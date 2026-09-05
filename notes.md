@@ -397,12 +397,49 @@ Getting the first deploy up hit two issues:
   mobile (375px) in-browser; gates green. **Phase 4 kickoff prompt written:
   `docs/PHASE_4_KICKOFF.md`** (Safety & Moderation) + §0Z Phase-4 ref corrected to §14/§11/§30.6/§47.
 
+- **2026-09-06** — **PHASE 4 — Safety & Moderation: BUILT + deployed + live (handover §14, §11.3,
+  §30.6, §47).** Awaiting one manual SQL paste (migration 0005) to fully activate.
+  - **Migration 0005 (`0005_safety_moderation.sql`, WRITTEN — apply pending):** `reports` (§36.33),
+    `skill_reviews` (§36.32), `support_tickets` (§36.38) + enums; moderation-action columns on
+    `profiles` (`status_reason`, `status_updated_at`, `status_updated_by`, `suspended_until`,
+    `vouching_restricted_until`); seeds `reports_per_24h`/`skill_reviews_per_24h` settings. RLS:
+    reporter/submitter read own; staff read all; all status/resolution writes via the service role
+    (no user UPDATE policy). One-paste apply: **`scripts/apply-0005.sql`** (idempotent + verify;
+    expect safety_tables=3, profiles_mod_columns=5, safety_rls_policies=6, new_settings=2).
+  - **User actions:** `submitReport` (player + vouch-comment UGC; reporter always stored — never anon
+    to admin; dup/rate-limited), `submitSkillReview` (SEPARATE from report; submitter stored, never
+    public; organizer-only tournament context), `blockUser`/`unblockUser`, `submitSupportTicket`.
+  - **Staff actions (`lib/actions/moderation.ts`), each behind `assertStaffActor` (staff role + aal2
+    MFA) + an append-only `audit_logs` row:** resolve reports/skill-reviews, review + raise fraud
+    flags, update support tickets, hide/remove/restore comments, **invalidate vouch** (recompute),
+    account actions warn/restrict-vouching/restrict-account/suspend/ban/lift.
+  - **Enforcement (server-side):** `submitVouch`/`requestVouch` honor `account_status` +
+    `vouching_restricted_until` via `lib/moderation/enforcement`; reads the timed columns
+    **best-effort** so the deploy is safe in the window before 0005 is applied (columns read null →
+    no restriction). Banned/suspended already 404 in the public directory.
+  - **Anonymous voucher identity** revealed ONLY via the staff-gated `getVouchAuthorForModeration` /
+    `listActiveVouchesForModeration` path (§37, §4.5) — the moderation vouch-invalidation panel.
+  - **UI:** real Report / Skill-review / Block on profiles (+ per-comment report), `/me/blocked`,
+    `/me/support` (appeals), and a staff-gated **`/staff` + `/staff/moderation`** queue (Reports ·
+    Skill reviews · Fraud flags · Support) behind `requireStaffPage` (staff + `requireStaffMfa`);
+    staff-only link surfaced in `/me`.
+  - **Gates green** (typecheck/lint/format/test 18/build). Also normalized pre-existing repo-wide
+    Prettier drift so CI `format:check` is green again. Committed `fe18ac6` + `35d9353`, pushed to
+    `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`** to the new deployment.
+    Verified live: profile safety actions render (anon → gated signup w/ resume `next`), routes 200.
+  - **DB step handed to Jasper (dashboard automation is classifier-blocked):** paste
+    `scripts/apply-0005.sql` into the Supabase SQL editor + run, return the verify numbers. Until
+    then: submitting reports/skill-reviews/support fails gracefully; the staff queue shows empty;
+    vouching is unaffected (defensive reads). **Staff must enroll TOTP + step up (aal2)** at
+    `/me/settings/security` before the moderation area unlocks (Admin MFA framework, by design).
+  - **Deferred within Phase 4:** private-bucket file evidence for reports/skill-reviews (§38 — V1
+    uses an optional text note + link in `evidence` jsonb; approved by Jasper); fraud-flag detectors
+    (§11.2 — manual raise + review shipped). **Next: Phase 5 — Clubs (§15).**
+
 ## Next up
-- **Phase 4 — Safety & Moderation** — kickoff prompt ready at `docs/PHASE_4_KICKOFF.md`.
-- Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
-  the Supabase org over-quota before 21 Sep 2026.
-- `supabase gen types` → `packages/db`; smoke-test signup → OTP → onboarding end-to-end on the live
-  site; seed JT admin accounts; validate RLS + role-spoofing (Phase 1 gate); Admin MFA framework.
-- **Deferred within Phase 1:** avatar upload on onboarding (needs `avatars` bucket); set-password
-  page for reset-link landing (`/me/settings/password`).
-- Then **Phase 2** (player directory & profile).
+- **Manual: apply `scripts/apply-0005.sql`** in the Supabase SQL editor (migration 0005) + return
+  verify numbers; then seed Tane's admin; both JT admins should enroll TOTP to use `/staff`.
+- **Phase 5 — Clubs (§15).** (Phase 4 shipped; kickoff prompt was `docs/PHASE_4_KICKOFF.md`.)
+- **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
+  a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
+  is wired (types are hand-synced for now).

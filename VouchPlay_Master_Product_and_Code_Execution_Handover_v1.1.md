@@ -87,9 +87,24 @@ enforced in the vouch path).
 hero headers, hover-lift cards, gradient nav indicators, real home hero, branded auth) — layered on
 the locked §33.2 palette, theme-aware, reduced-motion safe.
 
-**Next:** Phase 4 — Safety & Moderation (§14, §11, §30.6, §47) — reports, comment reports, block UI,
-skill review, moderation queue + actions, fraud-flag review, appeals/support path. (Open ops: seed
-Tane's admin; clear Supabase over-quota before 21 Sep 2026.)
+**Phase 4 — Safety & Moderation: ✅ BUILT + live (§14, §11.3, §30.6, §47).** Reports (player + vouch
+comment; reporter always stored — never anon to admin), Skill Review (separate; submitter stored,
+never public; organizer tournament-context), Block/Unblock (enforced across vouch + request; Phase-5
+initiation points reuse the same guard), a staff-gated moderation queue (`/staff` + `/staff/moderation`:
+reports · skill reviews · fraud flags · support) behind `requireStaffPage` + `requireStaffMfa`, with
+actions dismiss/warn/invalidate-vouch/restrict-vouching/restrict-account/suspend/ban/lift + hide/
+remove/restore comment + raise/review fraud flag — **each writes an immutable `audit_logs` row**.
+Restricted/suspended enforced server-side (`account_status` + timed `suspended_until`/
+`vouching_restricted_until`); banned/suspended already 404 publicly. Appeals/support via
+`/me/support`. **Anonymous voucher identity exposed only through the staff-gated
+`getVouchAuthorForModeration` path** (§37, §4.5). Migration `0005_safety_moderation` written
+(`scripts/apply-0005.sql`) — **apply pending** (dashboard automation is classifier-blocked; code is
+defensive so vouching is unaffected until it lands). Evidence in V1 = optional text note + link in
+`evidence` jsonb (private-bucket file evidence §38 deferred, approved by JT). Fraud-flag detectors
+(§11.2) deferred — manual raise + review shipped. Gates green; deployed to `vouchplayph.vercel.app`.
+
+**Next:** Phase 5 — Clubs (§15). (Open ops: apply migration 0005; seed Tane's admin; both JT admins
+enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 
