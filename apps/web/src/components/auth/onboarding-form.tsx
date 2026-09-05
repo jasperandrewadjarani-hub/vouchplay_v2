@@ -81,6 +81,20 @@ export function OnboardingForm({
         <Input id="bio" name="bio" maxLength={300} />
       </Field>
 
+      <Field
+        label="Profile photo"
+        htmlFor="avatar"
+        hint="Optional. PNG, JPG or WebP, up to 2 MB."
+      >
+        <input
+          id="avatar"
+          name="avatar"
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="text-foreground-muted file:border-border file:bg-surface file:text-foreground hover:file:bg-surface-muted block w-full text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm file:font-medium"
+        />
+      </Field>
+
       <SubmitButton pendingLabel="Saving…">Finish setup</SubmitButton>
     </form>
   );

@@ -271,9 +271,23 @@ Getting the first deploy up hit two issues:
     LIVE Supabase DB:** directory lists the seeded profile, filter combos (q+coach) work with no
     console errors, profile page renders header + sections + correct `<title>`/OG, anonymous Vouch/
     Request gates route to `/signup?next=/players/{slug}?intent=…` (resume wired).
-  - **Deferred (fold-ins, next commits):** apply migration 0003 (avatars bucket + `public_player_facts`)
-    then switch badge reads off the service client; avatar upload on onboarding; `/me/settings/password`
-    reset landing; seed JT admin; RLS/role-spoofing test; Admin MFA framework.
+- **2026-09-05** — **Phase 2 fold-ins (batch 1).**
+  - **`avatars` storage bucket CREATED on live Supabase** (public, 2 MB, png/jpg/webp) via the
+    service-role Storage API — no DDL needed (script run once, not committed).
+  - **Avatar upload on onboarding:** optional file input; `completeOnboarding` uploads via the
+    service client to `avatars/{userId}/…` (path keyed to the user = server-side authz) and sets
+    `avatar_path`. Failure never blocks onboarding (avatar is optional). Display already worked via
+    `avatarUrl()`.
+  - **`/me/settings/password`** reset-link landing + change-password page (the reset email already
+    routes here via `/auth/callback?next=…`); guarded route, reuses the `setPassword` action.
+  - **Migration `0003_avatars_and_public_facts.sql` WRITTEN (not yet applied):** records the bucket
+    config idempotently, adds storage.objects owner-folder policies, and adds the RLS-clean
+    `public_player_facts(ids)` SECURITY DEFINER fn (grant anon/authenticated). **Apply via the
+    Supabase SQL editor**, then switch `lib/players/queries.ts` badge reads from the service client
+    to `public_player_facts()`.
+  - Gates green (lint/typecheck/test/build); `/me/settings/password` guard verified (anon → login).
+  - **Still deferred:** apply migration 0003 + switch badge reads; seed JT admin account(s) (grants
+    privileges — will confirm which accounts first); RLS/role-spoofing test pass; Admin MFA framework.
 
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear

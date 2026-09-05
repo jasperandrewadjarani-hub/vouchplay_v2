@@ -4,8 +4,40 @@ import { redirect } from 'next/navigation';
 import { revalidateTag } from 'next/cache';
 import { onboardingSchema } from '@vouchplay/validation';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { safeNext } from '@/lib/auth';
+import { AVATARS_BUCKET } from '@/lib/storage';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
+
+const AVATAR_MIME_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Upload an avatar for `userId` to the public `avatars` bucket via the service client. The path is
+ * keyed to the user's own id (authorization: the caller already verified this is that user), so a
+ * user can only ever write their own avatar. Returns the stored path, or null on any problem
+ * (avatar is optional — a failure must never block onboarding).
+ */
+async function uploadAvatar(userId: string, file: File): Promise<string | null> {
+  const ext = AVATAR_MIME_EXT[file.type];
+  if (!ext || file.size === 0 || file.size > MAX_AVATAR_BYTES) return null;
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const path = `${userId}/avatar-${Date.now()}.${ext}`;
+    const svc = createServiceClient();
+    const { error } = await svc.storage
+      .from(AVATARS_BUCKET)
+      .upload(path, bytes, { contentType: file.type, upsert: true });
+    if (error) return null;
+    return path;
+  } catch {
+    return null;
+  }
+}
 
 export interface ProfileFormState {
   error?: string;
@@ -54,6 +86,12 @@ export async function completeOnboarding(
     const base = slugify(v.nickname) || slugify(`${v.firstName}-${v.lastName}`) || 'player';
     const slug = `${base}-${crypto.randomUUID().slice(0, 6)}`;
 
+    const avatarFile = formData.get('avatar');
+    const avatarPath =
+      avatarFile instanceof File && avatarFile.size > 0
+        ? await uploadAvatar(user!.id, avatarFile)
+        : null;
+
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -66,6 +104,7 @@ export async function completeOnboarding(
         facebook_url: v.facebookUrl ? v.facebookUrl : null,
         bio: v.bio ? v.bio : null,
         slug,
+        ...(avatarPath ? { avatar_path: avatarPath } : {}),
         onboarded_at: new Date().toISOString(),
       })
       .eq('id', user!.id);
