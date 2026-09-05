@@ -97,14 +97,27 @@ remove/restore comment + raise/review fraud flag — **each writes an immutable 
 Restricted/suspended enforced server-side (`account_status` + timed `suspended_until`/
 `vouching_restricted_until`); banned/suspended already 404 publicly. Appeals/support via
 `/me/support`. **Anonymous voucher identity exposed only through the staff-gated
-`getVouchAuthorForModeration` path** (§37, §4.5). Migration `0005_safety_moderation` written
-(`scripts/apply-0005.sql`) — **apply pending** (dashboard automation is classifier-blocked; code is
-defensive so vouching is unaffected until it lands). Evidence in V1 = optional text note + link in
-`evidence` jsonb (private-bucket file evidence §38 deferred, approved by JT). Fraud-flag detectors
-(§11.2) deferred — manual raise + review shipped. Gates green; deployed to `vouchplayph.vercel.app`.
+`getVouchAuthorForModeration` path** (§37, §4.5). Migration `0005_safety_moderation` **applied**
+(verify 3/5/6/2). Evidence in V1 = optional text note + link in `evidence` jsonb (private-bucket file
+evidence §38 deferred, approved by JT). Fraud-flag detectors (§11.2) deferred — manual raise + review
+shipped. Gates green; live on `vouchplayph.vercel.app`.
 
-**Next:** Phase 5 — Clubs (§15). (Open ops: apply migration 0005; seed Tane's admin; both JT admins
-enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
+**Phase 5 — Clubs core: ✅ BUILT + live (§15).** Scope: Clubs CORE only (recruitment/sponsorship §16
++ bidding §16A deferred). `clubs` + `club_memberships` (§36.16–36.17) with separate verification /
+activity status, `is_club_*()` RLS helpers, single-owner + single-live-membership constraints.
+`/clubs` directory, `/clubs/[slug]` public page (§15.5), `/clubs/new`, `/clubs/[slug]/manage`
+(members + settings + owner danger zone). Server actions cover create / join (public-instant vs
+approval) / leave / approve-reject-remove / role changes / ownership transfer / privacy / activity /
+soft-delete — all authz'd server-side via active membership. Admin club **verification** + suspend/
+reinstate added to the `/staff` queue (Clubs tab), each audit-logged. Player cards/profiles show real
+club stacks. Logos reuse the public `avatars` bucket (`club-logos/` prefix). Migration
+`0006_clubs` written (`scripts/apply-0006.sql`) — **apply pending** (code degrades gracefully until
+it lands). Deferred: §16 offers, §16A bids, manager-initiated invites, delete re-auth (typed-name
+confirm used). Gates green; live.
+
+**Next:** Phase 6 — Recruitment/Sponsorship (§16) then Tournaments (§17+). (Open ops: apply migration
+0006; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota
+before 21 Sep 2026.)
 
 ---
 

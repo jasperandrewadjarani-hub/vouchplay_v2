@@ -436,10 +436,50 @@ Getting the first deploy up hit two issues:
     uses an optional text note + link in `evidence` jsonb; approved by Jasper); fraud-flag detectors
     (§11.2 — manual raise + review shipped). **Next: Phase 5 — Clubs (§15).**
 
+- **2026-09-06** — **Migration 0005 APPLIED (Phase 4 fully live).** Jasper ran `scripts/apply-0005.sql`
+  in the Supabase SQL editor; verify returned safety_tables=3, profiles_mod_columns=5,
+  safety_rls_policies=6, new_settings=2 — all as expected. Reports/skill-reviews/support submit + the
+  staff moderation queue are now fully active on live DB `itrosesiywpbaxtmucbb`.
+
+- **2026-09-06** — **Minor UI:** dark/light/system toggle is now **icon-only** (Sun/Moon/Monitor;
+  full label kept in aria-label + title). Committed `c17d43b`, deployed, re-aliased.
+
+- **2026-09-06** — **PHASE 5 — Clubs core (§15): BUILT + deployed + live.** Scope decision (Jasper):
+  **Clubs core only** — recruitment/sponsorship (§16) + bidding (§16A) deferred to a later phase.
+  Awaiting one manual SQL paste (migration 0006) to fully activate.
+  - **Migration 0006 (`0006_clubs.sql`, WRITTEN — apply pending):** `clubs` (§36.16) +
+    `club_memberships` (§36.17) + enums (privacy/verification_status/activity_status/role/membership
+    status), `is_club_member/manager/owner()` SECURITY DEFINER helpers, single-owner + single-live-
+    membership partial unique indexes, RLS (public reads active clubs + active memberships; managers/
+    staff see the rest; writes via service role). One-paste apply: **`scripts/apply-0006.sql`**
+    (expect club_tables=2, club_helpers=3, club_rls_policies=3).
+  - **Data layer (`lib/clubs/`):** DTO + cache-first queries — directory (`listClubs`), club page
+    (`getClubBySlug` w/ owners/admins + member count + viewer membership), member list, and bulk
+    `getUserClubsBulk` wired into player cards/profiles (real club stacks). No `select(*)`.
+  - **Server actions (`lib/actions/club.ts`), authz server-side (active membership → manager/owner):**
+    createClub (owner membership + optional logo), updateClub, requestJoin (public = instant active /
+    approval_required = requested), leaveClub (owner must transfer/delete first), approve/reject/remove
+    member, setMemberRole (admin↔member, owner only), transferOwnership (single-owner-safe w/ rollback),
+    setClubPrivacy, setClubActivity, deleteClub (soft-delete, typed-name confirm). `club_creation_enabled`
+    honored. Logos reuse the public `avatars` bucket under a `club-logos/` prefix (no new bucket).
+  - **Admin club verification** in the `/staff` queue: new **Clubs tab** + `verifyClub`
+    (verified/unverified/rejected) and `setClubModerationStatus` (suspend/reinstate) — each writes an
+    append-only `audit_logs` row (staff + aal2 gated).
+  - **UI:** `/clubs` directory (search + verified filter + pagination), `/clubs/[slug]` public page
+    (§15.5 — logo/verified/members/owners+admins/join-leave/share + manage link), `/clubs/new`,
+    `/clubs/[slug]/manage` (members mgmt + settings + owner danger zone).
+  - **Gates green** (typecheck/lint/format/test 18/build — 24 routes). Committed `9869f38`, pushed to
+    `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**. Verified live: `/clubs` +
+    `/clubs/new` return 200, directory renders (empty until 0006). Deploy is safe pre-0006 (club reads
+    degrade to empty; writes error gracefully — like the Phase-4 pattern).
+  - **DB step handed to Jasper:** paste `scripts/apply-0006.sql` + return verify numbers.
+  - **Deferred:** Recruitment/Sponsorship offers (§16 `club_offers`), gamified bidding (§16A
+    `player_bids`); manager-initiated invitations (§15.4 INVITED path — request+approve shipped);
+    password/OAuth re-auth on club delete (§15.7 — typed-name confirm used instead). **Next: Phase 6.**
+
 ## Next up
-- **Manual: apply `scripts/apply-0005.sql`** in the Supabase SQL editor (migration 0005) + return
-  verify numbers; then seed Tane's admin; both JT admins should enroll TOTP to use `/staff`.
-- **Phase 5 — Clubs (§15).** (Phase 4 shipped; kickoff prompt was `docs/PHASE_4_KICKOFF.md`.)
+- **Manual: apply `scripts/apply-0006.sql`** (migration 0006, Clubs) + return verify numbers.
+- **Phase 6+** — Recruitment/Sponsorship (§16) + Tournaments (§17+), per the handover phase plan.
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).
