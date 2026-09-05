@@ -79,6 +79,7 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   ownerId: string;
   ownerName: string | null;
   ownerSlug: string | null;
+  maxClubsPerPlayer: number;
   divisions: DivisionDTO[];
   organizers: OrganizerDTO[];
   announcements: AnnouncementDTO[];

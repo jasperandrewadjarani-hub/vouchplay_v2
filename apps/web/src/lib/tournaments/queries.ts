@@ -237,6 +237,7 @@ export async function getTournamentBySlug(
       ownerId: row.owner_organizer_id,
       ownerName: owner?.name ?? null,
       ownerSlug: owner?.slug ?? null,
+      maxClubsPerPlayer: row.max_clubs_per_player ?? 3,
       divisions: ((divRes.data ?? []) as unknown as DivisionRow[]).map(toDivisionDTO),
       organizers,
       announcements,

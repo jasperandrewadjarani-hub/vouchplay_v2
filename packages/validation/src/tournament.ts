@@ -68,6 +68,13 @@ export const announcementSchema = z.object({
 });
 export type AnnouncementInput = z.infer<typeof announcementSchema>;
 
+export const partnerInviteSchema = z.object({
+  divisionId: z.string().uuid('Invalid division'),
+  inviteeSlug: z.string().trim().min(1, "Enter your partner's handle").max(60),
+  message: z.string().trim().max(500).optional().or(z.literal('')),
+});
+export type PartnerInviteInput = z.infer<typeof partnerInviteSchema>;
+
 export const organizerApplicationSchema = z.object({
   motivation: z
     .string()

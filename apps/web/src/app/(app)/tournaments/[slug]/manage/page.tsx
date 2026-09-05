@@ -3,12 +3,14 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
+import { getOrganizerRegistrations } from '@/lib/tournaments/registration-queries';
 import { updateTournament } from '@/lib/actions/tournament';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
 import { DivisionBuilder } from '@/components/tournaments/division-builder';
 import { AnnouncementForm } from '@/components/tournaments/announcement-form';
 import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manager';
+import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
 
 export const metadata: Metadata = { title: 'Manage tournament' };
 
@@ -28,6 +30,8 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t) notFound();
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
+  const registrations = await getOrganizerRegistrations(t.id);
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
@@ -45,6 +49,11 @@ export default async function ManageTournamentPage({ params }: Params) {
       <section className="border-border bg-surface rounded-2xl border p-5">
         <h2 className="text-foreground mb-3 text-base font-semibold">Status</h2>
         <LifecycleControls tournamentId={t.id} slug={slug} status={t.status} />
+      </section>
+
+      <section className="border-border bg-surface rounded-2xl border p-5">
+        <h2 className="text-foreground mb-3 text-base font-semibold">Registrations</h2>
+        <OrganizerRegistrations tournamentId={t.id} registrations={registrations} />
       </section>
 
       <section className="border-border bg-surface rounded-2xl border p-5">

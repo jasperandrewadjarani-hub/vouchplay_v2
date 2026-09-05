@@ -4,11 +4,13 @@ import { notFound } from 'next/navigation';
 import { MapPin, CalendarDays, Users, Settings, ExternalLink } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
+import { getViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { publicEnv } from '@/lib/env';
 import { ShareButton } from '@/components/players/share-button';
 import { InterestButton } from '@/components/tournaments/interest-button';
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
+import { RegistrationPanel } from '@/components/tournaments/registration-panel';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -54,6 +56,10 @@ export default async function TournamentPage({ params }: Params) {
   if (!t) notFound();
 
   const authed = viewer.viewerId !== null;
+  const regState =
+    authed && t.status === 'registration_open'
+      ? await getViewerRegistrationState(t.id, viewer.viewerId as string)
+      : null;
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}`;
   const start = fmt(t.startAt);
   const regOpen = fmt(t.registrationOpenAt);
@@ -144,6 +150,15 @@ export default async function TournamentPage({ params }: Params) {
         <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
         <DivisionList divisions={t.divisions} />
       </section>
+
+      {regState && (
+        <RegistrationPanel
+          tournamentId={t.id}
+          maxClubsPerPlayer={t.maxClubsPerPlayer}
+          divisions={t.divisions}
+          state={regState}
+        />
+      )}
 
       {t.announcements.length > 0 && (
         <section className="border-border bg-surface rounded-2xl border p-4">

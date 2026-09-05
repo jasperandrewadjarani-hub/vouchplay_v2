@@ -381,6 +381,108 @@ export interface TournamentAnnouncementRow {
   published_at: string;
 }
 
+// ---------- Registration (migration 0008) ----------
+export type PartnerInvitationStatus =
+  'sent' | 'accepted' | 'declined' | 'cancelled' | 'expired' | 'merged';
+export type TeamStatus = 'forming' | 'formed' | 'locked' | 'withdrawn' | 'disbanded';
+export type RegistrationStatus =
+  | 'team_formed'
+  | 'payment_pending'
+  | 'payment_submitted'
+  | 'under_review'
+  | 'confirmed'
+  | 'waitlisted'
+  | 'rejected'
+  | 'withdrawn'
+  | 'cancelled'
+  | 'refunded';
+export type RegistrationEligibility =
+  'eligible' | 'review' | 'skill_mismatch' | 'ineligible_hard_rule';
+export type WaitlistStatus = 'waiting' | 'promoted' | 'expired' | 'removed';
+
+export interface PartnerInvitationRow {
+  id: string;
+  tournament_id: string;
+  division_id: string;
+  inviter_id: string;
+  invitee_id: string;
+  message: string | null;
+  status: PartnerInvitationStatus;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamRow {
+  id: string;
+  tournament_id: string;
+  division_id: string;
+  status: TeamStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamMemberRow {
+  id: string;
+  team_id: string;
+  player_id: string;
+  member_order: number;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
+export interface ClubRepresentationRow {
+  id: string;
+  tournament_id: string;
+  player_id: string;
+  club_id: string;
+  display_order: number;
+  membership_verified_at_selection: boolean;
+  organizer_override: boolean;
+  override_reason: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegistrationRow {
+  id: string;
+  tournament_id: string;
+  division_id: string;
+  team_id: string;
+  status: RegistrationStatus;
+  eligibility_status: RegistrationEligibility;
+  eligibility_snapshot: Record<string, unknown>;
+  slot_hold_expires_at: string | null;
+  review_grace_expires_at: string | null;
+  submitted_at: string | null;
+  confirmed_at: string | null;
+  reviewed_by: string | null;
+  review_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RegistrationEventRow {
+  id: string;
+  registration_id: string;
+  actor_id: string | null;
+  event_type: string;
+  from_status: string | null;
+  to_status: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface WaitlistEntryRow {
+  id: string;
+  registration_id: string;
+  division_id: string;
+  position_rank: number;
+  status: WaitlistStatus;
+  created_at: string;
+}
+
 export interface AuditLogRow {
   id: string;
   actor_id: string | null;

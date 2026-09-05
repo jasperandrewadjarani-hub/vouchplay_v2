@@ -12,6 +12,7 @@ import type { TournamentStatus } from '@vouchplay/db';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { AVATARS_BUCKET } from '@/lib/storage';
+import { authorizeOrganizer, hasOrganizerRole, type OrganizerPerm } from '@/lib/tournaments/authz';
 import {
   TOURNAMENTS_LIST_TAG,
   tournamentTag,
@@ -69,59 +70,6 @@ async function uploadCover(tournamentId: string, file: File): Promise<string | n
   } catch {
     return null;
   }
-}
-
-type OrganizerPerm =
-  | 'edit'
-  | 'manage_divisions'
-  | 'send_announcements'
-  | 'manage_organizers'
-  | 'approve_registrations'
-  | 'manage_payments'
-  | 'export';
-
-/**
- * Authorize the caller for a tournament. Returns { isOwner } when allowed. The owner has every
- * permission; a co-organizer must hold the specific `perm` in their permissions jsonb.
- * `manage_organizers` is always owner-only.
- */
-async function authorizeOrganizer(
-  userId: string,
-  tournamentId: string,
-  perm?: OrganizerPerm,
-): Promise<{ isOwner: boolean } | null> {
-  const svc = createServiceClient();
-  const { data: t } = await svc
-    .from('tournaments')
-    .select('owner_organizer_id')
-    .eq('id', tournamentId)
-    .maybeSingle();
-  const owner = (t as { owner_organizer_id: string } | null)?.owner_organizer_id;
-  if (!owner) return null;
-  if (owner === userId) return { isOwner: true };
-  if (perm === 'manage_organizers') return null; // owner-only
-  const { data: co } = await svc
-    .from('tournament_organizers')
-    .select('permissions')
-    .eq('tournament_id', tournamentId)
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .maybeSingle();
-  if (!co) return null;
-  if (!perm) return { isOwner: false };
-  const perms = (co as { permissions: Record<string, unknown> }).permissions ?? {};
-  return perms[perm] === true ? { isOwner: false } : null;
-}
-
-async function hasOrganizerRole(userId: string): Promise<boolean> {
-  const svc = createServiceClient();
-  const { data } = await svc
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .in('role', ['organizer', 'admin', 'super_admin']);
-  return (data ?? []).length > 0;
 }
 
 function invalidate(slug: string | null, tournamentId: string) {
