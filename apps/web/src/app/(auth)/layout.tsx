@@ -8,18 +8,15 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="vp-hero flex min-h-dvh flex-col">
       <header className="flex items-center justify-between px-5 py-4">
-        <Link href="/" className="flex flex-col leading-none" aria-label="VouchPlay home">
+        <Link href="/" aria-label="VouchPlay home">
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
             alt="VouchPlay"
-            width={210}
-            height={44}
+            width={148}
+            height={32}
             priority
-            className="h-11 w-auto"
+            className="h-8 w-auto"
           />
-          <span className="text-foreground-muted mt-1 pl-0.5 text-[10px] font-medium tracking-wide">
-            By JT Consulting &amp; Analytics
-          </span>
         </Link>
         <ThemeToggle />
       </header>

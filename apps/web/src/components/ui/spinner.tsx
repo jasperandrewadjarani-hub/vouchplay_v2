@@ -5,16 +5,15 @@ export function Spinner({ size = 28, className = '' }: { size?: number; classNam
   return <Loader2 size={size} className={`text-primary animate-spin ${className}`} aria-hidden />;
 }
 
-/** Centered loading cue for route transitions (rendered by loading.tsx). */
-export function LoadingScreen({ label = 'Loading…' }: { label?: string }) {
+/** Centered loading cue for route transitions (rendered by loading.tsx). Spinner only. */
+export function LoadingScreen() {
   return (
     <div
       role="status"
-      aria-live="polite"
-      className="flex min-h-[60vh] flex-col items-center justify-center gap-3"
+      aria-label="Loading"
+      className="flex min-h-[60vh] items-center justify-center"
     >
       <Spinner size={34} />
-      <span className="text-foreground-muted text-sm font-medium">{label}</span>
     </div>
   );
 }
