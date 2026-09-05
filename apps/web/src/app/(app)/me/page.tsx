@@ -43,15 +43,40 @@ export default async function MePage() {
           <Row label="City" value={profile?.city ?? '—'} />
           <Row label="Account" value={profile?.account_status ?? 'active'} />
         </dl>
-        {!profile?.onboarded_at && (
+        {!profile?.onboarded_at ? (
           <Link href="/onboarding" className="mt-4 inline-block">
             <Button>Complete your profile</Button>
           </Link>
+        ) : (
+          profile?.slug && (
+            <Link href={`/players/${profile.slug}`} className="mt-4 inline-block">
+              <Button variant="secondary">View public profile</Button>
+            </Link>
+          )
         )}
       </div>
 
+      <nav className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm">
+        <SettingsLink href="/me/settings/security" label="Security & two-factor" />
+        <SettingsLink href="/me/settings/password" label="Password" />
+      </nav>
+
       <SignOutButton />
     </section>
+  );
+}
+
+function SettingsLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="text-foreground hover:bg-surface-muted flex items-center justify-between px-4 py-3 font-medium first:rounded-t-2xl last:rounded-b-2xl"
+    >
+      <span>{label}</span>
+      <span aria-hidden className="text-foreground-muted">
+        ›
+      </span>
+    </Link>
   );
 }
 

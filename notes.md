@@ -292,9 +292,30 @@ Getting the first deploy up hit two issues:
     escalation). **Jasper to run** from repo root: `node scripts/seed-admin.mjs
     jasper.andrew.adjarani@gmail.com` (and Tane's email once known). Requires the account to have
     signed up already.
-  - **Still deferred (need DB dashboard access or a decision):** apply migration 0003 + switch badge
-    reads off the service client; run the admin seed; RLS/role-spoofing test pass (best after admin +
-    a test coach exist); Admin MFA framework.
+- **2026-09-05** — **Phase 2 fold-ins (batch 2): RLS verification + Admin MFA framework.**
+  - **RLS/role-spoofing verification:** `scripts/verify-rls.mjs` — compares ANON vs service-role
+    visibility to prove RLS filters (not just empty tables). Read-only by default; `VERIFY_WRITES=1`
+    adds anon spoofing-write attempts (must affect 0 rows). **Ran read-only: 6/6 PASS** — anon reads
+    `system_settings` (21) + `profiles` (public), and is blocked from `user_roles`/
+    `identity_verifications`/`audit_logs`/`vouches`. (user_roles etc. are 0 in service too until the
+    admin grant lands — re-run after applying the SQL for the conclusive service=1/anon=0 divergence.)
+  - **Admin MFA framework:** `lib/auth/mfa.ts` (`getMfaStatus`, `requireStaffMfa(returnTo)` guard for
+    future admin/staff routes — non-staff unaffected in V1; enforces verified TOTP + aal2 step-up);
+    `components/auth/mfa-manager.tsx` (client TOTP enroll → QR + secret → challenge/verify → session
+    upgrades to aal2 in place; list/remove factors); `/me/settings/security` page (guarded; nudges
+    staff). Wired settings links + "View public profile" into `/me`. Supabase Auth TOTP is on by
+    default; `requireStaffMfa` is exported but not yet wired to any route (Admin Control Center is
+    Phase 30+).
+  - **DB step handed to Jasper (auto-mode classifier blocks Claude from writing/executing on the
+    Supabase dashboard — both JS and keyboard input are gated on that origin; no direct Postgres
+    conn string locally either):** `scripts/apply-0003-and-admin.sql` — one paste into the SQL editor
+    applies migration 0003 (avatars config + storage policies + `public_player_facts`) AND grants
+    Jasper `super_admin`. Idempotent + self-verifying. **After it's run:** switch the badge reads in
+    `lib/players/queries.ts` from the service client to `public_player_facts()` via the anon client,
+    and re-run `verify-rls.mjs` for the conclusive divergence.
+  - Gates green (typecheck/lint/build).
+  - **Still deferred:** the one manual SQL paste above (then the badge-reads switch); seed Tane's
+    admin once their email is known; wiring `requireStaffMfa` into the admin area when it exists.
 
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
