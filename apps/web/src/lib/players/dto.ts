@@ -63,6 +63,8 @@ export interface PlayerCardDTO {
 }
 
 export interface PlayerProfileDTO extends PlayerCardDTO {
+  /** The target's user id — needed by the vouch form (profile only). */
+  id: string;
   bio: string | null;
   facebookUrl: string | null;
   /** Displayed age (derived from DOB), only when present AND visible to this viewer. */
@@ -70,6 +72,9 @@ export interface PlayerProfileDTO extends PlayerCardDTO {
   memberSince: string;
   /** True when the row belongs to the current viewer (drives owner-only affordances). */
   isOwnProfile: boolean;
+  /** Vouch distribution by band ordinal (0..6 → count) and total unique vouchers (§9.2). */
+  distribution: Record<string, number>;
+  uniqueVoucherCount: number;
 }
 
 function fullName(row: ProfileRow): string {
@@ -101,11 +106,21 @@ function bandFromOrdinal(ordinal: number | null): SkillBand | null {
   return skillByOrdinal(ordinal) ?? null;
 }
 
+/** Computed community-skill snapshot (from player_skill_profiles; Phase 3). */
+export interface SkillSnapshot {
+  communitySkillLevel: number | null;
+  sts: number;
+  skillVerified: boolean;
+  uniqueVoucherCount: number;
+  distribution: Record<string, number>;
+}
+
 /** Extra facts fetched in bulk (avoids N+1) and passed alongside the profile row. */
 export interface ProfileExtras {
   roles: GlobalRole[];
   identityVerified: boolean;
   clubs?: ClubRef[];
+  skill?: SkillSnapshot | null;
 }
 
 export function toPlayerCardDTO(
@@ -126,10 +141,10 @@ export function toPlayerCardDTO(
     avatarUrl: avatarUrl(row.avatar_path),
     sex: showSex ? row.sex : null,
     city: showCity ? row.city : null,
-    communitySkill: null, // Phase 3 (player_skill_profiles)
+    communitySkill: bandFromOrdinal(extras.skill?.communitySkillLevel ?? null),
     selfRatedSkill: bandFromOrdinal(row.self_rated_skill),
-    sts: null, // Phase 3
-    skillVerified: false, // Phase 3
+    sts: extras.skill?.sts ?? null,
+    skillVerified: extras.skill?.skillVerified ?? false,
     identityVerified: extras.identityVerified,
     isCoach: extras.roles.includes('coach'),
     isOrganizer: extras.roles.includes('organizer'),
@@ -151,11 +166,14 @@ export function toPlayerProfileDTO(
 
   return {
     ...toPlayerCardDTO(row, extras, viewer),
+    id: row.id,
     bio: row.bio ?? null,
     facebookUrl: row.facebook_url ?? null,
     age: showAge ? ageFromDob(row.date_of_birth) : null,
     memberSince: row.created_at,
     isOwnProfile: viewer.viewerId === row.id,
+    distribution: extras.skill?.distribution ?? {},
+    uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
   };
 }
 

@@ -80,3 +80,78 @@ export interface SystemSettingRow {
   updated_by: string | null;
   updated_at: string;
 }
+
+// ---------- Vouch engine (migration 0004) ----------
+export type VouchInteraction = 'with' | 'against';
+export type VouchVisibility = 'anonymous' | 'public';
+export type VouchStatus = 'active' | 'withdrawn' | 'invalidated';
+export type VouchChangeType = 'created' | 'updated' | 'withdrawn' | 'invalidated' | 'reinstated';
+export type VouchCommentStatus = 'active' | 'hidden' | 'removed';
+export type VouchRequestStatus =
+  | 'pending'
+  | 'fulfilled'
+  | 'dismissed'
+  | 'cancelled'
+  | 'expired';
+export type SkillVerificationType = 'none' | 'community' | 'admin_override';
+
+export interface VouchRow {
+  id: string;
+  voucher_id: string;
+  target_id: string;
+  skill_level: number;
+  interaction_type: VouchInteraction;
+  visibility: VouchVisibility;
+  used_coach_weight: boolean;
+  effective_weight: number;
+  weight_rule_version: string;
+  status: VouchStatus;
+  created_at: string;
+  updated_at: string;
+  invalidated_by: string | null;
+  invalidation_reason: string | null;
+}
+
+export interface VouchCommentRow {
+  id: string;
+  vouch_id: string;
+  author_id: string;
+  target_id: string;
+  body: string;
+  status: VouchCommentStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VouchRequestRow {
+  id: string;
+  requester_id: string;
+  recipient_id: string;
+  message: string | null;
+  status: VouchRequestStatus;
+  created_at: string;
+  fulfilled_at: string | null;
+}
+
+export interface PlayerSkillProfileRow {
+  player_id: string;
+  community_skill_level: number | null;
+  weighted_mean: number | null;
+  sts: number;
+  unique_voucher_count: number;
+  effective_weight_sum: number;
+  agreement_component: number;
+  count_component: number;
+  weight_component: number;
+  distribution: Record<string, number>;
+  skill_verified: boolean;
+  verification_type: SkillVerificationType;
+  algorithm_version: string;
+  calculated_at: string;
+}
+
+export interface BlockRow {
+  blocker_id: string;
+  blocked_id: string;
+  created_at: string;
+}

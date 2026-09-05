@@ -4,37 +4,46 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ThumbsUp } from 'lucide-react';
+import { VouchForm } from './vouch-form';
 
 /**
- * Vouch entry point + auth gate (handover §8.1, §9.1; Phase-2 gate "login gate resumes protected
- * action"). The vouch ENGINE is Phase 3 — this only gates the entry point:
- *  - Anonymous → link to signup carrying `next=/players/{slug}?intent=vouch`, so after auth the user
- *    lands back here with the vouch intent and it resumes (the note auto-opens).
- *  - Signed-in → opens the entry point, which currently explains vouching arrives in the next release.
+ * Vouch entry point + auth gate (handover §8.1, §9.1; gate "login gate resumes protected action").
+ *  - Anonymous → signup carrying `next=/players/{slug}?intent=vouch` (resumes after auth).
+ *  - Signed-in on a card → link to the profile with the vouch intent (the form lives on the profile).
+ *  - Signed-in on the profile → opens the real vouch form (auto-opens when arriving with ?intent=vouch).
  */
 export function VouchButton({
   slug,
+  targetId,
+  targetName,
   authed,
   isOwnProfile = false,
+  viewerIsCoach = false,
   size = 'md',
+  mode = 'card',
 }: {
   slug: string;
+  /** Required only for `mode="profile"` (the form needs the target uuid). */
+  targetId?: string;
+  targetName?: string;
   authed: boolean;
   isOwnProfile?: boolean;
+  viewerIsCoach?: boolean;
   size?: 'sm' | 'md';
+  mode?: 'card' | 'profile';
 }) {
   const params = useSearchParams();
   const resumed = params.get('intent') === 'vouch';
-  const [open, setOpen] = useState(resumed && authed);
+  const [open, setOpen] = useState(mode === 'profile' && resumed && authed && !isOwnProfile);
 
   const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
   const btn = `inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${pad}`;
+  const iconSize = size === 'sm' ? 14 : 16;
 
-  // You can't vouch for yourself.
   if (isOwnProfile) {
     return (
       <span className={`${btn} border-border text-foreground-muted cursor-not-allowed border`}>
-        <ThumbsUp size={size === 'sm' ? 14 : 16} aria-hidden />
+        <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </span>
     );
@@ -44,32 +53,35 @@ export function VouchButton({
     const next = `/players/${slug}?intent=vouch`;
     return (
       <Link href={`/signup?next=${encodeURIComponent(next)}`} className={`${btn} bg-primary text-white hover:opacity-90`}>
-        <ThumbsUp size={size === 'sm' ? 14 : 16} aria-hidden />
+        <ThumbsUp size={iconSize} aria-hidden />
+        Vouch
+      </Link>
+    );
+  }
+
+  if (mode === 'card') {
+    return (
+      <Link href={`/players/${slug}?intent=vouch`} className={`${btn} bg-primary text-white hover:opacity-90`}>
+        <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </Link>
     );
   }
 
   return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`${btn} bg-primary text-white hover:opacity-90`}
-        aria-expanded={open}
-      >
-        <ThumbsUp size={size === 'sm' ? 14 : 16} aria-hidden />
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={`${btn} bg-primary text-white hover:opacity-90`}>
+        <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </button>
-      {open && (
-        <span
-          role="status"
-          className="border-border bg-surface text-foreground-muted absolute left-0 top-full z-10 mt-2 w-64 rounded-xl border p-3 text-xs shadow-lg"
-        >
-          Vouching opens in the next release. You&apos;ll be able to rate this player&apos;s skill and
-          leave a comment — with your rating anonymous if you choose.
-        </span>
+      {open && targetId && (
+        <VouchForm
+          targetId={targetId}
+          targetName={targetName ?? 'this player'}
+          viewerIsCoach={viewerIsCoach}
+          onClose={() => setOpen(false)}
+        />
       )}
-    </span>
+    </>
   );
 }

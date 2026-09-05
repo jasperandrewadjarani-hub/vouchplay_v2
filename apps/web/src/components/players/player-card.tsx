@@ -81,7 +81,13 @@ export function PlayerCard({ player, authed }: { player: PlayerCardDTO; authed: 
         <Link href={profileHref} className="text-primary text-sm font-medium hover:underline">
           View profile
         </Link>
-        <VouchButton slug={player.slug} authed={authed} size="sm" />
+        <VouchButton
+          slug={player.slug}
+          targetName={player.displayName}
+          authed={authed}
+          size="sm"
+          mode="card"
+        />
       </div>
     </div>
   );

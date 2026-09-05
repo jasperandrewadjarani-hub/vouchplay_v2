@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { SKILL_BANDS } from '@vouchplay/config';
+import { PlayerAvatar } from './player-avatar';
 
 /** Titled card wrapper for profile sections (handover §9). */
 export function SectionCard({
@@ -27,41 +29,92 @@ function EmptyNote({ children }: { children: ReactNode }) {
 }
 
 /**
- * Skill distribution by band (handover §9.2). The vouch data arrives in Phase 3; until then this
- * shows the band scaffold with an explanatory empty state so the layout is real and testable.
+ * Skill distribution by band (handover §9.2). Shows vouch counts per band from the computed
+ * snapshot; anonymous vs public voucher identities are handled elsewhere (icons are a later add).
  */
-export function SkillDistribution() {
+export function SkillDistribution({
+  distribution,
+  total,
+}: {
+  distribution: Record<string, number>;
+  total: number;
+}) {
+  const max = Math.max(1, ...SKILL_BANDS.map((b) => distribution[String(b.ordinal)] ?? 0));
   return (
     <SectionCard title="Community skill distribution">
-      <EmptyNote>
-        No community vouches yet. Once players vouch for this profile, their skill ratings appear here
-        by band — the community skill level is the weighted median of those vouches.
-      </EmptyNote>
-      <ul className="mt-3 space-y-1.5">
-        {[...SKILL_BANDS]
-          .slice()
-          .reverse()
-          .map((band) => (
-            <li key={band.key} className="flex items-center gap-3">
-              <span className="text-foreground-muted w-32 shrink-0 text-xs">{band.label}</span>
-              <span className="bg-surface-muted h-2 flex-1 overflow-hidden rounded-full">
-                <span className="block h-full rounded-full" style={{ width: 0, backgroundColor: band.color }} />
-              </span>
-              <span className="text-foreground-muted w-6 text-right text-xs">0</span>
-            </li>
-          ))}
-      </ul>
+      {total === 0 ? (
+        <EmptyNote>
+          No community vouches yet. Once players vouch for this profile, their skill ratings appear
+          here by band — the community skill level is the weighted median of those vouches.
+        </EmptyNote>
+      ) : (
+        <ul className="space-y-1.5">
+          {[...SKILL_BANDS].reverse().map((band) => {
+            const count = distribution[String(band.ordinal)] ?? 0;
+            return (
+              <li key={band.key} className="flex items-center gap-3">
+                <span className="text-foreground-muted w-32 shrink-0 text-xs">{band.label}</span>
+                <span className="bg-surface-muted h-2 flex-1 overflow-hidden rounded-full">
+                  <span
+                    className="block h-full rounded-full"
+                    style={{ width: `${(count / max) * 100}%`, backgroundColor: band.color }}
+                  />
+                </span>
+                <span className="text-foreground-muted w-6 text-right text-xs">{count}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </SectionCard>
   );
 }
 
-export function VouchComments() {
+export interface CommentView {
+  id: string;
+  authorName: string;
+  authorSlug: string | null;
+  authorInitials: string;
+  authorAvatarUrl: string | null;
+  date: string;
+  body: string;
+}
+
+export function VouchComments({ comments }: { comments: CommentView[] }) {
+  if (comments.length === 0) {
+    return (
+      <SectionCard title="Vouch comments">
+        <EmptyNote>
+          No comments yet. Vouch comments are always attributed to their author, even when the skill
+          rating itself is anonymous.
+        </EmptyNote>
+      </SectionCard>
+    );
+  }
   return (
-    <SectionCard title="Vouch comments">
-      <EmptyNote>
-        No comments yet. Vouch comments are always attributed to their author, even when the skill
-        rating itself is anonymous.
-      </EmptyNote>
+    <SectionCard title={`Vouch comments (${comments.length})`}>
+      <ul className="space-y-3">
+        {comments.map((c) => (
+          <li key={c.id} className="border-border flex gap-3 border-b pb-3 last:border-b-0 last:pb-0">
+            <PlayerAvatar url={c.authorAvatarUrl} initials={c.authorInitials} name={c.authorName} size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                {c.authorSlug ? (
+                  <Link href={`/players/${c.authorSlug}`} className="hover:text-primary text-sm font-medium">
+                    {c.authorName}
+                  </Link>
+                ) : (
+                  <span className="text-sm font-medium">{c.authorName}</span>
+                )}
+                <time className="text-foreground-muted text-xs">
+                  {new Date(c.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                </time>
+              </div>
+              <p className="text-foreground mt-0.5 text-sm">{c.body}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
     </SectionCard>
   );
 }

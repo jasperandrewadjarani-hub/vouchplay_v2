@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MapPin, CalendarDays, Facebook } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
-import { getPlayerBySlug, getPlayerMetaBySlug } from '@/lib/players/queries';
+import { getPlayerBySlug, getPlayerMetaBySlug, getPlayerComments } from '@/lib/players/queries';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ClubStack } from '@/components/players/club-stack';
@@ -68,7 +68,9 @@ export default async function PlayerProfilePage({ params }: Params) {
   const player = await getPlayerBySlug(slug, viewer);
   if (!player) notFound();
 
+  const comments = await getPlayerComments(player.id);
   const authed = viewer.viewerId !== null;
+  const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
     : player.selfRatedSkill
@@ -161,7 +163,15 @@ export default async function PlayerProfilePage({ params }: Params) {
 
         {/* Primary actions (§9.1) */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <VouchButton slug={slug} authed={authed} isOwnProfile={player.isOwnProfile} />
+          <VouchButton
+            slug={slug}
+            targetId={player.id}
+            targetName={player.displayName}
+            authed={authed}
+            isOwnProfile={player.isOwnProfile}
+            viewerIsCoach={viewer.isCoach}
+            mode="profile"
+          />
           <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
         </div>
         <div className="mt-2">
@@ -169,8 +179,8 @@ export default async function PlayerProfilePage({ params }: Params) {
         </div>
       </header>
 
-      <SkillDistribution />
-      <VouchComments />
+      <SkillDistribution distribution={player.distribution} total={distributionTotal} />
+      <VouchComments comments={comments} />
       <Achievements />
       <SkillTags />
     </div>

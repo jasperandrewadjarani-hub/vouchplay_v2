@@ -87,21 +87,29 @@ const STAFF_ROLES = ['moderator', 'support', 'admin', 'super_admin'];
  * Viewer context for DTO projection: the current user's id (or null) and whether they are staff.
  * Reads only the caller's OWN roles (RLS-permitted). Never throws — degrades to an anonymous viewer.
  */
-export async function getViewerContext(): Promise<{ viewerId: string | null; isStaff: boolean }> {
+export async function getViewerContext(): Promise<{
+  viewerId: string | null;
+  isStaff: boolean;
+  isCoach: boolean;
+}> {
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return { viewerId: null, isStaff: false };
+    if (!user) return { viewerId: null, isStaff: false, isCoach: false };
     const { data } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
       .eq('status', 'active');
-    const isStaff = (data ?? []).some((r) => STAFF_ROLES.includes((r as { role: string }).role));
-    return { viewerId: user.id, isStaff };
+    const roles = (data ?? []).map((r) => (r as { role: string }).role);
+    return {
+      viewerId: user.id,
+      isStaff: roles.some((r) => STAFF_ROLES.includes(r)),
+      isCoach: roles.includes('coach'),
+    };
   } catch {
-    return { viewerId: null, isStaff: false };
+    return { viewerId: null, isStaff: false, isCoach: false };
   }
 }

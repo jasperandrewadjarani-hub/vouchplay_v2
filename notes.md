@@ -333,6 +333,40 @@ Getting the first deploy up hit two issues:
   - **Open:** seed Tane's admin once their email is known; wire `requireStaffMfa` into the Admin
     Control Center when it's built (Phase 30+). **Next: Phase 3 — Vouch Engine (§10).**
 
+- **2026-09-05** — **PHASE 3 — Vouch Engine: core BUILT (handover §10–§12).** Awaiting one manual
+  SQL paste (migration 0004) to go live.
+  - **STS_V1 algorithm in `@vouchplay/core`** (`vouches/weight.ts` + `vouches/sts.ts`): pure,
+    deterministic, version-locked. `effectiveWeight` (§10.5 — 1.00/1.25/2.00/2.50; Skill-Verified/
+    Facebook/Organizer never affect weight), `weightedMedian` CSL (§10.6), `computeSkillProfile`
+    (STS components §10.7 + Skill-Verified §10.8 + distribution). **11 unit tests pass** incl.
+    hand-computed worked examples (5 unanimous Low-Int → STS 4.6; split [2,4] → 2.0; clamp → 5.0),
+    order-independence, threshold boundaries. Constants injected from settings (never hardcoded);
+    test also asserts the shipped config defaults match the locked spec.
+  - **Migration 0004 (`0004_vouch_engine.sql`, WRITTEN — apply pending):** `vouches`,
+    `vouch_revisions`, `vouch_comments`, `vouch_requests`, `player_skill_profiles` (+ `distribution`
+    jsonb), `blocks`, `fraud_flags` + enums + RLS. **Anonymous voucher identity protected:** `vouches`
+    is NOT publicly readable (voucher-own/staff only); public skill data comes from the safe aggregate
+    `player_skill_profiles` (public read) + attributed `vouch_comments`. One-paste apply:
+    `scripts/apply-0004.sql` (idempotent + verify).
+  - **Domain + server actions (`lib/actions/vouch.ts`):** `submitVouch` (create/update) enforces every
+    LOCKED rule server-side — no self-vouch, both accounts active, block check (both directions),
+    coach weight only for approved coaches, ONE active vouch/pair (update replaces + writes a
+    revision), rolling 24h limit (counts revisions; 5 player / 20 coach), 30-day update cooldown;
+    optional always-attributed comment; fulfills a pending request. `withdrawVouch`, `requestVouch`
+    (§12) too. Writes via service client after in-action authz; revisions service-only per RLS.
+  - **Recompute on WRITE (`lib/vouches/recompute.ts`):** reads all active vouches (service client),
+    computes with @vouchplay/core, upserts `player_skill_profiles` (preserving admin_override),
+    invalidates player/comments/list cache tags. `lib/settings.ts` reads live `system_settings`
+    (weights/limits/thresholds) with config fallback; STS constants from config.
+  - **UI:** real Vouch **form** modal (skill, with/against, coach toggle [coaches only], anonymous
+    default ON, comment) replacing the Phase-2 stub; cards link to the profile to vouch. CSL/STS/
+    Skill-Verified now flow into PlayerCard + profile header; profile shows real skill distribution
+    bars + attributed comments. DTO reads `player_skill_profiles` (graceful when absent pre-0004).
+  - Gates green (typecheck/lint; build pending). **Deferred within Phase 3:** fraud-flag generation
+    (§11.2 — table + RLS shipped; detectors later), admin invalidate UI (Phase 30), block-management
+    UI (Phase 4 — block is already enforced in the vouch path). **NEXT after apply: a UI/UX polish
+    pass** (Jasper flagged the interface as clunky — agreed; no design pass done yet, §33).
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.

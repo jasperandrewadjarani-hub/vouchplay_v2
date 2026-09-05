@@ -2,6 +2,7 @@ import { unstable_cache } from 'next/cache';
 import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
+import { avatarUrl } from '@/lib/storage';
 import {
   PLAYER_CARD_COLUMNS,
   PLAYER_PROFILE_COLUMNS,
@@ -10,11 +11,13 @@ import {
   type PlayerCardDTO,
   type PlayerProfileDTO,
   type ProfileExtras,
+  type SkillSnapshot,
   type ViewerContext,
 } from './dto';
 
 export const PLAYERS_LIST_TAG = 'players:list';
 export const playerTag = (slug: string) => `player:${slug}`;
+export const commentsTag = (id: string) => `player-comments:${id}`;
 
 export const PAGE_SIZE = 24;
 
@@ -89,6 +92,46 @@ const fetchBadgeFacts = unstable_cache(
     return out;
   },
   ['player-badge-facts'],
+  { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/**
+ * Bulk-load computed skill snapshots (player_skill_profiles) for a set of ids. PUBLIC-safe aggregate
+ * (no voucher identity), read via the anon client. Returns {} when the table isn't present yet.
+ */
+const fetchSkillSnapshots = unstable_cache(
+  async (ids: string[]): Promise<Record<string, SkillSnapshot>> => {
+    const out: Record<string, SkillSnapshot> = {};
+    if (ids.length === 0) return out;
+    try {
+      const supabase = createPublicClient();
+      const { data } = await supabase
+        .from('player_skill_profiles')
+        .select('player_id, community_skill_level, sts, skill_verified, unique_voucher_count, distribution')
+        .in('player_id', ids);
+      for (const r of data ?? []) {
+        const row = r as {
+          player_id: string;
+          community_skill_level: number | null;
+          sts: number | string;
+          skill_verified: boolean;
+          unique_voucher_count: number;
+          distribution: Record<string, number> | null;
+        };
+        out[row.player_id] = {
+          communitySkillLevel: row.community_skill_level,
+          sts: Number(row.sts),
+          skillVerified: row.skill_verified,
+          uniqueVoucherCount: row.unique_voucher_count,
+          distribution: row.distribution ?? {},
+        };
+      }
+    } catch {
+      // Table not present yet (pre-0004) or unavailable → no computed skill; cards fall back to self-rated.
+    }
+    return out;
+  },
+  ['player-skill-snapshots'],
   { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
 );
 
@@ -207,10 +250,15 @@ export async function listPlayers(
   });
   const { rows, total } = await cached();
 
-  const facts = await fetchBadgeFacts(rows.map((r) => r.id));
+  const ids = rows.map((r) => r.id);
+  const [facts, skills] = await Promise.all([fetchBadgeFacts(ids), fetchSkillSnapshots(ids)]);
   const players = rows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
-    const extras: ProfileExtras = { roles: f.roles, identityVerified: f.identityVerified };
+    const extras: ProfileExtras = {
+      roles: f.roles,
+      identityVerified: f.identityVerified,
+      skill: skills[row.id] ?? null,
+    };
     return toPlayerCardDTO(row, extras, viewer);
   });
 
@@ -252,13 +300,99 @@ export async function getPlayerBySlug(
   const row = await cached();
   if (!row) return null;
 
-  const facts = await fetchBadgeFacts([row.id]);
+  const [facts, skills] = await Promise.all([fetchBadgeFacts([row.id]), fetchSkillSnapshots([row.id])]);
   const f = facts[row.id] ?? emptyFacts();
-  const extras: ProfileExtras = { roles: f.roles, identityVerified: f.identityVerified };
+  const extras: ProfileExtras = {
+    roles: f.roles,
+    identityVerified: f.identityVerified,
+    skill: skills[row.id] ?? null,
+  };
   return toPlayerProfileDTO(row, extras, viewer);
 }
 
 /** Lightweight fetch for metadata generation (§28) — reuses the cached profile read. */
 export async function getPlayerMetaBySlug(slug: string): Promise<PlayerProfileDTO | null> {
   return getPlayerBySlug(slug, { viewerId: null, isStaff: false });
+}
+
+// ----------------------------------------------------------------------------
+// Vouch comments (§9.3) — always attributed; public read of active comments.
+// ----------------------------------------------------------------------------
+
+export interface PlayerComment {
+  id: string;
+  authorName: string;
+  authorSlug: string | null;
+  authorInitials: string;
+  authorAvatarUrl: string | null;
+  date: string;
+  body: string;
+}
+
+export async function getPlayerComments(targetId: string): Promise<PlayerComment[]> {
+  const cached = unstable_cache(
+    async (): Promise<PlayerComment[]> => {
+      try {
+        const supabase = createPublicClient();
+        const { data: comments } = await supabase
+          .from('vouch_comments')
+          .select('id, author_id, body, created_at')
+          .eq('target_id', targetId)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        const rows = (comments ?? []) as Array<{
+          id: string;
+          author_id: string;
+          body: string;
+          created_at: string;
+        }>;
+        if (rows.length === 0) return [];
+
+        const authorIds = Array.from(new Set(rows.map((r) => r.author_id)));
+        const { data: authors } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, nickname, slug, avatar_path')
+          .in('id', authorIds);
+        const byId = new Map(
+          (authors ?? []).map((a) => {
+            const row = a as {
+              id: string;
+              first_name: string | null;
+              last_name: string | null;
+              nickname: string | null;
+              slug: string | null;
+              avatar_path: string | null;
+            };
+            return [row.id, row];
+          }),
+        );
+
+        return rows.map((r) => {
+          const a = byId.get(r.author_id);
+          const name =
+            [a?.first_name, a?.last_name].filter(Boolean).join(' ').trim() ||
+            a?.nickname ||
+            'VouchPlay player';
+          const initials =
+            `${a?.first_name?.[0] ?? ''}${a?.last_name?.[0] ?? ''}`.toUpperCase() ||
+            (a?.nickname?.[0] ?? '?').toUpperCase();
+          return {
+            id: r.id,
+            authorName: name,
+            authorSlug: a?.slug ?? null,
+            authorInitials: initials,
+            authorAvatarUrl: avatarUrl(a?.avatar_path),
+            date: r.created_at,
+            body: r.body,
+          };
+        });
+      } catch {
+        return [];
+      }
+    },
+    ['player-comments', targetId],
+    { revalidate: 60, tags: [commentsTag(targetId)] },
+  );
+  return cached();
 }
