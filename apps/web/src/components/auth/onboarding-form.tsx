@@ -8,11 +8,18 @@ import { SubmitButton } from '@/components/ui/button';
 
 const empty: ProfileFormState = {};
 
-export function OnboardingForm({ defaultFirstName = '' }: { defaultFirstName?: string }) {
+export function OnboardingForm({
+  defaultFirstName = '',
+  next,
+}: {
+  defaultFirstName?: string;
+  next?: string;
+}) {
   const [state, action] = useActionState(completeOnboarding, empty);
 
   return (
     <form action={action} className="space-y-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <FormError>{state.error}</FormError>
 
       <div className="grid grid-cols-2 gap-3">

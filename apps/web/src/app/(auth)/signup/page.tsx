@@ -5,7 +5,12 @@ import { GoogleSection } from '@/components/auth/google-button';
 
 export const metadata: Metadata = { title: 'Create account' };
 
-export default function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -17,9 +22,9 @@ export default function SignupPage() {
         </p>
       </div>
 
-      <GoogleSection />
+      <GoogleSection next={next} />
 
-      <SignupForm />
+      <SignupForm next={next} />
 
       <p className="text-foreground-muted text-center text-xs">
         By continuing you agree to VouchPlay&apos;s{' '}
@@ -35,7 +40,10 @@ export default function SignupPage() {
 
       <p className="text-foreground-muted text-center text-sm">
         Already have an account?{' '}
-        <Link href="/login" className="text-primary font-medium hover:underline">
+        <Link
+          href={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}
+          className="text-primary font-medium hover:underline"
+        >
           Sign in
         </Link>
       </p>

@@ -10,3 +10,5 @@
 export * from './skill';
 export * from './settings';
 export * from './brand';
+export * from './visibility';
+export * from './geo';

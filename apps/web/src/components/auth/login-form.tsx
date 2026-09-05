@@ -27,7 +27,7 @@ export function LoginForm({ next }: { next?: string }) {
         </TabButton>
       </div>
 
-      {mode === 'password' ? <PasswordLogin next={next} /> : <CodeLogin />}
+      {mode === 'password' ? <PasswordLogin next={next} /> : <CodeLogin next={next} />}
     </div>
   );
 }
@@ -82,13 +82,14 @@ function PasswordLogin({ next }: { next?: string }) {
   );
 }
 
-function CodeLogin() {
+function CodeLogin({ next }: { next?: string }) {
   const [request, requestAction] = useActionState(requestEmailOtp, empty);
   const [verify, verifyAction] = useActionState(verifyEmailOtp, empty);
 
   if (!request.ok) {
     return (
       <form action={requestAction} className="space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
         <FormError>{request.error}</FormError>
         <Field label="Email" htmlFor="code-email" required hint="We'll email you a 6-digit code.">
           <Input id="code-email" name="email" type="email" autoComplete="email" required />
@@ -103,6 +104,7 @@ function CodeLogin() {
       <FormMessage>{request.message}</FormMessage>
       <FormError>{verify.error}</FormError>
       <input type="hidden" name="email" value={request.email} />
+      {request.next && <input type="hidden" name="next" value={request.next} />}
       <Field label="6-digit code" htmlFor="token" required>
         <Input
           id="token"

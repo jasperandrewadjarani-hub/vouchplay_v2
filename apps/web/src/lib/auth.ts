@@ -58,8 +58,50 @@ export async function requireUser(returnTo?: string): Promise<User> {
   return user;
 }
 
-/** Where to send a user right after authentication: onboarding if incomplete, else home. */
-export function postAuthPath(profile: ProfileRow | null, fallback = '/'): string {
-  if (!profile || !profile.onboarded_at) return '/onboarding';
-  return fallback;
+/**
+ * Sanitize a post-auth `next` target: only same-origin absolute paths are allowed (blocks
+ * open-redirects to `//evil.com` or `https://…`). Returns undefined when unsafe/absent.
+ */
+export function safeNext(next?: string | null): string | undefined {
+  if (!next) return undefined;
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return undefined;
+  return next;
+}
+
+/**
+ * Where to send a user right after authentication: onboarding if incomplete (preserving `next` so
+ * the protected action resumes once onboarding finishes), else the sanitized `next` (default home).
+ */
+export function postAuthPath(profile: ProfileRow | null, next?: string | null): string {
+  const target = safeNext(next);
+  if (!profile || !profile.onboarded_at) {
+    return target ? `/onboarding?next=${encodeURIComponent(target)}` : '/onboarding';
+  }
+  return target ?? '/';
+}
+
+/** Staff roles that may see otherwise-hidden profile fields (handover §37, moderation). */
+const STAFF_ROLES = ['moderator', 'support', 'admin', 'super_admin'];
+
+/**
+ * Viewer context for DTO projection: the current user's id (or null) and whether they are staff.
+ * Reads only the caller's OWN roles (RLS-permitted). Never throws — degrades to an anonymous viewer.
+ */
+export async function getViewerContext(): Promise<{ viewerId: string | null; isStaff: boolean }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { viewerId: null, isStaff: false };
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', user.id)
+      .eq('status', 'active');
+    const isStaff = (data ?? []).some((r) => STAFF_ROLES.includes((r as { role: string }).role));
+    return { viewerId: user.id, isStaff };
+  } catch {
+    return { viewerId: null, isStaff: false };
+  }
 }

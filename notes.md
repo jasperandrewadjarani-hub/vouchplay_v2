@@ -233,6 +233,48 @@ Getting the first deploy up hit two issues:
   "by JT Consulting & Analytics" microcopy); §5.3.1 About/FAQ location; FAQ/components/Phase-2-scope
   updates; changelog + Locked Decisions. **Ready to hand off to a NEW conversation for Phase 2.**
 
+- **2026-09-05** — **PHASE 2 core BUILT + verified locally** (directory & profile, handover §8–§9,
+  §28, §34A). Shipped:
+  - **Config:** skill-band **colors + blurbs** (mined from v1 skill-tiers) on `SKILL_BANDS`;
+    `visibility.ts` (profile field-visibility contract: sex/city/age/directory, privacy-preserving
+    defaults, `parseVisibility`/`fieldVisible`); `geo.ts` (`PH_CITIES`, mined from v1).
+  - **`@vouchplay/db`:** hand-authored `Database`/row types matching migrations 0001–0002 (Supabase
+    CLI not on PATH + no access token, so `gen types` deferred — types kept in sync by hand; see
+    `packages/db/src/types.ts` note).
+  - **Data layer (RLS-safe, cache-first §34A.5 PUBLIC_REVALIDATED):** `lib/supabase/public.ts` (anon
+    cookie-less client for cached public reads, RLS-enforced as `anon`); `lib/players/dto.ts`
+    (privacy projection — hidden fields dropped server-side before payload; `PLAYER_CARD_COLUMNS`/
+    `PLAYER_PROFILE_COLUMNS`, **no `select(*)`**); `lib/players/queries.ts` (`listPlayers` +
+    `getPlayerBySlug`, `unstable_cache` + tags `players:list`/`player:{slug}`, bulk role/identity
+    joins = no N+1, default sort = recent activity + verified-first tiebreak, **never STS-ranked**,
+    directory opt-out via `profile_visibility.directory`).
+    - **Public badge facts (Coach/Organizer/ID-Verified) — RLS note:** these are public by design
+      (§8.2) but `user_roles`/`identity_verifications` RLS is owner-or-staff, so Phase 2 reads them
+      **server-side via the service client with a tight non-sensitive projection** (only booleans
+      reach the client). RLS-clean hardening = migration 0003 `public_player_facts()` SECURITY
+      DEFINER fn granted to `anon` (written, to apply + switch to in the fold-in step).
+  - **Components:** `PlayerAvatar` (initials fallback), `badges` (SkillPill w/ community-vs-self
+    label, StsChip [info-only, not a rank], ID/Skill-Verified, Coach, Organizer, LFP, sponsorship,
+    Sex), `PlayerCard`, `ClubStack` (empty→null until Phase 5), `SearchFilters` (client; §8.4 — URL
+    params, PH-cities datalist), `ShareButton` (native share + copy fallback, §28), `VouchButton`
+    (auth gate + resume via `?intent=vouch`), `ProfileActions` (gated secondary/contextual actions),
+    profile section empty-states (skill distribution scaffold / comments / achievements / skill tags).
+  - **Pages:** rewrote `/players` (directory: filters + grid + pagination + result count); new
+    `/players/[slug]` (full profile + `generateMetadata` → canonical + OG/Twitter, §28). Public 404
+    for non-active/non-onboarded.
+  - **Auth resume (Phase-2 gate "login gate resumes protected action"):** threaded a sanitized
+    `next` through the WHOLE flow — `safeNext()` (blocks open-redirects), `postAuthPath` preserves
+    `next` across onboarding, all auth actions (password/OTP request+verify) + `completeOnboarding`
+    honor it, signup/code-login/onboarding forms + pages carry it, signup↔login cross-links keep it.
+  - **Cache invalidation:** `completeOnboarding` now `revalidateTag`s `players:list` + `player:{slug}`.
+  - **Gates:** lint / typecheck / test (7/7) / `next build` all green. **Verified in-browser vs the
+    LIVE Supabase DB:** directory lists the seeded profile, filter combos (q+coach) work with no
+    console errors, profile page renders header + sections + correct `<title>`/OG, anonymous Vouch/
+    Request gates route to `/signup?next=/players/{slug}?intent=…` (resume wired).
+  - **Deferred (fold-ins, next commits):** apply migration 0003 (avatars bucket + `public_player_facts`)
+    then switch badge reads off the service client; avatar upload on onboarding; `/me/settings/password`
+    reset landing; seed JT admin; RLS/role-spoofing test; Admin MFA framework.
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.

@@ -36,7 +36,10 @@ export default async function LoginPage({
 
       <p className="text-foreground-muted text-center text-sm">
         New to VouchPlay?{' '}
-        <Link href="/signup" className="text-primary font-medium hover:underline">
+        <Link
+          href={next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}
+          className="text-primary font-medium hover:underline"
+        >
           Create an account
         </Link>
       </p>

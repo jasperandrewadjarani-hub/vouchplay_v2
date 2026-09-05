@@ -5,12 +5,17 @@ import { OnboardingForm } from '@/components/auth/onboarding-form';
 
 export const metadata: Metadata = { title: 'Complete your profile' };
 
-export default async function OnboardingPage() {
-  const user = await requireUser('/onboarding');
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  const user = await requireUser(next ? `/onboarding?next=${encodeURIComponent(next)}` : '/onboarding');
   const profile = await getMyProfile();
 
   // Already onboarded → nothing to do here.
-  if (profile?.onboarded_at) redirect('/');
+  if (profile?.onboarded_at) redirect(next && next.startsWith('/') ? next : '/');
 
   // Prefill first name from the OAuth provider display name when available.
   const providerName =
@@ -29,7 +34,7 @@ export default async function OnboardingPage() {
           A few details so players can find and vouch for you. You can edit these anytime.
         </p>
       </div>
-      <OnboardingForm defaultFirstName={firstName} />
+      <OnboardingForm defaultFirstName={firstName} next={next} />
     </div>
   );
 }

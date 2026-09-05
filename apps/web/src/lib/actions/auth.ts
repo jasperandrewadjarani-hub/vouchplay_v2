@@ -17,6 +17,8 @@ export interface FormState {
   error?: string;
   message?: string;
   email?: string;
+  /** Carried through the OTP request→verify steps so the protected action resumes after auth. */
+  next?: string;
 }
 
 function firstIssue(error: { issues: { message: string }[] }): string {
@@ -32,15 +34,16 @@ function callbackUrl(next?: string): string {
 export async function requestEmailOtp(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = requestOtpSchema.safeParse({ email: formData.get('email') });
   if (!parsed.success) return { error: firstIssue(parsed.error) };
+  const next = (formData.get('next') as string | null) ?? undefined;
 
   try {
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
-      options: { shouldCreateUser: true, emailRedirectTo: callbackUrl() },
+      options: { shouldCreateUser: true, emailRedirectTo: callbackUrl(next) },
     });
     if (error) return { error: error.message };
-    return { ok: true, email: parsed.data.email, message: 'Code sent — check your email.' };
+    return { ok: true, email: parsed.data.email, message: 'Code sent — check your email.', next };
   } catch {
     return { error: 'Sign-in is not available yet. Please try again shortly.' };
   }
@@ -53,6 +56,7 @@ export async function verifyEmailOtp(_prev: FormState, formData: FormData): Prom
     token: formData.get('token'),
   });
   if (!parsed.success) return { error: firstIssue(parsed.error) };
+  const next = (formData.get('next') as string | null) ?? undefined;
 
   try {
     const supabase = await createClient();
@@ -67,7 +71,7 @@ export async function verifyEmailOtp(_prev: FormState, formData: FormData): Prom
   }
 
   const profile = await getMyProfile();
-  redirect(postAuthPath(profile));
+  redirect(postAuthPath(profile, next));
 }
 
 /** Returning-user login with email + password. */
@@ -77,6 +81,7 @@ export async function signInWithPassword(_prev: FormState, formData: FormData): 
     password: formData.get('password'),
   });
   if (!parsed.success) return { error: firstIssue(parsed.error) };
+  const next = (formData.get('next') as string | null) ?? undefined;
 
   try {
     const supabase = await createClient();
@@ -87,7 +92,7 @@ export async function signInWithPassword(_prev: FormState, formData: FormData): 
   }
 
   const profile = await getMyProfile();
-  redirect(postAuthPath(profile));
+  redirect(postAuthPath(profile, next));
 }
 
 /** Set (or change) the account password for the currently-authenticated user. */

@@ -11,13 +11,14 @@ const empty: FormState = {};
  * Email signup: enter email → receive a 6-digit code → verify. Verifying creates the session and
  * redirects to onboarding (handover §7.1). A password can be set later from settings.
  */
-export function SignupForm() {
+export function SignupForm({ next }: { next?: string }) {
   const [request, requestAction] = useActionState(requestEmailOtp, empty);
   const [verify, verifyAction] = useActionState(verifyEmailOtp, empty);
 
   if (!request.ok) {
     return (
       <form action={requestAction} className="space-y-4">
+        {next && <input type="hidden" name="next" value={next} />}
         <FormError>{request.error}</FormError>
         <Field
           label="Email"
@@ -37,6 +38,7 @@ export function SignupForm() {
       <FormMessage>{request.message}</FormMessage>
       <FormError>{verify.error}</FormError>
       <input type="hidden" name="email" value={request.email} />
+      {request.next && <input type="hidden" name="next" value={request.next} />}
       <Field label="6-digit code" htmlFor="signup-token" required>
         <Input
           id="signup-token"
