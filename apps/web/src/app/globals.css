@@ -75,6 +75,9 @@
 
 html {
   color-scheme: light dark;
+  /* Global scale: Tailwind sizes/spacing are rem-based, so a smaller root shrinks the whole UI —
+     denser cards, more per screen on mobile (§33 mobile-first). */
+  font-size: 14px;
 }
 
 body {

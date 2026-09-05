@@ -1,6 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
+import { Loader2 } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
@@ -47,6 +48,7 @@ export function SubmitButton({
       disabled={pending}
       className={`${base} ${variants[variant]} w-full ${className}`}
     >
+      {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}
       {pending ? pendingLabel : children}
     </button>
   );

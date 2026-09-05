@@ -388,7 +388,17 @@ Getting the first deploy up hit two issues:
   deleted test data (0 rows remain). Full loop schema→recompute→public-read→display verified live.
   Handover §0Z stamped **Phase 3 ✅ DONE**. **Next: Phase 4 — Safety & Moderation (§11, §15).**
 
+- **2026-09-05** — **Minor UI fixes (Jasper).** (1) Header/auth logo bigger (h-9→h-11) with a
+  readable "By JT Consulting & Analytics" line stacked BELOW the wordmark (all breakpoints).
+  (2) Global scale down: root `font-size: 14px` (rem-based Tailwind → smaller text + tighter spacing
+  → more cards per mobile screen); PlayerCard denser (sm avatar, p-3.5, gap-2.5). (3) Loading cue:
+  `components/ui/spinner.tsx` (`Spinner`/`LoadingScreen`) + route `loading.tsx` for `(app)` and
+  `(auth)` → centered spinner on navigation; SubmitButton shows a spinner while pending. Verified
+  mobile (375px) in-browser; gates green. **Phase 4 kickoff prompt written:
+  `docs/PHASE_4_KICKOFF.md`** (Safety & Moderation) + §0Z Phase-4 ref corrected to §14/§11/§30.6/§47.
+
 ## Next up
+- **Phase 4 — Safety & Moderation** — kickoff prompt ready at `docs/PHASE_4_KICKOFF.md`.
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
 - `supabase gen types` → `packages/db`; smoke-test signup → OTP → onboarding end-to-end on the live

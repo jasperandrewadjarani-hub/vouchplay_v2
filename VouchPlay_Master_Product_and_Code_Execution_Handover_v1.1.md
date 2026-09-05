@@ -87,9 +87,9 @@ enforced in the vouch path).
 hero headers, hover-lift cards, gradient nav indicators, real home hero, branded auth) — layered on
 the locked §33.2 palette, theme-aware, reduced-motion safe.
 
-**Next:** Phase 4 — Safety & Moderation (§11, §15) — reports, comment reports, block UI, skill review,
-moderation queue, fraud-flag review. (Open ops: seed Tane's admin; clear Supabase over-quota before
-21 Sep 2026.)
+**Next:** Phase 4 — Safety & Moderation (§14, §11, §30.6, §47) — reports, comment reports, block UI,
+skill review, moderation queue + actions, fraud-flag review, appeals/support path. (Open ops: seed
+Tane's admin; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 

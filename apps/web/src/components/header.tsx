@@ -12,18 +12,17 @@ export async function Header() {
   return (
     <header className="border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="VouchPlay home">
+        <Link href="/" className="flex flex-col leading-none" aria-label="VouchPlay home">
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
             alt="VouchPlay"
-            width={168}
-            height={36}
+            width={210}
+            height={44}
             priority
-            className="h-9 w-auto"
+            className="h-11 w-auto"
           />
-          <span className="border-border hidden border-l pl-2.5 text-[10px] leading-tight font-medium text-foreground-muted sm:block">
-            by JT Consulting
-            <br />& Analytics
+          <span className="text-foreground-muted mt-1 pl-0.5 text-[10px] font-medium tracking-wide">
+            By JT Consulting &amp; Analytics
           </span>
         </Link>
 
