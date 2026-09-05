@@ -80,6 +80,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             contact: t.contact ?? '',
             termsText: t.termsText ?? '',
             paymentInstructions: t.paymentInstructions ?? '',
+            paymentMethods: t.paymentMethods ?? '',
           }}
         />
       </section>

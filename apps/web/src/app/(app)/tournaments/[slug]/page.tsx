@@ -155,6 +155,8 @@ export default async function TournamentPage({ params }: Params) {
         <RegistrationPanel
           tournamentId={t.id}
           maxClubsPerPlayer={t.maxClubsPerPlayer}
+          paymentInstructions={t.paymentInstructions}
+          paymentMethods={t.paymentMethods}
           divisions={t.divisions}
           state={regState}
         />

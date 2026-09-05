@@ -21,6 +21,7 @@ export interface TournamentFormInitial {
   contact?: string;
   termsText?: string;
   paymentInstructions?: string;
+  paymentMethods?: string;
 }
 
 const textarea =
@@ -143,6 +144,18 @@ export function TournamentForm({
           maxLength={2000}
           defaultValue={initial.paymentInstructions ?? ''}
           className={textarea}
+        />
+      </Field>
+      <Field
+        label="Accepted payment methods"
+        htmlFor="paymentMethods"
+        hint="Comma-separated labels, e.g. GCash, Maya, bank transfer."
+      >
+        <Input
+          id="paymentMethods"
+          name="paymentMethods"
+          maxLength={300}
+          defaultValue={initial.paymentMethods ?? ''}
         />
       </Field>
       <Field label="Cover photo (optional)" htmlFor="cover" hint="PNG, JPG or WebP, up to 4 MB.">

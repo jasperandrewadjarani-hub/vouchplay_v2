@@ -317,6 +317,7 @@ export interface TournamentRow {
   terms_text: string | null;
   contact: string | null;
   payment_instructions: string | null;
+  payment_methods: string | null;
   social_links: Record<string, unknown>;
   max_divisions_per_player: number;
   max_clubs_per_player: number;
@@ -481,6 +482,35 @@ export interface WaitlistEntryRow {
   position_rank: number;
   status: WaitlistStatus;
   created_at: string;
+}
+
+// ---------- Payments (migration 0009) ----------
+export type PaymentStatus =
+  | 'not_required'
+  | 'pending'
+  | 'submitted'
+  | 'verified'
+  | 'rejected'
+  | 'refunded'
+  | 'partially_refunded';
+
+export interface PaymentRow {
+  id: string;
+  registration_id: string;
+  amount_due: number;
+  amount_submitted: number | null;
+  currency: string;
+  method: string | null;
+  payer_name: string | null;
+  transaction_reference: string | null;
+  proof_storage_path: string | null;
+  status: PaymentStatus;
+  submitted_at: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AuditLogRow {

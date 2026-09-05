@@ -102,6 +102,7 @@ export async function createTournament(
     contact: formData.get('contact') ?? '',
     termsText: formData.get('termsText') ?? '',
     paymentInstructions: formData.get('paymentInstructions') ?? '',
+    paymentMethods: formData.get('paymentMethods') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -130,6 +131,7 @@ export async function createTournament(
         contact: v.contact || null,
         terms_text: v.termsText || null,
         payment_instructions: v.paymentInstructions || null,
+        payment_methods: v.paymentMethods || null,
         owner_organizer_id: user.id,
         status: 'draft',
       })
@@ -178,6 +180,7 @@ export async function updateTournament(
     contact: formData.get('contact') ?? '',
     termsText: formData.get('termsText') ?? '',
     paymentInstructions: formData.get('paymentInstructions') ?? '',
+    paymentMethods: formData.get('paymentMethods') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -197,6 +200,7 @@ export async function updateTournament(
       contact: v.contact || null,
       terms_text: v.termsText || null,
       payment_instructions: v.paymentInstructions || null,
+      payment_methods: v.paymentMethods || null,
     };
     const cover = formData.get('cover');
     if (cover instanceof File && cover.size > 0) {

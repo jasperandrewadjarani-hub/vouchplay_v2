@@ -3,6 +3,12 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { confirmRegistration, rejectRegistration } from '@/lib/actions/registration';
+import {
+  verifyPayment,
+  rejectPayment,
+  markRefunded,
+  getProofSignedUrl,
+} from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
 
 /** Organizer registrations dashboard (handover §26.4) — confirm / reject with waitlist release. */
@@ -108,6 +114,82 @@ function RegRow({ tournamentId, reg }: { tournamentId: string; reg: OrganizerReg
           </button>
         </div>
       )}
+
+      {/* Payment review (§24.4) */}
+      {reg.paymentId && (
+        <div className="border-border mt-2 rounded-lg border border-dashed p-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-foreground-muted text-xs">
+              Payment:{' '}
+              <span className="text-foreground font-medium">
+                {reg.paymentStatus?.replace(/_/g, ' ')}
+              </span>
+              {reg.amountDue != null && reg.currency && (
+                <span>
+                  {' '}
+                  · {reg.currency} {reg.amountDue.toLocaleString()}
+                </span>
+              )}
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {reg.hasProof && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    start(async () => {
+                      const res = await getProofSignedUrl(reg.paymentId as string);
+                      if (res.url) window.open(res.url, '_blank', 'noopener');
+                      else setMsg(res.error ?? 'Could not open proof.');
+                    })
+                  }
+                  className={`${btn} border-border text-foreground border`}
+                >
+                  View proof
+                </button>
+              )}
+              {reg.paymentStatus === 'submitted' && (
+                <>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => run(() => verifyPayment(reg.paymentId as string, tournamentId))}
+                    className={`${btn} vp-gradient text-white`}
+                  >
+                    Verify
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      const why = prompt('Reason for rejecting this payment?');
+                      if (why && why.trim())
+                        run(() => rejectPayment(reg.paymentId as string, tournamentId, why.trim()));
+                    }}
+                    className={`${btn} text-danger border-border border`}
+                  >
+                    Reject payment
+                  </button>
+                </>
+              )}
+              {reg.paymentStatus === 'verified' && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    if (confirm('Mark this payment refunded?'))
+                      run(() => markRefunded(reg.paymentId as string, tournamentId, ''));
+                  }}
+                  className={`${btn} border-border text-foreground border`}
+                >
+                  Mark refunded
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {msg && <p className="text-foreground-muted mt-1 text-xs">{msg}</p>}
     </li>
   );

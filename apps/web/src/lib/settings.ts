@@ -66,6 +66,13 @@ export async function loadSettingFlag(key: SystemSettingsKey, fallback: boolean)
   return typeof v === 'boolean' ? v : fallback;
 }
 
+/** Read a numeric setting from system_settings (handover §30.7), with a fallback default. */
+export async function loadSettingNumber(key: SystemSettingsKey, fallback: number): Promise<number> {
+  const m = await loadSettings();
+  const v = m[key];
+  return typeof v === 'number' ? v : fallback;
+}
+
 export interface SafetySettings {
   reportsPer24h: number;
   skillReviewsPer24h: number;

@@ -234,6 +234,7 @@ export async function getTournamentBySlug(
       contact: row.contact,
       termsText: row.terms_text,
       paymentInstructions: row.payment_instructions,
+      paymentMethods: row.payment_methods,
       ownerId: row.owner_organizer_id,
       ownerName: owner?.name ?? null,
       ownerSlug: owner?.slug ?? null,

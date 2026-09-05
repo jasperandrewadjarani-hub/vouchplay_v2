@@ -54,6 +54,9 @@ export interface ViewerRegistration {
   id: string;
   status: string;
   slotHoldExpiresAt: string | null;
+  paymentId: string | null;
+  paymentStatus: string | null;
+  paymentRejectionReason: string | null;
 }
 export interface ViewerInvitation {
   id: string;
@@ -140,16 +143,47 @@ export async function getViewerRegistrationState(
           .in('team_id', activeTeamIds)
           .not('status', 'in', '(withdrawn,cancelled,rejected)')
       : { data: [] };
-    for (const r of (regs ?? []) as {
+    const regList = (regs ?? []) as {
       id: string;
       division_id: string;
       status: string;
       slot_hold_expires_at: string | null;
-    }[]) {
+    }[];
+    // Payments for those registrations.
+    const paymentByReg = new Map<
+      string,
+      { id: string; status: string; rejection_reason: string | null }
+    >();
+    if (regList.length > 0) {
+      const { data: pays } = await svc
+        .from('payments')
+        .select('id, registration_id, status, rejection_reason')
+        .in(
+          'registration_id',
+          regList.map((r) => r.id),
+        );
+      for (const p of (pays ?? []) as {
+        id: string;
+        registration_id: string;
+        status: string;
+        rejection_reason: string | null;
+      }[]) {
+        paymentByReg.set(p.registration_id, {
+          id: p.id,
+          status: p.status,
+          rejection_reason: p.rejection_reason,
+        });
+      }
+    }
+    for (const r of regList) {
+      const pay = paymentByReg.get(r.id);
       registrationsByDivision[r.division_id] = {
         id: r.id,
         status: r.status,
         slotHoldExpiresAt: r.slot_hold_expires_at,
+        paymentId: pay?.id ?? null,
+        paymentStatus: pay?.status ?? null,
+        paymentRejectionReason: pay?.rejection_reason ?? null,
       };
     }
   }
@@ -235,6 +269,11 @@ export interface OrganizerRegistration {
   slotHoldExpiresAt: string | null;
   createdAt: string;
   members: Mini[];
+  paymentId: string | null;
+  paymentStatus: string | null;
+  amountDue: number | null;
+  currency: string | null;
+  hasProof: boolean;
 }
 
 export async function getOrganizerRegistrations(
@@ -284,20 +323,57 @@ export async function getOrganizerRegistrations(
   }[];
   const profiles = await resolve(members.map((m) => m.player_id));
 
-  return regRows.map((r) => ({
-    id: r.id,
-    divisionId: r.division_id,
-    divisionName: divName.get(r.division_id) ?? 'Division',
-    status: r.status,
-    eligibilityStatus: r.eligibility_status,
-    slotHoldExpiresAt: r.slot_hold_expires_at,
-    createdAt: r.created_at,
-    members: members
-      .filter((m) => m.team_id === r.team_id)
-      .sort((a, b) => a.member_order - b.member_order)
-      .map((m) => profiles.get(m.player_id))
-      .filter((x): x is Mini => !!x),
-  }));
+  // Payments for these registrations.
+  const { data: pays } = await svc
+    .from('payments')
+    .select('id, registration_id, status, amount_due, currency, proof_storage_path')
+    .in(
+      'registration_id',
+      regRows.map((r) => r.id),
+    );
+  const payByReg = new Map<
+    string,
+    {
+      id: string;
+      status: string;
+      amount_due: number;
+      currency: string;
+      proof_storage_path: string | null;
+    }
+  >();
+  for (const p of (pays ?? []) as {
+    id: string;
+    registration_id: string;
+    status: string;
+    amount_due: number;
+    currency: string;
+    proof_storage_path: string | null;
+  }[]) {
+    payByReg.set(p.registration_id, p);
+  }
+
+  return regRows.map((r) => {
+    const pay = payByReg.get(r.id);
+    return {
+      id: r.id,
+      divisionId: r.division_id,
+      divisionName: divName.get(r.division_id) ?? 'Division',
+      status: r.status,
+      eligibilityStatus: r.eligibility_status,
+      slotHoldExpiresAt: r.slot_hold_expires_at,
+      createdAt: r.created_at,
+      members: members
+        .filter((m) => m.team_id === r.team_id)
+        .sort((a, b) => a.member_order - b.member_order)
+        .map((m) => profiles.get(m.player_id))
+        .filter((x): x is Mini => !!x),
+      paymentId: pay?.id ?? null,
+      paymentStatus: pay?.status ?? null,
+      amountDue: pay ? Number(pay.amount_due) : null,
+      currency: pay?.currency ?? null,
+      hasProof: !!pay?.proof_storage_path,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

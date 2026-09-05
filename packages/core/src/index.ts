@@ -10,3 +10,4 @@ export const CORE_PACKAGE = '@vouchplay/core';
 
 export * from './notifications/email';
 export * from './vouches';
+export * from './payments/provider';

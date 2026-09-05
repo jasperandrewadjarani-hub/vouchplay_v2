@@ -22,6 +22,7 @@ export const tournamentCreateSchema = z.object({
   contact: optionalText(200),
   termsText: optionalText(8000),
   paymentInstructions: optionalText(2000),
+  paymentMethods: optionalText(300),
 });
 export type TournamentCreateInput = z.infer<typeof tournamentCreateSchema>;
 

@@ -5,6 +5,7 @@ import { RegisterActions } from './register-actions';
 import { PartnerInviteForm } from './partner-invite-form';
 import { InvitationActions } from './invitation-actions';
 import { ClubRepSelector } from './club-rep-selector';
+import { PaymentForm } from './payment-form';
 
 /**
  * Signed-in registration panel on a tournament page (handover §20–§23). Rendered only when the
@@ -14,11 +15,15 @@ import { ClubRepSelector } from './club-rep-selector';
 export function RegistrationPanel({
   tournamentId,
   maxClubsPerPlayer,
+  paymentInstructions,
+  paymentMethods,
   divisions,
   state,
 }: {
   tournamentId: string;
   maxClubsPerPlayer: number;
+  paymentInstructions: string | null;
+  paymentMethods: string | null;
   divisions: DivisionDTO[];
   state: ViewerRegistrationState;
 }) {
@@ -55,6 +60,20 @@ export function RegistrationPanel({
                     registration={reg ? { id: reg.id, status: reg.status } : null}
                   />
                 </div>
+                {reg &&
+                  d.feeAmount > 0 &&
+                  (reg.status === 'payment_pending' || reg.status === 'payment_submitted') && (
+                    <PaymentForm
+                      registrationId={reg.id}
+                      tournamentId={tournamentId}
+                      amountDue={d.feeAmount}
+                      currency={d.currency}
+                      instructions={paymentInstructions}
+                      methods={paymentMethods}
+                      paymentStatus={reg.paymentStatus}
+                      rejectionReason={reg.paymentRejectionReason}
+                    />
+                  )}
                 {d.format === 'doubles' && !team && !reg && (
                   <div className="mt-2">
                     <p className="text-foreground-muted mb-1 text-xs">

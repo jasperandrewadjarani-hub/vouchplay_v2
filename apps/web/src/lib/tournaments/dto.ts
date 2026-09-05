@@ -76,6 +76,7 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   contact: string | null;
   termsText: string | null;
   paymentInstructions: string | null;
+  paymentMethods: string | null;
   ownerId: string;
   ownerName: string | null;
   ownerSlug: string | null;
@@ -174,5 +175,5 @@ export const TOURNAMENT_CARD_COLUMNS =
   'id, slug, name, city, cover_path, status, visibility, start_at, end_at';
 export const TOURNAMENT_DETAIL_COLUMNS =
   `${TOURNAMENT_CARD_COLUMNS}, description, venue_name, address_text, timezone, ` +
-  'registration_open_at, registration_close_at, contact, terms_text, payment_instructions, ' +
+  'registration_open_at, registration_close_at, contact, terms_text, payment_instructions, payment_methods, ' +
   'owner_organizer_id, max_divisions_per_player, max_clubs_per_player, club_representation_required, verified_clubs_only';

@@ -3,6 +3,9 @@ import { publicEnv } from '@/lib/env';
 /** Public bucket that holds profile avatars (handover §38; created in migration 0003). */
 export const AVATARS_BUCKET = 'avatars';
 
+/** PRIVATE bucket for payment proof (handover §38; created in migration 0009). Access via signed URLs only. */
+export const PAYMENT_PROOFS_BUCKET = 'payment-proofs';
+
 /**
  * Resolve a stored avatar path to a public URL. Avatars live in a PUBLIC bucket, so the URL is
  * derived without a network call. Returns null when there is no avatar (caller renders initials).
