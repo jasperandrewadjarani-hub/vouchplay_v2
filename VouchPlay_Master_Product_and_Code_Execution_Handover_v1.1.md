@@ -126,11 +126,24 @@ tournaments (action + page guard + RLS). `tournaments` + `divisions` + `tourname
 `/tournaments/new`, `/tournaments/[slug]/manage`. Migration `0007_tournaments` written
 (`scripts/apply-0007.sql`) — **apply pending** (reads degrade to empty, writes error until it lands).
 Deferred: registration/partner/teams/club-representation (Phase 7), payments (Phase 8), eligibility
-(Phase 9), §16 offers, §16A bids. Gates green; live.
+(Phase 9), §16 offers, §16A bids. Migration `0007_tournaments` **applied** (verify 5/1/8). Gates green; live.
 
-**Next:** Phase 7 — Partner, Team & Registration (§20–§25). (Open ops: apply migration 0007; approve
-an organizer via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`;
-clear Supabase over-quota before 21 Sep 2026.)
+**Phase 7 — Partner, Team & Registration: ✅ BUILT + live (§20–§23).** `partner_invitations`, `teams`,
+`team_members`, `tournament_player_club_representations`, `registrations`, `registration_events`,
+`waitlist_entries` (§36.23–36.27, §36.25A, §36.29) + RLS. **Slot reservation is transactional (LOCKED
+§23.2)** — `register_team` locks the division row and atomically holds-or-waitlists; reciprocal
+partner cross-invites merge atomically in `accept_partner_invitation`; `release_slot` promotes the
+waitlist on withdraw/reject. Partner invites (§20), doubles team formation, singles solo entry,
+multi-club representation (§22 — max_clubs_per_player + active-membership + club-lock), duplicate
+prevention (§21.4). UI: signed-in registration panel on the tournament page (register/withdraw, invite,
+invitations, club select) + organizer registrations dashboard on manage (confirm/reject, waitlist
+release). Confirm path: organizer confirms directly (payments = Phase 8). Migration `0008_registration`
+written (`scripts/apply-0008.sql`) — **apply pending**. Deferred: payments (§24), eligibility (§25),
+hold-expiry/waitlist auto-promotion cron, partner-finder browse UI, club-lock override UI. Gates green; live.
+
+**Next:** Phase 8 — Payments (§24). (Open ops: apply migration 0008; approve an organizer via `/staff`
+→ Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota
+before 21 Sep 2026.)
 
 ---
 

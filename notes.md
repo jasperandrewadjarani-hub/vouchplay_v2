@@ -521,10 +521,47 @@ Getting the first deploy up hit two issues:
     eligibility/anti-sandbagging (Phase 9), organizer export (Phase 10), §16 offers, §16A bidding.
     **Next: Phase 7 — Partner, Team & Registration (§20–§25).**
 
+- **2026-09-06** — **Migration 0007 APPLIED (Tournaments fully live).** Verify returned
+  tournament_tables=5, tournament_helper=1, tournament_rls_policies=8. Organizer application/approval,
+  tournament CRUD/lifecycle, divisions, discovery, interests, announcements, co-organizers all active.
+  (Note: super_admin/admin can create tournaments directly without an organizer grant; the Role-apps
+  approval flow grants the `organizer` role to regular users.)
+
+- **2026-09-06** — **PHASE 7 — Partner, Team & Registration (§20–§23): BUILT + deployed + live.**
+  Scope: §20–§23 (payments §24 = Phase 8, eligibility §25 = Phase 9). Confirm-path decision (Jasper):
+  **organizer confirms directly** (payment-proof/verify layer lands in Phase 8). Awaiting one manual
+  SQL paste (migration 0008) to fully activate.
+  - **Migration 0008 (`0008_registration.sql`, WRITTEN — apply pending):** `partner_invitations`,
+    `teams`, `team_members`, `tournament_player_club_representations`, `registrations`,
+    `registration_events`, `waitlist_entries` (§36.23–36.27, §36.25A, §36.29) + enums + RLS + helper
+    `is_team_member`. **Transactional RPCs (LOCKED §23.2/§35.3 — no capacity race):**
+    `register_team` (locks the division row `SELECT … FOR UPDATE`, counts confirmed + valid active
+    holds, atomically creates a slot hold [payment_pending] or waitlists), `release_slot`
+    (withdraw/reject + promote next waitlisted), `accept_partner_invitation` (merges a reciprocal
+    cross-invite §20.4 + creates the team atomically, blocks conflicting teams), `slot_hold_minutes`.
+    One-paste apply: **`scripts/apply-0008.sql`** (expect reg_tables=7, reg_rpcs=5, reg_rls_policies=7).
+  - **Server actions (`lib/actions/registration.ts`):** invite/accept/decline/cancel partner;
+    registerSolo/registerTeam/withdraw (via RPCs); setClubRepresentations (§22 — max_clubs_per_player
+    + active-membership enforced, contiguous order, club-lock respected); organizer confirm/reject
+    (`approve_registrations` perm). Duplicate-prevention (§21.4), block + account-status enforced.
+  - **UI:** tournament page gains a signed-in **registration panel** (per open division:
+    register/withdraw, partner invite + team display, pending invitations accept/decline/cancel, club
+    representation multi-select); `/tournaments/[slug]/manage` gains the **organizer registrations
+    dashboard** (grouped by division; confirm/reject with waitlist release). Partner finder =
+    invite-by-handle (LFP discovery list query exists, `getPartnerCandidates`, not yet surfaced as a
+    browse UI — invite is by handle).
+  - **Gates green** (typecheck/lint/format/test 18/build — tournament routes present). Committed
+    `2625463`, pushed to `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0008.sql` + return verify numbers. Reads
+    degrade to empty until it lands; writes error gracefully.
+  - **Deferred:** payments (§24, Phase 8), eligibility/anti-sandbagging (§25, Phase 9), a hold-expiry
+    + waitlist auto-promotion **cron** (V1 handles promotion on explicit withdraw/reject; expired
+    holds free capacity lazily since register_team only counts unexpired holds), partner-finder browse
+    UI, and the club-lock organizer-override UI (§22.5). **Next: Phase 8 — Payments (§24).**
+
 ## Next up
-- **Manual: apply `scripts/apply-0007.sql`** (migration 0007, Tournaments) + return verify numbers;
-  then approve at least one organizer via `/staff` → Role apps so tournament creation can be tested.
-- **Phase 7 — Partner, Team & Registration** (handover §5273; §20–§25) next.
+- **Manual: apply `scripts/apply-0008.sql`** (migration 0008, Registration) + return verify numbers.
+- **Phase 8 — Payments (§24)** next (handover §5295).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).
