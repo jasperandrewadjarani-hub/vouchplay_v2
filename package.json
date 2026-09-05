@@ -1,0 +1,28 @@
+{
+  "name": "vouchplay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VouchPlay — community-powered sports identity & tournament platform. By JT Consulting & Analytics Inc.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @vouchplay/web",
+    "build": "npm run build --workspace @vouchplay/web",
+    "start": "npm run start --workspace @vouchplay/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,css,md}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "typescript": "^5.7.3"
+  }
+}

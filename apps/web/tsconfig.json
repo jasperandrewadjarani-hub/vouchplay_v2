@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "allowJs": true,
+    "noEmit": true,
+    "incremental": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "plugins": [{ "name": "next" }],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@vouchplay/core": ["../../packages/core/src/index.ts"],
+      "@vouchplay/core/*": ["../../packages/core/src/*"],
+      "@vouchplay/db": ["../../packages/db/src/index.ts"],
+      "@vouchplay/db/*": ["../../packages/db/src/*"],
+      "@vouchplay/ui": ["../../packages/ui/src/index.ts"],
+      "@vouchplay/ui/*": ["../../packages/ui/src/*"],
+      "@vouchplay/config": ["../../packages/config/src/index.ts"],
+      "@vouchplay/config/*": ["../../packages/config/src/*"],
+      "@vouchplay/validation": ["../../packages/validation/src/index.ts"],
+      "@vouchplay/validation/*": ["../../packages/validation/src/*"],
+      "@vouchplay/analytics": ["../../packages/analytics/src/index.ts"],
+      "@vouchplay/analytics/*": ["../../packages/analytics/src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}

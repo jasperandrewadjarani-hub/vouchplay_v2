@@ -1,0 +1,94 @@
+@import 'tailwindcss';
+
+/* Theme toggle uses a class on <html> (next-themes, attribute="class"). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Locked theme tokens (handover §33.2). Light is the base :root palette; .dark overrides.
+ * Semantic meaning takes priority over decorative neon — cyberpunk accents are used sparingly.
+ */
+:root {
+  --background: #f6f8fc;
+  --surface: #ffffff;
+  --surface-muted: #edf2f8;
+  --primary: #246beb;
+  --accent-cyan: #00afc7;
+  --accent-lime: #75b900;
+  --danger: #d73d52;
+  --warning: #b7791f;
+  --success: #1f9d57;
+  --foreground: #111827;
+  --foreground-muted: #5b6575;
+  --border: #dfe6f0;
+  --ring: #246beb;
+}
+
+.dark {
+  --background: #080d17;
+  --surface: #101827;
+  --surface-2: #162033;
+  --surface-muted: #162033;
+  --primary: #2d7cff;
+  --accent-cyan: #42e8ff;
+  --accent-lime: #b8ff4a;
+  --danger: #ff4d67;
+  --warning: #ffbe3d;
+  --success: #4de48a;
+  --foreground: #f4f7fb;
+  --foreground-muted: #9aa8bc;
+  --border: #1e2a40;
+  --ring: #42e8ff;
+}
+
+/* Map tokens into Tailwind's theme so bg-background / text-foreground / border-border work. */
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-primary: var(--primary);
+  --color-accent-cyan: var(--accent-cyan);
+  --color-accent-lime: var(--accent-lime);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect reduced-motion preference (handover §33.6). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Visible focus states for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

@@ -1,0 +1,3 @@
+-- VouchPlay v2 seed data.
+-- Phase 1+: seed system_settings defaults, skill_tags, report reason codes, and JT admin accounts.
+-- Do NOT seed fake vouches (handover §59). Placeholder until Phase 1 schema exists.
