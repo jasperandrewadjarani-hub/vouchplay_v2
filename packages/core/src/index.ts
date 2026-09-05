@@ -7,3 +7,5 @@
  * Scaffold placeholder — modules added per phase.
  */
 export const CORE_PACKAGE = '@vouchplay/core';
+
+export * from './notifications/email';

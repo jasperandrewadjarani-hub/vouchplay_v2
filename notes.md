@@ -80,3 +80,43 @@ conscious decision — not handled by the initial build.
 
 - **2026-09-05** — Read + fully understood handover v1.1 + chatgpt_convo. Surfaced v1→v2
   relationship. Began Phase 0 (monorepo foundation).
+- **2026-09-05** — **Phase 0 COMPLETE** (local, unpushed). npm-workspaces monorepo scaffolded:
+  `apps/web` (Next.js 16 App Router, React 19, Tailwind v4, TS strict) + `packages/{config,
+  core,db,ui,validation,analytics}`. Locked theme tokens + working theme toggle; app shell with
+  the 5 locked tabs, header, sidebar + bottom nav; `@vouchplay/config` holds canonical skill
+  bands / default settings / STS_V1 constants; PWA manifest; security headers; ESLint (flat) +
+  Prettier + Vitest (7/7 green) + GitHub Actions CI. **All gates pass:** lint, typecheck, tests,
+  format, `next build`. Shell + dark/light verified in-browser. Committed `093b9a7` on `main`.
+  Toolchain notes: npm workspaces (no pnpm); esbuild/unrs-resolver postinstall blocked by the
+  machine's allow-scripts wrapper but Vitest/build unaffected. Fixed two config gotchas:
+  eslint-config-next v16 is flat-native (import directly, not via FlatCompat); react-hooks v7
+  `set-state-in-effect` needs a scoped disable for the next-themes mount guard.
+  **NOT pushed** — awaiting Jasper's go-ahead (outward action) + repo state check.
+
+- **2026-09-05** — **Pushed** `main` to `github.com/jasperandrewadjarani-hub/vouchplay_v2`
+  (remote was empty; clean first push). CI runs on push.
+- **2026-09-05** — **Phase 1 (schema + plumbing) IN PROGRESS.** Wrote migrations
+  `0001_core_identity.sql` (extensions pgcrypto/pg_trgm; enums; profiles, user_roles,
+  role_applications, identity_verifications, system_settings, audit_logs; updated_at + new-user
+  triggers; authz helpers `has_global_role`/`is_admin`/`is_staff` SECURITY DEFINER; RLS on all
+  user-facing tables) and `0002_seed_system_settings.sql` (canonical defaults, ON CONFLICT DO
+  NOTHING). Added Supabase client plumbing in web: lazy build-safe `env.ts`, `supabase/{client,
+  server,service}.ts`, session-refresh `middleware.ts` (no-ops until keys exist), and the
+  `EmailProvider` abstraction in core. Gates still green (lint/typecheck/test 7-7/format/build).
+  **NOT yet applied to a live DB** — migrations validate on `supabase db push` when keys arrive.
+
+## Email decision (2026-09-05) — DEVIATION from handover, approved by Jasper
+Using **Gmail SMTP via `vouchplay@gmail.com`** for the pilot (handover §34A.11 forbids Gmail as
+primary transport). Implemented behind the `EmailProvider` interface so switching to Resend/
+Postmark/SendGrid later is a one-adapter change. Constraints: Gmail ≈500 sends/day (ok for first
+~100 users, not scale), no bounce webhooks — prefer in-app notifications. **Must switch to a
+dedicated provider before public launch.** Needs a Gmail **App Password** (16-char, requires 2FA)
+set as Supabase Custom SMTP for auth emails.
+
+## Next up
+- **Secrets to finish Phase 1 auth:** Supabase URL + anon + service_role (project
+  `itrosesiywpbaxtmucbb`); Google OAuth client id/secret; Gmail App Password for
+  `vouchplay@gmail.com`. Put them in `apps/web/.env.local` (see `.env.example`) and Supabase SMTP.
+- **Then:** `supabase link` + `db push` (apply 0001/0002), generate DB types into `packages/db`,
+  build auth (email verify + Google), profile onboarding UI, route guards, seed JT admin accounts,
+  Admin MFA framework. Validate RLS + role-spoofing tests (Phase 1 gate).
