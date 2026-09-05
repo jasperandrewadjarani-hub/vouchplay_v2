@@ -128,6 +128,30 @@ set as Supabase Custom SMTP for auth emails.
   PPR/partial caching for public pages (players/clubs/tournaments) per §34A.5. Docs/setup guide
   saved: [SECRETS_SETUP.md](docs/SECRETS_SETUP.md).
 
+- **2026-09-05** — **DEPLOYED LIVE:** https://vouchplay-v2.vercel.app (Vercel project
+  `vouchplay-v2`, account jasperandrewadjarani-hub, git-connected → auto-deploys on push to main).
+  Renders correctly (shell, theme, auth screens); auth inert until Supabase keys are added.
+
+## Deployment workarounds (IMPORTANT — revisit later)
+Getting the first deploy up hit two issues:
+1. **Vercel × Next 16.3.4 platform bug:** every deploy failed at "Deploying outputs" with
+   *"Cannot patch preview comments when immutable static file upload is enabled. Upgrade to
+   next@v16.3.0-canary.32 or newer."* The build always succeeded; only the output-deploy step
+   failed. Reproduced on 16.3.4 stable AND 16.4.0-canary.18, via CLI and Git, and was NOT fixed by
+   disabling the project Vercel Toolbar. **Workaround: pinned Next to `^15.5.0`** (currently
+   15.5.25), which doesn't trigger it. **TODO:** re-upgrade to Next 16 once Vercel/Next fix this
+   upstream (then revert middleware→proxy rename and re-add `agentRules:false`).
+2. **Monorepo detection:** the project's Root Directory and Framework Preset dashboard settings
+   would NOT persist via automation (confirmed by screenshot — stayed "./" and "Other"). So Vercel
+   runs framework detection at the repo ROOT. Fixes that made it work, both in-repo (no dashboard
+   dependency):
+   - **root `vercel.json`**: `framework: nextjs`, `installCommand: npm install`,
+     `buildCommand: npm run build --workspace @vouchplay/web`, `outputDirectory: apps/web/.next`.
+   - **declared `next` in the ROOT `package.json` dependencies** so Vercel's Next-version detection
+     passes at the root. (Slightly unusual but harmless — next is hoisted anyway.)
+   If Root Directory can later be persisted to `apps/web` (e.g. via a real dashboard session), the
+   root-level `next` dep and buildCommand/outputDirectory overrides can be removed.
+
 ## Next up
 - **Waiting on secrets** (Jasper setting up per docs/SECRETS_SETUP.md): Supabase URL + anon +
   service_role; Google OAuth client id/secret; Gmail App Password. Into `apps/web/.env.local` +
