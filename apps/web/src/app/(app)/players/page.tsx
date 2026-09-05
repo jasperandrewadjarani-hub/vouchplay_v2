@@ -75,8 +75,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-5">
-      <div className="space-y-1">
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">Players</h1>
+      <div className="vp-in space-y-1">
+        <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
+          <span className="vp-gradient-text">Players</span>
+        </h1>
         <p className="text-foreground-muted text-sm">
           Skill reputations built by the people you actually play with.
         </p>

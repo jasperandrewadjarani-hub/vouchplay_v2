@@ -20,12 +20,15 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`relative flex items-center gap-3 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
                     active
-                      ? 'bg-surface-muted text-primary'
+                      ? 'bg-primary/10 text-primary'
                       : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
                   }`}
                 >
+                  {active && (
+                    <span className="vp-gradient absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r" aria-hidden />
+                  )}
                   <Icon size={20} aria-hidden strokeWidth={active ? 2.4 : 1.8} />
                   <span>{item.label}</span>
                 </Link>

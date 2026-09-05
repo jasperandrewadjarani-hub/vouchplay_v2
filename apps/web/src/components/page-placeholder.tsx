@@ -14,14 +14,16 @@ export function PagePlaceholder({
   children?: ReactNode;
 }) {
   return (
-    <section className="mx-auto max-w-2xl">
+    <section className="vp-in mx-auto max-w-2xl">
       <div className="mb-6 flex items-center justify-between gap-3">
-        <h1 className="text-foreground text-xl font-semibold tracking-tight">{title}</h1>
-        <span className="border-border bg-surface-muted text-foreground-muted rounded-full border px-2.5 py-1 text-xs font-medium">
+        <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
+          <span className="vp-gradient-text">{title}</span>
+        </h1>
+        <span className="border-primary/30 bg-primary/10 text-primary rounded-full border px-2.5 py-1 text-xs font-semibold">
           {phase}
         </span>
       </div>
-      <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-6 text-sm leading-relaxed">
+      <div className="border-border bg-surface vp-hero text-foreground-muted rounded-2xl border p-6 text-sm leading-relaxed">
         {children ?? 'Coming online in a later build phase.'}
       </div>
     </section>

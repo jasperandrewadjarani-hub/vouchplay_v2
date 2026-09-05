@@ -22,10 +22,13 @@ export function BottomNav() {
               <Link
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center gap-0.5 py-2 text-xs font-medium transition-colors ${
+                className={`relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors ${
                   active ? 'text-primary' : 'text-foreground-muted hover:text-foreground'
                 }`}
               >
+                {active && (
+                  <span className="vp-gradient absolute top-0 h-0.5 w-8 rounded-b" aria-hidden />
+                )}
                 <Icon size={22} aria-hidden strokeWidth={active ? 2.4 : 1.8} />
                 <span>{item.label}</span>
               </Link>

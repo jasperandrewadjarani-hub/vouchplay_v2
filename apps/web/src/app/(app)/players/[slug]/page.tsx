@@ -89,13 +89,15 @@ export default async function PlayerProfilePage({ params }: Params) {
       </Link>
 
       {/* Header (§9.1) */}
-      <header className="border-border bg-surface rounded-2xl border p-5">
+      <header className="border-border bg-surface vp-hero relative overflow-hidden rounded-2xl border p-5">
+        <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
           <PlayerAvatar
             url={player.avatarUrl}
             initials={player.initials}
             name={player.displayName}
             size="lg"
+            className="ring-primary/25 ring-4"
           />
           <div className="min-w-0 flex-1 space-y-2">
             <div>

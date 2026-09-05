@@ -10,17 +10,21 @@ export async function Header() {
   const user = await getOptionalUser();
 
   return (
-    <header className="border-border bg-surface/90 sticky top-0 z-50 border-b backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
-        <Link href="/" className="flex items-center gap-2" aria-label="VouchPlay home">
+    <header className="border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4">
+        <Link href="/" className="flex items-center gap-2.5" aria-label="VouchPlay home">
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
             alt="VouchPlay"
-            width={148}
-            height={32}
+            width={168}
+            height={36}
             priority
-            className="h-8 w-auto"
+            className="h-9 w-auto"
           />
+          <span className="border-border hidden border-l pl-2.5 text-[10px] leading-tight font-medium text-foreground-muted sm:block">
+            by JT Consulting
+            <br />& Analytics
+          </span>
         </Link>
 
         <div className="flex items-center gap-2">
@@ -29,19 +33,18 @@ export async function Header() {
             <Link
               href="/me/notifications"
               aria-label="Notifications"
-              className="border-border bg-surface text-foreground hover:bg-surface-muted relative rounded-full border p-2 transition-colors"
+              className="border-border bg-surface text-foreground hover:border-primary relative rounded-full border p-2 transition-colors"
             >
               <Bell size={18} aria-hidden />
             </Link>
           ) : (
             <Link href="/login">
-              <Button variant="secondary" className="px-3 py-1.5">
-                Sign in
-              </Button>
+              <Button className="px-4 py-2">Sign in</Button>
             </Link>
           )}
         </div>
       </div>
+      <div className="vp-gradient h-0.5 w-full opacity-80" aria-hidden />
     </header>
   );
 }

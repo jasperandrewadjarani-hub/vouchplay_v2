@@ -29,10 +29,15 @@ export function PlayerCard({ player, authed }: { player: PlayerCardDTO; authed: 
       : null;
 
   return (
-    <div className="border-border bg-surface flex flex-col gap-3 rounded-2xl border p-4">
+    <div className="border-border bg-surface vp-card flex flex-col gap-3 rounded-2xl border p-4">
       <div className="flex items-start gap-3">
         <Link href={profileHref} aria-label={player.displayName}>
-          <PlayerAvatar url={player.avatarUrl} initials={player.initials} name={player.displayName} />
+          <PlayerAvatar
+            url={player.avatarUrl}
+            initials={player.initials}
+            name={player.displayName}
+            className="ring-primary/20 ring-2 ring-offset-0"
+          />
         </Link>
         <div className="min-w-0 flex-1">
           <Link href={profileHref} className="hover:text-primary block truncate font-semibold">
