@@ -13,7 +13,7 @@ export default async function HomePage() {
       <section className="border-border bg-surface vp-hero vp-in relative overflow-hidden rounded-3xl border p-7 sm:p-10">
         <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
         <p className="vp-label text-primary mb-3">Community-verified skill</p>
-        <h1 className="text-foreground max-w-2xl text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+        <h1 className="text-foreground max-w-2xl text-3xl leading-tight font-extrabold tracking-tight sm:text-4xl">
           Your game, <span className="vp-gradient-text">vouched for</span> by the players you
           actually play with.
         </h1>
@@ -61,25 +61,17 @@ export default async function HomePage() {
       </section>
 
       <p className="text-foreground-muted text-center text-xs">
-        Your personalized dashboard — skill summary, requests, and tournament activity — arrives in a
-        later release (handover §6).
+        Your personalized dashboard — skill summary, requests, and tournament activity — arrives in
+        a later release (handover §6).
       </p>
     </div>
   );
 }
 
-function FeatureCard({
-  icon,
-  title,
-  body,
-}: {
-  icon: ReactNode;
-  title: string;
-  body: string;
-}) {
+function FeatureCard({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   return (
     <div className="border-border bg-surface vp-card rounded-2xl border p-5">
-      <span className="vp-gradient text-white inline-flex h-10 w-10 items-center justify-center rounded-xl">
+      <span className="vp-gradient inline-flex h-10 w-10 items-center justify-center rounded-xl text-white">
         {icon}
       </span>
       <h2 className="text-foreground mt-3 font-semibold">{title}</h2>

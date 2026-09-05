@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { MapPin, CalendarDays, Facebook } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getPlayerBySlug, getPlayerMetaBySlug, getPlayerComments } from '@/lib/players/queries';
+import { hasViewerBlocked } from '@/lib/moderation/enforcement';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ClubStack } from '@/components/players/club-stack';
@@ -70,6 +71,10 @@ export default async function PlayerProfilePage({ params }: Params) {
 
   const comments = await getPlayerComments(player.id);
   const authed = viewer.viewerId !== null;
+  const iBlocked =
+    authed && !player.isOwnProfile
+      ? await hasViewerBlocked(viewer.viewerId as string, player.id)
+      : false;
   const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
@@ -177,12 +182,19 @@ export default async function PlayerProfilePage({ params }: Params) {
           <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
         </div>
         <div className="mt-2">
-          <ProfileActions slug={slug} authed={authed} isOwnProfile={player.isOwnProfile} />
+          <ProfileActions
+            slug={slug}
+            authed={authed}
+            isOwnProfile={player.isOwnProfile}
+            targetId={player.id}
+            targetName={player.displayName}
+            iBlocked={iBlocked}
+          />
         </div>
       </header>
 
       <SkillDistribution distribution={player.distribution} total={distributionTotal} />
-      <VouchComments comments={comments} />
+      <VouchComments comments={comments} authed={authed} />
       <Achievements />
       <SkillTags />
     </div>

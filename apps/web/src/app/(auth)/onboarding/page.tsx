@@ -11,7 +11,9 @@ export default async function OnboardingPage({
   searchParams: Promise<{ next?: string }>;
 }) {
   const { next } = await searchParams;
-  const user = await requireUser(next ? `/onboarding?next=${encodeURIComponent(next)}` : '/onboarding');
+  const user = await requireUser(
+    next ? `/onboarding?next=${encodeURIComponent(next)}` : '/onboarding',
+  );
   const profile = await getMyProfile();
 
   // Already onboarded → nothing to do here.

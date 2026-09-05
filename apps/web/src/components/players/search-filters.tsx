@@ -29,12 +29,12 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
   const [showFilters, setShowFilters] = useState(
     Boolean(
       current.city ||
-        current.sex ||
-        current.minSkill ||
-        current.identityVerified ||
-        current.coach ||
-        current.lookingForPartner ||
-        current.openForSponsorship,
+      current.sex ||
+      current.minSkill ||
+      current.identityVerified ||
+      current.coach ||
+      current.lookingForPartner ||
+      current.openForSponsorship,
     ),
   );
 
@@ -60,13 +60,13 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
 
   const hasAny = Boolean(
     current.q ||
-      current.city ||
-      current.sex ||
-      current.minSkill ||
-      current.identityVerified ||
-      current.coach ||
-      current.lookingForPartner ||
-      current.openForSponsorship,
+    current.city ||
+    current.sex ||
+    current.minSkill ||
+    current.identityVerified ||
+    current.coach ||
+    current.lookingForPartner ||
+    current.openForSponsorship,
   );
 
   return (
@@ -76,7 +76,7 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
           <Search
             size={16}
             aria-hidden
-            className="text-foreground-muted pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"
+            className="text-foreground-muted pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
           />
           <input
             name="q"
@@ -107,7 +107,12 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
         <div className="border-border grid grid-cols-1 gap-3 border-t pt-3 sm:grid-cols-2">
           <label className="space-y-1.5">
             <span className="text-foreground block text-sm font-medium">City</span>
-            <input name="city" defaultValue={current.city ?? ''} list="ph-cities" className={controlClass} />
+            <input
+              name="city"
+              defaultValue={current.city ?? ''}
+              list="ph-cities"
+              className={controlClass}
+            />
             <datalist id="ph-cities">
               {PH_CITIES.map((c) => (
                 <option key={c} value={c} />
@@ -125,7 +130,9 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
           </label>
 
           <label className="space-y-1.5">
-            <span className="text-foreground block text-sm font-medium">Minimum self-rated skill</span>
+            <span className="text-foreground block text-sm font-medium">
+              Minimum self-rated skill
+            </span>
             <select name="minSkill" defaultValue={current.minSkill ?? ''} className={controlClass}>
               <option value="">Any</option>
               {SKILL_BANDS.map((b) => (
@@ -138,7 +145,11 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
 
           <fieldset className="space-y-2 sm:pt-6">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="identityVerified" defaultChecked={current.identityVerified} />
+              <input
+                type="checkbox"
+                name="identityVerified"
+                defaultChecked={current.identityVerified}
+              />
               Identity verified
             </label>
             <label className="flex items-center gap-2 text-sm">
@@ -146,11 +157,19 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
               Coach
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="lookingForPartner" defaultChecked={current.lookingForPartner} />
+              <input
+                type="checkbox"
+                name="lookingForPartner"
+                defaultChecked={current.lookingForPartner}
+              />
               Looking for partner
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" name="openForSponsorship" defaultChecked={current.openForSponsorship} />
+              <input
+                type="checkbox"
+                name="openForSponsorship"
+                defaultChecked={current.openForSponsorship}
+              />
               Open to sponsorship
             </label>
           </fieldset>

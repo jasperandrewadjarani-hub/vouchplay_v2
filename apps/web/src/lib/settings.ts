@@ -1,9 +1,5 @@
 import { unstable_cache } from 'next/cache';
-import {
-  DEFAULT_SYSTEM_SETTINGS,
-  STS_CONSTANTS,
-  type SystemSettingsKey,
-} from '@vouchplay/config';
+import { DEFAULT_SYSTEM_SETTINGS, STS_CONSTANTS, type SystemSettingsKey } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
 
 export const SYSTEM_SETTINGS_TAG = 'system_settings';
@@ -39,7 +35,12 @@ function num(map: Record<string, unknown>, key: SystemSettingsKey): number {
 }
 
 export interface VouchSettings {
-  weights: { normal: number; identityVerified: number; coach: number; identityVerifiedCoach: number };
+  weights: {
+    normal: number;
+    identityVerified: number;
+    coach: number;
+    identityVerifiedCoach: number;
+  };
   limits: {
     playerPer24h: number;
     coachPer24h: number;
@@ -55,6 +56,20 @@ export interface VouchSettings {
     weightCoefficient: number;
     agreementCoefficient: number;
     scale: number;
+  };
+}
+
+export interface SafetySettings {
+  reportsPer24h: number;
+  skillReviewsPer24h: number;
+}
+
+/** Safety & moderation abuse limits (handover §14, §30.7). */
+export async function getSafetySettings(): Promise<SafetySettings> {
+  const m = await loadSettings();
+  return {
+    reportsPer24h: num(m, 'reports_per_24h'),
+    skillReviewsPer24h: num(m, 'skill_reviews_per_24h'),
   };
 }
 

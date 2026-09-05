@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { PlayerAvatar } from './player-avatar';
+import { CommentReportButton } from '@/components/safety/comment-report-button';
 
 /** Titled card wrapper for profile sections (handover §9). */
 export function SectionCard({
@@ -80,7 +81,13 @@ export interface CommentView {
   body: string;
 }
 
-export function VouchComments({ comments }: { comments: CommentView[] }) {
+export function VouchComments({
+  comments,
+  authed = false,
+}: {
+  comments: CommentView[];
+  authed?: boolean;
+}) {
   if (comments.length === 0) {
     return (
       <SectionCard title="Vouch comments">
@@ -95,22 +102,42 @@ export function VouchComments({ comments }: { comments: CommentView[] }) {
     <SectionCard title={`Vouch comments (${comments.length})`}>
       <ul className="space-y-3">
         {comments.map((c) => (
-          <li key={c.id} className="border-border flex gap-3 border-b pb-3 last:border-b-0 last:pb-0">
-            <PlayerAvatar url={c.authorAvatarUrl} initials={c.authorInitials} name={c.authorName} size="sm" />
+          <li
+            key={c.id}
+            className="border-border flex gap-3 border-b pb-3 last:border-b-0 last:pb-0"
+          >
+            <PlayerAvatar
+              url={c.authorAvatarUrl}
+              initials={c.authorInitials}
+              name={c.authorName}
+              size="sm"
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 {c.authorSlug ? (
-                  <Link href={`/players/${c.authorSlug}`} className="hover:text-primary text-sm font-medium">
+                  <Link
+                    href={`/players/${c.authorSlug}`}
+                    className="hover:text-primary text-sm font-medium"
+                  >
                     {c.authorName}
                   </Link>
                 ) : (
                   <span className="text-sm font-medium">{c.authorName}</span>
                 )}
                 <time className="text-foreground-muted text-xs">
-                  {new Date(c.date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  {new Date(c.date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </time>
               </div>
               <p className="text-foreground mt-0.5 text-sm">{c.body}</p>
+              {authed && (
+                <div className="mt-1">
+                  <CommentReportButton commentId={c.id} authorName={c.authorName} />
+                </div>
+              )}
             </div>
           </li>
         ))}
@@ -123,8 +150,9 @@ export function Achievements() {
   return (
     <SectionCard title="Achievements">
       <EmptyNote>
-        No achievements yet. Official achievements (tournament results, MVP, sportsmanship) are issued
-        by verified organizers or admins; players can also add community claims for others to endorse.
+        No achievements yet. Official achievements (tournament results, MVP, sportsmanship) are
+        issued by verified organizers or admins; players can also add community claims for others to
+        endorse.
       </EmptyNote>
     </SectionCard>
   );

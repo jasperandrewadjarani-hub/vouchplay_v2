@@ -46,7 +46,11 @@ export function ShareButton({
       onClick={share}
       className={`border-border bg-surface text-foreground hover:bg-surface-muted inline-flex items-center justify-center gap-2 rounded-xl border font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${pad}`}
     >
-      {copied ? <Check size={size === 'sm' ? 14 : 16} aria-hidden /> : <Share2 size={size === 'sm' ? 14 : 16} aria-hidden />}
+      {copied ? (
+        <Check size={size === 'sm' ? 14 : 16} aria-hidden />
+      ) : (
+        <Share2 size={size === 'sm' ? 14 : 16} aria-hidden />
+      )}
       {copied ? 'Link copied' : 'Share'}
     </button>
   );

@@ -34,6 +34,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // Privacy (handover §13.3).
   identity_file_retention_days_after_decision: 30,
 
+  // Safety & moderation abuse limits (handover §14, §11.3, §30.7). Rolling 24h windows.
+  reports_per_24h: 10,
+  skill_reviews_per_24h: 5,
+
   // Feature flags (handover §61).
   maintenance_mode: false,
   signup_enabled: true,

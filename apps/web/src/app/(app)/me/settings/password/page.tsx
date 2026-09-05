@@ -15,7 +15,9 @@ export default async function SetPasswordPage() {
   return (
     <div className="mx-auto max-w-md space-y-6">
       <div className="space-y-1">
-        <h1 className="text-foreground text-2xl font-semibold tracking-tight">Set a new password</h1>
+        <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+          Set a new password
+        </h1>
         <p className="text-foreground-muted text-sm">
           Choose a password for signing in with your email address.
         </p>

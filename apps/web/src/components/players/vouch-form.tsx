@@ -54,7 +54,9 @@ export function VouchForm({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-foreground text-lg font-semibold">Vouch for {targetName}</h2>
-            <p className="text-foreground-muted text-sm">Rate the skill you&apos;ve actually seen.</p>
+            <p className="text-foreground-muted text-sm">
+              Rate the skill you&apos;ve actually seen.
+            </p>
           </div>
           <button
             type="button"

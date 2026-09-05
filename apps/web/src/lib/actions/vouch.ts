@@ -7,6 +7,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
+import { checkActorCanVouch } from '@/lib/moderation/enforcement';
 
 export interface VouchActionState {
   ok?: boolean;
@@ -42,7 +43,8 @@ export async function submitVouch(
     anonymous: bool(formData, 'anonymous'),
     comment: formData.get('comment') ?? '',
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   const v = parsed.data;
 
   if (v.targetId === user.id) return { error: 'You cannot vouch for yourself.' };
@@ -52,20 +54,77 @@ export async function submitVouch(
   const since = new Date(Date.now() - DAY_MS).toISOString();
 
   try {
-    const [meRes, targetRes, coachRes, idvRes, blockRes, existingRes, actionsRes] = await Promise.all([
-      svc.from('profiles').select('account_status').eq('id', user.id).maybeSingle(),
-      svc.from('profiles').select('id, account_status, onboarded_at').eq('id', v.targetId).maybeSingle(),
-      svc.from('user_roles').select('id').eq('user_id', user.id).eq('role', 'coach').eq('status', 'active').maybeSingle(),
-      svc.from('identity_verifications').select('id').eq('user_id', user.id).eq('status', 'approved').maybeSingle(),
-      svc.from('blocks').select('blocker_id').or(`and(blocker_id.eq.${user.id},blocked_id.eq.${v.targetId}),and(blocker_id.eq.${v.targetId},blocked_id.eq.${user.id})`),
-      svc.from('vouches').select('id, skill_level, visibility, effective_weight, updated_at').eq('voucher_id', user.id).eq('target_id', v.targetId).eq('status', 'active').maybeSingle(),
-      svc.from('vouch_revisions').select('id', { count: 'exact', head: true }).eq('changed_by', user.id).gte('created_at', since),
-    ]);
+    const [meRes, targetRes, coachRes, idvRes, blockRes, existingRes, actionsRes] =
+      await Promise.all([
+        svc
+          .from('profiles')
+          .select('account_status, suspended_until, vouching_restricted_until')
+          .eq('id', user.id)
+          .maybeSingle(),
+        svc
+          .from('profiles')
+          .select('id, account_status, onboarded_at')
+          .eq('id', v.targetId)
+          .maybeSingle(),
+        svc
+          .from('user_roles')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('role', 'coach')
+          .eq('status', 'active')
+          .maybeSingle(),
+        svc
+          .from('identity_verifications')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('status', 'approved')
+          .maybeSingle(),
+        svc
+          .from('blocks')
+          .select('blocker_id')
+          .or(
+            `and(blocker_id.eq.${user.id},blocked_id.eq.${v.targetId}),and(blocker_id.eq.${v.targetId},blocked_id.eq.${user.id})`,
+          ),
+        svc
+          .from('vouches')
+          .select('id, skill_level, visibility, effective_weight, updated_at')
+          .eq('voucher_id', user.id)
+          .eq('target_id', v.targetId)
+          .eq('status', 'active')
+          .maybeSingle(),
+        svc
+          .from('vouch_revisions')
+          .select('id', { count: 'exact', head: true })
+          .eq('changed_by', user.id)
+          .gte('created_at', since),
+      ]);
 
-    const me = meRes.data as { account_status: string } | null;
-    const target = targetRes.data as { id: string; account_status: string; onboarded_at: string | null } | null;
-    if (!me || me.account_status !== 'active') {
+    const me = meRes.data as {
+      account_status: string;
+      suspended_until: string | null;
+      vouching_restricted_until: string | null;
+    } | null;
+    const target = targetRes.data as {
+      id: string;
+      account_status: string;
+      onboarded_at: string | null;
+    } | null;
+    const nowMs = Date.now();
+    const inFuture = (ts: string | null) => !!ts && new Date(ts).getTime() > nowMs;
+    if (!me) return { error: 'Your account cannot issue vouches right now.' };
+    if (
+      me.account_status === 'banned' ||
+      me.account_status === 'suspended' ||
+      me.account_status === 'deactivated' ||
+      inFuture(me.suspended_until)
+    ) {
       return { error: 'Your account cannot issue vouches right now.' };
+    }
+    if (me.account_status === 'restricted' || inFuture(me.vouching_restricted_until)) {
+      return {
+        error:
+          'Your account is restricted from vouching. Contact support if you think this is a mistake.',
+      };
     }
     if (!target || target.account_status !== 'active' || !target.onboarded_at) {
       return { error: 'That player is not available to vouch for.' };
@@ -82,12 +141,18 @@ export async function submitVouch(
     // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window.
     const limit = isCoach ? settings.limits.coachPer24h : settings.limits.playerPer24h;
     if ((actionsRes.count ?? 0) >= limit) {
-      return { error: `You've reached your vouch limit for now (${limit} per 24 hours). Try again later.` };
+      return {
+        error: `You've reached your vouch limit for now (${limit} per 24 hours). Try again later.`,
+      };
     }
 
-    const existing = existingRes.data as
-      | { id: string; skill_level: number; visibility: string; effective_weight: number; updated_at: string }
-      | null;
+    const existing = existingRes.data as {
+      id: string;
+      skill_level: number;
+      visibility: string;
+      effective_weight: number;
+      updated_at: string;
+    } | null;
 
     let vouchId: string;
     if (existing) {
@@ -96,7 +161,9 @@ export async function submitVouch(
       const cooldownMs = settings.limits.updateCooldownDays * DAY_MS;
       if (ageMs < cooldownMs) {
         const daysLeft = Math.ceil((cooldownMs - ageMs) / DAY_MS);
-        return { error: `You can update this vouch in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.` };
+        return {
+          error: `You can update this vouch in ${daysLeft} day${daysLeft === 1 ? '' : 's'}.`,
+        };
       }
       const { error } = await svc
         .from('vouches')
@@ -192,7 +259,9 @@ export async function withdrawVouch(targetId: string): Promise<VouchActionState>
     if (!existing) return { error: 'No active vouch to withdraw.' };
     const id = (existing as { id: string }).id;
     await svc.from('vouches').update({ status: 'withdrawn' }).eq('id', id);
-    await svc.from('vouch_revisions').insert({ vouch_id: id, changed_by: user.id, change_type: 'withdrawn' });
+    await svc
+      .from('vouch_revisions')
+      .insert({ vouch_id: id, changed_by: user.id, change_type: 'withdrawn' });
     await recomputePlayerSkillProfile(targetId);
   } catch {
     return { error: 'Could not withdraw the vouch right now.' };
@@ -211,23 +280,43 @@ export async function requestVouch(
     recipientId: formData.get('recipientId'),
     message: formData.get('message') ?? '',
   });
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   const { recipientId, message } = parsed.data;
   if (recipientId === user.id) return { error: 'You cannot request a vouch from yourself.' };
 
   const svc = createServiceClient();
   const since = new Date(Date.now() - DAY_MS).toISOString();
   try {
+    const statusErr = await checkActorCanVouch(user.id);
+    if (statusErr) return { error: statusErr };
     const [blockRes, dupRes, rateRes] = await Promise.all([
-      svc.from('blocks').select('blocker_id').or(`and(blocker_id.eq.${user.id},blocked_id.eq.${recipientId}),and(blocker_id.eq.${recipientId},blocked_id.eq.${user.id})`),
-      svc.from('vouch_requests').select('id').eq('requester_id', user.id).eq('recipient_id', recipientId).eq('status', 'pending').maybeSingle(),
-      svc.from('vouch_requests').select('id', { count: 'exact', head: true }).eq('requester_id', user.id).gte('created_at', since),
+      svc
+        .from('blocks')
+        .select('blocker_id')
+        .or(
+          `and(blocker_id.eq.${user.id},blocked_id.eq.${recipientId}),and(blocker_id.eq.${recipientId},blocked_id.eq.${user.id})`,
+        ),
+      svc
+        .from('vouch_requests')
+        .select('id')
+        .eq('requester_id', user.id)
+        .eq('recipient_id', recipientId)
+        .eq('status', 'pending')
+        .maybeSingle(),
+      svc
+        .from('vouch_requests')
+        .select('id', { count: 'exact', head: true })
+        .eq('requester_id', user.id)
+        .gte('created_at', since),
     ]);
     if ((blockRes.data ?? []).length > 0) return { error: 'That request is unavailable.' };
     if (dupRes.data) return { error: 'You already have a pending request to this player.' };
     const settings = await getVouchSettings();
     if ((rateRes.count ?? 0) >= settings.limits.requestsPer24h) {
-      return { error: `You've reached your request limit (${settings.limits.requestsPer24h} per 24 hours).` };
+      return {
+        error: `You've reached your request limit (${settings.limits.requestsPer24h} per 24 hours).`,
+      };
     }
     const { error } = await svc.from('vouch_requests').insert({
       requester_id: user.id,

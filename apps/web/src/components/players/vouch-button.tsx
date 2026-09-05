@@ -52,7 +52,10 @@ export function VouchButton({
   if (!authed) {
     const next = `/players/${slug}?intent=vouch`;
     return (
-      <Link href={`/signup?next=${encodeURIComponent(next)}`} className={`${btn} bg-primary text-white hover:opacity-90`}>
+      <Link
+        href={`/signup?next=${encodeURIComponent(next)}`}
+        className={`${btn} bg-primary text-white hover:opacity-90`}
+      >
         <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </Link>
@@ -61,7 +64,10 @@ export function VouchButton({
 
   if (mode === 'card') {
     return (
-      <Link href={`/players/${slug}?intent=vouch`} className={`${btn} bg-primary text-white hover:opacity-90`}>
+      <Link
+        href={`/players/${slug}?intent=vouch`}
+        className={`${btn} bg-primary text-white hover:opacity-90`}
+      >
         <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </Link>
@@ -70,7 +76,11 @@ export function VouchButton({
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`${btn} bg-primary text-white hover:opacity-90`}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`${btn} bg-primary text-white hover:opacity-90`}
+      >
         <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </button>

@@ -39,7 +39,8 @@ export async function recomputePlayerSkillProfile(targetId: string): Promise<voi
     .select('verification_type')
     .eq('player_id', targetId)
     .maybeSingle();
-  const adminOverride = (existing as { verification_type?: string } | null)?.verification_type === 'admin_override';
+  const adminOverride =
+    (existing as { verification_type?: string } | null)?.verification_type === 'admin_override';
   const verificationType = adminOverride
     ? 'admin_override'
     : result.skillVerifiedByCommunity
@@ -66,11 +67,7 @@ export async function recomputePlayerSkillProfile(targetId: string): Promise<voi
     { onConflict: 'player_id' },
   );
 
-  const { data: prof } = await svc
-    .from('profiles')
-    .select('slug')
-    .eq('id', targetId)
-    .maybeSingle();
+  const { data: prof } = await svc.from('profiles').select('slug').eq('id', targetId).maybeSingle();
   const slug = (prof as { slug?: string } | null)?.slug;
   if (slug) revalidateTag(playerTag(slug));
   revalidateTag(commentsTag(targetId));

@@ -29,7 +29,10 @@ export function SkillPill({
       style={{ backgroundColor: `${band.color}22`, color: band.color }}
       title={`${source === 'community' ? 'Community skill' : 'Self-rated'}: ${band.label}`}
     >
-      <span className="rounded-full" style={{ width: dot, height: dot, backgroundColor: band.color }} />
+      <span
+        className="rounded-full"
+        style={{ width: dot, height: dot, backgroundColor: band.color }}
+      />
       {band.label}
       <span className="opacity-70">· {source === 'community' ? 'Community' : 'Self-rated'}</span>
     </span>

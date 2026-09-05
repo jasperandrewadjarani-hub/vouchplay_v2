@@ -27,9 +27,7 @@ export function ClubStack({ clubs, max = 3 }: { clubs: ClubRef[]; max?: number }
           )}
         </Link>
       ))}
-      {extra > 0 && (
-        <span className="text-foreground-muted text-[11px] font-medium">+{extra}</span>
-      )}
+      {extra > 0 && <span className="text-foreground-muted text-[11px] font-medium">+{extra}</span>}
     </div>
   );
 }

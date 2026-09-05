@@ -40,13 +40,22 @@ const v = (skillOrdinal: number, effectiveWeightValue: number, voucherId: string
 
 describe('effectiveWeight (§10.5)', () => {
   it('applies the four locked weights', () => {
-    expect(effectiveWeight({ usedCoachWeight: false, voucherIdentityVerified: false }, W)).toBe(1.0);
-    expect(effectiveWeight({ usedCoachWeight: false, voucherIdentityVerified: true }, W)).toBe(1.25);
+    expect(effectiveWeight({ usedCoachWeight: false, voucherIdentityVerified: false }, W)).toBe(
+      1.0,
+    );
+    expect(effectiveWeight({ usedCoachWeight: false, voucherIdentityVerified: true }, W)).toBe(
+      1.25,
+    );
     expect(effectiveWeight({ usedCoachWeight: true, voucherIdentityVerified: false }, W)).toBe(2.0);
     expect(effectiveWeight({ usedCoachWeight: true, voucherIdentityVerified: true }, W)).toBe(2.5);
   });
   it('config defaults match the locked spec', () => {
-    expect(W).toEqual({ normal: 1.0, identityVerified: 1.25, coach: 2.0, identityVerifiedCoach: 2.5 });
+    expect(W).toEqual({
+      normal: 1.0,
+      identityVerified: 1.25,
+      coach: 2.0,
+      identityVerifiedCoach: 2.5,
+    });
     expect(T).toEqual({ minSts: 3.0, minUniqueVouchers: 2 });
     expect(C.countDivisor).toBe(5);
     expect(C.weightDivisor).toBe(7.5);

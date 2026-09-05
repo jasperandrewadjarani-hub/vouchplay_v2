@@ -17,9 +17,17 @@ interface FactorView {
  * so the session upgrades to aal2 in place after verification. Part of the Admin MFA framework
  * (lib/auth/mfa.ts is the server guard side).
  */
-export function MfaManager({ factors, hasVerified }: { factors: FactorView[]; hasVerified: boolean }) {
+export function MfaManager({
+  factors,
+  hasVerified,
+}: {
+  factors: FactorView[];
+  hasVerified: boolean;
+}) {
   const router = useRouter();
-  const [enroll, setEnroll] = useState<{ factorId: string; qr: string; secret: string } | null>(null);
+  const [enroll, setEnroll] = useState<{ factorId: string; qr: string; secret: string } | null>(
+    null,
+  );
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,9 +153,10 @@ export function MfaManager({ factors, hasVerified }: { factors: FactorView[]; ha
           </p>
           {/* qr_code is an inline SVG data URL from Supabase. eslint-disable for the raw <img>. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={enroll.qr} alt="TOTP QR code" className="bg-white h-44 w-44 rounded-lg p-2" />
-          <p className="text-foreground-muted break-all text-xs">
-            Or enter this key manually: <span className="text-foreground font-mono">{enroll.secret}</span>
+          <img src={enroll.qr} alt="TOTP QR code" className="h-44 w-44 rounded-lg bg-white p-2" />
+          <p className="text-foreground-muted text-xs break-all">
+            Or enter this key manually:{' '}
+            <span className="text-foreground font-mono">{enroll.secret}</span>
           </p>
           <Field label="6-digit code" htmlFor="mfa-code" required>
             <Input

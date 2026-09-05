@@ -27,7 +27,10 @@ export function Sidebar() {
                   }`}
                 >
                   {active && (
-                    <span className="vp-gradient absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r" aria-hidden />
+                    <span
+                      className="vp-gradient absolute top-1/2 left-0 h-6 w-1 -translate-y-1/2 rounded-r"
+                      aria-hidden
+                    />
                   )}
                   <Icon size={20} aria-hidden strokeWidth={active ? 2.4 : 1.8} />
                   <span>{item.label}</span>

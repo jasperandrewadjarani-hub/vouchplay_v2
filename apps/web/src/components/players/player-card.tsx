@@ -45,7 +45,9 @@ export function PlayerCard({ player, authed }: { player: PlayerCardDTO; authed: 
             {player.displayName}
           </Link>
           {player.nickname && (
-            <p className="text-foreground-muted truncate text-sm">&ldquo;{player.nickname}&rdquo;</p>
+            <p className="text-foreground-muted truncate text-sm">
+              &ldquo;{player.nickname}&rdquo;
+            </p>
           )}
           <div className="text-foreground-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
             {player.city && (

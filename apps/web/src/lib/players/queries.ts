@@ -107,7 +107,9 @@ const fetchSkillSnapshots = unstable_cache(
       const supabase = createPublicClient();
       const { data } = await supabase
         .from('player_skill_profiles')
-        .select('player_id, community_skill_level, sts, skill_verified, unique_voucher_count, distribution')
+        .select(
+          'player_id, community_skill_level, sts, skill_verified, unique_voucher_count, distribution',
+        )
         .in('player_id', ids);
       for (const r of data ?? []) {
         const row = r as {
@@ -140,7 +142,11 @@ const fetchUserIdsWithRole = unstable_cache(
   async (role: GlobalRole): Promise<string[]> => {
     try {
       const svc = createServiceClient();
-      const { data } = await svc.from('user_roles').select('user_id').eq('status', 'active').eq('role', role);
+      const { data } = await svc
+        .from('user_roles')
+        .select('user_id')
+        .eq('status', 'active')
+        .eq('role', role);
       return (data ?? []).map((r) => (r as { user_id: string }).user_id);
     } catch {
       return [];
@@ -181,7 +187,10 @@ interface RawListResult {
  * Fetch a page of public directory rows (RLS-enforced anon read). Cached; caller applies the
  * viewer-specific DTO projection OUTSIDE the cache so the cache stays public/shareable.
  */
-async function fetchListRows(f: PlayerFilters, restrictIds: string[] | null): Promise<RawListResult> {
+async function fetchListRows(
+  f: PlayerFilters,
+  restrictIds: string[] | null,
+): Promise<RawListResult> {
   try {
     const supabase = createPublicClient();
     let query = supabase
@@ -266,7 +275,13 @@ export async function listPlayers(
   players.sort((a, b) => Number(b.identityVerified) - Number(a.identityVerified));
 
   const page = Math.max(1, filters.page ?? 1);
-  return { players, total, page, pageSize: PAGE_SIZE, pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+  return {
+    players,
+    total,
+    page,
+    pageSize: PAGE_SIZE,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -300,7 +315,10 @@ export async function getPlayerBySlug(
   const row = await cached();
   if (!row) return null;
 
-  const [facts, skills] = await Promise.all([fetchBadgeFacts([row.id]), fetchSkillSnapshots([row.id])]);
+  const [facts, skills] = await Promise.all([
+    fetchBadgeFacts([row.id]),
+    fetchSkillSnapshots([row.id]),
+  ]);
   const f = facts[row.id] ?? emptyFacts();
   const extras: ProfileExtras = {
     roles: f.roles,

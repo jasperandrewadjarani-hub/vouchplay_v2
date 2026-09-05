@@ -81,11 +81,7 @@ export function OnboardingForm({
         <Input id="bio" name="bio" maxLength={300} />
       </Field>
 
-      <Field
-        label="Profile photo"
-        htmlFor="avatar"
-        hint="Optional. PNG, JPG or WebP, up to 2 MB."
-      >
+      <Field label="Profile photo" htmlFor="avatar" hint="Optional. PNG, JPG or WebP, up to 2 MB.">
         <input
           id="avatar"
           name="avatar"

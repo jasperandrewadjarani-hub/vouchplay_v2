@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
+import { viewerIsStaff } from '@/lib/moderation/staff';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { Button } from '@/components/ui/button';
 
@@ -29,6 +30,7 @@ export default async function MePage() {
   }
 
   const profile = await getMyProfile();
+  const isStaff = await viewerIsStaff();
   const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '—';
 
   return (
@@ -56,7 +58,15 @@ export default async function MePage() {
         )}
       </div>
 
+      {isStaff && (
+        <nav className="border-primary/40 bg-primary/5 divide-border divide-y rounded-2xl border text-sm">
+          <SettingsLink href="/staff" label="Staff · Moderation" />
+        </nav>
+      )}
+
       <nav className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm">
+        <SettingsLink href="/me/blocked" label="Blocked users" />
+        <SettingsLink href="/me/support" label="Support & appeals" />
         <SettingsLink href="/me/settings/security" label="Security & two-factor" />
         <SettingsLink href="/me/settings/password" label="Password" />
       </nav>

@@ -88,7 +88,15 @@ export function weightedMedian(vouches: VouchInput[]): number {
   return last ? last.skillOrdinal : 0;
 }
 
-const EMPTY_DISTRIBUTION = (): Record<number, number> => ({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
+const EMPTY_DISTRIBUTION = (): Record<number, number> => ({
+  0: 0,
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 0,
+  5: 0,
+  6: 0,
+});
 
 /**
  * Full CSL + STS_V1 computation for one target's active vouches. Deterministic given the same
@@ -125,11 +133,13 @@ export function computeSkillProfile(
   const uniqueVoucherCount = new Set(vouches.map((v) => v.voucherId)).size;
   const weightSum = vouches.reduce((s, v) => s + v.effectiveWeight, 0);
   const median = weightedMedian(vouches);
-  const weightedMean = vouches.reduce((s, v) => s + v.skillOrdinal * v.effectiveWeight, 0) / weightSum;
+  const weightedMean =
+    vouches.reduce((s, v) => s + v.skillOrdinal * v.effectiveWeight, 0) / weightSum;
 
   // Agreement: weighted mean absolute distance from the weighted median (§10.7C).
   const dispersion =
-    vouches.reduce((s, v) => s + v.effectiveWeight * Math.abs(v.skillOrdinal - median), 0) / weightSum;
+    vouches.reduce((s, v) => s + v.effectiveWeight * Math.abs(v.skillOrdinal - median), 0) /
+    weightSum;
 
   const countComponent = Math.min(uniqueVoucherCount / constants.countDivisor, 1);
   const weightComponent = Math.min(weightSum / constants.weightDivisor, 1);
