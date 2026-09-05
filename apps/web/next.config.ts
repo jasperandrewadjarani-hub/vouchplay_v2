@@ -2,8 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // We maintain our own AGENTS.md/CLAUDE.md conventions; don't auto-generate them per app.
-  agentRules: false,
+  // Lint runs as its own CI step; don't let it gate the production build (Next 15 lints on build).
+  eslint: { ignoreDuringBuilds: true },
   // Domain logic lives in workspace packages; transpile them for the app.
   transpilePackages: [
     '@vouchplay/core',

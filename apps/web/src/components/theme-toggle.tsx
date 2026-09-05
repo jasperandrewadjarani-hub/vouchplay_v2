@@ -9,8 +9,7 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   // Standard next-themes hydration guard: theme is only known client-side, so we render a stable
-  // label until mounted to avoid a server/client mismatch. Setting state once on mount is intended.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // label until mounted to avoid a server/client mismatch.
   useEffect(() => setMounted(true), []);
 
   const label = !mounted
