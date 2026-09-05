@@ -46,9 +46,11 @@ function filtersKey(f: PlayerFilters): string {
 }
 
 // ----------------------------------------------------------------------------
-// Public-by-design badge facts (§8.2). Read server-side with a tight projection;
-// only booleans ever reach the client via the DTO. See notes.md for the RLS-clean
-// hardening (migration 0003 `public_player_facts()`), to replace this in the fold-in step.
+// Public-by-design badge facts (§8.2). RLS-clean: read through the anon client via the
+// `public_player_facts()` SECURITY DEFINER RPC (migration 0003), which returns ONLY safe booleans
+// — never the sensitive columns of user_roles / identity_verifications. The service client is no
+// longer on the per-card badge path (only the opt-in role/identity FILTER id-lists below still use
+// it, reading a single safe `user_id` column).
 // ----------------------------------------------------------------------------
 
 interface BadgeFacts {
@@ -56,31 +58,30 @@ interface BadgeFacts {
   identityVerified: boolean;
 }
 
+interface PublicFactRow {
+  user_id: string;
+  is_coach: boolean;
+  is_organizer: boolean;
+  identity_verified: boolean;
+}
+
 const emptyFacts = (): BadgeFacts => ({ roles: [], identityVerified: false });
 
-/** Bulk-load active roles + identity-approved flag for a set of user ids (no N+1). */
+/** Bulk-load public badge facts for a set of user ids via the anon RPC (no N+1, RLS-clean). */
 const fetchBadgeFacts = unstable_cache(
   async (ids: string[]): Promise<Record<string, BadgeFacts>> => {
     const out: Record<string, BadgeFacts> = {};
     if (ids.length === 0) return out;
     for (const id of ids) out[id] = emptyFacts();
     try {
-      const svc = createServiceClient();
-      const [rolesRes, idRes] = await Promise.all([
-        svc.from('user_roles').select('user_id, role').eq('status', 'active').in('user_id', ids),
-        svc
-          .from('identity_verifications')
-          .select('user_id')
-          .eq('status', 'approved')
-          .in('user_id', ids),
-      ]);
-      for (const r of rolesRes.data ?? []) {
-        const row = r as { user_id: string; role: GlobalRole };
-        (out[row.user_id] ??= emptyFacts()).roles.push(row.role);
-      }
-      for (const v of idRes.data ?? []) {
-        const row = v as { user_id: string };
-        (out[row.user_id] ??= emptyFacts()).identityVerified = true;
+      const supabase = createPublicClient();
+      const { data, error } = await supabase.rpc('public_player_facts', { ids });
+      if (error || !data) return out;
+      for (const row of data as PublicFactRow[]) {
+        const f = (out[row.user_id] ??= emptyFacts());
+        if (row.is_coach) f.roles.push('coach');
+        if (row.is_organizer) f.roles.push('organizer');
+        f.identityVerified = !!row.identity_verified;
       }
     } catch {
       // Facts are non-critical decoration; render cards without badges rather than failing.

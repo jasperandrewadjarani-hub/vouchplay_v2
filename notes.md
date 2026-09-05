@@ -317,6 +317,22 @@ Getting the first deploy up hit two issues:
   - **Still deferred:** the one manual SQL paste above (then the badge-reads switch); seed Tane's
     admin once their email is known; wiring `requireStaffMfa` into the admin area when it exists.
 
+- **2026-09-05** — **Migration 0003 APPLIED + admin seeded + badge reads switched (Phase 2 hardening
+  CLOSED).** Jasper pasted `scripts/apply-0003-and-admin.sql` into the Supabase SQL editor and ran it
+  (verify query returned admins=1, public_player_facts_exists=1, avatars_bucket_public=1). So on live
+  DB `itrosesiywpbaxtmucbb`: avatars bucket config + `storage.objects` owner policies applied;
+  `public_player_facts(uuid[])` SECURITY DEFINER fn created + granted anon/authenticated; Jasper's
+  account granted `super_admin`.
+  - **Switched `lib/players/queries.ts` badge reads** from the service client to the anon
+    `public_player_facts()` RPC (RLS-clean; returns only safe booleans, and deliberately does NOT
+    expose staff/admin status). Service client now only touches the opt-in role/identity FILTER
+    id-lists (single safe `user_id` column). Verified: anon RPC call returns correct rows, no error.
+  - **Re-ran `verify-rls.mjs`: 6/6, now CONCLUSIVE** — `user_roles anon=0 / service=1 → RLS filtering
+    confirmed` (the super_admin row is invisible to anon).
+  - Handover §0Z stamped **Phase 2 ✅ DONE (live)**.
+  - **Open:** seed Tane's admin once their email is known; wire `requireStaffMfa` into the Admin
+    Control Center when it's built (Phase 30+). **Next: Phase 3 — Vouch Engine (§10).**
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
