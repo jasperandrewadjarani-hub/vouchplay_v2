@@ -477,9 +477,54 @@ Getting the first deploy up hit two issues:
     `player_bids`); manager-initiated invitations (§15.4 INVITED path — request+approve shipped);
     password/OAuth re-auth on club delete (§15.7 — typed-name confirm used instead). **Next: Phase 6.**
 
+- **2026-09-06** — **Migration 0006 APPLIED (Clubs fully live).** Verify returned club_tables=2,
+  club_helpers=3, club_rls_policies=3. Directory/create/join/manage + admin verification all active on
+  live DB `itrosesiywpbaxtmucbb`.
+
+- **2026-09-06** — **PHASE 6 — Tournament Setup (§17–§19): BUILT + deployed + live.** Scope decision
+  (Jasper): **full Phase-6 list.** Awaiting one manual SQL paste (migration 0007) to fully activate.
+  Note: §16 recruitment/sponsorship was in the handover's Phase-5 build list but was deferred when
+  Phase 5 was scoped to Clubs-core; it now lands with Phase 7 (Partner/Team/Registration) or as a
+  fold-in — Phase 6 per the authoritative plan (handover §5252) is Tournament Setup.
+  - **Migration 0007 (`0007_tournaments.sql`, WRITTEN — apply pending):** `tournaments` (§36.19),
+    `divisions` (§36.21), `tournament_organizers` (§36.20), `tournament_interests` (§36.22),
+    `tournament_announcements` (§36.30) + enums + `is_tournament_organizer()` helper + RLS (public
+    reads non-draft; organizers/staff see drafts; writes via service role). One-paste apply:
+    **`scripts/apply-0007.sql`** (expect tournament_tables=5, tournament_helper=1,
+    tournament_rls_policies=8).
+  - **Organizer role (§17.1):** `applyForOrganizer` (from `/me`, the `?organizer=1` deep link, and the
+    tournaments "Become an organizer" CTA) → admin approval in the `/staff` queue (**new Role apps
+    tab**, `assertAdminActor` [admin/super_admin + aal2] + audit) grants the `organizer` role. Only
+    approved organizers/admins can create tournaments (action + `/tournaments/new` page guard + RLS
+    insert check).
+  - **Tournaments (`lib/actions/tournament.ts`):** CRUD, **server-enforced lifecycle** state machine
+    (`TRANSITIONS` map — draft→published→registration_open→registration_closed→locked→live→completed→
+    archived, cancel from live states), cover upload (public `avatars` bucket, `tournament-covers/`
+    prefix), interested toggle, announcements, co-organizers with granular permission jsonb
+    (edit/manage_divisions/send_announcements/manage_organizers[owner]/approve_registrations/
+    manage_payments/export).
+  - **Divisions (§18):** attribute rule-builder (skill policy/format/sex/age/team-size/capacity/fee/
+    skill-verified/min-STS/approval); auto-composed display names (`divisionName`); add/edit/clone/
+    status.
+  - **Data layer (`lib/tournaments/`):** DTO + cache-first `listTournaments` (discovery) +
+    `getTournamentBySlug` (session-aware so organizers see their drafts; interested count via service;
+    no `select(*)` on read paths).
+  - **UI:** `/tournaments` discovery (search), `/tournaments/[slug]` public page (§19 — cover, status
+    pill, divisions, announcements, interested, share, manage link), `/tournaments/new`,
+    `/tournaments/[slug]/manage` (lifecycle + division builder + details + announcements + co-organizers).
+  - **Gates green** (typecheck/lint/format/test 18/build — tournament routes present). Committed
+    `16fb60e`, pushed to `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0007.sql` + return verify numbers. Until then:
+    tournament reads degrade to empty, writes error gracefully (Phase-4/5 pattern). Organizers must
+    also be granted via the Role apps queue (needs a staff member with aal2).
+  - **Deferred:** registration/partner/teams/club-representation (Phase 7), payments (Phase 8),
+    eligibility/anti-sandbagging (Phase 9), organizer export (Phase 10), §16 offers, §16A bidding.
+    **Next: Phase 7 — Partner, Team & Registration (§20–§25).**
+
 ## Next up
-- **Manual: apply `scripts/apply-0006.sql`** (migration 0006, Clubs) + return verify numbers.
-- **Phase 6+** — Recruitment/Sponsorship (§16) + Tournaments (§17+), per the handover phase plan.
+- **Manual: apply `scripts/apply-0007.sql`** (migration 0007, Tournaments) + return verify numbers;
+  then approve at least one organizer via `/staff` → Role apps so tournament creation can be tested.
+- **Phase 7 — Partner, Team & Registration** (handover §5273; §20–§25) next.
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).

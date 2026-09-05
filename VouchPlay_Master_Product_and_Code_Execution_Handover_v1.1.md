@@ -113,11 +113,24 @@ reinstate added to the `/staff` queue (Clubs tab), each audit-logged. Player car
 club stacks. Logos reuse the public `avatars` bucket (`club-logos/` prefix). Migration
 `0006_clubs` written (`scripts/apply-0006.sql`) — **apply pending** (code degrades gracefully until
 it lands). Deferred: §16 offers, §16A bids, manager-initiated invites, delete re-auth (typed-name
-confirm used). Gates green; live.
+confirm used). Migration `0006_clubs` **applied** (verify 2/3/3). Gates green; live.
 
-**Next:** Phase 6 — Recruitment/Sponsorship (§16) then Tournaments (§17+). (Open ops: apply migration
-0006; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota
-before 21 Sep 2026.)
+**Phase 6 — Tournament Setup: ✅ BUILT + live (§17–§19).** Organizer role application (`/me`) + admin
+approval in the `/staff` Role-apps queue grants `organizer`; only approved organizers/admins create
+tournaments (action + page guard + RLS). `tournaments` + `divisions` + `tournament_organizers` +
+`tournament_interests` + `tournament_announcements` (§36.19–36.22, §36.30) + `is_tournament_organizer()`
++ RLS (public reads non-draft; organizers see drafts). Server-enforced lifecycle state machine
+(§17.2); attribute-assembled division rule-builder (§18) with add/edit/clone/status; co-organizers
+(§17.4) with granular permission jsonb; interested toggle; announcements; cover uploads (public bucket,
+`tournament-covers/` prefix). UI: `/tournaments` discovery, `/tournaments/[slug]` public page (§19),
+`/tournaments/new`, `/tournaments/[slug]/manage`. Migration `0007_tournaments` written
+(`scripts/apply-0007.sql`) — **apply pending** (reads degrade to empty, writes error until it lands).
+Deferred: registration/partner/teams/club-representation (Phase 7), payments (Phase 8), eligibility
+(Phase 9), §16 offers, §16A bids. Gates green; live.
+
+**Next:** Phase 7 — Partner, Team & Registration (§20–§25). (Open ops: apply migration 0007; approve
+an organizer via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`;
+clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 
