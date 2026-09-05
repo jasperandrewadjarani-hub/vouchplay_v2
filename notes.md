@@ -195,6 +195,18 @@ Getting the first deploy up hit two issues:
   `verifyOtp({type:'email'})` already expects the typed code, so the flow is now code-based end to end.
   Vercel Auth is OFF → **https://vouchplayph.vercel.app is public & live.**
 
+- **2026-09-05** — **OTP-code signup fully fixed.** First code-template edit wasn't enough: a NEW
+  user via `signInWithOtp({shouldCreateUser:true})` with **"Confirm email" ON** gets the *Confirm
+  signup* template (a LINK), not the Magic-link/OTP template. Root fix, all in Supabase Auth →
+  Sign In / Providers:
+  1. **Confirm email → OFF** (User Signups). With OTP sign-in the code itself proves email
+     ownership, so new users now get the Magic-link/OTP template = the 6-digit code. ("Successfully
+     updated settings" confirmed.)
+  2. **Email OTP length 8 → 6** (Email provider) to match the app's 6-digit validation + UI copy.
+  3. (Earlier) Magic-link/OTP template body → `{{ .Token }}`.
+  Re-tested live signup → "Code sent". Now new + returning users both get a 6-digit code, verified
+  with `verifyOtp({type:'email'})`. All Supabase dashboard changes persisted (verified on reload).
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
