@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { BRAND, THEME_COLORS } from '@vouchplay/config';
 import { ThemeProvider } from '@/components/theme-provider';
-import { AppShell } from '@/components/app-shell';
 import './globals.css';
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
@@ -43,9 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body>
-        <ThemeProvider>
-          <AppShell>{children}</AppShell>
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

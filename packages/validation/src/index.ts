@@ -1,5 +1,6 @@
 /**
  * @vouchplay/validation — shared Zod schemas used at every external boundary (API request/response,
- * forms). Handover §35.2, §43.2. Scaffold placeholder — schemas added per phase.
+ * forms). Handover §35.2, §43.2.
  */
-export const VALIDATION_PACKAGE = '@vouchplay/validation';
+export * from './auth';
+export * from './profile';

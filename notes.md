@@ -113,10 +113,27 @@ Postmark/SendGrid later is a one-adapter change. Constraints: Gmail ≈500 sends
 dedicated provider before public launch.** Needs a Gmail **App Password** (16-char, requires 2FA)
 set as Supabase Custom SMTP for auth emails.
 
+- **2026-09-05** — **Phase 1 auth UI STAGED** (compiles + renders without keys; activates when
+  `.env.local` is filled). Restructured `app/` into `(app)` (shell) and `(auth)` (minimal) route
+  groups. Added: server actions (`lib/actions/auth.ts` — email OTP request/verify, password login,
+  set password, Google OAuth, password reset, sign out; `lib/actions/profile.ts` — onboarding with
+  slug gen); `lib/auth.ts` guards (`getOptionalUser`/`getMyProfile`/`requireUser`/`postAuthPath`,
+  all graceful when keys absent); `/auth/callback` route (OAuth code + email token_hash); pages
+  login/signup/forgot-password/onboarding; wired `/me` (signed-in card + sign out) and header
+  (Sign in when logged out); shared UI atoms (Button/SubmitButton/Field/Input/Select/FormError);
+  validation schemas in `@vouchplay/validation`; Terms/Privacy stubs. Migrated `middleware.ts` →
+  `proxy.ts` (Next 16). Verified login/signup/me in-browser (light theme). Gates green
+  (lint/typecheck/test 7-7/format/build). Docs: `docs/SECRETS_SETUP.md` (step-by-step for keys).
+  Follow-up noted: `(app)` pages are dynamic because the header reads auth cookies — revisit with
+  PPR/partial caching for public pages (players/clubs/tournaments) per §34A.5. Docs/setup guide
+  saved: [SECRETS_SETUP.md](docs/SECRETS_SETUP.md).
+
 ## Next up
-- **Secrets to finish Phase 1 auth:** Supabase URL + anon + service_role (project
-  `itrosesiywpbaxtmucbb`); Google OAuth client id/secret; Gmail App Password for
-  `vouchplay@gmail.com`. Put them in `apps/web/.env.local` (see `.env.example`) and Supabase SMTP.
-- **Then:** `supabase link` + `db push` (apply 0001/0002), generate DB types into `packages/db`,
-  build auth (email verify + Google), profile onboarding UI, route guards, seed JT admin accounts,
-  Admin MFA framework. Validate RLS + role-spoofing tests (Phase 1 gate).
+- **Waiting on secrets** (Jasper setting up per docs/SECRETS_SETUP.md): Supabase URL + anon +
+  service_role; Google OAuth client id/secret; Gmail App Password. Into `apps/web/.env.local` +
+  Supabase SMTP.
+- **Then (no more code blockers for auth):** `supabase link` + `db push` (apply 0001/0002),
+  `supabase gen types` → `packages/db`, smoke-test signup/login/Google/onboarding end-to-end,
+  validate RLS + role-spoofing, seed JT admin accounts, Admin MFA framework (Phase 1 gate).
+- **Deferred within Phase 1:** avatar upload on onboarding (needs `avatars` bucket); set-password
+  page for reset link landing (`/me/settings/password`).
