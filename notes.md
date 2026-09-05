@@ -379,6 +379,15 @@ Getting the first deploy up hit two issues:
   (typecheck/lint/build). Not a token re-theme — the locked §33.2 base palette is unchanged; this
   layers accents/motion/hierarchy on top.
 
+- **2026-09-05** — **Migration 0004 APPLIED + Phase 3 pipeline verified live (Phase 3 CLOSED).**
+  Jasper pasted `scripts/apply-0004.sql` (verify: vouch_tables=7, player_skill_profiles_public_read=1).
+  Confirmed on live DB: `player_skill_profiles` anon-readable (public aggregate); `vouches` blocked
+  from anon SELECT (voucher identity protected). **Controlled pipeline smoke test** (service-side,
+  cleaned up): inserted a skill-4/weight-1 vouch → wrote the profile as recompute would → anon read
+  returned CSL 4 / STS 1.9 / unique 1 / distribution {4:1} (matches the unit-tested algorithm) →
+  deleted test data (0 rows remain). Full loop schema→recompute→public-read→display verified live.
+  Handover §0Z stamped **Phase 3 ✅ DONE**. **Next: Phase 4 — Safety & Moderation (§11, §15).**
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.

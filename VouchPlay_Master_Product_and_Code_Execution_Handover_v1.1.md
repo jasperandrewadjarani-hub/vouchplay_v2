@@ -71,8 +71,25 @@ pilot (not a dedicated provider — §34A.11), behind the `EmailProvider` interf
 **Ops flags:** Supabase org is **over-quota** (projects restricted from 21 Sep 2026 if not cleared);
 Google consent screen shows the Supabase project domain (cosmetic; needs paid custom domain to rebrand).
 
-**Next:** apply `scripts/apply-0003-and-admin.sql` (manual), then switch badge reads to
-`public_player_facts()`; then Phase 3 — Vouch Engine (§10), the core domain module.
+**Phase 3 — Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
+STS components, Skill-Verified, effective weights) — pure/deterministic, 11 unit tests incl.
+hand-computed cases. Migration 0004 applied (vouches, revisions, comments, requests,
+player_skill_profiles, blocks, fraud_flags + RLS; anonymous voucher identity never public — public
+skill data via the safe `player_skill_profiles` aggregate). `submitVouch`/`withdrawVouch`/
+`requestVouch` enforce every locked rule server-side (self/active/block/coach-toggle/one-active-per-
+pair/rolling-limit/cooldown, revisions); recompute-on-write; live vouch form + CSL/STS/Skill-Verified
+on cards+profile + real distribution/comments. Pipeline smoke-tested against the live DB
+(insert → recompute → public read = correct values, then cleaned up). Deferred: fraud-flag detectors
+(§11.2 table shipped), admin invalidate UI (Phase 30), block-management UI (Phase 4 — block already
+enforced in the vouch path).
+
+**UI/UX:** a bold-sporty polish pass shipped across the whole app (gradient/glow tokens + utilities,
+hero headers, hover-lift cards, gradient nav indicators, real home hero, branded auth) — layered on
+the locked §33.2 palette, theme-aware, reduced-motion safe.
+
+**Next:** Phase 4 — Safety & Moderation (§11, §15) — reports, comment reports, block UI, skill review,
+moderation queue, fraud-flag review. (Open ops: seed Tane's admin; clear Supabase over-quota before
+21 Sep 2026.)
 
 ---
 
