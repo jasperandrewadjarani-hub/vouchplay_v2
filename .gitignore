@@ -45,3 +45,5 @@ Thumbs.db
 
 # keep the canonical export sample and logos, but never commit generated exports
 /tmp-exports/
+
+.vercel
