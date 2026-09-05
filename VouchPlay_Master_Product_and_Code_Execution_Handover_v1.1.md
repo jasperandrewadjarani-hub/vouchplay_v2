@@ -465,9 +465,8 @@ Profile is accessed from **Me**, not duplicated permanently in the header.
   Analytics"** (roughly 9–10px, `text-foreground-muted`, non-wrapping). The logo + this line form one
   clickable unit that links to the JT Facebook page (`https://www.facebook.com/61590234100280/`).
 - Keep the mark crisp in both themes (use the transparent logo asset in `logo_/`).
-- Note: the header logo stays **upper-left** per the locked IA (the bell/notifications stay
-  upper-right). If JT instead wants the lockup relocated, that's a header re-layout to confirm
-  explicitly, since it competes with the notification bell for the upper-right slot.
+- Position is **confirmed upper-left** (locked IA); the notification bell / profile avatar stay
+  upper-right.
 
 ## 5.3 Me Section
 
