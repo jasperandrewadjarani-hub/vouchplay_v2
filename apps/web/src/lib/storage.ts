@@ -15,3 +15,11 @@ export function avatarUrl(path: string | null | undefined): string | null {
   const clean = path.replace(/^\/+/, '');
   return `${base}/storage/v1/object/public/${AVATARS_BUCKET}/${clean}`;
 }
+
+/**
+ * Club logos live in the same PUBLIC `avatars` bucket under a `club-logos/` prefix (no new bucket
+ * needed; writes go through the service client which bypasses storage RLS). Same public-URL rules.
+ */
+export function clubLogoUrl(path: string | null | undefined): string | null {
+  return avatarUrl(path);
+}

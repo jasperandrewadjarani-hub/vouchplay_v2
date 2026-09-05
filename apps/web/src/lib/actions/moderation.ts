@@ -12,6 +12,7 @@ import { assertStaffActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
+import { CLUBS_LIST_TAG, clubTag } from '@/lib/clubs/queries';
 import { listActiveVouchesForModeration, type ModerationVouch } from '@/lib/moderation/queries';
 import type { SafetyActionState } from './report';
 
@@ -342,6 +343,97 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
   }
   revalidatePath('/staff/moderation');
   return { ok: true, message: 'Vouch invalidated and skill profile recomputed.' };
+}
+
+// ---------------------------------------------------------------------------
+// Club moderation (§15.1–§15.2) — admin verification + activity status.
+// ---------------------------------------------------------------------------
+export async function verifyClub(
+  clubId: string,
+  status: 'verified' | 'unverified' | 'rejected',
+  reason: string,
+): Promise<SafetyActionState> {
+  const actor = await assertStaffActor();
+  if (!actor) return NO_STAFF;
+  const svc = createServiceClient();
+  try {
+    const { data: before } = await svc
+      .from('clubs')
+      .select('slug, verification_status')
+      .eq('id', clubId)
+      .maybeSingle();
+    if (!before) return { error: 'Club not found.' };
+    const b = before as { slug: string; verification_status: string };
+    const { error } = await svc
+      .from('clubs')
+      .update({
+        verification_status: status,
+        verification_reviewed_by: actor.viewerId,
+        verification_reviewed_at: new Date().toISOString(),
+        verification_reason: reason?.trim() || null,
+      })
+      .eq('id', clubId);
+    if (error) return { error: 'Could not update the club.' };
+    await writeAudit({
+      actorId: actor.viewerId,
+      actorRole: actor.role,
+      action: `moderation.club.${status}`,
+      entityType: 'club',
+      entityId: clubId,
+      before: { verification_status: b.verification_status },
+      after: { verification_status: status },
+      reason: reason?.trim() || null,
+    });
+    revalidateTag(CLUBS_LIST_TAG);
+    revalidateTag(clubTag(b.slug));
+  } catch {
+    return { error: 'Moderation action failed. Please try again.' };
+  }
+  revalidatePath('/staff/moderation');
+  return { ok: true, message: 'Club verification updated.' };
+}
+
+export async function setClubModerationStatus(
+  clubId: string,
+  activity: 'active' | 'suspended',
+  reason: string,
+): Promise<SafetyActionState> {
+  const actor = await assertStaffActor();
+  if (!actor) return NO_STAFF;
+  if (activity === 'suspended' && requireReason(reason)) {
+    return { error: 'A reason is required to suspend a club.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: before } = await svc
+      .from('clubs')
+      .select('slug, activity_status')
+      .eq('id', clubId)
+      .maybeSingle();
+    if (!before) return { error: 'Club not found.' };
+    const b = before as { slug: string; activity_status: string };
+    const { error } = await svc
+      .from('clubs')
+      .update({ activity_status: activity, status_reason: reason?.trim() || null })
+      .eq('id', clubId);
+    if (error) return { error: 'Could not update the club.' };
+    await writeAudit({
+      actorId: actor.viewerId,
+      actorRole: actor.role,
+      action: `moderation.club.${activity === 'suspended' ? 'suspend' : 'reinstate'}`,
+      entityType: 'club',
+      entityId: clubId,
+      before: { activity_status: b.activity_status },
+      after: { activity_status: activity },
+      reason: reason?.trim() || null,
+    });
+    revalidateTag(CLUBS_LIST_TAG);
+    revalidateTag(clubTag(b.slug));
+  } catch {
+    return { error: 'Moderation action failed. Please try again.' };
+  }
+  revalidatePath('/staff/moderation');
+  return { ok: true, message: 'Club status updated.' };
 }
 
 /**

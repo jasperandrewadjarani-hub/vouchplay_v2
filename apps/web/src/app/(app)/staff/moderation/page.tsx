@@ -6,21 +6,24 @@ import {
   listSkillReviews,
   listFraudFlags,
   listSupportTickets,
+  listClubsForModeration,
   getModerationCounts,
 } from '@/lib/moderation/queries';
 import { ReportsPanel } from '@/components/moderation/reports-panel';
 import { SkillReviewsPanel } from '@/components/moderation/skill-reviews-panel';
 import { FraudFlagsPanel } from '@/components/moderation/fraud-flags-panel';
 import { SupportPanel } from '@/components/moderation/support-panel';
+import { ClubsPanel } from '@/components/moderation/clubs-panel';
 
 export const metadata: Metadata = { title: 'Moderation queue' };
 
-type Tab = 'reports' | 'skill-reviews' | 'fraud' | 'support';
+type Tab = 'reports' | 'skill-reviews' | 'fraud' | 'support' | 'clubs';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'reports', label: 'Reports' },
   { key: 'skill-reviews', label: 'Skill reviews' },
   { key: 'fraud', label: 'Fraud flags' },
   { key: 'support', label: 'Support' },
+  { key: 'clubs', label: 'Clubs' },
 ];
 
 interface Props {
@@ -37,6 +40,7 @@ export default async function ModerationQueue({ searchParams }: Props) {
     'skill-reviews': counts.skillReviews,
     fraud: counts.fraudFlags,
     support: counts.supportTickets,
+    clubs: counts.clubs,
   };
 
   return (
@@ -79,6 +83,7 @@ export default async function ModerationQueue({ searchParams }: Props) {
       {tab === 'skill-reviews' && <SkillReviewsPanel items={await listSkillReviews()} />}
       {tab === 'fraud' && <FraudFlagsPanel items={await listFraudFlags()} />}
       {tab === 'support' && <SupportPanel items={await listSupportTickets()} />}
+      {tab === 'clubs' && <ClubsPanel items={await listClubsForModeration()} />}
     </section>
   );
 }

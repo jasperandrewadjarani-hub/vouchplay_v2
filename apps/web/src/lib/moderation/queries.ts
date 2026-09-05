@@ -164,11 +164,12 @@ export interface ModerationCounts {
   skillReviews: number;
   fraudFlags: number;
   supportTickets: number;
+  clubs: number;
 }
 
 export async function getModerationCounts(): Promise<ModerationCounts> {
   const svc = createServiceClient();
-  const [reports, skillReviews, fraudFlags, supportTickets] = await Promise.all([
+  const [reports, skillReviews, fraudFlags, supportTickets, clubs] = await Promise.all([
     svc.from('reports').select('id', { count: 'exact', head: true }).in('status', OPEN_REPORT),
     svc
       .from('skill_reviews')
@@ -179,13 +180,63 @@ export async function getModerationCounts(): Promise<ModerationCounts> {
       .from('support_tickets')
       .select('id', { count: 'exact', head: true })
       .in('status', OPEN_TICKET),
+    svc
+      .from('clubs')
+      .select('id', { count: 'exact', head: true })
+      .eq('verification_status', 'pending')
+      .neq('activity_status', 'deleted'),
   ]);
   return {
     reports: reports.count ?? 0,
     skillReviews: skillReviews.count ?? 0,
     fraudFlags: fraudFlags.count ?? 0,
     supportTickets: supportTickets.count ?? 0,
+    clubs: clubs.count ?? 0,
   };
+}
+
+export interface ClubModerationItem {
+  id: string;
+  slug: string;
+  name: string;
+  city: string | null;
+  verificationStatus: string;
+  activityStatus: string;
+  createdAt: string;
+  ownerName: string | null;
+}
+
+/** Clubs needing verification review (§15.2). Staff-only (page-guarded). */
+export async function listClubsForModeration(): Promise<ClubModerationItem[]> {
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('clubs')
+    .select('id, slug, name, city, verification_status, activity_status, created_by, created_at')
+    .neq('activity_status', 'deleted')
+    .or('verification_status.eq.pending,activity_status.eq.suspended')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  const rows = (data ?? []) as Array<{
+    id: string;
+    slug: string;
+    name: string;
+    city: string | null;
+    verification_status: string;
+    activity_status: string;
+    created_by: string;
+    created_at: string;
+  }>;
+  const owners = await resolveProfiles(rows.map((r) => r.created_by));
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    city: r.city,
+    verificationStatus: r.verification_status,
+    activityStatus: r.activity_status,
+    createdAt: r.created_at,
+    ownerName: owners.get(r.created_by)?.name ?? null,
+  }));
 }
 
 // ---------------------------------------------------------------------------

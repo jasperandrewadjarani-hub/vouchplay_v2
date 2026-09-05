@@ -234,6 +234,48 @@ export interface SupportTicketRow {
   updated_at: string;
 }
 
+// ---------- Clubs (migration 0006) ----------
+export type ClubPrivacy = 'public' | 'approval_required';
+export type ClubVerificationStatus = 'pending' | 'verified' | 'unverified' | 'rejected';
+export type ClubActivityStatus = 'active' | 'inactive' | 'suspended' | 'deleted';
+export type ClubRole = 'owner' | 'admin' | 'member';
+export type ClubMembershipStatus =
+  'requested' | 'invited' | 'active' | 'rejected' | 'declined' | 'left' | 'removed' | 'expired';
+
+export interface ClubRow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  city: string | null;
+  logo_path: string | null;
+  contact: string | null;
+  social_links: Record<string, unknown>;
+  privacy: ClubPrivacy;
+  verification_status: ClubVerificationStatus;
+  activity_status: ClubActivityStatus;
+  created_by: string;
+  verification_reviewed_by: string | null;
+  verification_reviewed_at: string | null;
+  verification_reason: string | null;
+  status_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface ClubMembershipRow {
+  id: string;
+  club_id: string;
+  user_id: string;
+  role: ClubRole;
+  status: ClubMembershipStatus;
+  invited_by: string | null;
+  created_at: string;
+  approved_at: string | null;
+  ended_at: string | null;
+}
+
 export interface AuditLogRow {
   id: string;
   actor_id: string | null;

@@ -3,6 +3,7 @@ import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
+import { getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
 import {
   PLAYER_CARD_COLUMNS,
   PLAYER_PROFILE_COLUMNS,
@@ -260,13 +261,18 @@ export async function listPlayers(
   const { rows, total } = await cached();
 
   const ids = rows.map((r) => r.id);
-  const [facts, skills] = await Promise.all([fetchBadgeFacts(ids), fetchSkillSnapshots(ids)]);
+  const [facts, skills, clubs] = await Promise.all([
+    fetchBadgeFacts(ids),
+    fetchSkillSnapshots(ids),
+    getUserClubsBulk(ids),
+  ]);
   const players = rows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
     const extras: ProfileExtras = {
       roles: f.roles,
       identityVerified: f.identityVerified,
       skill: skills[row.id] ?? null,
+      clubs: clubs[row.id] ?? [],
     };
     return toPlayerCardDTO(row, extras, viewer);
   });
@@ -315,15 +321,17 @@ export async function getPlayerBySlug(
   const row = await cached();
   if (!row) return null;
 
-  const [facts, skills] = await Promise.all([
+  const [facts, skills, clubs] = await Promise.all([
     fetchBadgeFacts([row.id]),
     fetchSkillSnapshots([row.id]),
+    getUserClubs(row.id),
   ]);
   const f = facts[row.id] ?? emptyFacts();
   const extras: ProfileExtras = {
     roles: f.roles,
     identityVerified: f.identityVerified,
     skill: skills[row.id] ?? null,
+    clubs,
   };
   return toPlayerProfileDTO(row, extras, viewer);
 }

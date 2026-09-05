@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldAlert, Flag, ClipboardCheck, Search, LifeBuoy } from 'lucide-react';
+import { ShieldAlert, Flag, ClipboardCheck, Search, LifeBuoy, Shield } from 'lucide-react';
 import { requireStaffPage } from '@/lib/moderation/staff';
 import { getModerationCounts } from '@/lib/moderation/queries';
 
@@ -30,6 +30,7 @@ export default async function StaffHome() {
       icon: LifeBuoy,
       n: counts.supportTickets,
     },
+    { href: '/staff/moderation?tab=clubs', label: 'Clubs', icon: Shield, n: counts.clubs },
   ];
 
   return (

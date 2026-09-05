@@ -59,6 +59,13 @@ export interface VouchSettings {
   };
 }
 
+/** Read a boolean feature flag from system_settings (handover §30.7), with a fallback default. */
+export async function loadSettingFlag(key: SystemSettingsKey, fallback: boolean): Promise<boolean> {
+  const m = await loadSettings();
+  const v = m[key];
+  return typeof v === 'boolean' ? v : fallback;
+}
+
 export interface SafetySettings {
   reportsPer24h: number;
   skillReviewsPer24h: number;
