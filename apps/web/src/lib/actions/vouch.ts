@@ -54,78 +54,55 @@ export async function submitVouch(
   const since = new Date(Date.now() - DAY_MS).toISOString();
 
   try {
-    const [meRes, targetRes, coachRes, idvRes, blockRes, existingRes, actionsRes] =
-      await Promise.all([
-        svc
-          .from('profiles')
-          .select('account_status, suspended_until, vouching_restricted_until')
-          .eq('id', user.id)
-          .maybeSingle(),
-        svc
-          .from('profiles')
-          .select('id, account_status, onboarded_at')
-          .eq('id', v.targetId)
-          .maybeSingle(),
-        svc
-          .from('user_roles')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('role', 'coach')
-          .eq('status', 'active')
-          .maybeSingle(),
-        svc
-          .from('identity_verifications')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('status', 'approved')
-          .maybeSingle(),
-        svc
-          .from('blocks')
-          .select('blocker_id')
-          .or(
-            `and(blocker_id.eq.${user.id},blocked_id.eq.${v.targetId}),and(blocker_id.eq.${v.targetId},blocked_id.eq.${user.id})`,
-          ),
-        svc
-          .from('vouches')
-          .select('id, skill_level, visibility, effective_weight, updated_at')
-          .eq('voucher_id', user.id)
-          .eq('target_id', v.targetId)
-          .eq('status', 'active')
-          .maybeSingle(),
-        svc
-          .from('vouch_revisions')
-          .select('id', { count: 'exact', head: true })
-          .eq('changed_by', user.id)
-          .gte('created_at', since),
-      ]);
+    // Actor status gate (account_status + timed vouching/suspension restriction), defensive so it
+    // works whether or not migration 0005's timed columns exist yet (§11.3, §47).
+    const statusErr = await checkActorCanVouch(user.id);
+    if (statusErr) return { error: statusErr };
 
-    const me = meRes.data as {
-      account_status: string;
-      suspended_until: string | null;
-      vouching_restricted_until: string | null;
-    } | null;
+    const [targetRes, coachRes, idvRes, blockRes, existingRes, actionsRes] = await Promise.all([
+      svc
+        .from('profiles')
+        .select('id, account_status, onboarded_at')
+        .eq('id', v.targetId)
+        .maybeSingle(),
+      svc
+        .from('user_roles')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('role', 'coach')
+        .eq('status', 'active')
+        .maybeSingle(),
+      svc
+        .from('identity_verifications')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .maybeSingle(),
+      svc
+        .from('blocks')
+        .select('blocker_id')
+        .or(
+          `and(blocker_id.eq.${user.id},blocked_id.eq.${v.targetId}),and(blocker_id.eq.${v.targetId},blocked_id.eq.${user.id})`,
+        ),
+      svc
+        .from('vouches')
+        .select('id, skill_level, visibility, effective_weight, updated_at')
+        .eq('voucher_id', user.id)
+        .eq('target_id', v.targetId)
+        .eq('status', 'active')
+        .maybeSingle(),
+      svc
+        .from('vouch_revisions')
+        .select('id', { count: 'exact', head: true })
+        .eq('changed_by', user.id)
+        .gte('created_at', since),
+    ]);
+
     const target = targetRes.data as {
       id: string;
       account_status: string;
       onboarded_at: string | null;
     } | null;
-    const nowMs = Date.now();
-    const inFuture = (ts: string | null) => !!ts && new Date(ts).getTime() > nowMs;
-    if (!me) return { error: 'Your account cannot issue vouches right now.' };
-    if (
-      me.account_status === 'banned' ||
-      me.account_status === 'suspended' ||
-      me.account_status === 'deactivated' ||
-      inFuture(me.suspended_until)
-    ) {
-      return { error: 'Your account cannot issue vouches right now.' };
-    }
-    if (me.account_status === 'restricted' || inFuture(me.vouching_restricted_until)) {
-      return {
-        error:
-          'Your account is restricted from vouching. Contact support if you think this is a mistake.',
-      };
-    }
     if (!target || target.account_status !== 'active' || !target.onboarded_at) {
       return { error: 'That player is not available to vouch for.' };
     }

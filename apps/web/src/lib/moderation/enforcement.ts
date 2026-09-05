@@ -9,34 +9,55 @@ import { createServiceClient } from '@/lib/supabase/service';
  * (queries select account_status='active'); these guards cover the authenticated action paths.
  */
 
-interface ActorStatus {
-  account_status: string;
-  suspended_until: string | null;
-  vouching_restricted_until: string | null;
-}
-
 function future(ts: string | null): boolean {
   return !!ts && new Date(ts).getTime() > Date.now();
 }
 
 /**
- * Can this user initiate community interactions right now? Blocks non-active accounts and expired-
- * check suspensions. Returns null when allowed, or a user-safe message when not.
+ * Best-effort read of the timed moderation columns (migration 0005). Read separately + guarded so a
+ * deploy that lands before 0005 is applied does not break the live vouch flow (the columns simply
+ * read as null → no restriction). Once 0005 is applied these carry real values.
+ */
+async function readTimedStatus(
+  userId: string,
+): Promise<{ suspendedUntil: string | null; vouchingRestrictedUntil: string | null }> {
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('profiles')
+      .select('suspended_until, vouching_restricted_until')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error || !data) return { suspendedUntil: null, vouchingRestrictedUntil: null };
+    const r = data as { suspended_until: string | null; vouching_restricted_until: string | null };
+    return {
+      suspendedUntil: r.suspended_until,
+      vouchingRestrictedUntil: r.vouching_restricted_until,
+    };
+  } catch {
+    return { suspendedUntil: null, vouchingRestrictedUntil: null };
+  }
+}
+
+/**
+ * Can this user initiate community interactions right now? Blocks non-active accounts and unexpired
+ * timed suspensions. Returns null when allowed, or a user-safe message when not. `account_status`
+ * (migration 0001) is always read; the timed columns are read best-effort (see readTimedStatus).
  */
 export async function checkActorCanInteract(userId: string): Promise<string | null> {
   const svc = createServiceClient();
   const { data } = await svc
     .from('profiles')
-    .select('account_status, suspended_until, vouching_restricted_until')
+    .select('account_status')
     .eq('id', userId)
     .maybeSingle();
-  const me = data as ActorStatus | null;
-  if (!me) return 'Your account is unavailable right now.';
-  if (me.account_status === 'banned') return 'Your account is banned and cannot take this action.';
-  if (me.account_status === 'suspended' || future(me.suspended_until)) {
-    return 'Your account is suspended and cannot take this action.';
-  }
-  if (me.account_status === 'deactivated') return 'Your account is deactivated.';
+  const status = (data as { account_status: string } | null)?.account_status;
+  if (!status) return 'Your account is unavailable right now.';
+  if (status === 'banned') return 'Your account is banned and cannot take this action.';
+  if (status === 'suspended') return 'Your account is suspended and cannot take this action.';
+  if (status === 'deactivated') return 'Your account is deactivated.';
+  const { suspendedUntil } = await readTimedStatus(userId);
+  if (future(suspendedUntil)) return 'Your account is suspended and cannot take this action.';
   return null;
 }
 
@@ -51,15 +72,15 @@ export async function checkActorCanVouch(userId: string): Promise<string | null>
   const svc = createServiceClient();
   const { data } = await svc
     .from('profiles')
-    .select('account_status, vouching_restricted_until')
+    .select('account_status')
     .eq('id', userId)
     .maybeSingle();
-  const me = data as { account_status: string; vouching_restricted_until: string | null } | null;
-  if (!me) return 'Your account is unavailable right now.';
-  if (me.account_status === 'restricted') {
+  const status = (data as { account_status: string } | null)?.account_status;
+  if (status === 'restricted') {
     return 'Your account is restricted from vouching. Contact support if you think this is a mistake.';
   }
-  if (future(me.vouching_restricted_until)) {
+  const { vouchingRestrictedUntil } = await readTimedStatus(userId);
+  if (future(vouchingRestrictedUntil)) {
     return 'Your vouching is temporarily restricted. Contact support if you think this is a mistake.';
   }
   return null;
