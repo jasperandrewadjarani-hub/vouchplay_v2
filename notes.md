@@ -367,6 +367,18 @@ Getting the first deploy up hit two issues:
     UI (Phase 4 — block is already enforced in the vouch path). **NEXT after apply: a UI/UX polish
     pass** (Jasper flagged the interface as clunky — agreed; no design pass done yet, §33).
 
+- **2026-09-05** — **UI/UX polish pass (whole app, "bold sporty" direction — Jasper's call).** Added
+  a design foundation to `globals.css`: gradient/glow/hero-tint tokens (light + dark) + utility
+  classes (`vp-gradient`, `vp-gradient-text`, `vp-glow`, `vp-card` hover-lift, `vp-label`, `vp-hero`,
+  `vp-in` entrance motion — all reduced-motion safe). Applied across: gradient primary buttons
+  (glow + lift), header (gradient hairline + "by JT Consulting & Analytics" microcopy §5.2.1),
+  gradient active nav indicators (sidebar + bottom nav), PlayerCard (hover-lift + ringed avatar),
+  profile hero header (gradient strip + ring), a real **home hero + feature cards** (replaced the
+  placeholder), branded auth layout (card + backdrop), uppercase sporty badge chips, polished
+  placeholder pages. Verified in-browser (home/profile/directory, dark). Gates green
+  (typecheck/lint/build). Not a token re-theme — the locked §33.2 base palette is unchanged; this
+  layers accents/motion/hierarchy on top.
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
