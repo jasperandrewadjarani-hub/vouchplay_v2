@@ -23,3 +23,8 @@ export function avatarUrl(path: string | null | undefined): string | null {
 export function clubLogoUrl(path: string | null | undefined): string | null {
   return avatarUrl(path);
 }
+
+/** Tournament covers live in the public `avatars` bucket under a `tournament-covers/` prefix. */
+export function tournamentCoverUrl(path: string | null | undefined): string | null {
+  return avatarUrl(path);
+}

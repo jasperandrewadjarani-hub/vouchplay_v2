@@ -2,13 +2,20 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
 import { viewerIsStaff } from '@/lib/moderation/staff';
+import { createServiceClient } from '@/lib/supabase/service';
 import { SignOutButton } from '@/components/auth/sign-out-button';
+import { OrganizerApply } from '@/components/roles/organizer-apply';
 import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = { title: 'Me' };
 
-export default async function MePage() {
+export default async function MePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const user = await getOptionalUser();
+  const sp = await searchParams;
 
   if (!user) {
     return (
@@ -32,6 +39,28 @@ export default async function MePage() {
   const profile = await getMyProfile();
   const isStaff = await viewerIsStaff();
   const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '—';
+
+  // Organizer role state (§17.1) for the apply-as-organizer card.
+  const svc = createServiceClient();
+  const [{ data: orgRole }, { data: orgApp }] = await Promise.all([
+    svc
+      .from('user_roles')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('role', 'organizer')
+      .eq('status', 'active')
+      .maybeSingle(),
+    svc
+      .from('role_applications')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('role_requested', 'organizer')
+      .in('status', ['pending', 'reviewing'])
+      .maybeSingle(),
+  ]);
+  const isOrganizer = !!orgRole;
+  const hasPendingOrgApp = !!orgApp;
+  const organizerIntent = (Array.isArray(sp.organizer) ? sp.organizer[0] : sp.organizer) === '1';
 
   return (
     <section className="mx-auto max-w-md space-y-6">
@@ -57,6 +86,14 @@ export default async function MePage() {
           )
         )}
       </div>
+
+      {profile?.onboarded_at && (
+        <OrganizerApply
+          isOrganizer={isOrganizer}
+          hasPending={hasPendingOrgApp}
+          defaultOpen={organizerIntent}
+        />
+      )}
 
       {isStaff && (
         <nav className="border-primary/40 bg-primary/5 divide-border divide-y rounded-2xl border text-sm">

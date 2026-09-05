@@ -7,6 +7,7 @@ import {
   listFraudFlags,
   listSupportTickets,
   listClubsForModeration,
+  listRoleApplications,
   getModerationCounts,
 } from '@/lib/moderation/queries';
 import { ReportsPanel } from '@/components/moderation/reports-panel';
@@ -14,16 +15,18 @@ import { SkillReviewsPanel } from '@/components/moderation/skill-reviews-panel';
 import { FraudFlagsPanel } from '@/components/moderation/fraud-flags-panel';
 import { SupportPanel } from '@/components/moderation/support-panel';
 import { ClubsPanel } from '@/components/moderation/clubs-panel';
+import { RoleAppsPanel } from '@/components/moderation/role-apps-panel';
 
 export const metadata: Metadata = { title: 'Moderation queue' };
 
-type Tab = 'reports' | 'skill-reviews' | 'fraud' | 'support' | 'clubs';
+type Tab = 'reports' | 'skill-reviews' | 'fraud' | 'support' | 'clubs' | 'roles';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'reports', label: 'Reports' },
   { key: 'skill-reviews', label: 'Skill reviews' },
   { key: 'fraud', label: 'Fraud flags' },
   { key: 'support', label: 'Support' },
   { key: 'clubs', label: 'Clubs' },
+  { key: 'roles', label: 'Role apps' },
 ];
 
 interface Props {
@@ -41,6 +44,7 @@ export default async function ModerationQueue({ searchParams }: Props) {
     fraud: counts.fraudFlags,
     support: counts.supportTickets,
     clubs: counts.clubs,
+    roles: counts.roleApps,
   };
 
   return (
@@ -84,6 +88,7 @@ export default async function ModerationQueue({ searchParams }: Props) {
       {tab === 'fraud' && <FraudFlagsPanel items={await listFraudFlags()} />}
       {tab === 'support' && <SupportPanel items={await listSupportTickets()} />}
       {tab === 'clubs' && <ClubsPanel items={await listClubsForModeration()} />}
+      {tab === 'roles' && <RoleAppsPanel items={await listRoleApplications()} />}
     </section>
   );
 }

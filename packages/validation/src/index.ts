@@ -7,3 +7,4 @@ export * from './profile';
 export * from './vouch';
 export * from './safety';
 export * from './club';
+export * from './tournament';

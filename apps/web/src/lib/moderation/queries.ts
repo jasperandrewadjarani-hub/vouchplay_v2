@@ -165,11 +165,12 @@ export interface ModerationCounts {
   fraudFlags: number;
   supportTickets: number;
   clubs: number;
+  roleApps: number;
 }
 
 export async function getModerationCounts(): Promise<ModerationCounts> {
   const svc = createServiceClient();
-  const [reports, skillReviews, fraudFlags, supportTickets, clubs] = await Promise.all([
+  const [reports, skillReviews, fraudFlags, supportTickets, clubs, roleApps] = await Promise.all([
     svc.from('reports').select('id', { count: 'exact', head: true }).in('status', OPEN_REPORT),
     svc
       .from('skill_reviews')
@@ -185,6 +186,10 @@ export async function getModerationCounts(): Promise<ModerationCounts> {
       .select('id', { count: 'exact', head: true })
       .eq('verification_status', 'pending')
       .neq('activity_status', 'deleted'),
+    svc
+      .from('role_applications')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['pending', 'reviewing']),
   ]);
   return {
     reports: reports.count ?? 0,
@@ -192,7 +197,44 @@ export async function getModerationCounts(): Promise<ModerationCounts> {
     fraudFlags: fraudFlags.count ?? 0,
     supportTickets: supportTickets.count ?? 0,
     clubs: clubs.count ?? 0,
+    roleApps: roleApps.count ?? 0,
   };
+}
+
+export interface RoleAppItem {
+  id: string;
+  role: string;
+  motivation: string | null;
+  createdAt: string;
+  applicantName: string | null;
+  applicantSlug: string | null;
+}
+
+/** Open role applications for the admin queue (§30.2). Staff-only (page-guarded). */
+export async function listRoleApplications(): Promise<RoleAppItem[]> {
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('role_applications')
+    .select('id, user_id, role_requested, answers, status, created_at')
+    .in('status', ['pending', 'reviewing'])
+    .order('created_at', { ascending: true })
+    .limit(200);
+  const rows = (data ?? []) as Array<{
+    id: string;
+    user_id: string;
+    role_requested: string;
+    answers: Record<string, unknown> | null;
+    created_at: string;
+  }>;
+  const names = await resolveProfiles(rows.map((r) => r.user_id));
+  return rows.map((r) => ({
+    id: r.id,
+    role: r.role_requested,
+    motivation: typeof r.answers?.motivation === 'string' ? (r.answers.motivation as string) : null,
+    createdAt: r.created_at,
+    applicantName: names.get(r.user_id)?.name ?? null,
+    applicantSlug: names.get(r.user_id)?.slug ?? null,
+  }));
 }
 
 export interface ClubModerationItem {

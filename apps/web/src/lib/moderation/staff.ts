@@ -63,6 +63,20 @@ export async function assertStaffActor(): Promise<StaffActor | null> {
 }
 
 /**
+ * Action-layer guard requiring ADMIN (admin/super_admin) with an aal2 session — for privileged ops
+ * like approving role applications (§4.3: only Admin/Super Admin approve roles). Returns null otherwise.
+ */
+export async function assertAdminActor(): Promise<StaffActor | null> {
+  const roles = await myRoles();
+  if (!roles.includes('admin') && !roles.includes('super_admin')) return null;
+  const mfa = await getMfaStatus();
+  if (!mfa.aal2) return null;
+  const { viewerId } = await getViewerContext();
+  if (!viewerId) return null;
+  return { viewerId, role: highestStaffRole(roles) ?? 'admin' };
+}
+
+/**
  * Page-layer guard for the /staff area. Anonymous → login; signed-in non-staff → home; staff without
  * a verified factor or an aal2 session → the security page to enroll / step up (reusing
  * requireStaffMfa's redirects).

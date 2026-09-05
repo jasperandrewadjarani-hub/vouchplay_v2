@@ -276,6 +276,111 @@ export interface ClubMembershipRow {
   ended_at: string | null;
 }
 
+// ---------- Tournaments (migration 0007) ----------
+export type TournamentStatus =
+  | 'draft'
+  | 'published'
+  | 'registration_open'
+  | 'registration_closed'
+  | 'locked'
+  | 'live'
+  | 'completed'
+  | 'archived'
+  | 'cancelled';
+export type TournamentVisibility = 'public' | 'unlisted';
+export type DivisionSkillPolicy = 'band' | 'open' | 'custom';
+export type DivisionFormat = 'singles' | 'doubles';
+export type DivisionSexClassification = 'men' | 'women' | 'mixed' | 'genderless';
+export type DivisionStatus = 'draft' | 'open' | 'closed' | 'locked' | 'cancelled';
+export type TournamentOrganizerStatus = 'invited' | 'active' | 'declined' | 'removed';
+export type AnnouncementAudience = 'all' | 'confirmed' | 'waitlisted' | 'pending' | 'division';
+
+export interface TournamentRow {
+  id: string;
+  name: string;
+  slug: string;
+  cover_path: string | null;
+  description: string | null;
+  venue_name: string | null;
+  address_text: string | null;
+  city: string | null;
+  timezone: string;
+  start_at: string | null;
+  end_at: string | null;
+  registration_open_at: string | null;
+  registration_close_at: string | null;
+  club_lock_at: string | null;
+  registration_lock_at: string | null;
+  status: TournamentStatus;
+  visibility: TournamentVisibility;
+  owner_organizer_id: string;
+  terms_text: string | null;
+  contact: string | null;
+  payment_instructions: string | null;
+  social_links: Record<string, unknown>;
+  max_divisions_per_player: number;
+  max_clubs_per_player: number;
+  club_representation_required: boolean;
+  verified_clubs_only: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TournamentOrganizerRow {
+  id: string;
+  tournament_id: string;
+  user_id: string;
+  source_club_id: string | null;
+  permissions: Record<string, unknown>;
+  status: TournamentOrganizerStatus;
+  created_at: string;
+}
+
+export interface DivisionRow {
+  id: string;
+  tournament_id: string;
+  name_override: string | null;
+  skill_policy: DivisionSkillPolicy;
+  minimum_skill: number | null;
+  maximum_skill: number | null;
+  format: DivisionFormat;
+  sex_classification: DivisionSexClassification;
+  minimum_age: number | null;
+  maximum_age: number | null;
+  team_size: number;
+  capacity_teams: number;
+  fee_amount: number;
+  currency: string;
+  skill_verified_required: boolean;
+  minimum_sts: number | null;
+  organizer_approval_required: boolean;
+  max_entries_per_player: number | null;
+  registration_open_at: string | null;
+  registration_close_at: string | null;
+  status: DivisionStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TournamentInterestRow {
+  id: string;
+  tournament_id: string;
+  player_id: string;
+  division_id: string | null;
+  created_at: string;
+}
+
+export interface TournamentAnnouncementRow {
+  id: string;
+  tournament_id: string;
+  division_id: string | null;
+  audience: AnnouncementAudience;
+  title: string;
+  body: string;
+  created_by: string | null;
+  published_at: string;
+}
+
 export interface AuditLogRow {
   id: string;
   actor_id: string | null;
