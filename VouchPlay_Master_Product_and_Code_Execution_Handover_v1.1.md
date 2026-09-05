@@ -138,12 +138,22 @@ multi-club representation (§22 — max_clubs_per_player + active-membership + c
 prevention (§21.4). UI: signed-in registration panel on the tournament page (register/withdraw, invite,
 invitations, club select) + organizer registrations dashboard on manage (confirm/reject, waitlist
 release). Confirm path: organizer confirms directly (payments = Phase 8). Migration `0008_registration`
-written (`scripts/apply-0008.sql`) — **apply pending**. Deferred: payments (§24), eligibility (§25),
+written (`scripts/apply-0008.sql`) — **applied** (verify 7/5/7). Deferred: eligibility (§25),
 hold-expiry/waitlist auto-promotion cron, partner-finder browse UI, club-lock override UI. Gates green; live.
 
-**Next:** Phase 8 — Payments (§24). (Open ops: apply migration 0008; approve an organizer via `/staff`
-→ Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota
-before 21 Sep 2026.)
+**Phase 8 — Payments: ✅ BUILT + live (§24).** V1 abstract manual-proof layer (`PaymentProvider`
+interface in core for a future gateway, §24.5). `payments` table (§36.28) + a PRIVATE `payment-proofs`
+bucket (§38) — proof reachable only via server-issued 60s signed URLs gated to team/organizer/staff.
+Player submits proof → registration `payment_submitted` + 24h review grace; organizer verify →
+confirmed, reject(reason) → back to payment_pending (resubmit), mark refunded — all audited. fee=0
+divisions use the organizer-confirm-directly path. UI: payment step in the registration panel +
+verify/reject/refund + View-proof in the organizer dashboard; accepted-methods in tournament config.
+Migration `0009_payments` written (`scripts/apply-0009.sql`) — **apply pending**. Deferred: real
+gateway, partial refunds, payment-deadline cron. Gates green; live.
+
+**Next:** Phase 9 — Eligibility / Anti-Sandbagging (§25), the headline decision-support engine. (Open
+ops: apply migration 0009; approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT
+admins enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 

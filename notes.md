@@ -559,9 +559,40 @@ Getting the first deploy up hit two issues:
     holds free capacity lazily since register_team only counts unexpired holds), partner-finder browse
     UI, and the club-lock organizer-override UI (§22.5). **Next: Phase 8 — Payments (§24).**
 
+- **2026-09-06** — **Migration 0008 APPLIED (Registration fully live).** Verify returned reg_tables=7,
+  reg_rpcs=5, reg_rls_policies=7. Partner invites, teams, transactional register/waitlist, club
+  representation, and the organizer registrations dashboard are all active on live DB.
+
+- **2026-09-06** — **PHASE 8 — Payments (§24): BUILT + deployed + live.** Manual-proof payment layer.
+  Awaiting one manual SQL paste (migration 0009) to fully activate.
+  - **Migration 0009 (`0009_payments.sql`, WRITTEN — apply pending):** `payments` table (§36.28) +
+    enum `payment_status`; `tournaments.payment_methods` column; a **PRIVATE `payment-proofs` storage
+    bucket** (§38, created via `insert into storage.buckets`); RLS (payment readable by team members /
+    organizers / staff; writes via service role). One-paste apply: **`scripts/apply-0009.sql`**
+    (expect payments_table=1, payment_methods_col=1, payments_rls_policy=1, proofs_bucket_private=1).
+  - **PaymentProvider interface** in `@vouchplay/core` (`ManualPaymentProvider`) — V1 manual; a
+    gateway can be added later (§24.5) without touching registration logic.
+  - **Proof access:** files never public — retrieved only via **server-issued 60s signed URLs**
+    (`getProofSignedUrl`), gated to team member / organizer(`manage_payments`) / staff.
+  - **Actions (`lib/actions/payment.ts`):** `submitPayment` (upload proof → payment `submitted` →
+    registration `payment_submitted` + 24h review grace §23.1; first-submit + resubmit); organizer
+    `verifyPayment` (→ registration confirmed), `rejectPayment(reason)` (→ back to payment_pending +
+    fresh hold, resubmit), `markRefunded`. All audited (`audit_logs` + `registration_events`).
+  - **fee=0** divisions keep the Phase-7 organizer-confirm-directly path (payment not required).
+  - **UI:** payment step in the tournament registration panel (amount + instructions + accepted
+    methods + proof upload; submitted/rejected states); organizer registrations dashboard gains
+    payment status + **View proof** (signed URL) + **Verify / Reject / Mark refunded**; tournament
+    config form gains an accepted-payment-methods field.
+  - **Gates green** (typecheck/lint/format/test 18/build). Committed `616723a`, pushed; Vercel
+    auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0009.sql` + return verify numbers.
+  - **Deferred:** real payment gateway (§24.5 — interface only), partial refunds (§24.3 — enum exists,
+    no UI), payment deadline auto-enforcement cron. **Next: Phase 9 — Eligibility / Anti-Sandbagging
+    (§25)** — the product's headline anti-sandbagging decision-support engine.
+
 ## Next up
-- **Manual: apply `scripts/apply-0008.sql`** (migration 0008, Registration) + return verify numbers.
-- **Phase 8 — Payments (§24)** next (handover §5295).
+- **Manual: apply `scripts/apply-0009.sql`** (migration 0009, Payments) + return verify numbers.
+- **Phase 9 — Eligibility / Anti-Sandbagging (§25)** next (handover §5339) — the core differentiator.
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).
