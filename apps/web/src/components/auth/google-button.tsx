@@ -1,25 +1,67 @@
-import { googleSignIn } from '@/lib/actions/auth';
-import { publicEnv } from '@/lib/env';
-import { SubmitButton } from '@/components/ui/button';
+'use client';
 
-/** Google sign-in button. Renders only when Google auth is enabled for this environment. */
+import { useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+
+/**
+ * Google sign-in. Renders only when Google auth is enabled for this environment.
+ *
+ * The OAuth start runs CLIENT-side via the Supabase browser client: `signInWithOAuth` sets
+ * `window.location` to Google's consent URL itself. (A Server Action calling `redirect()` to an
+ * external URL does not reliably navigate the browser in Next 15 — hence the client approach.)
+ */
 export function GoogleButton({ next }: { next?: string }) {
-  if (!publicEnv.googleAuthEnabled) return null;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED !== 'true') return null;
+
+  async function signIn() {
+    setLoading(true);
+    setError(null);
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback${
+        next ? `?next=${encodeURIComponent(next)}` : ''
+      }`;
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo },
+      });
+      // On success Supabase redirects the browser to Google; we only reach here on error.
+      if (oauthError) {
+        setError('Google sign-in is unavailable right now.');
+        setLoading(false);
+      }
+    } catch {
+      setError('Google sign-in is not configured yet.');
+      setLoading(false);
+    }
+  }
 
   return (
-    <form action={googleSignIn}>
-      {next && <input type="hidden" name="next" value={next} />}
-      <SubmitButton variant="secondary" pendingLabel="Redirecting…">
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={signIn}
+        disabled={loading}
+        className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+      >
         <GoogleGlyph />
-        Continue with Google
-      </SubmitButton>
-    </form>
+        {loading ? 'Redirecting…' : 'Continue with Google'}
+      </button>
+      {error && (
+        <p role="alert" className="text-danger text-center text-sm">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
 /** Google button plus an "or" divider — the whole block disappears when Google is disabled. */
 export function GoogleSection({ next }: { next?: string }) {
-  if (!publicEnv.googleAuthEnabled) return null;
+  if (process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED !== 'true') return null;
 
   return (
     <>

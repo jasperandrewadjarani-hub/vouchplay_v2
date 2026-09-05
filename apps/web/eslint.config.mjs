@@ -1,21 +1,17 @@
-// eslint-config-next v16 ships a native flat-config array (core-web-vitals + next/typescript).
-// Import and spread it directly — do NOT wrap it in FlatCompat (that re-validates flat plugin
-// objects as eslintrc and crashes on circular references).
-import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
-import tseslint from 'typescript-eslint';
+// eslint-config-next v15 is eslintrc-format, consumed via FlatCompat (not the v16 flat import).
+// (The project is pinned to Next 15 as a Vercel-deploy workaround — see CLAUDE.md.)
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { FlatCompat } from '@eslint/eslintrc';
+
+const compat = new FlatCompat({
+  baseDirectory: dirname(fileURLToPath(import.meta.url)),
+});
 
 const eslintConfig = [
-  ...nextCoreWebVitals,
+  ...compat.extends('next/core-web-vitals', 'next/typescript'),
   {
     ignores: ['.next/**', 'node_modules/**', 'next-env.d.ts'],
-  },
-  {
-    // Register the plugin in the same object that applies its rule (flat-config requirement).
-    files: ['**/*.ts', '**/*.tsx'],
-    plugins: { '@typescript-eslint': tseslint.plugin },
-    rules: {
-      '@typescript-eslint/no-explicit-any': 'error',
-    },
   },
 ];
 

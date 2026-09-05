@@ -207,6 +207,26 @@ Getting the first deploy up hit two issues:
   Re-tested live signup → "Code sent". Now new + returning users both get a 6-digit code, verified
   with `verifyOtp({type:'email'})`. All Supabase dashboard changes persisted (verified on reload).
 
+- **2026-09-05** — **Google login LIVE + verified.** Jasper created the Google OAuth client
+  (reused the existing "VouchPlay" Google Cloud project; authorized redirect URI =
+  `https://itrosesiywpbaxtmucbb.supabase.co/auth/v1/callback`) and enabled Google in Supabase Auth.
+  I: added Supabase redirect allowlist (Site URL → vouchplayph; `https://vouchplayph.vercel.app/**`,
+  `https://vouchplay-v2.vercel.app/**`, localhost), set `NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true`
+  (Vercel + local), redeployed. **Verified end-to-end:** clicking "Continue with Google" on the live
+  site reaches Google's consent ("Sign in to continue to itrosesiywpbaxtmucbb.supabase.co").
+  Two bugs fixed along the way:
+  1. **OAuth didn't navigate** — a Server Action calling `redirect()` to an *external* URL doesn't
+     navigate the browser in Next 15. Refactored the Google button to **client-side**
+     `supabase.auth.signInWithOAuth` (browser client redirects itself). This is the standard pattern.
+  2. **Browser Supabase client threw "missing URL"** — `env.ts`'s `supabaseUrl` used a helper that
+     reads `process.env[name]` *dynamically*; Next only inlines *literal* `process.env.NEXT_PUBLIC_X`
+     into the browser bundle. Fixed the public getters to use literal access. (Server email was
+     unaffected because it reads env at runtime server-side.)
+  Also fixed **pre-existing lint breakage** from the gap's Next 16→15 downgrade: `eslint-config-next`
+  v15 is eslintrc-format, so `eslint.config.mjs` now uses `FlatCompat` (+ re-added `@eslint/eslintrc`,
+  dropped the direct `typescript-eslint` dep). Lint/typecheck/test/build all green again.
+  Deployment domain caveat unchanged: vouchplayph is a manual alias — re-alias after each deploy.
+
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
