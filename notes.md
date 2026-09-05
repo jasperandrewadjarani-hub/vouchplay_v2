@@ -226,6 +226,12 @@ Getting the first deploy up hit two issues:
   v15 is eslintrc-format, so `eslint.config.mjs` now uses `FlatCompat` (+ re-added `@eslint/eslintrc`,
   dropped the direct `typescript-eslint` dep). Lint/typecheck/test/build all green again.
   Deployment domain caveat unchanged: vouchplayph is a manual alias — re-alias after each deploy.
+- **2026-09-05** — **Handover updated to v1.2** (in the v1.1-named file). Added: §0Z Current Build
+  Status; §16A Gamified Player Bidding (points-based, clubs bid to represent/sponsor players, player
+  accepts) + `player_bids` entity §36.18A; §6.1 Home Leaderboards & Bidding Spotlight (top players /
+  most bidded / top clubs w/ medals — never STS-ranked); §5.2.1 logo aesthetics (bigger wordmark + tiny
+  "by JT Consulting & Analytics" microcopy); §5.3.1 About/FAQ location; FAQ/components/Phase-2-scope
+  updates; changelog + Locked Decisions. **Ready to hand off to a NEW conversation for Phase 2.**
 
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear

@@ -1,6 +1,8 @@
-# VouchPlay Master Product & Code Execution Handover v1.1
+# VouchPlay Master Product & Code Execution Handover v1.2
 
-**Status:** LOCKED FOR EXECUTION  
+_(File retains its `…v1.1.md` name; content is v1.2 — see Changelog.)_
+
+**Status:** LOCKED FOR EXECUTION — Phases 0–1 built (see §0Z Current Build Status)  
 **Owner:** JT Consulting & Analytics Inc.  
 **Founders / Product Leads:** Jasper Adjarani, Tane Valdez  
 **Product:** VouchPlay  
@@ -12,9 +14,50 @@
 **sources**
 Local project folder: D:\claude_\P006b_PlayerProfiling\vouchplay_v2
 GitHub repo: https://github.com/jasperandrewadjarani-hub/vouchplay_v2
-Vercel project: for input once ready from github
+Vercel project: `vouchplayph` (jasperandrewadjarani-hub) — **LIVE:** https://vouchplayph.vercel.app (also https://vouchplay-v2.vercel.app)
 Supabase project: https://supabase.com/dashboard/project/itrosesiywpbaxtmucbb
 Gmail account (for SMTP): vouchplay@gmail.com
+
+---
+
+# 0Z. Current Build Status — as of 2026-09-05
+
+> Living status block. Update this whenever a phase completes. Full detail lives in
+> `notes.md`; `CLAUDE.md` / `AGENTS.md` hold agent working rules + deploy gotchas.
+
+**Live:** https://vouchplayph.vercel.app (public, connected to Supabase). Auto-deploys on push to
+`main`; `vouchplayph.vercel.app` is currently a manual alias — re-alias after each deploy (or promote
+it to a project domain) until it's made a permanent production domain.
+
+**Phase 0 — Foundations: ✅ DONE.** npm-workspaces monorepo (`apps/web` + `packages/{config,core,db,
+ui,validation,analytics}`), Next.js + React 19 + Tailwind v4 + TS strict, locked theme tokens +
+dark/light toggle, app shell (5 tabs, header, sidebar, bottom nav), PWA manifest, ESLint/Prettier/
+Vitest, GitHub Actions CI.
+
+**Phase 1 — Database, Auth, Permissions: ✅ core DONE.**
+- DB migrations applied to Supabase (`0001_core_identity`, `0002_seed_system_settings`):
+  `profiles`, `user_roles`, `role_applications`, `identity_verifications`, `system_settings`,
+  `audit_logs` (append-only); `updated_at` + new-user triggers; SECURITY DEFINER authz helpers
+  (`has_global_role`/`is_admin`/`is_staff`); RLS on all user-facing tables; 21 seeded settings.
+- Auth LIVE + verified end-to-end on production: email 6-digit OTP code (Gmail Custom SMTP),
+  password login, **Google login**, `/auth/callback`, profile onboarding, route guards.
+- Supabase Auth config: "Confirm email" OFF (OTP is the verification), Email OTP length 6, Magic-link
+  template emits `{{ .Token }}`, redirect allowlist set for both prod domains + localhost.
+- **Still open within Phase 1 (do early in/around Phase 2):** `supabase gen types` → `@vouchplay/db`;
+  seed JT admin accounts; RLS/role-spoofing test pass; Admin MFA framework; avatar upload on
+  onboarding (needs `avatars` bucket); reset-link landing page (`/me/settings/password`).
+
+**Deploy constraint (see CLAUDE.md):** pinned to **Next.js 15** to dodge a Vercel×Next-16 deploy bug;
+root `vercel.json` + root-level `next` dep make monorepo detection work. Revert to Next 16 only per
+the documented exit plan.
+
+**Deviations from this document (approved by JT):** transactional email uses **Gmail SMTP** for the
+pilot (not a dedicated provider — §34A.11), behind the `EmailProvider` interface; switch before scale.
+
+**Ops flags:** Supabase org is **over-quota** (projects restricted from 21 Sep 2026 if not cleared);
+Google consent screen shows the Supabase project domain (cosmetic; needs paid custom domain to rebrand).
+
+**Next:** Phase 2 — Player Directory & Profile.
 
 ---
 
@@ -264,6 +307,8 @@ the signup/login gate is shown and the original action is resumed after authenti
 - Vouch freshness/decay if required by data.
 - Advanced vouch-ring detection.
 - Advanced sponsorship workflows.
+- **Gamified player bidding** (clubs bid points to represent/sponsor players; §16A).
+- **Home leaderboards** (top players / most bidded / top clubs with medals; §6.1).
 - Club Pro features.
 - Organizer paid tiers.
 - Payment gateway integration.
@@ -407,10 +452,22 @@ Do not use Settings as a primary bottom-navigation item.
 Default mobile header:
 
 - VouchPlay logo: upper left.
-- Notification bell: upper right.
+- Notification bell: upper right (profile avatar may sit beside it when signed in).
 - Contextual overflow `•••`: only where relevant.
 
 Profile is accessed from **Me**, not duplicated permanently in the header.
+
+### 5.2.1 Logo treatment (design refinement, 2026-09-05)
+
+- **Enlarge the header logo** — make the VouchPlay wordmark visibly bigger/more prominent than the
+  current build (still fitting a ~56px header; scale up the mark, don't overflow the bar).
+- Directly **below the logo**, add **very small but legible** microcopy: **"by JT Consulting &
+  Analytics"** (roughly 9–10px, `text-foreground-muted`, non-wrapping). The logo + this line form one
+  clickable unit that links to the JT Facebook page (`https://www.facebook.com/61590234100280/`).
+- Keep the mark crisp in both themes (use the transparent logo asset in `logo_/`).
+- Note: the header logo stays **upper-left** per the locked IA (the bell/notifications stay
+  upper-right). If JT instead wants the lockup relocated, that's a header re-layout to confirm
+  explicitly, since it competes with the notification bell for the upper-right slot.
 
 ## 5.3 Me Section
 
@@ -442,6 +499,18 @@ All JT branding in About may link to:
 
 `https://www.facebook.com/61590234100280/`
 
+### 5.3.1 Where About & FAQ live (discoverability)
+
+**About** and **FAQ** are reached from **Me → Help / FAQ** and **Me → About** (this section), and
+their full content is specified in **§29**. They are **not** yet built (planned Phase 12 / late
+Phase 1 legal-pages pass) — routes `/about` and `/faq` (and `/terms`, `/privacy`) currently render
+placeholder stubs.
+
+To make them easy to find, also surface them in:
+- the **Me** list (primary home — grouped under a "Help & About" or Settings group),
+- the header **•••** overflow on relevant pages (About · FAQ · Contact Support), and
+- a small **footer** on public pages (About · FAQ · Terms · Privacy · "by JT Consulting & Analytics").
+
 ## 5.4 Desktop / Tablet Adaptation
 
 At large widths:
@@ -455,19 +524,21 @@ At large widths:
 
 # 6. Home Dashboard
 
-Home is a personalized utility dashboard, not a social feed.
+Home is a personalized utility dashboard with a light **gamified spotlight** on top — not a social feed.
 
 Sections are prioritized dynamically:
 
 1. Profile / skill summary.
 2. Action-required cards.
-3. Upcoming tournament registrations.
-4. Partner requests.
-5. Vouch requests.
-6. Club activity.
-7. Tournament discovery.
-8. Recent vouches/comments.
-9. System/organizer announcements.
+3. **Bidding spotlight** — top players currently being bid on (see §16A).
+4. **Leaderboards** — top players, most-bidded players, top clubs (with medals). See §6.1.
+5. Upcoming tournament registrations.
+6. Partner requests.
+7. Vouch requests.
+8. Club activity.
+9. Tournament discovery.
+10. Recent vouches/comments.
+11. System/organizer announcements.
 
 Example action cards:
 
@@ -476,6 +547,38 @@ Example action cards:
 - "Payment proof rejected — resubmit."
 - "Your team was promoted from the waitlist."
 - "Your Coach application was approved."
+- "🔥 3 clubs are bidding to sponsor you — review offers."
+
+## 6.1 Leaderboards & Bidding Spotlight (2026-09-05)
+
+The Home button surfaces **leaderboards** and a **bidding spotlight**, integrated into the existing
+card layout (a horizontally-scrollable "podium" row + tappable leaderboard cards), not a separate
+screen.
+
+**Leaderboards (medal styling 🥇🥈🥉 for the top 3):**
+- **Top Players** — ranked by an **engagement/credibility composite**, NOT raw STS. Suggested inputs:
+  verified-match/tournament participation, achievements/medals, Skill-Verified status, number of
+  distinct credible vouchers, and bidding interest — deliberately excluding a raw "highest STS"
+  ranking to avoid incentivizing vouch manipulation (handover gamification guardrail).
+- **Most Bidded** — players with the most/highest active bids (see §16A). This is the headline
+  gamified metric.
+- **Top Clubs** — ranked by club activity: verified members, players sponsored/recruited via winning
+  bids, tournament participation, medals won by represented players.
+
+**Bidding spotlight:** a "🔥 Hot right now" row of players receiving active bids, each card showing the
+current top bid, number of bidding clubs, and a countdown to bid close — tap to view the player and
+(if it's you) to accept/decline.
+
+**Rules & guardrails:**
+- Leaderboards are **scoped** (by city/region and by tournament where relevant), refreshed on a cadence
+  (not real-time), and cache-first per §34A. Never rank by raw STS or expose internal effective weights.
+- Bidding uses **reputation/points, not money** in V1 (see §16A) — no real-currency wagering.
+- Respect privacy/visibility: a player can opt out of appearing in public leaderboards (profile
+  setting); minors and restricted/suspended accounts are excluded.
+- Admin can hide/reset leaderboards and exclude flagged accounts.
+
+Leaderboards + bidding are **Phase 2+ / a dedicated gamification sub-phase** — foundational player
+directory & profiles (Phase 2) land first, then bidding (§16A), then leaderboards read from it.
 
 ---
 
@@ -1182,6 +1285,98 @@ States:
 
 A player can set:
 `Open for Sponsorship = true/false`
+
+---
+
+# 16A. Gamified Player Bidding (2026-09-05)
+
+A gamified extension of Recruitment (§16.1) and Sponsorship (§16.2): instead of a single private
+offer, **multiple clubs place competing bids** to secure a player, and **the player accepts one**.
+This drives engagement, powers the Home **bidding spotlight** and **"Most Bidded" leaderboard** (§6.1),
+and feeds tournament **club representation** (§22).
+
+## 16A.1 What a bid is
+
+A bid is a club's competing offer to a player for either:
+- **Representation** — the player represents the club in a specific tournament (feeds §22 club
+  representation on acceptance), and/or
+- **Sponsorship** — the club sponsors the player (covers entry fee / gear / support), with an offer note.
+
+Bids are **points-based, never money** in V1 (reputation/soft-currency only — no real-currency
+wagering, escrow, or transfer; this keeps V1 out of gambling/payments regulation). A club spends from a
+**bid budget** of points (allocated by Admin / earned through activity — exact economy is an Admin
+setting, §30.7). Losing/withdrawn bids **refund** the club's points.
+
+## 16A.2 Actors & eligibility
+
+- Only a **verified, active club** can bid; only its **Owner/Admin** may place/raise/withdraw bids.
+- A club cannot bid on a **suspended/restricted** player, nor on its own owner where that would be a
+  conflict (configurable).
+- A player must have **`open_for_bids = true`** (extends `open_for_sponsorship`) to receive bids; they
+  can scope it (global, or per-tournament / per-division).
+- Bids may be **tournament-scoped** (tied to a `tournament_id`, and optionally a division), or open.
+
+## 16A.3 Bid lifecycle
+
+Per-bid status:
+
+`PLACED → LEADING / OUTBID → ACCEPTED / DECLINED / WITHDRAWN / EXPIRED / REFUNDED`
+
+Per-player "auction" for a given (player, tournament) context:
+
+`OPEN (accepting bids) → CLOSED (player accepted one, or all declined/expired)`
+
+Rules:
+- New higher bids mark previous bids **OUTBID** (points held until the auction closes, then refunded to
+  non-winners). Enforce a **minimum increment** (Admin setting).
+- The **player chooses** — they may accept the top bid, accept a **lower** bid (preference is allowed;
+  it's their representation), or decline all. There is no auto-award purely by highest points.
+- **Acceptance is transactional** (§35.3): it closes the auction, creates the winning
+  representation/sponsorship record (via §16 `club_offers` + §22 representation), debits the winning
+  club's points, refunds losing clubs, and notifies everyone.
+- **Close/expiry:** each auction has a deadline; a tournament-scoped auction must close no later than
+  `tournament.club_lock_at` (§22.5). Expiry refunds all held points.
+- Blocking (§14.3) prevents a blocked club owner from bidding on a player.
+
+## 16A.4 Anti-abuse (reuses §11 patterns)
+
+- Per-club bid rate limits + cooldowns; minimum increment; max concurrent bids (Admin settings).
+- Flag suspicious patterns: rings of clubs inflating a player, a club and player colluding to farm
+  points, wash-bidding (bid/withdraw loops). Flags go to the moderation/fraud queue (§11.3); they don't
+  auto-punish.
+- Every bid, raise, withdraw, accept, decline, refund is **audited** (§30.8).
+
+## 16A.5 UI/UX integration
+
+- **Player profile (§9):** an **"Open for Bids"** toggle and, when open, a **Bids** panel showing
+  incoming bids ranked, with Accept / Decline per bid and a countdown to close. Reuses the existing
+  offer-card and status-chip components (§33.4).
+- **Club owner/admin:** on a player profile, a **"Place bid / Raise bid"** action (points picker +
+  representation/sponsorship type + optional tournament/division + note); a **My Bids** view under the
+  club and under **Me → Sponsorship/Recruitment Offers**.
+- **Home (§6.1):** bidding spotlight ("🔥 Hot right now") + "Most Bidded" leaderboard.
+- **Tournament page:** where a tournament is in scope, show which players are open for bids for it.
+- Respect privacy: a player may hide bid counts publicly while still receiving them.
+
+## 16A.6 Notifications (extends §27)
+
+- Player: new bid received; you were out-bid-adjacent updates; bid you hold expiring; auction closing soon.
+- Club: your bid is leading / was out-bid; player accepted / declined your bid; auction expired; points refunded.
+
+## 16A.7 Data
+
+New entity `player_bids` (see §36.18A). It references `clubs`, `profiles` (player), optional
+`tournaments`/`divisions`, carries points/status/expiry, and on acceptance links to the created
+`club_offers` / representation record. Bid points ledger is captured via `audit_logs` (and, if the
+economy grows, a dedicated `club_points_ledger` in a later phase).
+
+## 16A.8 Scope / phasing
+
+Bidding is **not V1-MVP-critical**; it is a **gamification sub-phase after Phase 2** (needs players,
+clubs, and tournament representation to exist first). Build order: player directory/profiles (Phase 2)
+→ clubs (Phase 5) → tournaments + representation (Phase 6–7) → **bidding (§16A)** → **leaderboards
+(§6.1)** which read from bidding + participation. Keep it points-only in V1; a real-money/sponsorship-
+marketplace is explicitly out of scope (§2.3) until legal/payments review.
 
 ---
 
@@ -2231,6 +2426,10 @@ Future share-card types:
 - What is sponsorship?
 - How is my information used?
 - How do I delete my account?
+- What is club bidding, and how do I accept a bid? (see §16A)
+- Are bids real money? (No — reputation points only in V1.)
+- How are the Home leaderboards ranked? (engagement/medals/bidding — not raw STS; see §6.1)
+- Can I hide from leaderboards / turn off bids?
 
 ## 29.2 Skill Explanation
 
@@ -2540,6 +2739,9 @@ Build reusable components:
 - Skeleton.
 - ErrorState.
 - OfflineBanner.
+- BrandLockup (enlarged logo + "by JT Consulting & Analytics" microcopy, links to JT FB — §5.2.1).
+- LeaderboardCard + MedalBadge (🥇🥈🥉) — Home leaderboards (§6.1).
+- BidCard + BidModal + BidSpotlightRow — gamified player bidding (§16A, §6.1).
 
 ## 33.5 Mobile Interaction
 
@@ -3693,6 +3895,40 @@ created_by
 created_at
 updated_at
 ```
+
+---
+
+## 36.18A `player_bids`
+
+Gamified competing bids from clubs for a player (see §16A). Points-based, never money in V1.
+
+```text
+id uuid PK
+player_id uuid FK -> profiles.id        -- the player being bid on
+club_id uuid FK -> clubs.id             -- the bidding club
+bid_type enum(representation, sponsorship)
+tournament_id uuid FK nullable          -- tournament-scoped bid (optional)
+division_id uuid FK nullable
+points int                              -- bid amount in reputation points (>=0), not money
+message text nullable                    -- offer note
+status enum(placed, leading, outbid, accepted, declined, withdrawn, expired, refunded)
+expires_at timestamptz nullable
+placed_by uuid FK -> profiles.id        -- club owner/admin who placed it
+accepted_offer_id uuid FK nullable      -- club_offers row created on acceptance
+created_at timestamptz
+updated_at timestamptz
+```
+
+Constraints / notes:
+- one active bid per `(player_id, club_id, tournament_id)` in `placed`/`leading`/`outbid` states;
+  raising replaces the amount and writes history.
+- `CHECK (points >= 0)`; minimum-increment enforced in the domain service (Admin setting).
+- acceptance is transactional (§35.3): closes the auction, creates `club_offers`/representation,
+  debits the winner, refunds losers, audits all moves.
+- indexes: `(player_id, status)`, `(club_id, status)`, `(tournament_id, status)`, `(player_id, points desc)`
+  for the "Most Bidded" leaderboard.
+- RLS: player sees bids on themselves; club owner/admin sees their club's bids; public sees only
+  aggregate counts where the player allows it; full identities to Admin/moderation.
 
 ---
 
@@ -5580,6 +5816,9 @@ The following are locked for V1 unless JT explicitly revises this master plan:
 - Expo native later.
 - No microservices in V1.
 - Security, moderation, privacy, and account deletion are launch requirements, not post-launch extras.
+- Gamified player bidding (§16A) is **points-based, never real money** in V1.
+- Home leaderboards (§6.1) are **never ranked by raw STS or internal effective weights**; they use
+  engagement/participation/medals/bidding, are scope-limited, and honor a player opt-out.
 
 ---
 
@@ -5616,6 +5855,25 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.2 (2026-09-05)
+- Added **§0Z Current Build Status** — Phases 0–1 built and LIVE (https://vouchplayph.vercel.app);
+  Supabase migrations applied; email-OTP + password + Google auth verified; Next-15 deploy workaround;
+  Gmail-SMTP deviation; open Phase-1 items; ops flags (Supabase over-quota).
+- Added **§16A Gamified Player Bidding** — clubs place competing **points-based** (not money) bids to
+  represent/sponsor a player; player accepts one; transactional acceptance; anti-abuse; notifications;
+  phasing (post-Phase-2 gamification sub-phase). Added `player_bids` entity (§36.18A).
+- Reworked **§6 Home** — added **§6.1 Leaderboards & Bidding Spotlight**: Top Players (engagement/medals,
+  NOT raw STS), **Most Bidded**, Top Clubs (medals 🥇🥈🥉); bidding "🔥 Hot right now" spotlight; privacy
+  opt-out + guardrails against STS-manipulation.
+- **Logo aesthetics (§5.2.1):** enlarge the header wordmark; add very-small "by JT Consulting &
+  Analytics" microcopy beneath it, linking to JT Facebook; new `BrandLockup` component.
+- **About & FAQ location (§5.3.1):** clarified they live under **Me** (Help/FAQ + About), full content
+  in §29; surfaced via Me + `•••` overflow + public footer; currently placeholder stubs.
+- Added FAQ entries (§29.1), Phase-2 scope items (§2.2), and UI components (§33.4: LeaderboardCard,
+  MedalBadge, BidCard, BidModal, BidSpotlightRow, BrandLockup).
+- Note: leaderboards remain **scoped, cache-first, and never ranked by raw STS or effective weights**,
+  per the gamification guardrail.
 
 ## v1.1
 - Added mandatory platform-limit, caching, egress, compute and invocation optimization architecture.
