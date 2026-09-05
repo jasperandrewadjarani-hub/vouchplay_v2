@@ -286,8 +286,15 @@ Getting the first deploy up hit two issues:
     Supabase SQL editor**, then switch `lib/players/queries.ts` badge reads from the service client
     to `public_player_facts()`.
   - Gates green (lint/typecheck/test/build); `/me/settings/password` guard verified (anon → login).
-  - **Still deferred:** apply migration 0003 + switch badge reads; seed JT admin account(s) (grants
-    privileges — will confirm which accounts first); RLS/role-spoofing test pass; Admin MFA framework.
+  - **Admin seed — script provided, NOT run:** added `scripts/seed-admin.mjs` (grants a global role
+    via the service role; DML, no DDL; idempotent). Attempting to run it here was blocked by the
+    Claude Code auto-mode classifier (correct — granting `super_admin` on production is a privilege
+    escalation). **Jasper to run** from repo root: `node scripts/seed-admin.mjs
+    jasper.andrew.adjarani@gmail.com` (and Tane's email once known). Requires the account to have
+    signed up already.
+  - **Still deferred (need DB dashboard access or a decision):** apply migration 0003 + switch badge
+    reads off the service client; run the admin seed; RLS/role-spoofing test pass (best after admin +
+    a test coach exist); Admin MFA framework.
 
 ## Next up
 - Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
