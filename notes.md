@@ -177,15 +177,26 @@ Getting the first deploy up hit two issues:
     deploys, or add it as a project domain, since a deployment alias doesn't auto-update.)
 
 ## Live status (2026-09-05)
-- **Public:** https://vouchplay-v2.vercel.app  — live, connected to Supabase.
-- **Pending manual toggle:** https://vouchplayph.vercel.app (turn off Vercel Auth; see above).
+- **Public (primary):** https://vouchplayph.vercel.app — LIVE (Jasper turned off Vercel Auth;
+  verified rendering publicly). Caveat: it's a deployment alias, so re-alias after each deploy (or
+  promote it to a project domain) — it won't auto-track production.
+- **Public (also):** https://vouchplay-v2.vercel.app — live, connected to Supabase.
 - **Auth note:** email OTP signup relies on Supabase's built-in email (rate-limited; the org is also
   flagged **over-quota**, restriction threatened 21 Sep 2026). For reliable delivery set up Gmail
   Custom SMTP (App Password) per docs/SECRETS_SETUP.md §3. Google login stays off until OAuth keys
   are added.
 
+- **2026-09-05** — **Gmail SMTP live + OTP-code email fixed.** Jasper set up Gmail Custom SMTP in
+  Supabase (App Password). First live signup test returned "Code sent" (SMTP accepted) but the email
+  was a **magic LINK**, not a code — because the default Supabase "Magic link or OTP" template renders
+  `{{ .ConfirmationURL }}`. Edited that template (via the dashboard, Monaco `setValue` + Save) to
+  render the 6-digit **`{{ .Token }}`** (subject "Your VouchPlay sign-in code"); **verified persisted
+  after reload**. (Same gotcha v1 documented.) Re-triggered signup → fresh code email sent. Our app's
+  `verifyOtp({type:'email'})` already expects the typed code, so the flow is now code-based end to end.
+  Vercel Auth is OFF → **https://vouchplayph.vercel.app is public & live.**
+
 ## Next up
-- Manual: Vercel Auth toggle off for vouchplayph; Gmail App Password → Supabase Custom SMTP; clear
+- Manual: Gmail App Password → Supabase Custom SMTP (DONE); clear
   the Supabase org over-quota before 21 Sep 2026.
 - `supabase gen types` → `packages/db`; smoke-test signup → OTP → onboarding end-to-end on the live
   site; seed JT admin accounts; validate RLS + role-spoofing (Phase 1 gate); Admin MFA framework.
