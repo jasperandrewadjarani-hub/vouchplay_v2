@@ -43,9 +43,23 @@ Vitest, GitHub Actions CI.
   password login, **Google login**, `/auth/callback`, profile onboarding, route guards.
 - Supabase Auth config: "Confirm email" OFF (OTP is the verification), Email OTP length 6, Magic-link
   template emits `{{ .Token }}`, redirect allowlist set for both prod domains + localhost.
-- **Still open within Phase 1 (do early in/around Phase 2):** `supabase gen types` → `@vouchplay/db`;
-  seed JT admin accounts; RLS/role-spoofing test pass; Admin MFA framework; avatar upload on
-  onboarding (needs `avatars` bucket); reset-link landing page (`/me/settings/password`).
+- Phase-1 leftovers now handled in/around Phase 2: DB types hand-authored in `@vouchplay/db`
+  (`supabase gen types` deferred — CLI/token unavailable); avatar upload on onboarding + `avatars`
+  bucket (created live); `/me/settings/password` reset landing; RLS/role-spoofing verification
+  (`scripts/verify-rls.mjs`, 6/6); Admin MFA framework (`lib/auth/mfa.ts` + `/me/settings/security`).
+  **Still pending a manual SQL paste (`scripts/apply-0003-and-admin.sql`):** migration 0003
+  (`public_player_facts` + storage policies) and the JT admin grant — dashboard automation is
+  classifier-blocked.
+
+**Phase 2 — Player Directory & Profile: ✅ DONE (live).** Public `/players` directory (concise
+PlayerCard, §8.4 search/filters, pagination, no STS ranking) and `/players/[slug]` profile (header,
+skill-distribution/comments/achievements/skill-tags sections, §28 sharing metadata). RLS-safe DTO
+projections (no `select(*)`), cache-first reads with tag invalidation (§34A), server-side authz.
+**Gate met + verified live:** non-users browse safe fields; hidden fields never sent; the Vouch/
+Request gate routes to signup and **resumes after auth** (`?intent=…` + a sanitized `next` threaded
+through the whole auth flow). Public badge facts (Coach/Organizer/ID-Verified) currently read
+server-side via the service client with a boolean-only projection; the RLS-clean `public_player_facts()`
+swap is ready to switch on once migration 0003 is applied.
 
 **Deploy constraint (see CLAUDE.md):** pinned to **Next.js 15** to dodge a Vercel×Next-16 deploy bug;
 root `vercel.json` + root-level `next` dep make monorepo detection work. Revert to Next 16 only per
@@ -57,7 +71,8 @@ pilot (not a dedicated provider — §34A.11), behind the `EmailProvider` interf
 **Ops flags:** Supabase org is **over-quota** (projects restricted from 21 Sep 2026 if not cleared);
 Google consent screen shows the Supabase project domain (cosmetic; needs paid custom domain to rebrand).
 
-**Next:** Phase 2 — Player Directory & Profile.
+**Next:** apply `scripts/apply-0003-and-admin.sql` (manual), then switch badge reads to
+`public_player_facts()`; then Phase 3 — Vouch Engine (§10), the core domain module.
 
 ---
 
