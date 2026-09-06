@@ -740,11 +740,30 @@ Getting the first deploy up hit two issues:
     management UI. Bracket-config Division columns emit documented defaults (organizer tunes them in
     the tournament system). CSV ZIP bundle (per-entity links used instead).
 
+- **2026-09-06** - **PHASE 10 (part 2 of 2) - Dashboard analytics (§26.1, §26.4): BUILT + deployed +
+  live. Phase 10 COMPLETE.** No migration; no extra query (computed from the registrations the manage
+  page already loads).
+  - **Overview tiles (§26.1):** `lib/tournaments/overview.ts` (pure `computeOverview`, 4 unit tests) +
+    `components/tournaments/tournament-overview.tsx`. Tiles: active registrations, confirmed teams,
+    payments to review, waitlisted, eligibility to review (links §25 work), revenue collected (sum of
+    verified payments); plus a "divisions nearing capacity" callout (>=80% of capacity, slot-holding
+    statuses mirror `register_team` §23.2). Rendered at the top of the manage dashboard.
+  - **Registration filters (§26.4):** the organizer registrations dashboard gains a client-side filter
+    bar - division / status / eligibility / payment - with an "N of M" count. Filters the already-
+    loaded list (cache-first, no round-trip).
+  - Confirmed Jasper's migrations context (SQL editor "untitled" tab = unsaved snippet text only; the
+    0010/0011 DB changes are already committed - safe to close without saving).
+  - Gates green (typecheck/lint/format/test 15-web/build). Committed `<hash>`, pushed; deployed;
+    **re-aliased `vouchplayph.vercel.app`**.
+  - **Deferred (later):** §26.6 manual waitlist reprioritize (auto-promotion on release already works,
+    §23.3); §26.8 participants search; §26.9 broader comms beyond announcements. Export desktop-Excel
+    integrity confirmation still pending from Jasper (§26.11 deliverable gate).
+
 ## Next up
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
-- **Phase 10 part 2 - Organizer Dashboard analytics (§26.1-§26.9)** - overview tiles, filters,
-  waitlist management, eligibility review rollup.
+- **Phase 11 - Notifications (§27)** next - in-app + email-for-critical, push adapter (per the phase
+  plan; confirm scope before building).
 - **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
   Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →

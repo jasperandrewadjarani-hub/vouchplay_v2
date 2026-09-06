@@ -12,6 +12,8 @@ import { AnnouncementForm } from '@/components/tournaments/announcement-form';
 import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manager';
 import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
 import { TournamentExport } from '@/components/tournaments/tournament-export';
+import { TournamentOverview } from '@/components/tournaments/tournament-overview';
+import { computeOverview } from '@/lib/tournaments/overview';
 
 export const metadata: Metadata = { title: 'Manage tournament' };
 
@@ -33,6 +35,17 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
   const registrations = await getOrganizerRegistrations(t.id);
+  const overview = computeOverview(
+    registrations.map((r) => ({
+      divisionId: r.divisionId,
+      status: r.status,
+      eligibilityStatus: r.eligibilityStatus,
+      paymentStatus: r.paymentStatus,
+      amountDue: r.amountDue,
+      currency: r.currency,
+    })),
+    t.divisions.map((d) => ({ id: d.id, name: d.name, capacityTeams: d.capacityTeams })),
+  );
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -51,6 +64,11 @@ export default async function ManageTournamentPage({ params }: Params) {
       <section className="border-border bg-surface rounded-2xl border p-5">
         <h2 className="text-foreground mb-3 text-base font-semibold">Status</h2>
         <LifecycleControls tournamentId={t.id} slug={slug} status={t.status} />
+      </section>
+
+      <section className="border-border bg-surface rounded-2xl border p-5">
+        <h2 className="text-foreground mb-3 text-base font-semibold">Overview</h2>
+        <TournamentOverview overview={overview} />
       </section>
 
       <section className="border-border bg-surface rounded-2xl border p-5">

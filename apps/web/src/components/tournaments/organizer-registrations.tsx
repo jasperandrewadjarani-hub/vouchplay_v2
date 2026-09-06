@@ -33,7 +33,14 @@ export interface EligibilityDivisionOption {
 
 type ActionResult = { ok?: boolean; error?: string; message?: string };
 
-/** Organizer registrations dashboard (handover §26.4) with the §25.5 eligibility decision-support. */
+const ELIG_FILTER_LABELS: Record<string, string> = {
+  eligible: 'Eligible',
+  review: 'Needs review',
+  skill_mismatch: 'Potential skill mismatch',
+  ineligible_hard_rule: 'Does not meet a rule',
+};
+
+/** Organizer registrations dashboard (handover §26.4) with filters + the §25.5 eligibility support. */
 export function OrganizerRegistrations({
   tournamentId,
   registrations,
@@ -43,28 +50,100 @@ export function OrganizerRegistrations({
   registrations: OrganizerRegistration[];
   divisions: EligibilityDivisionOption[];
 }) {
+  const [division, setDivision] = useState('all');
+  const [status, setStatus] = useState('all');
+  const [eligibility, setEligibility] = useState('all');
+  const [payment, setPayment] = useState('all');
+
   if (registrations.length === 0) {
     return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
   }
+
+  const statusOptions = Array.from(new Set(registrations.map((r) => r.status))).sort();
+  const paymentOptions = Array.from(
+    new Set(registrations.map((r) => r.paymentStatus).filter((p): p is string => !!p)),
+  ).sort();
+  const eligibilityOptions = Array.from(new Set(registrations.map((r) => r.eligibilityStatus)));
+
+  const filtered = registrations.filter(
+    (r) =>
+      (division === 'all' || r.divisionName === division) &&
+      (status === 'all' || r.status === status) &&
+      (eligibility === 'all' || r.eligibilityStatus === eligibility) &&
+      (payment === 'all' || (r.paymentStatus ?? '') === payment),
+  );
+
   const byDivision = new Map<string, OrganizerRegistration[]>();
-  for (const r of registrations) {
+  for (const r of filtered) {
     const arr = byDivision.get(r.divisionName) ?? [];
     arr.push(r);
     byDivision.set(r.divisionName, arr);
   }
 
+  const sel =
+    'border-border bg-background rounded-lg border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2';
+
   return (
     <div className="space-y-4">
-      {[...byDivision.entries()].map(([division, regs]) => (
-        <div key={division}>
-          <h3 className="text-foreground mb-2 text-sm font-semibold">{division}</h3>
-          <ul className="space-y-2">
-            {regs.map((r) => (
-              <RegRow key={r.id} tournamentId={tournamentId} reg={r} divisions={divisions} />
+      {/* Filters (§26.4) */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <select value={division} onChange={(e) => setDivision(e.target.value)} className={sel}>
+          <option value="all">All divisions</option>
+          {divisions.map((d) => (
+            <option key={d.id} value={d.name}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className={sel}>
+          <option value="all">Any status</option>
+          {statusOptions.map((s) => (
+            <option key={s} value={s}>
+              {s.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </select>
+        <select
+          value={eligibility}
+          onChange={(e) => setEligibility(e.target.value)}
+          className={sel}
+        >
+          <option value="all">Any eligibility</option>
+          {eligibilityOptions.map((s) => (
+            <option key={s} value={s}>
+              {ELIG_FILTER_LABELS[s] ?? s}
+            </option>
+          ))}
+        </select>
+        {paymentOptions.length > 0 && (
+          <select value={payment} onChange={(e) => setPayment(e.target.value)} className={sel}>
+            <option value="all">Any payment</option>
+            {paymentOptions.map((s) => (
+              <option key={s} value={s}>
+                {s.replace(/_/g, ' ')}
+              </option>
             ))}
-          </ul>
-        </div>
-      ))}
+          </select>
+        )}
+        <span className="text-foreground-muted text-xs">
+          {filtered.length} of {registrations.length}
+        </span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-foreground-muted text-sm">No registrations match these filters.</p>
+      ) : (
+        [...byDivision.entries()].map(([divisionName, regs]) => (
+          <div key={divisionName}>
+            <h3 className="text-foreground mb-2 text-sm font-semibold">{divisionName}</h3>
+            <ul className="space-y-2">
+              {regs.map((r) => (
+                <RegRow key={r.id} tournamentId={tournamentId} reg={r} divisions={divisions} />
+              ))}
+            </ul>
+          </div>
+        ))
+      )}
     </div>
   );
 }

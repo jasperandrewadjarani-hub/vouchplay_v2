@@ -187,6 +187,13 @@ registration deep link** (`?register=1` scrolls straight to the registration sec
 stays clean; behaviour-only, bypasses nothing). Migrations 0010 + 0011 **applied** (vouch tweaks +
 eligibility thresholds) - Phase 9 fully active. Gates green; live.
 
+**Phase 10 - Organizer Dashboard + Export (§26): ✅ BUILT + live.** Part 2 (analytics): **overview
+tiles** (§26.1 - active registrations, confirmed teams, payments to review, waitlisted, eligibility to
+review, revenue collected, divisions nearing capacity; pure `computeOverview`, unit-tested) at the top
+of the manage dashboard, and **registration filters** (§26.4 - division/status/eligibility/payment,
+client-side over the loaded list). Deferred: §26.6 manual waitlist reprioritize (auto-promotion works),
+§26.8 participants search, §26.9 broader comms.
+
 **Phase 10 - Export (§26.11): ✅ BUILT + live (part 1 of 2 - export-first).** Decoupled export
 (§26.11.2): `TournamentExportSnapshot` + three adapters - the **canonical `TournamentSystemXlsxExporter`**
 (the LOCKED compatibility contract, reproduced exactly from the inspected sample workbook - see
@@ -198,11 +205,10 @@ panel on the manage dashboard. Generated demo files re-read cleanly (exceljs); d
 native-integrity confirmation is the one manual gate before it's a shippable deliverable. Gates green;
 live. **Deferred to Phase 10 part 2:** dashboard analytics/overview tiles (§26.1-§26.9).
 
-**Next:** Phase 10 part 2 - Organizer Dashboard analytics (§26.1-§26.9): overview tiles (totals,
-pending payments, waitlist, eligibility review count, revenue), registration filters, waitlist
-management. (Open ops: Jasper confirm the demo XLSX open cleanly in desktop Excel; approve an organizer
-via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear
-Supabase over-quota before 21 Sep 2026.)
+**Next:** Phase 11 - Notifications (§27): in-app + email-for-critical, push-notification adapter.
+(Open ops: Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer via
+`/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase
+over-quota before 21 Sep 2026.)
 
 ---
 
