@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase/server';
 import { getMyProfile, postAuthPath } from '@/lib/auth';
 import { publicEnv } from '@/lib/env';
+import { loadSettingFlag } from '@/lib/settings';
 
 export interface FormState {
   ok?: boolean;
@@ -37,10 +38,13 @@ export async function requestEmailOtp(_prev: FormState, formData: FormData): Pro
   const next = (formData.get('next') as string | null) ?? undefined;
 
   try {
+    // When signups are disabled (§30.7) new emails must not create an account; existing users can
+    // still request a login code (shouldCreateUser:false only creates for known addresses).
+    const allowSignup = await loadSettingFlag('signup_enabled', true);
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email: parsed.data.email,
-      options: { shouldCreateUser: true, emailRedirectTo: callbackUrl(next) },
+      options: { shouldCreateUser: allowSignup, emailRedirectTo: callbackUrl(next) },
     });
     if (error) return { error: error.message };
     return { ok: true, email: parsed.data.email, message: 'Code sent - check your email.', next };

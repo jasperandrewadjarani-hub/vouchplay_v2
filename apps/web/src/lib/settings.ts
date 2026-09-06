@@ -73,6 +73,13 @@ export async function loadSettingNumber(key: SystemSettingsKey, fallback: number
   return typeof v === 'number' ? v : fallback;
 }
 
+/** Read a text setting from system_settings (handover §30.7), with a fallback default. */
+export async function loadSettingText(key: SystemSettingsKey, fallback = ''): Promise<string> {
+  const m = await loadSettings();
+  const v = m[key];
+  return typeof v === 'string' ? v : fallback;
+}
+
 export interface SafetySettings {
   reportsPer24h: number;
   skillReviewsPer24h: number;

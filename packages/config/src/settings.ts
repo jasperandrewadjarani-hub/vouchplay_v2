@@ -49,6 +49,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   signup_enabled: true,
   role_applications_enabled: true,
   club_creation_enabled: true,
+
+  // Site-wide announcement banner (handover §30.7). When enabled, shown to every visitor.
+  announcement_banner_enabled: false,
+  announcement_banner: '',
 } as const;
 
 export type SystemSettingsKey = keyof typeof DEFAULT_SYSTEM_SETTINGS;

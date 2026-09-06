@@ -851,13 +851,55 @@ Getting the first deploy up hit two issues:
     (`useLinkStatus`) so a spinner appears on the tapped card while its detail page loads.
   - Gates green (typecheck/lint/format/build). Committed `d3d3ce8`, pushed; deployed; **re-aliased**.
 
+- **2026-09-07** - **PHASE 13 - Admin Control Center (§30-§31, §13): BUILT + deployed + live.** Scope
+  (Jasper): the full core bundle - System Settings + Audit viewer + Users admin + Analytics. **No new
+  migration** (every table/column already exists). Identity Verification (§13 submission+review) is
+  deferred to its own sub-phase (needs a private id-docs bucket + submission UI + retention).
+  - **New `/admin` area** behind **`requireAdminPage`** (new page guard: admin/super_admin + verified
+    TOTP + aal2; non-admin staff bounce to `/staff`) + `assertAdminActor` at every action layer +
+    `viewerIsAdmin()` for nav. Landing tiles → settings/users/analytics/audit + a link to `/staff`.
+    Admin link surfaced in `/me` (admins only).
+  - **§30.7 System Settings** (the headline): a `SETTINGS_CATALOG` + pure `validateSettingValue()` in
+    `@vouchplay/config` (single source of truth for label/group/kind/bounds; 15 unit tests incl. a
+    guard that the catalog covers exactly `DEFAULT_SYSTEM_SETTINGS`). `updateSystemSettings` validates
+    every value server-side, **upserts only changed keys**, writes one immutable `audit_logs` row per
+    change (before/after snapshot, §30.8), and `revalidateTag`s the settings cache. Added two new
+    settings keys - `announcement_banner_enabled` + `announcement_banner` (no migration needed; reads
+    fall back to config defaults, first write upserts them). Grouped settings form at `/admin/settings`.
+  - **Toggle enforcement wired (were previously inert):** `maintenance_mode` (non-staff see a
+    maintenance screen in the app shell; staff keep access), `announcement_banner` (site-wide banner in
+    the shell), `signup_enabled` (OTP `shouldCreateUser` gated - existing users can still log in, new
+    signups blocked), `role_applications_enabled` (gates `applyForOrganizer`). `club_creation_enabled`
+    already enforced.
+  - **§30.8 Audit viewer** at `/admin/audit`: read-only, filter by action/entity/actor/date, keyset
+    pagination, actor names bulk-resolved (no N+1), before/after JSON in native `<details>`. Relaxed
+    `writeAudit` to accept a null `entityId` (a settings key has no uuid).
+  - **§30.1-30.2 Users admin:** `/admin/users` (debounced search) + `/admin/users/[id]` (inspect:
+    profile, email via `auth.admin.getUserById`, skill snapshot, active roles, role history). Actions
+    (`admin-users.ts`, admin+aal2 + audit + critical `account_security` notify): **grantRole/revokeRole**
+    (only super_admin may grant/revoke admin/super_admin; can't revoke your own privileged role),
+    **setManualSkillVerified** (admin_override via recompute-first so a later vouch recompute preserves
+    it; never alters calculated STS/CSL), and reuses the Phase-4 **applyAccountAction**
+    (warn/restrict/suspend/ban/lift). Merge-duplicate + revoke-sessions deferred.
+  - **§31 Analytics** at `/admin/analytics`: pure `computeAnalyticsSummary` in `@vouchplay/core`
+    (conversion/average math + North Star, 11 unit tests) fed by cheap `head:true` COUNT queries
+    (+ two small capped scans for distinct vouchers + verified revenue; noted to revisit at scale).
+    Tiles for growth/vouching/tournaments/clubs/safety + the North Star (Skill-Verified active profiles).
+  - Gates green (typecheck/lint/format/test - core 47, config 19, web 15/build - 6 new `/admin` routes,
+    31 pages). Committed + pushed to `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **No DB step for Jasper this phase** (no migration). Deferred: §13 Identity Verification full flow;
+    Users merge-duplicate + revoke-sessions; per-viewer settings-change diff email. **Next: pick with
+    Jasper** - §16/§16A recruitment+bidding, organizer dashboard depth (§26.6/§26.8/§26.9), or §13.
+
 ## Next up
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
-- **Phase 13 - Admin Control Center** (§30+) or another priority - confirm next scope with Jasper.
-- **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
-  Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
+- **Phase 13 - Admin Control Center** (§30-§31) - ✅ DONE (core bundle; §13 Identity Verification deferred).
+- **Next phase - confirm scope with Jasper:** §16 Recruitment/Sponsorship + §16A Gamified Bidding;
+  organizer dashboard depth (§26.6 waitlist reprioritize / §26.8 participants search / §26.9 comms +
+  export ZIP-of-CSVs); §13 Identity Verification full flow (needs a private id-docs bucket + migration);
+  or notifications depth (§27.4 admin fan-out / async email outbox / push).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).

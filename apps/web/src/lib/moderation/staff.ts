@@ -102,3 +102,31 @@ export async function viewerIsStaff(): Promise<boolean> {
   const roles = await myRoles();
   return highestStaffRole(roles) !== null;
 }
+
+/** Lightweight check for conditional nav (is the current viewer an Admin / Super Admin?). */
+export async function viewerIsAdmin(): Promise<boolean> {
+  const roles = await myRoles();
+  return roles.includes('admin') || roles.includes('super_admin');
+}
+
+/**
+ * Page-layer guard for the /admin Admin Control Center (handover §30). Same MFA step-up as
+ * requireStaffPage, but requires an ADMIN (admin/super_admin) role - moderators/support are staff
+ * for moderation but not for the control center. Anonymous → login; signed-in non-admin → /staff
+ * (their moderation surface) or home; admin without a verified factor / aal2 → the security page.
+ */
+export async function requireAdminPage(returnTo: string): Promise<StaffActor> {
+  const { viewerId } = await getViewerContext();
+  if (!viewerId) redirect(`/login?next=${encodeURIComponent(returnTo)}`);
+
+  const roles = await myRoles();
+  const isAdmin = roles.includes('admin') || roles.includes('super_admin');
+  if (!isAdmin) redirect(highestStaffRole(roles) ? '/staff' : '/');
+
+  const mfa = await getMfaStatus();
+  const suffix = `next=${encodeURIComponent(returnTo)}`;
+  if (!mfa.hasVerifiedTotp) redirect(`/me/settings/security?reason=enroll_required&${suffix}`);
+  if (!mfa.aal2) redirect(`/me/settings/security?reason=step_up_required&${suffix}`);
+
+  return { viewerId: viewerId as string, role: highestStaffRole(roles) ?? 'admin' };
+}

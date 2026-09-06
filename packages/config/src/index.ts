@@ -9,6 +9,7 @@
 
 export * from './skill';
 export * from './settings';
+export * from './settings-catalog';
 export * from './brand';
 export * from './visibility';
 export * from './geo';

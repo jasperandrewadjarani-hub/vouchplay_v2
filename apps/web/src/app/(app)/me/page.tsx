@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
-import { viewerIsStaff } from '@/lib/moderation/staff';
+import { viewerIsStaff, viewerIsAdmin } from '@/lib/moderation/staff';
 import { createServiceClient } from '@/lib/supabase/service';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { OrganizerApply } from '@/components/roles/organizer-apply';
@@ -37,7 +37,7 @@ export default async function MePage({
   }
 
   const profile = await getMyProfile();
-  const isStaff = await viewerIsStaff();
+  const [isStaff, isAdmin] = await Promise.all([viewerIsStaff(), viewerIsAdmin()]);
   const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '-';
 
   // Organizer role state (§17.1) for the apply-as-organizer card.
@@ -97,6 +97,7 @@ export default async function MePage({
 
       {isStaff && (
         <nav className="border-primary/40 bg-primary/5 divide-border divide-y rounded-2xl border text-sm">
+          {isAdmin && <SettingsLink href="/admin" label="Admin Control Center" />}
           <SettingsLink href="/staff" label="Staff · Moderation" />
         </nav>
       )}

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { organizerApplicationSchema } from '@vouchplay/validation';
 import { getOptionalUser } from '@/lib/auth';
+import { loadSettingFlag } from '@/lib/settings';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertAdminActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
@@ -20,6 +21,9 @@ export async function applyForOrganizer(
 ): Promise<SafetyActionState> {
   const user = await getOptionalUser();
   if (!user) return { error: 'Please sign in.' };
+  if (!(await loadSettingFlag('role_applications_enabled', true))) {
+    return { error: 'Role applications are temporarily closed.' };
+  }
   const parsed = organizerApplicationSchema.safeParse({
     motivation: formData.get('motivation') ?? '',
   });

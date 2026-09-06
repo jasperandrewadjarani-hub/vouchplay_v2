@@ -13,3 +13,4 @@ export * from './notifications/catalog';
 export * from './vouches';
 export * from './eligibility';
 export * from './payments/provider';
+export * from './analytics/summary';

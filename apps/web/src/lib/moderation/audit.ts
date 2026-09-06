@@ -12,7 +12,8 @@ export interface AuditEntry {
   actorRole?: string | null;
   action: string;
   entityType: string;
-  entityId: string;
+  /** The affected entity's uuid, or null when the entity has no uuid (e.g. a settings key). */
+  entityId: string | null;
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   reason?: string | null;
@@ -26,7 +27,7 @@ export async function writeAudit(entry: AuditEntry): Promise<boolean> {
       actor_role: entry.actorRole ?? null,
       action: entry.action,
       entity_type: entry.entityType,
-      entity_id: entry.entityId,
+      entity_id: entry.entityId ?? null,
       before_snapshot: entry.before ?? null,
       after_snapshot: entry.after ?? null,
       reason: entry.reason ?? null,

@@ -226,10 +226,29 @@ Playing history (derived from registrations, no new table) on profiles. Migratio
 play in a clearly-higher division; no invented equivalencies), wired into ELIG_V1. New
 `achievement_awarded` notification. Gates green; live.
 
-**Next:** Phase 13 - Admin Control Center (§30+) or the next JT priority. (Open ops: apply migration
-0013; Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer via
-`/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase
-over-quota before 21 Sep 2026.)
+**Phase 13 - Admin Control Center: ✅ BUILT + live (§30-§31).** Scope: core bundle (System Settings +
+Audit viewer + Users admin + Analytics); **no new migration** (all tables/columns already existed).
+New `/admin` area behind `requireAdminPage` (admin/super_admin + verified TOTP + aal2) + `assertAdminActor`.
+**§30.7 System Settings:** a `SETTINGS_CATALOG` + pure `validateSettingValue()` in `@vouchplay/config`
+drive a grouped settings form; `updateSystemSettings` validates server-side, upserts only changed keys,
+and writes one immutable audit row per change (§30.8); added `announcement_banner[_enabled]` keys. The
+platform toggles now actually enforce - `maintenance_mode` (non-staff maintenance screen), site-wide
+`announcement_banner`, `signup_enabled` (OTP account creation gated, existing users still log in),
+`role_applications_enabled`. **§30.8 Audit viewer** (`/admin/audit`): read-only, filterable, keyset-
+paginated, before/after snapshots. **§30.1-30.2 Users admin** (`/admin/users` + `[id]`): search/inspect,
+grant/revoke roles (privileged roles Super-Admin-only; no self-revoke), manual Skill-Verified override
+(admin_override, never alters calculated STS/CSL), account actions (reuse Phase-4 applyAccountAction),
+role history - all audited + a critical `account_security` notification. **§31 Analytics** (`/admin/analytics`):
+pure `computeAnalyticsSummary` in `@vouchplay/core` over cheap COUNT queries - growth/vouching/tournaments/
+clubs/safety + the North Star (Skill-Verified active profiles). Gates green (core 47, config 19, web 15;
+build 31 pages incl. 6 `/admin` routes). Deferred: §13 Identity Verification full flow (private id-docs
+bucket + submission/review + retention - its own sub-phase), users merge-duplicate + revoke-sessions.
+
+**Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
+dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
+(§27.4). (Open ops: Jasper confirm the demo export XLSX open cleanly in desktop Excel; seed Tane's admin;
+both JT admins enroll TOTP to reach `/staff` + `/admin`; add SMTP creds to switch on critical email; clear
+Supabase over-quota before 21 Sep 2026.)
 
 ---
 

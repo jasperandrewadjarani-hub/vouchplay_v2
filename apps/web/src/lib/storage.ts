@@ -31,3 +31,11 @@ export function clubLogoUrl(path: string | null | undefined): string | null {
 export function tournamentCoverUrl(path: string | null | undefined): string | null {
   return avatarUrl(path);
 }
+
+/** Up-to-two-letter initials from a display name, for the avatar fallback. */
+export function nameInitials(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
+}
