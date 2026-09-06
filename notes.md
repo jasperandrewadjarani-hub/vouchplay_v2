@@ -675,10 +675,36 @@ Getting the first deploy up hit two issues:
     actually raise `UNUSUAL_VOUCH_ACTIVITY` (Phase-4 table shipped, detectors later); the eligibility
     review-queue rollup in the organizer dashboard analytics (Phase 10, §26.7). **Next: Phase 10.**
 
+- **2026-09-06** - **Migrations 0010 + 0011 APPLIED (Jasper).** Both ran in the Supabase SQL editor,
+  results as expected (0010: both_enum=1, cooldown_days=1; 0011: eligibility_settings=3). So on live DB
+  `itrosesiywpbaxtmucbb`: the vouch `both` enum + 1-day update cooldown are live, and the three
+  eligibility thresholds are seeded. **Phase 9 is now fully active end to end.**
+
+- **2026-09-06** - **Registration UX: Frictionless Join + Shareable Registration Link (Jasper request;
+  specced into the handover first, §19.2/§19.3/§28.1).** BUILT + deployed + live. No migration.
+  - **Join before signup (§19.2):** the tournament page shows a prominent **Register** CTA to everyone
+    (incl. signed-out) when registration is open, plus a "Join this tournament" card. An anon visitor is
+    routed to signup carrying `next=/tournaments/{slug}?register=1`, so **signup → onboarding →
+    registration options** resumes with no lost context (reuses the sitewide login-gate resume
+    plumbing - `safeNext`/`postAuthPath`). No slot/team/payment state is ever created for an anon
+    visitor; all registration writes still require an authed, onboarded account (§21/§23 unchanged).
+  - **Shareable registration link (§19.3/§28.1):** the tournament **Share** action produces a
+    `?register=1` deep link when the tournament is registerable (published/registration_open); opening
+    it scrolls to + highlights the registration section (`RegisterAnchorScroll`). Canonical/OG URL stays
+    the clean `/tournaments/{slug}`. Behaviour-only - never bypasses auth, eligibility (§25), slot
+    reservation (§23), or visibility (unlisted stays unlisted).
+  - Replaced the **stale "registration opens in a later release" placeholder** (left over from before
+    Phase 7) with a real state-aware `#register` section: anon Join card / live RegistrationPanel /
+    schedule / closed message.
+  - New `components/tournaments/register-cta.tsx` (`RegisterButton`, `RegisterAnchorScroll`,
+    `registerNext`). Gates green (typecheck/lint/format/test/build). Committed `5b17073`, pushed to
+    `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**. Handover updated: §19.2,
+    §19.3, §28.1.
+
 ## Next up
-- **Manual: apply `scripts/apply-0010.sql`** (migration 0010, vouch tweaks) + return verify numbers.
-- **Manual: apply `scripts/apply-0011.sql`** (migration 0011, eligibility settings) + return verify
-  number (expect eligibility_settings = 3).
+- **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** - confirm plan before building.
+  Includes the canonical Tournament-System XLSX adapter (inspect
+  `sample_data_/tournament_googlesheets_sample.xlsx` FIRST, never guess - §26.11.1).
 - **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
   Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →

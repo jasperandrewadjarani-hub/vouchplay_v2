@@ -180,10 +180,17 @@ evidence + Approve (hard-rule override needs a reason, §25.2) / Reclassify / Re
 Reject - every override audit-logged. **§25.6 enforced by a build-failing guard test** that bans the
 person-labels sandbagger/smurf/cheater from all source. Gates green; live on `vouchplayph.vercel.app`.
 
+**Registration UX (2026-09-06, §19.2/§19.3/§28.1):** frictionless **Join before signup** (anon visitors
+get a Register CTA + Join card → signup carrying `next=/tournaments/{slug}?register=1` → onboarding →
+registration options resume; no anon slot/team/payment state ever created) and a **shareable
+registration deep link** (`?register=1` scrolls straight to the registration section; canonical/OG URL
+stays clean; behaviour-only, bypasses nothing). Migrations 0010 + 0011 **applied** (vouch tweaks +
+eligibility thresholds) - Phase 9 fully active. Gates green; live.
+
 **Next:** Phase 10 - Organizer Dashboard analytics + Export (§26, §27), incl. the canonical
 Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
-(Open ops: apply migrations 0010 + 0011; approve an organizer via `/staff` → Role apps; seed Tane's
-admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
+(Open ops: approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT admins enroll
+TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 
