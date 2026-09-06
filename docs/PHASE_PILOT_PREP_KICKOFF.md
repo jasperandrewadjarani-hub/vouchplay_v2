@@ -14,7 +14,7 @@ First, read for full context:
 - `CLAUDE.md` and `AGENTS.md` - working rules + the Next-15/Vercel deploy gotcha (do NOT undo the
   Next 15 pin, root `vercel.json`, or the `middleware.ts` rename).
 - `notes.md` - running execution log + decisions (read the latest entries first).
-- `VouchPlay_Master_Product_and_Code_Execution_Handover_v1.1.md` (content v1.3) - the LOCKED source of
+- `VouchPlay_Master_Product_and_Code_Execution_Handover_v1.1.md` (content v1.4) - the LOCKED source of
   truth. Read §0Z "Current Build Status" first, then §19.4 + §25.5 (the new registration prompt).
 
 ## Where things stand (all LIVE at https://vouchplayph.vercel.app, Supabase `itrosesiywpbaxtmucbb`)

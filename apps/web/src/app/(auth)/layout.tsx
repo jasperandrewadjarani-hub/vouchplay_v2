@@ -12,10 +12,10 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
             alt="VouchPlay"
-            width={148}
-            height={32}
+            width={866}
+            height={288}
             priority
-            className="h-8 w-auto"
+            className="h-9 w-auto"
           />
         </Link>
         <ThemeToggle />

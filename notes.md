@@ -951,6 +951,22 @@ Getting the first deploy up hit two issues:
   - Gates green (typecheck/lint/format/build; tests unaffected). Committed + pushed; deployed;
     **re-aliased `vouchplayph.vercel.app`**.
 
+- **2026-09-07** - **Branding refresh + About/FAQ (Jasper).** BUILT + deployed + live. No migration.
+  - **New logo:** swapped in the new full-colour horizontal VouchPlay logo
+    (`logo_/new_logos/vertical_full_logo_transp.png` -> `apps/web/public/brand/vouchplay-logo-horizontal.png`,
+    866x288); updated header + auth-layout `<Image>` dims to `h-9 w-auto`.
+  - **"Powered by JT Consulting & Analytics" strip:** thin centred top strip in the header, links to the
+    JT Facebook page (updated `BRAND.jtFacebookUrl` to the canonical people-page URL Jasper gave).
+  - **About & FAQ built (§29, §5.3.1):** `/about` (mission, how-it-works, the four concepts CSL/STS/
+    Skill-Verified/Identity-Verified, the skill ladder from SKILL_BANDS, JT attribution + FB link) and
+    `/faq` (the §29.1 questions grouped into accessible native-`<details>` accordions, answering the
+    LIVE feature set; deferred-feature Qs omitted). Surfaced under **Me -> Help & About** group + a
+    home-page footer (About/FAQ/Terms/Privacy + Powered-by) for signed-out discoverability.
+  - Handover updated to **content v1.4** (§5.2.1 branding, §5.3.1 About/FAQ now built, changelog v1.4).
+    Pilot-prep handover unaffected except the version ref (v1.3 -> v1.4).
+  - Gates green (typecheck/lint/format/test/build - 33 routes incl. /about + /faq). Committed + pushed;
+    deployed; **re-aliased `vouchplayph.vercel.app`**.
+
 ## Next up
 - **PILOT PREP (next phase):** see `docs/PHASE_PILOT_PREP_KICKOFF.md`. First code item = the §19.4
   unverified-skill registration prompt. Config/ops items for Jasper: SMTP env for critical email;

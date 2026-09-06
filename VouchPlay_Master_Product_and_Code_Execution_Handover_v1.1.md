@@ -648,16 +648,20 @@ Default mobile header:
 
 Profile is accessed from **Me**, not duplicated permanently in the header.
 
-### 5.2.1 Logo treatment (design refinement, 2026-09-05)
+### 5.2.1 Logo & branding treatment (design refinement, updated 2026-09-07)
 
-- **Enlarge the header logo** - make the VouchPlay wordmark visibly bigger/more prominent than the
-  current build (still fitting a ~56px header; scale up the mark, don't overflow the bar).
-- Directly **below the logo**, add **very small but legible** microcopy: **"by JT Consulting &
-  Analytics"** (roughly 9–10px, `text-foreground-muted`, non-wrapping). The logo + this line form one
-  clickable unit that links to the JT Facebook page (`https://www.facebook.com/61590234100280/`).
-- Keep the mark crisp in both themes (use the transparent logo asset in `logo_/`).
-- Position is **confirmed upper-left** (locked IA); the notification bell / profile avatar stay
-  upper-right.
+- **Logo:** the full-colour horizontal VouchPlay logo (V-mark + wordmark) lives **upper-left** in the
+  header, sized to fit the ~56px bar (`h-9 w-auto`). Asset:
+  `apps/web/public/brand/vouchplay-logo-horizontal.png` (source in `logo_/new_logos/`). Transparent
+  background so it works in both themes.
+- **"Powered by" strip (top middle):** a thin, full-width strip at the very top of the header shows
+  **very small centred** microcopy **"Powered by JT Consulting & Analytics"** (~10px,
+  `text-foreground-muted`), which is a link to the JT Facebook page
+  (`https://www.facebook.com/people/JT-Consulting-Analytics-Inc/61590234100280/`, from
+  `BRAND.jtFacebookUrl`). This replaces the earlier "microcopy directly below the logo" idea - a
+  centred top strip reads cleanly on mobile without crowding the logo/actions.
+- The JT link + logo also appear on the **About** page footer (§29.3) and the home-page footer.
+- Notification bell / profile avatar stay upper-right; position of the logo is locked upper-left.
 
 ## 5.3 Me Section
 
@@ -691,15 +695,18 @@ All JT branding in About may link to:
 
 ### 5.3.1 Where About & FAQ live (discoverability)
 
-**About** and **FAQ** are reached from **Me → Help / FAQ** and **Me → About** (this section), and
-their full content is specified in **§29**. They are **not** yet built (planned Phase 12 / late
-Phase 1 legal-pages pass) - routes `/about` and `/faq` (and `/terms`, `/privacy`) currently render
-placeholder stubs.
+**About** and **FAQ** are reached from **Me → Help & About** (a dedicated group: About VouchPlay ·
+Help & FAQ · Terms · Privacy), with full content per **§29**. **BUILT (2026-09-07):** `/about`
+(mission, how-it-works, the four concepts, the skill ladder, JT attribution + FB link) and `/faq`
+(the §29.1 questions grouped into accessible native-`<details>` accordions, answering the live
+feature set; deferred-feature questions - bidding/sponsorship/leaderboards - are omitted until those
+ship). `/terms` and `/privacy` remain placeholder stubs pending the Phase-14 legal pass.
 
-To make them easy to find, also surface them in:
-- the **Me** list (primary home - grouped under a "Help & About" or Settings group),
-- the header **•••** overflow on relevant pages (About · FAQ · Contact Support), and
-- a small **footer** on public pages (About · FAQ · Terms · Privacy · "by JT Consulting & Analytics").
+Also surfaced (discoverability):
+- the **Me** list (primary home - the "Help & About" group),
+- a small **footer** on the home page (About · FAQ · Terms · Privacy · "Powered by JT Consulting &
+  Analytics"), so signed-out visitors can read About/FAQ before signing up.
+- (A header **•••** overflow menu is not built; the Me group + home footer cover discoverability.)
 
 ## 5.4 Desktop / Tablet Adaptation
 
@@ -6213,6 +6220,14 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.4 (2026-09-07)
+- **Branding refresh (§5.2.1):** swapped in the new full-colour horizontal VouchPlay logo; added a
+  thin **top-middle "Powered by JT Consulting & Analytics"** strip in the header linking to the JT
+  Facebook page. Updated `BRAND.jtFacebookUrl` to the canonical people-page URL.
+- **About & FAQ built (§5.3.1, §29):** `/about` (mission, how-it-works, the four concepts, skill
+  ladder, JT attribution) and `/faq` (grouped accessible `<details>` accordions for the live feature
+  set) shipped; surfaced under **Me → Help & About** and a home-page footer.
 
 ## v1.3 (2026-09-07)
 - **§33.5A Loading & Navigation Feedback made a MANDATORY, cross-cutting Definition-of-Done** for

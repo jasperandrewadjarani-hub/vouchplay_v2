@@ -108,6 +108,13 @@ export default async function MePage({
         <SettingsLink href="/me/settings/password" label="Password" />
       </nav>
 
+      <nav className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm">
+        <SettingsLink href="/about" label="About VouchPlay" />
+        <SettingsLink href="/faq" label="Help & FAQ" />
+        <SettingsLink href="/terms" label="Terms of Service" />
+        <SettingsLink href="/privacy" label="Privacy Policy" />
+      </nav>
+
       <SignOutButton />
     </section>
   );

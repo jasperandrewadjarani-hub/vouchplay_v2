@@ -6,7 +6,7 @@
 export const BRAND = {
   name: 'VouchPlay',
   developer: 'JT Consulting & Analytics Inc.',
-  jtFacebookUrl: 'https://www.facebook.com/61590234100280/',
+  jtFacebookUrl: 'https://www.facebook.com/people/JT-Consulting-Analytics-Inc/61590234100280/',
   tagline:
     'A community-powered sports identity and tournament platform where your playing profile is built by the people you actually play with.',
 } as const;

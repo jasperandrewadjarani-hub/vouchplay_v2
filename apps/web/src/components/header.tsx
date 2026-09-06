@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Bell } from 'lucide-react';
+import { BRAND } from '@vouchplay/config';
 import { ThemeToggle } from './theme-toggle';
 import { ButtonLink } from './ui/button';
 import { PlayerAvatar } from './players/player-avatar';
@@ -23,15 +24,28 @@ export async function Header() {
 
   return (
     <header className="border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
+      {/* Powered-by strip (top middle), links to the JT Consulting & Analytics page (§5.2.1). */}
+      <div className="border-border/50 border-b">
+        <div className="mx-auto max-w-6xl px-4 py-1 text-center">
+          <a
+            href={BRAND.jtFacebookUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground-muted hover:text-foreground text-[10px] tracking-wide transition-colors"
+          >
+            Powered by {BRAND.developer.replace(' Inc.', '')}
+          </a>
+        </div>
+      </div>
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
         <Link href="/" className="flex items-center gap-2" aria-label="VouchPlay home">
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
             alt="VouchPlay"
-            width={148}
-            height={32}
+            width={866}
+            height={288}
             priority
-            className="h-8 w-auto"
+            className="h-9 w-auto"
           />
         </Link>
 

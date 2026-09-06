@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
 import { Users, ShieldCheck, Trophy } from 'lucide-react';
+import { BRAND } from '@vouchplay/config';
 import { getOptionalUser } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui/button';
 
@@ -59,6 +61,31 @@ export default async function HomePage() {
         Your personalized dashboard - skill summary, requests, and tournament activity - arrives in
         a later release (handover §6).
       </p>
+
+      <footer className="border-border mt-2 border-t pt-5 text-center">
+        <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
+          <Link href="/about" className="text-foreground-muted hover:text-foreground">
+            About
+          </Link>
+          <Link href="/faq" className="text-foreground-muted hover:text-foreground">
+            FAQ
+          </Link>
+          <Link href="/terms" className="text-foreground-muted hover:text-foreground">
+            Terms
+          </Link>
+          <Link href="/privacy" className="text-foreground-muted hover:text-foreground">
+            Privacy
+          </Link>
+        </nav>
+        <a
+          href={BRAND.jtFacebookUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-foreground-muted hover:text-foreground mt-2 inline-block text-[11px]"
+        >
+          Powered by {BRAND.developer}
+        </a>
+      </footer>
     </div>
   );
 }
