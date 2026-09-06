@@ -38,6 +38,12 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   reports_per_24h: 10,
   skill_reviews_per_24h: 5,
 
+  // Eligibility engine thresholds (handover §25.4, ELIG_V1). Admin-tunable, never hardcoded.
+  eligibility_min_unique_vouchers: 2,
+  eligibility_review_below_sts: 3.0,
+  /** When true, a hard-rule failure blocks registration outright; default keeps it decision-support. */
+  eligibility_enforce_hard_rules: false,
+
   // Feature flags (handover §61).
   maintenance_mode: false,
   signup_enabled: true,

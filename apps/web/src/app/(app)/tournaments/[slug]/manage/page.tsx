@@ -54,7 +54,16 @@ export default async function ManageTournamentPage({ params }: Params) {
 
       <section className="border-border bg-surface rounded-2xl border p-5">
         <h2 className="text-foreground mb-3 text-base font-semibold">Registrations</h2>
-        <OrganizerRegistrations tournamentId={t.id} registrations={registrations} />
+        <OrganizerRegistrations
+          tournamentId={t.id}
+          registrations={registrations}
+          divisions={t.divisions.map((d) => ({
+            id: d.id,
+            name: d.name,
+            format: d.format,
+            teamSize: d.teamSize,
+          }))}
+        />
       </section>
 
       <section className="border-border bg-surface rounded-2xl border p-5">

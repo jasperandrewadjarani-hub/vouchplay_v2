@@ -266,6 +266,7 @@ export interface OrganizerRegistration {
   divisionName: string;
   status: string;
   eligibilityStatus: string;
+  eligibilitySnapshot: Record<string, unknown>;
   slotHoldExpiresAt: string | null;
   createdAt: string;
   members: Mini[];
@@ -283,7 +284,7 @@ export async function getOrganizerRegistrations(
   const { data: regs } = await svc
     .from('registrations')
     .select(
-      'id, division_id, team_id, status, eligibility_status, slot_hold_expires_at, created_at',
+      'id, division_id, team_id, status, eligibility_status, eligibility_snapshot, slot_hold_expires_at, created_at',
     )
     .eq('tournament_id', tournamentId)
     .order('created_at', { ascending: true })
@@ -294,6 +295,7 @@ export async function getOrganizerRegistrations(
     team_id: string;
     status: string;
     eligibility_status: string;
+    eligibility_snapshot: Record<string, unknown> | null;
     slot_hold_expires_at: string | null;
     created_at: string;
   }[];
@@ -360,6 +362,7 @@ export async function getOrganizerRegistrations(
       divisionName: divName.get(r.division_id) ?? 'Division',
       status: r.status,
       eligibilityStatus: r.eligibility_status,
+      eligibilitySnapshot: r.eligibility_snapshot ?? {},
       slotHoldExpiresAt: r.slot_hold_expires_at,
       createdAt: r.created_at,
       members: members

@@ -623,10 +623,64 @@ Getting the first deploy up hit two issues:
   - Migration `0010_vouch_tweaks` (`scripts/apply-0010.sql`) - **apply pending** (adds `both` enum +
     sets cooldown to 1). Gates green (typecheck/lint/format/test 18/build).
 
+- **2026-09-06** - **PHASE 9 - Eligibility / Anti-Sandbagging (§25, §26.7): BUILT + deployed + live.**
+  The headline decision-support engine - neutral, evidence-based, never auto-punishes, never labels a
+  person; the organizer decides. Awaiting one manual SQL paste (migration 0011) to seed the thresholds.
+  - **Pure engine `ELIG_V1` in `@vouchplay/core`** (`packages/core/src/eligibility/`): pure,
+    deterministic, version-locked, unit-tested like STS_V1. `evaluatePlayerEligibility` +
+    `evaluateTeamEligibility` → `ELIGIBLE / REVIEW / SKILL_MISMATCH / INELIGIBLE_HARD_RULE` +
+    `hardRuleCodes` + neutral `reasonCodes` + advisory `flags` (`UNUSUAL_VOUCH_ACTIVITY`;
+    `HISTORICAL_SKILL_MISMATCH` wired but a no-op until Phase-12 history exists). **Hard rules (§25.2):**
+    wrong sex (men/women divisions), age out of range at the start date, account not active, invalid
+    team size, plus caller-supplied registration-closed / duplicate; a hard-rule failure short-circuits
+    to INELIGIBLE_HARD_RULE. **Skill rules (§25.4):** CSL above the division max → SKILL_MISMATCH;
+    within band but below required/admin STS, too few vouches, unrated, or Skill-Verified-required-but-
+    missing → REVIEW (unrated → REVIEW, Jasper's call); a raised flag forces at least REVIEW.
+    **Team = worst-of-members** severity; flags/reasons unioned. All thresholds injected (never
+    hardcoded). **21 new unit tests** (in-band eligible, below-STS review, above-band mismatch, all
+    hard-rule failures, hard-rule-beats-mismatch, unrated→review, team worst-of-members, open policy
+    never mismatches) - core suite now 32 green.
+  - **§25.6 no-defamation guard:** neutral copy lives in `eligibility/labels.ts`
+    (`ELIGIBILITY_RESULT_LABELS`/`REASON_LABELS`/`FLAG_LABELS`/`HARD_RULE_LABELS`); a vitest guard scans
+    every `.ts/.tsx` under `packages/` + `apps/web/src` and **fails the build** if the person-labels
+    `sandbagger`/`smurf`/`cheater` (§25.6) ever appear in code (the feature name "anti-sandbagging" is
+    allowed in comments/spec, only the accusatory nouns are banned). Verified: the guard actually fired
+    on a stray term during the build and was fixed.
+  - **Migration 0011 (`0011_eligibility.sql`, WRITTEN - apply pending):** seeds 3 admin-tunable
+    settings ON CONFLICT DO NOTHING - `eligibility_min_unique_vouchers` (2),
+    `eligibility_review_below_sts` (3.0), `eligibility_enforce_hard_rules` (false = decision-support,
+    never auto-blocks). **No schema change** - `registrations.eligibility_status` +
+    `eligibility_snapshot jsonb` already exist (0008). One-paste apply: **`scripts/apply-0011.sql`**
+    (expect eligibility_settings = 3). `getEligibilitySettings()` reads them live with config fallback.
+  - **Compute-on-write (`lib/eligibility/compute.ts`):** fills `eligibility_status` +
+    `eligibility_snapshot` after `register_team` (in `registerTeam`/`registerSolo`), and recomputes a
+    player's active registrations when their vouches change (hooked into `recomputePlayerSkillProfile`).
+    Age computed at the tournament **start date** (§18.5); sex from `profiles.sex`; UNUSUAL_VOUCH_ACTIVITY
+    from open `fraud_flags`. Best-effort - never breaks the registration write; decision-support only,
+    does not block registration by itself.
+  - **Organizer UI (§25.5):** the registrations dashboard
+    (`components/tournaments/organizer-registrations.tsx`) gains a neutral **eligibility panel** per team
+    - result pill + per-player evidence (community skill, STS /5, active vouchers, Skill-Verified) +
+    reason/flag lines, all neutral wording. Actions: **Approve** (clears to eligible - reason REQUIRED to
+    override a hard rule, §25.2), **Reclassify** (move to a same-format/size division, re-checks
+    eligibility), **Request Skill Review** (per member, reuses Phase-4 `skill_reviews`), **Reject**
+    (existing). Every override writes an append-only `audit_logs` row + a `registration_events` row
+    (`lib/actions/eligibility.ts`).
+  - **Gates green** (typecheck/lint/format/test 32-core/build). Committed `<hash>`, pushed to `main`;
+    Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0011.sql` + return the verify number. Until then:
+    eligibility reads/writes degrade gracefully (settings fall back to config defaults; snapshots still
+    compute), so the deploy is safe pre-0011.
+  - **Deferred:** `HISTORICAL_SKILL_MISMATCH` real history (Phase 12); fraud-flag detectors that would
+    actually raise `UNUSUAL_VOUCH_ACTIVITY` (Phase-4 table shipped, detectors later); the eligibility
+    review-queue rollup in the organizer dashboard analytics (Phase 10, §26.7). **Next: Phase 10.**
+
 ## Next up
 - **Manual: apply `scripts/apply-0010.sql`** (migration 0010, vouch tweaks) + return verify numbers.
-- **Phase 9 - Eligibility / Anti-Sandbagging (§25)** next - the core differentiator. Handover doc:
-  `docs/PHASE_9_KICKOFF.md`.
+- **Manual: apply `scripts/apply-0011.sql`** (migration 0011, eligibility settings) + return verify
+  number (expect eligibility_settings = 3).
+- **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
+  Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).

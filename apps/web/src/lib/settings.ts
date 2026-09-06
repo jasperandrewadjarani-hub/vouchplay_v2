@@ -87,6 +87,24 @@ export async function getSafetySettings(): Promise<SafetySettings> {
   };
 }
 
+export interface EligibilitySettings {
+  thresholds: { minEvidenceVouchers: number; reviewBelowSts: number };
+  enforceHardRules: boolean;
+}
+
+/** Eligibility engine thresholds (handover §25.4, ELIG_V1). Admin-tunable via system_settings. */
+export async function getEligibilitySettings(): Promise<EligibilitySettings> {
+  const m = await loadSettings();
+  const enforce = m['eligibility_enforce_hard_rules'];
+  return {
+    thresholds: {
+      minEvidenceVouchers: num(m, 'eligibility_min_unique_vouchers'),
+      reviewBelowSts: num(m, 'eligibility_review_below_sts'),
+    },
+    enforceHardRules: typeof enforce === 'boolean' ? enforce : false,
+  };
+}
+
 export async function getVouchSettings(): Promise<VouchSettings> {
   const m = await loadSettings();
   return {

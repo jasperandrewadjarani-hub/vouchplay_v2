@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { tournamentTag } from '@/lib/tournaments/queries';
+import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 
 export interface RegistrationActionState {
   ok?: boolean;
@@ -227,6 +228,8 @@ export async function registerTeam(
   try {
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
+    const regId = (data as { registration_id?: string } | null)?.registration_id;
+    if (regId) await computeRegistrationEligibility(regId);
     await revalTournament(tournamentId);
     const status = (data as { status?: string } | null)?.status;
     return {
@@ -296,6 +299,8 @@ export async function registerSolo(
     }
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
+    const regId = (data as { registration_id?: string } | null)?.registration_id;
+    if (regId) await computeRegistrationEligibility(regId);
     await revalTournament(tournamentId);
     const status = (data as { status?: string } | null)?.status;
     return {

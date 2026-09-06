@@ -1,8 +1,21 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { skillByOrdinal } from '@vouchplay/config';
+import {
+  ELIGIBILITY_RESULT_LABELS,
+  ELIGIBILITY_RESULT_DESCRIPTIONS,
+  HARD_RULE_LABELS,
+  REASON_LABELS,
+  FLAG_LABELS,
+} from '@vouchplay/core';
 import { confirmRegistration, rejectRegistration } from '@/lib/actions/registration';
+import {
+  approveEligibility,
+  reclassifyRegistration,
+  requestSkillReviewForRegistration,
+} from '@/lib/actions/eligibility';
 import {
   verifyPayment,
   rejectPayment,
@@ -11,18 +24,28 @@ import {
 } from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
 
-/** Organizer registrations dashboard (handover §26.4) - confirm / reject with waitlist release. */
+export interface EligibilityDivisionOption {
+  id: string;
+  name: string;
+  format: string;
+  teamSize: number;
+}
+
+type ActionResult = { ok?: boolean; error?: string; message?: string };
+
+/** Organizer registrations dashboard (handover §26.4) with the §25.5 eligibility decision-support. */
 export function OrganizerRegistrations({
   tournamentId,
   registrations,
+  divisions,
 }: {
   tournamentId: string;
   registrations: OrganizerRegistration[];
+  divisions: EligibilityDivisionOption[];
 }) {
   if (registrations.length === 0) {
     return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
   }
-  // Group by division for readability.
   const byDivision = new Map<string, OrganizerRegistration[]>();
   for (const r of registrations) {
     const arr = byDivision.get(r.divisionName) ?? [];
@@ -37,7 +60,7 @@ export function OrganizerRegistrations({
           <h3 className="text-foreground mb-2 text-sm font-semibold">{division}</h3>
           <ul className="space-y-2">
             {regs.map((r) => (
-              <RegRow key={r.id} tournamentId={tournamentId} reg={r} />
+              <RegRow key={r.id} tournamentId={tournamentId} reg={r} divisions={divisions} />
             ))}
           </ul>
         </div>
@@ -46,14 +69,49 @@ export function OrganizerRegistrations({
   );
 }
 
-function RegRow({ tournamentId, reg }: { tournamentId: string; reg: OrganizerRegistration }) {
+const ELIG_STYLES: Record<string, string> = {
+  eligible: 'bg-success/10 text-success border-success/30',
+  review: 'bg-warning/10 text-warning border-warning/30',
+  skill_mismatch: 'bg-warning/10 text-warning border-warning/30',
+  ineligible_hard_rule: 'bg-danger/10 text-danger border-danger/30',
+};
+
+interface SnapshotPlayer {
+  playerId: string;
+  result: string;
+  communitySkillLevel: number | null;
+  sts: number;
+  uniqueVoucherCount: number;
+  skillVerified: boolean;
+  hardRuleCodes: string[];
+  reasonCodes: string[];
+  flags: string[];
+}
+interface Snapshot {
+  result?: string;
+  hardRuleCodes?: string[];
+  reasonCodes?: string[];
+  flags?: string[];
+  players?: SnapshotPlayer[];
+  override?: { by: string; at: string; reason: string | null } | null;
+}
+
+function RegRow({
+  tournamentId,
+  reg,
+  divisions,
+}: {
+  tournamentId: string;
+  reg: OrganizerRegistration;
+  divisions: EligibilityDivisionOption[];
+}) {
   const router = useRouter();
   const [reason, setReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function run(fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>) {
+  function run(fn: () => Promise<ActionResult>) {
     setMsg(null);
     start(async () => {
       const res = await fn();
@@ -64,6 +122,7 @@ function RegRow({ tournamentId, reg }: { tournamentId: string; reg: OrganizerReg
 
   const terminal = ['confirmed', 'withdrawn', 'cancelled', 'rejected'].includes(reg.status);
   const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  const nameById = new Map(reg.members.map((m) => [m.id, m.name]));
 
   return (
     <li className="border-border rounded-xl border p-2.5">
@@ -96,6 +155,17 @@ function RegRow({ tournamentId, reg }: { tournamentId: string; reg: OrganizerReg
           )}
         </div>
       </div>
+
+      {/* Eligibility decision-support (§25.5) - neutral, evidence-based. */}
+      <EligibilityPanel
+        reg={reg}
+        tournamentId={tournamentId}
+        divisions={divisions}
+        nameById={nameById}
+        pending={pending}
+        run={run}
+      />
+
       {showReject && !terminal && (
         <div className="mt-2 flex gap-2">
           <input
@@ -193,4 +263,257 @@ function RegRow({ tournamentId, reg }: { tournamentId: string; reg: OrganizerReg
       {msg && <p className="text-foreground-muted mt-1 text-xs">{msg}</p>}
     </li>
   );
+}
+
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="border-border text-foreground-muted rounded-full border px-2 py-0.5 text-[11px]">
+      {children}
+    </span>
+  );
+}
+
+function EligibilityPanel({
+  reg,
+  tournamentId,
+  divisions,
+  nameById,
+  pending,
+  run,
+}: {
+  reg: OrganizerRegistration;
+  tournamentId: string;
+  divisions: EligibilityDivisionOption[];
+  nameById: Map<string, string>;
+  pending: boolean;
+  run: (fn: () => Promise<ActionResult>) => void;
+}) {
+  const snap = (reg.eligibilitySnapshot ?? {}) as Snapshot;
+  const status = reg.eligibilityStatus;
+  const isEligible = status === 'eligible';
+  const isHardRule = status === 'ineligible_hard_rule';
+
+  const [open, setOpen] = useState(!isEligible);
+  const [approveReason, setApproveReason] = useState('');
+  const [showApprove, setShowApprove] = useState(false);
+  const [showReclass, setShowReclass] = useState(false);
+  const [reclassDiv, setReclassDiv] = useState('');
+  const [reclassReason, setReclassReason] = useState('');
+  const [reviewFor, setReviewFor] = useState<string | null>(null);
+  const [reviewReason, setReviewReason] = useState('');
+
+  const resultKey = snap.result as keyof typeof ELIGIBILITY_RESULT_LABELS | undefined;
+  const label =
+    resultKey && ELIGIBILITY_RESULT_LABELS[resultKey]
+      ? ELIGIBILITY_RESULT_LABELS[resultKey]
+      : statusToLabel(status);
+  const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  const sameDivisionTargets = divisions.filter((d) => d.id !== reg.divisionId);
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+          ELIG_STYLES[status] ?? 'border-border text-foreground-muted'
+        }`}
+      >
+        {label}
+        <span aria-hidden>{open ? '▾' : '▸'}</span>
+      </button>
+
+      {open && (
+        <div className="border-border mt-2 rounded-lg border border-dashed p-2.5">
+          <p className="text-foreground-muted text-[11px]">
+            {ELIGIBILITY_RESULT_DESCRIPTIONS[
+              (snap.result as keyof typeof ELIGIBILITY_RESULT_DESCRIPTIONS) ?? 'ELIGIBLE'
+            ] ?? 'Decision support - your call.'}
+          </p>
+
+          {/* Per-player neutral evidence */}
+          <div className="mt-2 space-y-1.5">
+            {(snap.players ?? []).map((p) => {
+              const csl =
+                p.communitySkillLevel != null ? skillByOrdinal(p.communitySkillLevel) : null;
+              return (
+                <div key={p.playerId} className="text-xs">
+                  <div className="text-foreground font-medium">
+                    {nameById.get(p.playerId) ?? 'Player'}
+                  </div>
+                  <div className="text-foreground-muted mt-0.5 flex flex-wrap gap-1.5">
+                    <Chip>Community skill: {csl ? csl.label : 'Unrated'}</Chip>
+                    <Chip>STS: {p.sts.toFixed(1)} / 5</Chip>
+                    <Chip>Active vouches: {p.uniqueVoucherCount}</Chip>
+                    {p.skillVerified && <Chip>Skill-Verified</Chip>}
+                  </div>
+                  {(p.hardRuleCodes.length > 0 ||
+                    p.reasonCodes.length > 0 ||
+                    p.flags.length > 0) && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {p.hardRuleCodes.map((c) => (
+                        <span key={c} className="text-danger text-[11px]">
+                          • {HARD_RULE_LABELS[c as keyof typeof HARD_RULE_LABELS] ?? c}
+                        </span>
+                      ))}
+                      {p.reasonCodes.map((c) => (
+                        <span key={c} className="text-warning text-[11px]">
+                          • {REASON_LABELS[c as keyof typeof REASON_LABELS] ?? c}
+                        </span>
+                      ))}
+                      {p.flags.map((c) => (
+                        <span key={c} className="text-foreground-muted text-[11px]">
+                          • {FLAG_LABELS[c as keyof typeof FLAG_LABELS] ?? c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {snap.override && (
+            <p className="text-foreground-muted mt-2 text-[11px]">
+              Overridden by an organizer{snap.override.reason ? ` - "${snap.override.reason}"` : ''}
+              .
+            </p>
+          )}
+
+          {/* Actions (§25.5) */}
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {!isEligible && (
+              <button
+                type="button"
+                onClick={() => setShowApprove((v) => !v)}
+                className={`${btn} vp-gradient text-white`}
+              >
+                Approve
+              </button>
+            )}
+            {sameDivisionTargets.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowReclass((v) => !v)}
+                className={`${btn} border-border text-foreground border`}
+              >
+                Reclassify
+              </button>
+            )}
+          </div>
+
+          {showApprove && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input
+                value={approveReason}
+                onChange={(e) => setApproveReason(e.target.value)}
+                placeholder={
+                  isHardRule ? 'Reason (required to override a rule)' : 'Reason (optional)'
+                }
+                className="border-border bg-background min-w-[12rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+              />
+              <button
+                type="button"
+                disabled={pending || (isHardRule && !approveReason.trim())}
+                onClick={() => run(() => approveEligibility(reg.id, tournamentId, approveReason))}
+                className={`${btn} vp-gradient text-white`}
+              >
+                Confirm approve
+              </button>
+            </div>
+          )}
+
+          {showReclass && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select
+                value={reclassDiv}
+                onChange={(e) => setReclassDiv(e.target.value)}
+                className="border-border bg-background rounded-lg border px-2.5 py-1.5 text-xs"
+              >
+                <option value="">Move to division…</option>
+                {sameDivisionTargets.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={reclassReason}
+                onChange={(e) => setReclassReason(e.target.value)}
+                placeholder="Reason (optional)"
+                className="border-border bg-background min-w-[10rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+              />
+              <button
+                type="button"
+                disabled={pending || !reclassDiv}
+                onClick={() =>
+                  run(() => reclassifyRegistration(reg.id, tournamentId, reclassDiv, reclassReason))
+                }
+                className={`${btn} border-border text-foreground border`}
+              >
+                Move
+              </button>
+            </div>
+          )}
+
+          {/* Request skill review per member (§25.5) */}
+          <div className="mt-2.5">
+            <p className="text-foreground-muted text-[11px]">Request a skill review:</p>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {(snap.players ?? []).map((p) => (
+                <button
+                  key={p.playerId}
+                  type="button"
+                  onClick={() => {
+                    setReviewFor((cur) => (cur === p.playerId ? null : p.playerId));
+                    setReviewReason('');
+                  }}
+                  className={`${btn} border-border text-foreground border`}
+                >
+                  {nameById.get(p.playerId) ?? 'Player'}
+                </button>
+              ))}
+            </div>
+            {reviewFor && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input
+                  value={reviewReason}
+                  onChange={(e) => setReviewReason(e.target.value)}
+                  placeholder="Why this review? (required)"
+                  className="border-border bg-background min-w-[12rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+                />
+                <button
+                  type="button"
+                  disabled={pending || !reviewReason.trim()}
+                  onClick={() =>
+                    run(() =>
+                      requestSkillReviewForRegistration(
+                        reg.id,
+                        tournamentId,
+                        reviewFor,
+                        reviewReason,
+                      ),
+                    )
+                  }
+                  className={`${btn} vp-gradient text-white`}
+                >
+                  Submit review
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function statusToLabel(status: string): string {
+  const map: Record<string, string> = {
+    eligible: 'Eligible',
+    review: 'Needs review',
+    skill_mismatch: 'Potential skill mismatch',
+    ineligible_hard_rule: 'Does not meet a division rule',
+  };
+  return map[status] ?? status.replace(/_/g, ' ');
 }

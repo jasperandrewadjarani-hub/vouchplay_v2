@@ -4,6 +4,7 @@ import { computeSkillProfile, type VouchInput } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
+import { recomputeEligibilityForPlayer } from '@/lib/eligibility/compute';
 
 /**
  * Recompute a player's cached skill profile (handover §10.6–§10.8). Runs on WRITE (never on read):
@@ -72,4 +73,8 @@ export async function recomputePlayerSkillProfile(targetId: string): Promise<voi
   if (slug) revalidateTag(playerTag(slug));
   revalidateTag(commentsTag(targetId));
   revalidateTag(PLAYERS_LIST_TAG);
+
+  // The player's community skill just changed - refresh any active tournament eligibility snapshots
+  // that depend on it (handover §25, decision-support only, best-effort).
+  await recomputeEligibilityForPlayer(targetId);
 }

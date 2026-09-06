@@ -164,9 +164,26 @@ with the rest edited later on Manage; **partner invite now searches players by n
 handle-only). Migration `0010_vouch_tweaks` written (`scripts/apply-0010.sql`, adds the `both` enum
 value + sets the cooldown) - **apply pending**.
 
-**Next:** Phase 9 - Eligibility / Anti-Sandbagging (§25), the headline decision-support engine. (Open
-ops: apply migration 0010; approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT
-admins enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
+**Phase 9 - Eligibility / Anti-Sandbagging: ✅ BUILT + live (§25, §26.7).** The headline decision-
+support engine - neutral, evidence-based, never auto-punishes, never labels a person; the organizer
+decides. Pure `ELIG_V1` engine in `@vouchplay/core` (`evaluatePlayerEligibility`/`evaluateTeamEligibility`
+→ ELIGIBLE / REVIEW / SKILL_MISMATCH / INELIGIBLE_HARD_RULE + hard-rule codes + neutral reason codes +
+advisory flags), pure/deterministic/version-locked, **21 new unit tests** (core suite 32 green) incl.
+hard-rule failures, below-STS review, above-band mismatch, unrated→review, and team = worst-of-members.
+Hard rules §25.2 (sex/age-at-start/account/team-size/closed/duplicate) short-circuit; skill rules §25.4
+(CSL>max → mismatch; below-STS / thin-evidence / unrated / skill-verified-missing → review). Thresholds
+are admin settings (migration 0011: `eligibility_min_unique_vouchers`, `eligibility_review_below_sts`,
+`eligibility_enforce_hard_rules` - **apply pending**, seeds only, no schema change). Compute-on-write
+fills `registrations.eligibility_status` + `eligibility_snapshot` after `register_team` and on vouch
+change. Organizer **eligibility panel** (§25.5) on the registrations dashboard: per-team neutral
+evidence + Approve (hard-rule override needs a reason, §25.2) / Reclassify / Request Skill Review /
+Reject - every override audit-logged. **§25.6 enforced by a build-failing guard test** that bans the
+person-labels sandbagger/smurf/cheater from all source. Gates green; live on `vouchplayph.vercel.app`.
+
+**Next:** Phase 10 - Organizer Dashboard analytics + Export (§26, §27), incl. the canonical
+Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
+(Open ops: apply migrations 0010 + 0011; approve an organizer via `/staff` → Role apps; seed Tane's
+admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
 
