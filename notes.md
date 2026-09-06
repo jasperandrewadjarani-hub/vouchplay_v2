@@ -733,7 +733,7 @@ Getting the first deploy up hit two issues:
     header-only) - well-formed OOXML. **Per the JT rule, library reopen alone is not sufficient:**
     sent the 3 demo files to Jasper to open in **desktop Excel** and confirm no repair prompt (pending
     that manual confirmation before it's treated as a shippable deliverable).
-  - Gates green (typecheck/lint/format/test 11-web/build). Committed `<hash>`, pushed; deployed;
+  - Gates green (typecheck/lint/format/test 11-web/build). Committed `c72fdf4`, pushed; deployed;
     **re-aliased `vouchplayph.vercel.app`**.
   - **Deferred to Phase 10 part 2:** the dashboard analytics/overview tiles (§26.1: totals, pending
     payments, waitlist, eligibility review count, revenue), richer registration filters, waitlist
