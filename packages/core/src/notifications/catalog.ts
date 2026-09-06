@@ -174,6 +174,15 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `Your request to join ${p.clubName ?? 'the club'} wasn't accepted`,
   ),
 
+  // --- Achievements (§9.4, §27.1) ---
+  achievement_awarded: t(
+    'tournaments',
+    false,
+    (p) =>
+      `You earned ${p.extra ?? 'an achievement'}${p.tournamentName ? ` at ${p.tournamentName}` : ''}`,
+    () => 'It now shows on your profile.',
+  ),
+
   // --- Roles (§27.1) ---
   organizer_application_result: t(
     'roles',

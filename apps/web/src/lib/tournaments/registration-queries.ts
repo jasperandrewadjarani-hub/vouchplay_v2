@@ -262,6 +262,7 @@ export async function getViewerRegistrationState(
 // ---------------------------------------------------------------------------
 export interface OrganizerRegistration {
   id: string;
+  teamId: string;
   divisionId: string;
   divisionName: string;
   status: string;
@@ -358,6 +359,7 @@ export async function getOrganizerRegistrations(
     const pay = payByReg.get(r.id);
     return {
       id: r.id,
+      teamId: r.team_id,
       divisionId: r.division_id,
       divisionName: divName.get(r.division_id) ?? 'Division',
       status: r.status,

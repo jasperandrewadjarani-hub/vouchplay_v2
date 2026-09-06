@@ -9,6 +9,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/service';
 import { getEligibilitySettings } from '@/lib/settings';
 import { tournamentTag } from '@/lib/tournaments/queries';
+import { hasHistoricalSkillMismatch } from '@/lib/players/profile-extras';
 
 /**
  * Eligibility compute-on-write (handover §25, ELIG_V1). Decision-SUPPORT only: this fills
@@ -191,6 +192,16 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     minimumSts: div.minimum_sts != null ? Number(div.minimum_sts) : null,
   };
 
+  // §50 historical-mismatch evidence: organizer-confirmed play in a clearly-higher division.
+  const historicalByPlayer = new Map<string, boolean>(
+    await Promise.all(
+      members.map(
+        async (m) =>
+          [m.player_id, await hasHistoricalSkillMismatch(m.player_id, rules.maximumSkill)] as const,
+      ),
+    ),
+  );
+
   const players: PlayerEligibilityInput[] = members.map((m) => {
     const prof = profileById.get(m.player_id);
     const skill = skillById.get(m.player_id);
@@ -205,7 +216,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
       ageAtStart: ageAt(prof?.date_of_birth ?? null, startAt),
       accountActive: (prof?.account_status ?? 'active') === 'active',
       unusualVouchActivity: unusualByPlayer.has(m.player_id),
-      historicalSkillMismatch: false, // Phase 12 - no history source yet.
+      historicalSkillMismatch: historicalByPlayer.get(m.player_id) ?? false,
     };
   });
 

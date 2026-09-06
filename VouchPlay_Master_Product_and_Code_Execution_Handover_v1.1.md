@@ -216,11 +216,20 @@ club-join / role-result / moderation events. UI: header unread badge, `/me/notif
 `/me/settings/notifications` preferences. Email switches on by adding SMTP_USER/SMTP_PASS to the app env.
 Gates green; live.
 
-**Next:** Phase 12 - Achievements / Skill-tags / History; also lights up the real
-`HISTORICAL_SKILL_MISMATCH` eligibility signal (a no-op until history exists). (Open ops: apply
-migration 0012; Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer
-via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear
-Supabase over-quota before 21 Sep 2026.)
+**Phase 12 - Achievements / Skill-tags / History (§9.4, §9.5, §49, §50): ✅ BUILT + live.** Migration
+0012 **applied** (notifications live). Skill tags (community-endorsed traits, not part of CSL) +
+Achievements (OFFICIAL issued by a verified organizer per-team on the dashboard, with tournament/
+division/placement + verified label; COMMUNITY claims player-added + peer-endorsed, clearly labeled) +
+Playing history (derived from registrations, no new table) on profiles. Migration 0013 (`skill_tags`,
+`player_skill_tag_votes`, `achievements`, `player_achievements`, `achievement_endorsements` §36.11-36.15)
+- **apply pending**. **§50 HISTORICAL_SKILL_MISMATCH now fires** on evidence only (organizer-confirmed
+play in a clearly-higher division; no invented equivalencies), wired into ELIG_V1. New
+`achievement_awarded` notification. Gates green; live.
+
+**Next:** Phase 13 - Admin Control Center (§30+) or the next JT priority. (Open ops: apply migration
+0013; Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer via
+`/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase
+over-quota before 21 Sep 2026.)
 
 ---
 

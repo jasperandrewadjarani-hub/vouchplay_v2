@@ -797,13 +797,49 @@ Getting the first deploy up hit two issues:
     a true async email outbox worker; web/native push adapters; admin notifications (§27.4);
     reciprocal/coach/sponsorship/recruitment events not yet in the product.
 
+- **2026-09-06** - **Migration 0012 APPLIED (Notifications live).** Jasper ran `scripts/apply-0012.sql`;
+  verify returned notif_tables=2, notif_rls_policies=2. In-app notifications + preferences fully active.
+
+- **2026-09-06** - **PHASE 12 - Achievements / Skill-tags / History (§9.4, §9.5, §49, §50): BUILT +
+  deployed + live.** Scope (Jasper): official achievements issued **per-team on the organizer
+  dashboard**. Awaiting one manual SQL paste (migration 0013).
+  - **Migration 0013 (`0013_achievements_skilltags.sql`, WRITTEN - apply pending):** `skill_tags`
+    (seeded 10 traits), `player_skill_tag_votes`, `achievements` (official/community), `player_achievements`
+    (+placement), `achievement_endorsements` (§36.11-36.15) + enums + RLS. These are **attributed,
+    public community endorsements** (unlike the anonymous vouch aggregate): public read; writes via
+    service role. One-paste apply: **`scripts/apply-0013.sql`** (expect ach_tables=5,
+    skill_tags_seeded=10, ach_rls_policies=5).
+  - **Skill tags (§9.5):** community-endorsed traits on profiles (top tags + counts; an authed non-self
+    viewer toggles endorsements). NOT part of CSL. `toggleSkillTag`.
+  - **Achievements (§9.4):** **Official** (issued by a verified organizer - Champion/Runner-up/Bronze/
+    MVP/Sportsmanship/Participant from `@vouchplay/config`; carries a "Verified organizer" label +
+    tournament/division + placement) and **Community claims** (player-added, peer-endorsed, clearly
+    labeled "not an official record"). Actions: `addCommunityAchievement`/remove, `toggleEndorsement`,
+    organizer `issueOfficialAchievement`/`removeOfficialAchievement` (authz'd + audited; notifies each
+    player via the new `achievement_awarded` notification type). Issued per-team from the organizer
+    registrations dashboard (Award dropdown on confirmed teams).
+  - **Playing history (§49):** a profile "Playing history" section **derived from registrations** (no
+    new table) - tournament, division, status, date (public non-draft tournaments only).
+  - **§50 HISTORICAL_SKILL_MISMATCH lit up:** the ELIG_V1 advisory flag now fires on *evidence only* -
+    an official achievement tied to a division whose skill FLOOR is above the entered division's max
+    (organizer-confirmed higher-division play). No invented score equivalencies. Wired into
+    `lib/eligibility/compute.ts` (`hasHistoricalSkillMismatch`).
+  - **UI:** real Achievements + Skill-tags panels + Playing-history section replace the empty profile
+    scaffolds; organizer Award control per confirmed team.
+  - Gates green (typecheck/lint/format/test - core 37, apps/web 15, config 4/build). Committed `<hash>`,
+    pushed; deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0013.sql` + return verify numbers. Until then
+    reads degrade to empty, writes error gracefully; deploy is safe pre-0013.
+  - **Deferred:** achievement media/photos (§48); community-claim reporting (reuse Phase-4 reports
+    later); admin-issued (vs organizer-issued) achievements; the "repeated podiums" nuance in §50 (V1
+    flags any organizer-confirmed higher-division entry).
+
 ## Next up
-- **Manual: apply `scripts/apply-0012.sql`** (migration 0012, notifications) + return verify numbers
-  (expect notif_tables=2, notif_rls_policies=2).
+- **Manual: apply `scripts/apply-0013.sql`** (migration 0013, achievements/skill-tags) + return verify
+  numbers (expect ach_tables=5, skill_tags_seeded=10, ach_rls_policies=5).
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
-- **Phase 12 - Achievements / Skill-tags / History (§ later phase)** - also unlocks the real
-  `HISTORICAL_SKILL_MISMATCH` eligibility signal (currently a no-op). Confirm scope before building.
+- **Phase 13 - Admin Control Center** (§30+) or another priority - confirm next scope with Jasper.
 - **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
   Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →

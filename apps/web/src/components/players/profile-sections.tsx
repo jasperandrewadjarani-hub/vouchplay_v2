@@ -146,25 +146,68 @@ export function VouchComments({
   );
 }
 
-export function Achievements() {
-  return (
-    <SectionCard title="Achievements">
-      <EmptyNote>
-        No achievements yet. Official achievements (tournament results, MVP, sportsmanship) are
-        issued by verified organizers or admins; players can also add community claims for others to
-        endorse.
-      </EmptyNote>
-    </SectionCard>
-  );
-}
+const HISTORY_STATUS_LABELS: Record<string, string> = {
+  confirmed: 'Confirmed',
+  waitlisted: 'Waitlisted',
+  payment_submitted: 'Payment submitted',
+  under_review: 'Under review',
+};
 
-export function SkillTags() {
+/** Playing history (handover §49) - derived from the player's tournament registrations. */
+export function PlayingHistory({
+  history,
+}: {
+  history: {
+    tournamentName: string;
+    tournamentSlug: string | null;
+    divisionName: string;
+    status: string;
+    date: string | null;
+  }[];
+}) {
+  if (history.length === 0) {
+    return (
+      <SectionCard title="Playing history">
+        <EmptyNote>No tournament history yet.</EmptyNote>
+      </SectionCard>
+    );
+  }
   return (
-    <SectionCard title="Skill tags">
-      <EmptyNote>
-        No skill tags yet. Community-endorsed traits like Dinking, Court IQ or Strong Defense show
-        here. Skill tags don&apos;t affect the community skill level.
-      </EmptyNote>
+    <SectionCard title="Playing history">
+      <ul className="space-y-2">
+        {history.map((h, i) => (
+          <li
+            key={`${h.tournamentSlug}-${h.divisionName}-${i}`}
+            className="border-border bg-background flex items-center justify-between gap-2 rounded-xl border p-3"
+          >
+            <div className="min-w-0">
+              <span className="text-foreground text-sm font-medium">
+                {h.tournamentSlug ? (
+                  <Link href={`/tournaments/${h.tournamentSlug}`} className="text-primary">
+                    {h.tournamentName}
+                  </Link>
+                ) : (
+                  h.tournamentName
+                )}
+              </span>
+              <p className="text-foreground-muted mt-0.5 text-xs">{h.divisionName}</p>
+            </div>
+            <div className="shrink-0 text-right">
+              <span className="text-foreground-muted text-xs">
+                {HISTORY_STATUS_LABELS[h.status] ?? h.status}
+              </span>
+              {h.date && (
+                <p className="text-foreground-muted text-[11px]">
+                  {new Date(h.date).toLocaleDateString('en-US', {
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </p>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </SectionCard>
   );
 }

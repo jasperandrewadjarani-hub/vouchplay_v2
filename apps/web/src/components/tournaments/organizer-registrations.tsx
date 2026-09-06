@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { skillByOrdinal } from '@vouchplay/config';
+import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
 import {
   ELIGIBILITY_RESULT_LABELS,
   ELIGIBILITY_RESULT_DESCRIPTIONS,
@@ -16,6 +16,7 @@ import {
   reclassifyRegistration,
   requestSkillReviewForRegistration,
 } from '@/lib/actions/eligibility';
+import { issueOfficialAchievement } from '@/lib/actions/achievements';
 import {
   verifyPayment,
   rejectPayment,
@@ -188,6 +189,7 @@ function RegRow({
   const [reason, setReason] = useState('');
   const [showReject, setShowReject] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [award, setAward] = useState<string>(OFFICIAL_ACHIEVEMENTS[0].key);
   const [pending, start] = useTransition();
 
   function run(fn: () => Promise<ActionResult>) {
@@ -336,6 +338,32 @@ function RegRow({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Awards (§9.4) - issue an official achievement to a confirmed team. */}
+      {reg.status === 'confirmed' && (
+        <div className="border-border mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed p-2">
+          <span className="text-foreground-muted text-xs">Award:</span>
+          <select
+            value={award}
+            onChange={(e) => setAward(e.target.value)}
+            className="border-border bg-background rounded-lg border px-2 py-1 text-xs"
+          >
+            {OFFICIAL_ACHIEVEMENTS.map((a) => (
+              <option key={a.key} value={a.key}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => issueOfficialAchievement(tournamentId, reg.teamId, award))}
+            className={`${btn} vp-gradient text-white`}
+          >
+            Issue
+          </button>
         </div>
       )}
 

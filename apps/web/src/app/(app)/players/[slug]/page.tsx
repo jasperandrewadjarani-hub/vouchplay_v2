@@ -25,9 +25,15 @@ import {
 import {
   SkillDistribution,
   VouchComments,
-  Achievements,
-  SkillTags,
+  PlayingHistory,
 } from '@/components/players/profile-sections';
+import { AchievementsPanel } from '@/components/players/achievements-panel';
+import { SkillTagsPanel } from '@/components/players/skill-tags-panel';
+import {
+  getPlayerSkillTags,
+  getPlayerAchievements,
+  getPlayerHistory,
+} from '@/lib/players/profile-extras';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -70,6 +76,11 @@ export default async function PlayerProfilePage({ params }: Params) {
   if (!player) notFound();
 
   const comments = await getPlayerComments(player.id);
+  const [skillTags, achievements, history] = await Promise.all([
+    getPlayerSkillTags(player.id, viewer.viewerId),
+    getPlayerAchievements(player.id, viewer.viewerId),
+    getPlayerHistory(player.id),
+  ]);
   const authed = viewer.viewerId !== null;
   const iBlocked =
     authed && !player.isOwnProfile
@@ -194,9 +205,21 @@ export default async function PlayerProfilePage({ params }: Params) {
       </header>
 
       <SkillDistribution distribution={player.distribution} total={distributionTotal} />
+      <AchievementsPanel
+        authed={authed}
+        isOwnProfile={player.isOwnProfile}
+        official={achievements.official}
+        community={achievements.community}
+      />
+      <SkillTagsPanel
+        playerId={player.id}
+        slug={slug}
+        authed={authed}
+        isOwnProfile={player.isOwnProfile}
+        tags={skillTags}
+      />
+      <PlayingHistory history={history} />
       <VouchComments comments={comments} authed={authed} />
-      <Achievements />
-      <SkillTags />
     </div>
   );
 }

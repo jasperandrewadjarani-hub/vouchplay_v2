@@ -537,6 +537,55 @@ export interface NotificationPreferenceRow {
   updated_at: string;
 }
 
+// ---------- Achievements, Skill Tags (migration 0013) ----------
+export type AchievementType = 'official' | 'community_claim';
+export type AchievementIssuerType = 'system' | 'organizer' | 'admin' | 'self';
+
+export interface SkillTagRow {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+  created_at: string;
+}
+
+export interface PlayerSkillTagVoteRow {
+  id: string;
+  player_id: string;
+  tag_id: string;
+  voter_id: string;
+  created_at: string;
+}
+
+export interface AchievementRow {
+  id: string;
+  type: AchievementType;
+  title: string;
+  description: string | null;
+  issuer_type: AchievementIssuerType;
+  issuer_id: string | null;
+  tournament_id: string | null;
+  division_id: string | null;
+  issued_at: string;
+  verification_status: string;
+  created_at: string;
+}
+
+export interface PlayerAchievementRow {
+  id: string;
+  player_id: string;
+  achievement_id: string;
+  placement: string | null;
+  created_at: string;
+}
+
+export interface AchievementEndorsementRow {
+  id: string;
+  achievement_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 export interface AuditLogRow {
   id: string;
   actor_id: string | null;
