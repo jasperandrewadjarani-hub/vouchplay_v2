@@ -1,5 +1,5 @@
 /**
- * @vouchplay/analytics — product-analytics event catalog (handover §52). Never include sensitive
+ * @vouchplay/analytics - product-analytics event catalog (handover §52). Never include sensitive
  * identity/payment content in events. Scaffold placeholder with the critical domain events named.
  */
 export const ANALYTICS_EVENTS = [

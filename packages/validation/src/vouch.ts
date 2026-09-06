@@ -8,7 +8,7 @@ import { z } from 'zod';
 export const vouchSchema = z.object({
   targetId: z.string().uuid('Invalid target'),
   skillLevel: z.coerce.number().int().min(0, 'Select a skill level').max(6, 'Invalid skill level'),
-  interactionType: z.enum(['with', 'against'], { message: 'Select how you played' }),
+  interactionType: z.enum(['with', 'against', 'both'], { message: 'Select how you played' }),
   asCoach: z.boolean().default(false),
   anonymous: z.boolean().default(true),
   comment: z.string().trim().max(1000, 'Comment is too long').optional().or(z.literal('')),

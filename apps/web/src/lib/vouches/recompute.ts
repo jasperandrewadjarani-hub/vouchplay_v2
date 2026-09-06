@@ -8,9 +8,9 @@ import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries'
 /**
  * Recompute a player's cached skill profile (handover §10.6–§10.8). Runs on WRITE (never on read):
  * called after any change to a target's active vouches. Reads ALL active vouches for the target via
- * the service client (crosses RLS — anonymity is preserved because only the public-safe aggregate is
+ * the service client (crosses RLS - anonymity is preserved because only the public-safe aggregate is
  * written out), computes CSL/STS/distribution with the version-locked @vouchplay/core algorithm, and
- * upserts player_skill_profiles. An existing admin_override verification is preserved (§10.8 — admin
+ * upserts player_skill_profiles. An existing admin_override verification is preserved (§10.8 - admin
  * override does not change calculated STS, and stays verified). Invalidates the player's cache tags.
  */
 export async function recomputePlayerSkillProfile(targetId: string): Promise<void> {

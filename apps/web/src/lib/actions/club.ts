@@ -242,7 +242,7 @@ export async function requestJoin(clubId: string, slug: string): Promise<ClubAct
     return {
       ok: true,
       message:
-        status === 'active' ? 'You joined the club.' : 'Request sent — an admin will review it.',
+        status === 'active' ? 'You joined the club.' : 'Request sent - an admin will review it.',
     };
   } catch {
     return { error: 'Joining is temporarily unavailable.' };

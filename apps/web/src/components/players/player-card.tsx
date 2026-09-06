@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 import { PlayerAvatar } from './player-avatar';
 import { ClubStack } from './club-stack';
 import { VouchButton } from './vouch-button';
@@ -86,8 +87,12 @@ export function PlayerCard({ player, authed }: { player: PlayerCardDTO; authed: 
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-        <Link href={profileHref} className="text-primary text-sm font-medium hover:underline">
+        <Link
+          href={profileHref}
+          className="text-primary inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+        >
           View profile
+          <LinkSpinner />
         </Link>
         <VouchButton
           slug={player.slug}

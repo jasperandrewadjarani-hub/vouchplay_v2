@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { SKILL_BANDS, PH_CITIES } from '@vouchplay/config';
 
@@ -38,9 +38,10 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
     ),
   );
 
-  function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function apply(form: HTMLFormElement) {
+    const fd = new FormData(form);
     const params = new URLSearchParams();
     const setIf = (key: string, value: FormDataEntryValue | null) => {
       const v = typeof value === 'string' ? value.trim() : '';
@@ -58,6 +59,21 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
     router.push(qs ? `/players?${qs}` : '/players');
   }
 
+  function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (timer.current) clearTimeout(timer.current);
+    apply(e.currentTarget);
+  }
+
+  // Instant results: debounce changes (typing) and apply automatically. The Search button remains
+  // as an explicit fallback. Tradeoff vs manual apply: a request per debounced change (mild extra
+  // load, cache-first) for zero-click filtering.
+  function onChange(e: FormEvent<HTMLFormElement>) {
+    const form = e.currentTarget;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => apply(form), 350);
+  }
+
   const hasAny = Boolean(
     current.q ||
     current.city ||
@@ -70,7 +86,11 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
   );
 
   return (
-    <form onSubmit={submit} className="border-border bg-surface space-y-3 rounded-2xl border p-4">
+    <form
+      onSubmit={submit}
+      onChange={onChange}
+      className="border-border bg-surface space-y-3 rounded-2xl border p-4"
+    >
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search

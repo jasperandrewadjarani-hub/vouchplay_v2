@@ -84,7 +84,7 @@ export interface SystemSettingRow {
 }
 
 // ---------- Vouch engine (migration 0004) ----------
-export type VouchInteraction = 'with' | 'against';
+export type VouchInteraction = 'with' | 'against' | 'both';
 export type VouchVisibility = 'anonymous' | 'public';
 export type VouchStatus = 'active' | 'withdrawn' | 'invalidated';
 export type VouchChangeType = 'created' | 'updated' | 'withdrawn' | 'invalidated' | 'reinstated';

@@ -12,7 +12,7 @@ const empty: VouchActionState = {};
 
 /**
  * Vouch modal (handover §10.1). Skill, played with/against, optional coach weight (only rendered for
- * approved coaches), anonymous toggle (default ON — public attribution of the rating), optional
+ * approved coaches), anonymous toggle (default ON - public attribution of the rating), optional
  * always-attributed comment. The server enforces every locked rule; this is the entry surface.
  */
 export function VouchForm({
@@ -91,6 +91,7 @@ export function VouchForm({
             <Select id="interactionType" name="interactionType" defaultValue="with" required>
               <option value="with">Played with (partner)</option>
               <option value="against">Played against (opponent)</option>
+              <option value="both">Both (partner and opponent)</option>
             </Select>
           </Field>
 

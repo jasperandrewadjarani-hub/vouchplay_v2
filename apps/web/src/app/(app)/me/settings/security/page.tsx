@@ -12,7 +12,7 @@ const REASONS: Record<string, string> = {
 };
 
 /**
- * Account security — two-factor authentication (Admin MFA framework, handover §7/§30). Available to
+ * Account security - two-factor authentication (Admin MFA framework, handover §7/§30). Available to
  * everyone; required for staff before privileged surfaces (enforced by requireStaffMfa server-side).
  */
 export default async function SecurityPage({

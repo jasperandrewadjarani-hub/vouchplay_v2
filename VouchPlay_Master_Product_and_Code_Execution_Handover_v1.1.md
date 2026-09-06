@@ -1,8 +1,8 @@
 # VouchPlay Master Product & Code Execution Handover v1.2
 
-_(File retains its `…v1.1.md` name; content is v1.2 — see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.2 - see Changelog.)_
 
-**Status:** LOCKED FOR EXECUTION — Phases 0–1 built (see §0Z Current Build Status)  
+**Status:** LOCKED FOR EXECUTION - Phases 0–1 built (see §0Z Current Build Status)  
 **Owner:** JT Consulting & Analytics Inc.  
 **Founders / Product Leads:** Jasper Adjarani, Tane Valdez  
 **Product:** VouchPlay  
@@ -14,27 +14,27 @@ _(File retains its `…v1.1.md` name; content is v1.2 — see Changelog.)_
 **sources**
 Local project folder: D:\claude_\P006b_PlayerProfiling\vouchplay_v2
 GitHub repo: https://github.com/jasperandrewadjarani-hub/vouchplay_v2
-Vercel project: `vouchplayph` (jasperandrewadjarani-hub) — **LIVE:** https://vouchplayph.vercel.app (also https://vouchplay-v2.vercel.app)
+Vercel project: `vouchplayph` (jasperandrewadjarani-hub) - **LIVE:** https://vouchplayph.vercel.app (also https://vouchplay-v2.vercel.app)
 Supabase project: https://supabase.com/dashboard/project/itrosesiywpbaxtmucbb
 Gmail account (for SMTP): vouchplay@gmail.com
 
 ---
 
-# 0Z. Current Build Status — as of 2026-09-05
+# 0Z. Current Build Status - as of 2026-09-05
 
 > Living status block. Update this whenever a phase completes. Full detail lives in
 > `notes.md`; `CLAUDE.md` / `AGENTS.md` hold agent working rules + deploy gotchas.
 
 **Live:** https://vouchplayph.vercel.app (public, connected to Supabase). Auto-deploys on push to
-`main`; `vouchplayph.vercel.app` is currently a manual alias — re-alias after each deploy (or promote
+`main`; `vouchplayph.vercel.app` is currently a manual alias - re-alias after each deploy (or promote
 it to a project domain) until it's made a permanent production domain.
 
-**Phase 0 — Foundations: ✅ DONE.** npm-workspaces monorepo (`apps/web` + `packages/{config,core,db,
+**Phase 0 - Foundations: ✅ DONE.** npm-workspaces monorepo (`apps/web` + `packages/{config,core,db,
 ui,validation,analytics}`), Next.js + React 19 + Tailwind v4 + TS strict, locked theme tokens +
 dark/light toggle, app shell (5 tabs, header, sidebar, bottom nav), PWA manifest, ESLint/Prettier/
 Vitest, GitHub Actions CI.
 
-**Phase 1 — Database, Auth, Permissions: ✅ core DONE.**
+**Phase 1 - Database, Auth, Permissions: ✅ core DONE.**
 - DB migrations applied to Supabase (`0001_core_identity`, `0002_seed_system_settings`):
   `profiles`, `user_roles`, `role_applications`, `identity_verifications`, `system_settings`,
   `audit_logs` (append-only); `updated_at` + new-user triggers; SECURITY DEFINER authz helpers
@@ -44,14 +44,14 @@ Vitest, GitHub Actions CI.
 - Supabase Auth config: "Confirm email" OFF (OTP is the verification), Email OTP length 6, Magic-link
   template emits `{{ .Token }}`, redirect allowlist set for both prod domains + localhost.
 - Phase-1 leftovers now handled in/around Phase 2: DB types hand-authored in `@vouchplay/db`
-  (`supabase gen types` deferred — CLI/token unavailable); avatar upload on onboarding + `avatars`
+  (`supabase gen types` deferred - CLI/token unavailable); avatar upload on onboarding + `avatars`
   bucket (created live); `/me/settings/password` reset landing; RLS/role-spoofing verification
   (`scripts/verify-rls.mjs`, 6/6); Admin MFA framework (`lib/auth/mfa.ts` + `/me/settings/security`).
   **Still pending a manual SQL paste (`scripts/apply-0003-and-admin.sql`):** migration 0003
-  (`public_player_facts` + storage policies) and the JT admin grant — dashboard automation is
+  (`public_player_facts` + storage policies) and the JT admin grant - dashboard automation is
   classifier-blocked.
 
-**Phase 2 — Player Directory & Profile: ✅ DONE (live).** Public `/players` directory (concise
+**Phase 2 - Player Directory & Profile: ✅ DONE (live).** Public `/players` directory (concise
 PlayerCard, §8.4 search/filters, pagination, no STS ranking) and `/players/[slug]` profile (header,
 skill-distribution/comments/achievements/skill-tags sections, §28 sharing metadata). RLS-safe DTO
 projections (no `select(*)`), cache-first reads with tag invalidation (§34A), server-side authz.
@@ -66,56 +66,56 @@ root `vercel.json` + root-level `next` dep make monorepo detection work. Revert 
 the documented exit plan.
 
 **Deviations from this document (approved by JT):** transactional email uses **Gmail SMTP** for the
-pilot (not a dedicated provider — §34A.11), behind the `EmailProvider` interface; switch before scale.
+pilot (not a dedicated provider - §34A.11), behind the `EmailProvider` interface; switch before scale.
 
 **Ops flags:** Supabase org is **over-quota** (projects restricted from 21 Sep 2026 if not cleared);
 Google consent screen shows the Supabase project domain (cosmetic; needs paid custom domain to rebrand).
 
-**Phase 3 — Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
-STS components, Skill-Verified, effective weights) — pure/deterministic, 11 unit tests incl.
+**Phase 3 - Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
+STS components, Skill-Verified, effective weights) - pure/deterministic, 11 unit tests incl.
 hand-computed cases. Migration 0004 applied (vouches, revisions, comments, requests,
-player_skill_profiles, blocks, fraud_flags + RLS; anonymous voucher identity never public — public
+player_skill_profiles, blocks, fraud_flags + RLS; anonymous voucher identity never public - public
 skill data via the safe `player_skill_profiles` aggregate). `submitVouch`/`withdrawVouch`/
 `requestVouch` enforce every locked rule server-side (self/active/block/coach-toggle/one-active-per-
 pair/rolling-limit/cooldown, revisions); recompute-on-write; live vouch form + CSL/STS/Skill-Verified
 on cards+profile + real distribution/comments. Pipeline smoke-tested against the live DB
 (insert → recompute → public read = correct values, then cleaned up). Deferred: fraud-flag detectors
-(§11.2 table shipped), admin invalidate UI (Phase 30), block-management UI (Phase 4 — block already
+(§11.2 table shipped), admin invalidate UI (Phase 30), block-management UI (Phase 4 - block already
 enforced in the vouch path).
 
 **UI/UX:** a bold-sporty polish pass shipped across the whole app (gradient/glow tokens + utilities,
-hero headers, hover-lift cards, gradient nav indicators, real home hero, branded auth) — layered on
+hero headers, hover-lift cards, gradient nav indicators, real home hero, branded auth) - layered on
 the locked §33.2 palette, theme-aware, reduced-motion safe.
 
-**Phase 4 — Safety & Moderation: ✅ BUILT + live (§14, §11.3, §30.6, §47).** Reports (player + vouch
-comment; reporter always stored — never anon to admin), Skill Review (separate; submitter stored,
+**Phase 4 - Safety & Moderation: ✅ BUILT + live (§14, §11.3, §30.6, §47).** Reports (player + vouch
+comment; reporter always stored - never anon to admin), Skill Review (separate; submitter stored,
 never public; organizer tournament-context), Block/Unblock (enforced across vouch + request; Phase-5
 initiation points reuse the same guard), a staff-gated moderation queue (`/staff` + `/staff/moderation`:
 reports · skill reviews · fraud flags · support) behind `requireStaffPage` + `requireStaffMfa`, with
 actions dismiss/warn/invalidate-vouch/restrict-vouching/restrict-account/suspend/ban/lift + hide/
-remove/restore comment + raise/review fraud flag — **each writes an immutable `audit_logs` row**.
+remove/restore comment + raise/review fraud flag - **each writes an immutable `audit_logs` row**.
 Restricted/suspended enforced server-side (`account_status` + timed `suspended_until`/
 `vouching_restricted_until`); banned/suspended already 404 publicly. Appeals/support via
 `/me/support`. **Anonymous voucher identity exposed only through the staff-gated
 `getVouchAuthorForModeration` path** (§37, §4.5). Migration `0005_safety_moderation` **applied**
 (verify 3/5/6/2). Evidence in V1 = optional text note + link in `evidence` jsonb (private-bucket file
-evidence §38 deferred, approved by JT). Fraud-flag detectors (§11.2) deferred — manual raise + review
+evidence §38 deferred, approved by JT). Fraud-flag detectors (§11.2) deferred - manual raise + review
 shipped. Gates green; live on `vouchplayph.vercel.app`.
 
-**Phase 5 — Clubs core: ✅ BUILT + live (§15).** Scope: Clubs CORE only (recruitment/sponsorship §16
+**Phase 5 - Clubs core: ✅ BUILT + live (§15).** Scope: Clubs CORE only (recruitment/sponsorship §16
 + bidding §16A deferred). `clubs` + `club_memberships` (§36.16–36.17) with separate verification /
 activity status, `is_club_*()` RLS helpers, single-owner + single-live-membership constraints.
 `/clubs` directory, `/clubs/[slug]` public page (§15.5), `/clubs/new`, `/clubs/[slug]/manage`
 (members + settings + owner danger zone). Server actions cover create / join (public-instant vs
 approval) / leave / approve-reject-remove / role changes / ownership transfer / privacy / activity /
-soft-delete — all authz'd server-side via active membership. Admin club **verification** + suspend/
+soft-delete - all authz'd server-side via active membership. Admin club **verification** + suspend/
 reinstate added to the `/staff` queue (Clubs tab), each audit-logged. Player cards/profiles show real
 club stacks. Logos reuse the public `avatars` bucket (`club-logos/` prefix). Migration
-`0006_clubs` written (`scripts/apply-0006.sql`) — **apply pending** (code degrades gracefully until
+`0006_clubs` written (`scripts/apply-0006.sql`) - **apply pending** (code degrades gracefully until
 it lands). Deferred: §16 offers, §16A bids, manager-initiated invites, delete re-auth (typed-name
 confirm used). Migration `0006_clubs` **applied** (verify 2/3/3). Gates green; live.
 
-**Phase 6 — Tournament Setup: ✅ BUILT + live (§17–§19).** Organizer role application (`/me`) + admin
+**Phase 6 - Tournament Setup: ✅ BUILT + live (§17–§19).** Organizer role application (`/me`) + admin
 approval in the `/staff` Role-apps queue grants `organizer`; only approved organizers/admins create
 tournaments (action + page guard + RLS). `tournaments` + `divisions` + `tournament_organizers` +
 `tournament_interests` + `tournament_announcements` (§36.19–36.22, §36.30) + `is_tournament_organizer()`
@@ -124,35 +124,48 @@ tournaments (action + page guard + RLS). `tournaments` + `divisions` + `tourname
 (§17.4) with granular permission jsonb; interested toggle; announcements; cover uploads (public bucket,
 `tournament-covers/` prefix). UI: `/tournaments` discovery, `/tournaments/[slug]` public page (§19),
 `/tournaments/new`, `/tournaments/[slug]/manage`. Migration `0007_tournaments` written
-(`scripts/apply-0007.sql`) — **apply pending** (reads degrade to empty, writes error until it lands).
+(`scripts/apply-0007.sql`) - **apply pending** (reads degrade to empty, writes error until it lands).
 Deferred: registration/partner/teams/club-representation (Phase 7), payments (Phase 8), eligibility
 (Phase 9), §16 offers, §16A bids. Migration `0007_tournaments` **applied** (verify 5/1/8). Gates green; live.
 
-**Phase 7 — Partner, Team & Registration: ✅ BUILT + live (§20–§23).** `partner_invitations`, `teams`,
+**Phase 7 - Partner, Team & Registration: ✅ BUILT + live (§20–§23).** `partner_invitations`, `teams`,
 `team_members`, `tournament_player_club_representations`, `registrations`, `registration_events`,
 `waitlist_entries` (§36.23–36.27, §36.25A, §36.29) + RLS. **Slot reservation is transactional (LOCKED
-§23.2)** — `register_team` locks the division row and atomically holds-or-waitlists; reciprocal
+§23.2)** - `register_team` locks the division row and atomically holds-or-waitlists; reciprocal
 partner cross-invites merge atomically in `accept_partner_invitation`; `release_slot` promotes the
 waitlist on withdraw/reject. Partner invites (§20), doubles team formation, singles solo entry,
-multi-club representation (§22 — max_clubs_per_player + active-membership + club-lock), duplicate
+multi-club representation (§22 - max_clubs_per_player + active-membership + club-lock), duplicate
 prevention (§21.4). UI: signed-in registration panel on the tournament page (register/withdraw, invite,
 invitations, club select) + organizer registrations dashboard on manage (confirm/reject, waitlist
 release). Confirm path: organizer confirms directly (payments = Phase 8). Migration `0008_registration`
-written (`scripts/apply-0008.sql`) — **applied** (verify 7/5/7). Deferred: eligibility (§25),
+written (`scripts/apply-0008.sql`) - **applied** (verify 7/5/7). Deferred: eligibility (§25),
 hold-expiry/waitlist auto-promotion cron, partner-finder browse UI, club-lock override UI. Gates green; live.
 
-**Phase 8 — Payments: ✅ BUILT + live (§24).** V1 abstract manual-proof layer (`PaymentProvider`
+**Phase 8 - Payments: ✅ BUILT + live (§24).** V1 abstract manual-proof layer (`PaymentProvider`
 interface in core for a future gateway, §24.5). `payments` table (§36.28) + a PRIVATE `payment-proofs`
-bucket (§38) — proof reachable only via server-issued 60s signed URLs gated to team/organizer/staff.
+bucket (§38) - proof reachable only via server-issued 60s signed URLs gated to team/organizer/staff.
 Player submits proof → registration `payment_submitted` + 24h review grace; organizer verify →
-confirmed, reject(reason) → back to payment_pending (resubmit), mark refunded — all audited. fee=0
+confirmed, reject(reason) → back to payment_pending (resubmit), mark refunded - all audited. fee=0
 divisions use the organizer-confirm-directly path. UI: payment step in the registration panel +
 verify/reject/refund + View-proof in the organizer dashboard; accepted-methods in tournament config.
-Migration `0009_payments` written (`scripts/apply-0009.sql`) — **apply pending**. Deferred: real
-gateway, partial refunds, payment-deadline cron. Gates green; live.
+Migration `0009_payments` **applied** (verify 1/1/1/1). Deferred: real gateway, partial refunds,
+payment-deadline cron. Gates green; live.
 
-**Next:** Phase 9 — Eligibility / Anti-Sandbagging (§25), the headline decision-support engine. (Open
-ops: apply migration 0009; approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT
+**Post-Phase-8 UX tweak batch (2026-09-06, Jasper):** em-dashes removed app-wide (replaced with
+hyphens) across copy/placeholders + docs; click-loading spinners on Create Club / Create Tournament /
+View profile / Vouch / Manage (via `useLinkStatus`); theme toggle is Light/Dark only (default still
+system); vouch interaction adds a **Both** option; **vouch update cooldown lowered 30d → 1d** (admin
+setting, migration 0010); sign-out confirmation prompt; header now shows the signed-in user's avatar
+beside the bell; **avatar/logo/cover/proof upload error fixed** - raised the Next Server Actions
+`bodySizeLimit` to 8MB (default 1MB was rejecting >1MB files); instant (debounced) filtering on
+Players/Clubs/Tournaments directories (Search button kept as fallback); tournament dates are
+**date-only** (time not required); **minimal create-tournament form** (name/city/dates/visibility)
+with the rest edited later on Manage; **partner invite now searches players by name** (was
+handle-only). Migration `0010_vouch_tweaks` written (`scripts/apply-0010.sql`, adds the `both` enum
+value + sets the cooldown) - **apply pending**.
+
+**Next:** Phase 9 - Eligibility / Anti-Sandbagging (§25), the headline decision-support engine. (Open
+ops: apply migration 0010; approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT
 admins enroll TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
 
 ---
@@ -237,7 +250,7 @@ VouchPlay provides **evidence and decision support**. Final tournament classific
 
 # 2. Locked Scope by Release
 
-## 2.1 V1 / MVP — Must Build
+## 2.1 V1 / MVP - Must Build
 
 ### Identity & Access
 - Email/password signup with email verification.
@@ -486,13 +499,13 @@ Roles are additive permissions.
 
 ## 4.1 Global Roles
 
-- `PLAYER` — automatic for every registered account.
-- `COACH` — approved by JT Admin.
-- `ORGANIZER` — approved by JT Admin.
-- `MODERATOR` — JT staff role.
-- `SUPPORT` — JT staff support role.
-- `ADMIN` — JT administrative role.
-- `SUPER_ADMIN` — highest JT authority.
+- `PLAYER` - automatic for every registered account.
+- `COACH` - approved by JT Admin.
+- `ORGANIZER` - approved by JT Admin.
+- `MODERATOR` - JT staff role.
+- `SUPPORT` - JT staff support role.
+- `ADMIN` - JT administrative role.
+- `SUPER_ADMIN` - highest JT authority.
 
 ## 4.2 Contextual Roles
 
@@ -511,19 +524,19 @@ Contextual roles are relationships, not global roles:
 | View public profiles | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Edit own profile | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Vouch | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Use coach-weight vouch | — | ✓ | If Coach too | If Coach too | If Coach too | Configurable | Configurable |
+| Use coach-weight vouch | - | ✓ | If Coach too | If Coach too | If Coach too | Configurable | Configurable |
 | Create club | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Manage owned club | Owner only | Owner only | Owner only | ✓ | — | ✓ | ✓ |
-| Apply as Coach | ✓ | — | ✓ | ✓ | ✓ | — | — |
-| Apply as Organizer | ✓ | ✓ | — | ✓ | ✓ | — | — |
-| Create tournament | — | — | ✓ | If Organizer | — | ✓ | ✓ |
-| Manage own tournament | — | — | ✓ | If assigned | — | ✓ | ✓ |
-| Review reports | — | — | Limited tournament skill review only | Club-specific limited | ✓ | ✓ | ✓ |
-| See anonymous voucher identity | — | — | — | — | Moderation need only | ✓ | ✓ |
-| Verify identity | — | — | — | — | — | ✓ | ✓ |
-| Approve roles | — | — | — | — | — | ✓ | ✓ |
-| Change system config | — | — | — | — | — | Limited | ✓ |
-| Manage Admin roles | — | — | — | — | — | — | ✓ |
+| Manage owned club | Owner only | Owner only | Owner only | ✓ | - | ✓ | ✓ |
+| Apply as Coach | ✓ | - | ✓ | ✓ | ✓ | - | - |
+| Apply as Organizer | ✓ | ✓ | - | ✓ | ✓ | - | - |
+| Create tournament | - | - | ✓ | If Organizer | - | ✓ | ✓ |
+| Manage own tournament | - | - | ✓ | If assigned | - | ✓ | ✓ |
+| Review reports | - | - | Limited tournament skill review only | Club-specific limited | ✓ | ✓ | ✓ |
+| See anonymous voucher identity | - | - | - | - | Moderation need only | ✓ | ✓ |
+| Verify identity | - | - | - | - | - | ✓ | ✓ |
+| Approve roles | - | - | - | - | - | ✓ | ✓ |
+| Change system config | - | - | - | - | - | Limited | ✓ |
+| Manage Admin roles | - | - | - | - | - | - | ✓ |
 
 All authorization must be enforced server-side and through database row-level security where appropriate.
 
@@ -555,7 +568,7 @@ Profile is accessed from **Me**, not duplicated permanently in the header.
 
 ### 5.2.1 Logo treatment (design refinement, 2026-09-05)
 
-- **Enlarge the header logo** — make the VouchPlay wordmark visibly bigger/more prominent than the
+- **Enlarge the header logo** - make the VouchPlay wordmark visibly bigger/more prominent than the
   current build (still fitting a ~56px header; scale up the mark, don't overflow the bar).
 - Directly **below the logo**, add **very small but legible** microcopy: **"by JT Consulting &
   Analytics"** (roughly 9–10px, `text-foreground-muted`, non-wrapping). The logo + this line form one
@@ -598,11 +611,11 @@ All JT branding in About may link to:
 
 **About** and **FAQ** are reached from **Me → Help / FAQ** and **Me → About** (this section), and
 their full content is specified in **§29**. They are **not** yet built (planned Phase 12 / late
-Phase 1 legal-pages pass) — routes `/about` and `/faq` (and `/terms`, `/privacy`) currently render
+Phase 1 legal-pages pass) - routes `/about` and `/faq` (and `/terms`, `/privacy`) currently render
 placeholder stubs.
 
 To make them easy to find, also surface them in:
-- the **Me** list (primary home — grouped under a "Help & About" or Settings group),
+- the **Me** list (primary home - grouped under a "Help & About" or Settings group),
 - the header **•••** overflow on relevant pages (About · FAQ · Contact Support), and
 - a small **footer** on public pages (About · FAQ · Terms · Privacy · "by JT Consulting & Analytics").
 
@@ -619,14 +632,14 @@ At large widths:
 
 # 6. Home Dashboard
 
-Home is a personalized utility dashboard with a light **gamified spotlight** on top — not a social feed.
+Home is a personalized utility dashboard with a light **gamified spotlight** on top - not a social feed.
 
 Sections are prioritized dynamically:
 
 1. Profile / skill summary.
 2. Action-required cards.
-3. **Bidding spotlight** — top players currently being bid on (see §16A).
-4. **Leaderboards** — top players, most-bidded players, top clubs (with medals). See §6.1.
+3. **Bidding spotlight** - top players currently being bid on (see §16A).
+4. **Leaderboards** - top players, most-bidded players, top clubs (with medals). See §6.1.
 5. Upcoming tournament registrations.
 6. Partner requests.
 7. Vouch requests.
@@ -639,10 +652,10 @@ Example action cards:
 
 - "2 vouch requests waiting."
 - "Partner invitation for PZZ Cup 2027."
-- "Payment proof rejected — resubmit."
+- "Payment proof rejected - resubmit."
 - "Your team was promoted from the waitlist."
 - "Your Coach application was approved."
-- "🔥 3 clubs are bidding to sponsor you — review offers."
+- "🔥 3 clubs are bidding to sponsor you - review offers."
 
 ## 6.1 Leaderboards & Bidding Spotlight (2026-09-05)
 
@@ -651,28 +664,28 @@ card layout (a horizontally-scrollable "podium" row + tappable leaderboard cards
 screen.
 
 **Leaderboards (medal styling 🥇🥈🥉 for the top 3):**
-- **Top Players** — ranked by an **engagement/credibility composite**, NOT raw STS. Suggested inputs:
+- **Top Players** - ranked by an **engagement/credibility composite**, NOT raw STS. Suggested inputs:
   verified-match/tournament participation, achievements/medals, Skill-Verified status, number of
-  distinct credible vouchers, and bidding interest — deliberately excluding a raw "highest STS"
+  distinct credible vouchers, and bidding interest - deliberately excluding a raw "highest STS"
   ranking to avoid incentivizing vouch manipulation (handover gamification guardrail).
-- **Most Bidded** — players with the most/highest active bids (see §16A). This is the headline
+- **Most Bidded** - players with the most/highest active bids (see §16A). This is the headline
   gamified metric.
-- **Top Clubs** — ranked by club activity: verified members, players sponsored/recruited via winning
+- **Top Clubs** - ranked by club activity: verified members, players sponsored/recruited via winning
   bids, tournament participation, medals won by represented players.
 
 **Bidding spotlight:** a "🔥 Hot right now" row of players receiving active bids, each card showing the
-current top bid, number of bidding clubs, and a countdown to bid close — tap to view the player and
+current top bid, number of bidding clubs, and a countdown to bid close - tap to view the player and
 (if it's you) to accept/decline.
 
 **Rules & guardrails:**
 - Leaderboards are **scoped** (by city/region and by tournament where relevant), refreshed on a cadence
   (not real-time), and cache-first per §34A. Never rank by raw STS or expose internal effective weights.
-- Bidding uses **reputation/points, not money** in V1 (see §16A) — no real-currency wagering.
+- Bidding uses **reputation/points, not money** in V1 (see §16A) - no real-currency wagering.
 - Respect privacy/visibility: a player can opt out of appearing in public leaderboards (profile
   setting); minors and restricted/suspended accounts are excluded.
 - Admin can hide/reset leaderboards and exclude flagged accounts.
 
-Leaderboards + bidding are **Phase 2+ / a dedicated gamification sub-phase** — foundational player
+Leaderboards + bidding are **Phase 2+ / a dedicated gamification sub-phase** - foundational player
 directory & profiles (Phase 2) land first, then bidding (§16A), then leaderboards read from it.
 
 ---
@@ -681,14 +694,14 @@ directory & profiles (Phase 2) land first, then bidding (§16A), then leaderboar
 
 ## 7.1 Signup Methods
 
-### Option A — Email
+### Option A - Email
 - Enter email.
 - Send one-time verification email/code through custom SMTP.
 - Verify email.
 - Set password.
 - Continue to profile creation.
 
-### Option B — Google
+### Option B - Google
 - OAuth via Google.
 - If email is new, create account.
 - If email maps to an existing account, link identity where safe.
@@ -834,8 +847,8 @@ Primary actions:
 - Share.
 
 Contextual actions:
-- Recruit Player — club owner/admin.
-- Sponsor Player — club owner/admin.
+- Recruit Player - club owner/admin.
+- Sponsor Player - club owner/admin.
 - Request Skill Review.
 - Report.
 - Block.
@@ -846,11 +859,11 @@ Show vouch distribution by skill band.
 
 Example:
 
-- Beginner — 2
-- Novice — 6
-- Low Intermediate — 18
-- High Intermediate — 5
-- Advanced — 0
+- Beginner - 2
+- Novice - 6
+- Low Intermediate - 18
+- High Intermediate - 5
+- Advanced - 0
 
 Each row can display up to several voucher icons.
 
@@ -1393,13 +1406,13 @@ and feeds tournament **club representation** (§22).
 ## 16A.1 What a bid is
 
 A bid is a club's competing offer to a player for either:
-- **Representation** — the player represents the club in a specific tournament (feeds §22 club
+- **Representation** - the player represents the club in a specific tournament (feeds §22 club
   representation on acceptance), and/or
-- **Sponsorship** — the club sponsors the player (covers entry fee / gear / support), with an offer note.
+- **Sponsorship** - the club sponsors the player (covers entry fee / gear / support), with an offer note.
 
-Bids are **points-based, never money** in V1 (reputation/soft-currency only — no real-currency
+Bids are **points-based, never money** in V1 (reputation/soft-currency only - no real-currency
 wagering, escrow, or transfer; this keeps V1 out of gambling/payments regulation). A club spends from a
-**bid budget** of points (allocated by Admin / earned through activity — exact economy is an Admin
+**bid budget** of points (allocated by Admin / earned through activity - exact economy is an Admin
 setting, §30.7). Losing/withdrawn bids **refund** the club's points.
 
 ## 16A.2 Actors & eligibility
@@ -1424,7 +1437,7 @@ Per-player "auction" for a given (player, tournament) context:
 Rules:
 - New higher bids mark previous bids **OUTBID** (points held until the auction closes, then refunded to
   non-winners). Enforce a **minimum increment** (Admin setting).
-- The **player chooses** — they may accept the top bid, accept a **lower** bid (preference is allowed;
+- The **player chooses** - they may accept the top bid, accept a **lower** bid (preference is allowed;
   it's their representation), or decline all. There is no auto-award purely by highest points.
 - **Acceptance is transactional** (§35.3): it closes the auction, creates the winning
   representation/sponsorship record (via §16 `club_offers` + §22 representation), debits the winning
@@ -1587,9 +1600,9 @@ A division is assembled from attributes.
 ## 18.2 Skill Policy
 
 Values:
-- `BAND` — bounded by skill.
-- `OPEN` — no skill restriction.
-- `CUSTOM` — organizer-defined rules.
+- `BAND` - bounded by skill.
+- `OPEN` - no skill restriction.
+- `CUSTOM` - organizer-defined rules.
 
 Default bands:
 - Beginner.
@@ -2183,9 +2196,9 @@ Organizers can download the **current tournament state** at any time, subject to
 
 Required export types:
 
-1. **Tournament System XLSX** — canonical operational handover.
-2. **Normalized XLSX** — human-readable workbook.
-3. **CSV** — flat exports by entity.
+1. **Tournament System XLSX** - canonical operational handover.
+2. **Normalized XLSX** - human-readable workbook.
+3. **CSV** - flat exports by entity.
 
 The export must support, at minimum:
 - tournament configuration,
@@ -2522,8 +2535,8 @@ Future share-card types:
 - How is my information used?
 - How do I delete my account?
 - What is club bidding, and how do I accept a bid? (see §16A)
-- Are bids real money? (No — reputation points only in V1.)
-- How are the Home leaderboards ranked? (engagement/medals/bidding — not raw STS; see §6.1)
+- Are bids real money? (No - reputation points only in V1.)
+- How are the Home leaderboards ranked? (engagement/medals/bidding - not raw STS; see §6.1)
 - Can I hide from leaderboards / turn off bids?
 
 ## 29.2 Skill Explanation
@@ -2834,9 +2847,9 @@ Build reusable components:
 - Skeleton.
 - ErrorState.
 - OfflineBanner.
-- BrandLockup (enlarged logo + "by JT Consulting & Analytics" microcopy, links to JT FB — §5.2.1).
-- LeaderboardCard + MedalBadge (🥇🥈🥉) — Home leaderboards (§6.1).
-- BidCard + BidModal + BidSpotlightRow — gamified player bidding (§16A, §6.1).
+- BrandLockup (enlarged logo + "by JT Consulting & Analytics" microcopy, links to JT FB - §5.2.1).
+- LeaderboardCard + MedalBadge (🥇🥈🥉) - Home leaderboards (§6.1).
+- BidCard + BidModal + BidSpotlightRow - gamified player bidding (§16A, §6.1).
 
 ## 33.5 Mobile Interaction
 
@@ -2997,7 +3010,7 @@ Official references:
 - Gmail API quotas: `https://developers.google.com/workspace/gmail/api/reference/quota`
 - Google OAuth production readiness: `https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance`
 
-## 34A.1 Current Platform Baseline — Supabase
+## 34A.1 Current Platform Baseline - Supabase
 
 As of the verification date:
 
@@ -3281,7 +3294,7 @@ Avoid generating dozens of width × quality × format combinations for each avat
 
 For small already-optimized SVG/logo assets, do not unnecessarily route through expensive transformations.
 
-## 34A.11 Email Architecture — Do Not Use Gmail as the Primary Transactional Transport
+## 34A.11 Email Architecture - Do Not Use Gmail as the Primary Transactional Transport
 
 Production VouchPlay email should use a transactional SMTP provider through Supabase custom SMTP.
 
@@ -5135,13 +5148,13 @@ Target initial:
 
 ---
 
-# 58. Execution Order — Code Handover Plan
+# 58. Execution Order - Code Handover Plan
 
 The coding team/agent must execute phases in this order unless a blocker is documented.
 
 ---
 
-## Phase 0 — Repository & Foundations
+## Phase 0 - Repository & Foundations
 
 ### Build
 - monorepo.
@@ -5167,7 +5180,7 @@ The coding team/agent must execute phases in this order unless a blocker is docu
 
 ---
 
-## Phase 1 — Database, Auth, Permissions
+## Phase 1 - Database, Auth, Permissions
 
 ### Build
 - core enums.
@@ -5193,7 +5206,7 @@ The coding team/agent must execute phases in this order unless a blocker is docu
 
 ---
 
-## Phase 2 — Player Directory & Profile
+## Phase 2 - Player Directory & Profile
 
 ### Build
 - public player routes.
@@ -5213,7 +5226,7 @@ The coding team/agent must execute phases in this order unless a blocker is docu
 
 ---
 
-## Phase 3 — Vouch Engine
+## Phase 3 - Vouch Engine
 
 ### Build
 - vouches.
@@ -5243,7 +5256,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 4 — Safety & Moderation
+## Phase 4 - Safety & Moderation
 
 ### Build
 - skill review.
@@ -5263,7 +5276,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 5 — Clubs
+## Phase 5 - Clubs
 
 ### Build
 - create club.
@@ -5285,7 +5298,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 6 — Tournament Setup
+## Phase 6 - Tournament Setup
 
 ### Build
 - Organizer role.
@@ -5306,7 +5319,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 7 — Partner, Team & Registration
+## Phase 7 - Partner, Team & Registration
 
 ### Build
 - partner finder.
@@ -5328,7 +5341,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 8 — Payments
+## Phase 8 - Payments
 
 ### Build
 - organizer payment config.
@@ -5346,7 +5359,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 9 — Eligibility / Anti-Sandbagging
+## Phase 9 - Eligibility / Anti-Sandbagging
 
 ### Build
 - eligibility engine.
@@ -5367,7 +5380,7 @@ This phase must be stable before tournament eligibility.
 
 ---
 
-## Phase 10 — Organizer Dashboard & Export
+## Phase 10 - Organizer Dashboard & Export
 
 ### Build
 - overview.
@@ -5405,7 +5418,7 @@ or its repository-relative equivalent.
 
 ---
 
-## Phase 11 — Notifications
+## Phase 11 - Notifications
 
 ### Build
 - notification table.
@@ -5423,7 +5436,7 @@ or its repository-relative equivalent.
 
 ---
 
-## Phase 12 — Achievements, Skill Tags, History
+## Phase 12 - Achievements, Skill Tags, History
 
 ### Build
 - official achievements.
@@ -5439,7 +5452,7 @@ or its repository-relative equivalent.
 
 ---
 
-## Phase 13 — Admin, Analytics, Support
+## Phase 13 - Admin, Analytics, Support
 
 ### Build
 - complete Admin control center.
@@ -5457,7 +5470,7 @@ or its repository-relative equivalent.
 
 ---
 
-## Phase 14 — Hardening & Beta
+## Phase 14 - Hardening & Beta
 
 ### Build/Test
 - load testing.
@@ -5488,7 +5501,7 @@ No public beta until:
 
 ---
 
-## Phase 15 — Pilot Launch
+## Phase 15 - Pilot Launch
 
 Recommended sequence:
 1. JT internal alpha.
@@ -5503,7 +5516,7 @@ Recommended sequence:
 
 ---
 
-## Phase 16 — Native Apps
+## Phase 16 - Native Apps
 
 After PWA stability:
 - Expo app.
@@ -5745,7 +5758,7 @@ Any AI coding agent or development team receiving this document must follow thes
 
 # 68. Recommended First Development Tickets
 
-## EPIC 0 — Foundation
+## EPIC 0 - Foundation
 - VP-001 Initialize monorepo.
 - VP-002 Configure Next.js/TypeScript/Tailwind.
 - VP-003 Configure Supabase local/staging.
@@ -5754,7 +5767,7 @@ Any AI coding agent or development team receiving this document must follow thes
 - VP-006 Add Sentry/analytics shell.
 - VP-007 Add PWA manifest.
 
-## EPIC 1 — Identity
+## EPIC 1 - Identity
 - VP-101 Auth schema and profile migration.
 - VP-102 Email signup.
 - VP-103 Google OAuth.
@@ -5764,7 +5777,7 @@ Any AI coding agent or development team receiving this document must follow thes
 - VP-107 Audit log.
 - VP-108 Admin role approval.
 
-## EPIC 2 — Player
+## EPIC 2 - Player
 - VP-201 Player directory.
 - VP-202 Player card.
 - VP-203 Player profile.
@@ -5772,7 +5785,7 @@ Any AI coding agent or development team receiving this document must follow thes
 - VP-205 Public profile metadata.
 - VP-206 Profile visibility.
 
-## EPIC 3 — Vouch
+## EPIC 3 - Vouch
 - VP-301 Vouch schema.
 - VP-302 Vouch API.
 - VP-303 Vouch modal.
@@ -5940,9 +5953,9 @@ must be documented in a new version.
 Recommended format:
 
 ```text
-v1.0 — Initial locked execution handover
-v1.1 — Minor product-rule revision
-v2.0 — Breaking domain or architecture revision
+v1.0 - Initial locked execution handover
+v1.1 - Minor product-rule revision
+v2.0 - Breaking domain or architecture revision
 ```
 
 Maintain a changelog at the bottom.
@@ -5952,13 +5965,13 @@ Maintain a changelog at the bottom.
 # Changelog
 
 ## v1.2 (2026-09-05)
-- Added **§0Z Current Build Status** — Phases 0–1 built and LIVE (https://vouchplayph.vercel.app);
+- Added **§0Z Current Build Status** - Phases 0–1 built and LIVE (https://vouchplayph.vercel.app);
   Supabase migrations applied; email-OTP + password + Google auth verified; Next-15 deploy workaround;
   Gmail-SMTP deviation; open Phase-1 items; ops flags (Supabase over-quota).
-- Added **§16A Gamified Player Bidding** — clubs place competing **points-based** (not money) bids to
+- Added **§16A Gamified Player Bidding** - clubs place competing **points-based** (not money) bids to
   represent/sponsor a player; player accepts one; transactional acceptance; anti-abuse; notifications;
   phasing (post-Phase-2 gamification sub-phase). Added `player_bids` entity (§36.18A).
-- Reworked **§6 Home** — added **§6.1 Leaderboards & Bidding Spotlight**: Top Players (engagement/medals,
+- Reworked **§6 Home** - added **§6.1 Leaderboards & Bidding Spotlight**: Top Players (engagement/medals,
   NOT raw STS), **Most Bidded**, Top Clubs (medals 🥇🥈🥉); bidding "🔥 Hot right now" spotlight; privacy
   opt-out + guardrails against STS-manipulation.
 - **Logo aesthetics (§5.2.1):** enlarge the header wordmark; add very-small "by JT Consulting &

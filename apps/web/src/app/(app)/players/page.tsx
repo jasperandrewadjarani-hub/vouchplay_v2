@@ -8,7 +8,7 @@ import { SearchFilters, type ActiveFilters } from '@/components/players/search-f
 export const metadata: Metadata = {
   title: 'Players',
   description:
-    'Browse the VouchPlay player directory — skill reputations built by community vouches, not self-declaration.',
+    'Browse the VouchPlay player directory - skill reputations built by community vouches, not self-declaration.',
 };
 
 type SP = Record<string, string | string[] | undefined>;

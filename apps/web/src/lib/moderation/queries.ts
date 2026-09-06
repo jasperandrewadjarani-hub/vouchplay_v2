@@ -6,7 +6,7 @@ import type { ReportRow, SkillReviewRow, SupportTicketRow, FraudFlagRow } from '
 /**
  * Staff-side moderation reads (handover §30.6). All of these run behind the /staff page guard
  * (requireStaffPage) AND re-verify staff at the action layer for anything sensitive. The service
- * client is used because staff must see rows that RLS would otherwise scope to the owner — this is the
+ * client is used because staff must see rows that RLS would otherwise scope to the owner - this is the
  * ONLY place anonymous voucher identity is resolvable, and getVouchAuthorForModeration guards it
  * again (handover §37, §4.5 "See anonymous voucher identity: Moderation need only").
  */
@@ -282,7 +282,7 @@ export async function listClubsForModeration(): Promise<ClubModerationItem[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Anonymous voucher identity — staff-gated ONLY (§37, §4.5). Never call from a public path.
+// Anonymous voucher identity - staff-gated ONLY (§37, §4.5). Never call from a public path.
 // ---------------------------------------------------------------------------
 export interface VouchAuthorForModeration {
   voucherId: string;
@@ -296,7 +296,7 @@ export interface VouchAuthorForModeration {
 
 /**
  * Reveal the real author of a vouch for moderation purposes. Re-verifies a stepped-up staff session
- * (assertStaffActor) before returning identity — this is the single authorized path that pierces the
+ * (assertStaffActor) before returning identity - this is the single authorized path that pierces the
  * anonymity the public UI guarantees. Returns null when unauthorized or not found.
  */
 export async function getVouchAuthorForModeration(

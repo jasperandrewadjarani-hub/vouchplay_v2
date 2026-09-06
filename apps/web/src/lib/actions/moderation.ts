@@ -118,7 +118,7 @@ export async function resolveSkillReview(
 }
 
 // ---------------------------------------------------------------------------
-// Fraud flags (§11.3) — never auto-punish; review only.
+// Fraud flags (§11.3) - never auto-punish; review only.
 // ---------------------------------------------------------------------------
 export async function reviewFraudFlag(
   flagId: string,
@@ -241,7 +241,7 @@ export async function updateSupportTicket(
 }
 
 // ---------------------------------------------------------------------------
-// Content actions (§47) — hide / remove a vouch comment.
+// Content actions (§47) - hide / remove a vouch comment.
 // ---------------------------------------------------------------------------
 async function setCommentStatus(
   commentId: string,
@@ -295,7 +295,7 @@ export async function restoreComment(
 }
 
 // ---------------------------------------------------------------------------
-// Vouch invalidation (§11.1, §11.3) — remove a vouch from scoring; recompute the target.
+// Vouch invalidation (§11.1, §11.3) - remove a vouch from scoring; recompute the target.
 // ---------------------------------------------------------------------------
 export async function invalidateVouch(vouchId: string, reason: string): Promise<SafetyActionState> {
   const actor = await assertStaffActor();
@@ -346,7 +346,7 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Club moderation (§15.1–§15.2) — admin verification + activity status.
+// Club moderation (§15.1–§15.2) - admin verification + activity status.
 // ---------------------------------------------------------------------------
 export async function verifyClub(
   clubId: string,
@@ -437,7 +437,7 @@ export async function setClubModerationStatus(
 }
 
 /**
- * Load a target's active vouches for the moderation invalidation panel (staff-gated — reveals the
+ * Load a target's active vouches for the moderation invalidation panel (staff-gated - reveals the
  * anonymous voucher identity only through this authorized path, §37/§4.5).
  */
 export async function loadActiveVouchesForTarget(targetId: string): Promise<ModerationVouch[]> {
@@ -445,7 +445,7 @@ export async function loadActiveVouchesForTarget(targetId: string): Promise<Mode
 }
 
 // ---------------------------------------------------------------------------
-// Account actions (§47) — warn / restrict vouching / restrict account / suspend / ban / lift.
+// Account actions (§47) - warn / restrict vouching / restrict account / suspend / ban / lift.
 // ---------------------------------------------------------------------------
 export type AccountAction =
   'warn' | 'restrict_vouching' | 'restrict_account' | 'suspend' | 'ban' | 'lift_status';
@@ -483,7 +483,7 @@ export async function applyAccountAction(
       vouching_restricted_until: string | null;
     };
 
-    // A warning changes no status — it is an audited advisory record only.
+    // A warning changes no status - it is an audited advisory record only.
     if (action === 'warn') {
       await writeAudit({
         actorId: actor.viewerId,

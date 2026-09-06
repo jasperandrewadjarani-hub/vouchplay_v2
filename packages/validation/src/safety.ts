@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Safety & moderation form schemas (handover §14, §11.3, §47). Enum value tuples are locked to
  * migration 0005 + @vouchplay/config (moderation.ts). Evidence in V1 is an optional text note plus
- * optional links (stored in the `evidence` jsonb column) — private-bucket file evidence (§38) is a
+ * optional links (stored in the `evidence` jsonb column) - private-bucket file evidence (§38) is a
  * later fold-in.
  */
 

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client';
  *
  * The OAuth start runs CLIENT-side via the Supabase browser client: `signInWithOAuth` sets
  * `window.location` to Google's consent URL itself. (A Server Action calling `redirect()` to an
- * external URL does not reliably navigate the browser in Next 15 — hence the client approach.)
+ * external URL does not reliably navigate the browser in Next 15 - hence the client approach.)
  */
 export function GoogleButton({ next }: { next?: string }) {
   const [loading, setLoading] = useState(false);
@@ -59,7 +59,7 @@ export function GoogleButton({ next }: { next?: string }) {
   );
 }
 
-/** Google button plus an "or" divider — the whole block disappears when Google is disabled. */
+/** Google button plus an "or" divider - the whole block disappears when Google is disabled. */
 export function GoogleSection({ next }: { next?: string }) {
   if (process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED !== 'true') return null;
 

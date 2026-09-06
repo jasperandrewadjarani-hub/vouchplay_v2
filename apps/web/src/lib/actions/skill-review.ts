@@ -9,7 +9,7 @@ import type { SafetyActionState } from './report';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Submit a skill review (handover §14.1, §36.32) — SEPARATE from a report. Used when a player
+ * Submit a skill review (handover §14.1, §36.32) - SEPARATE from a report. Used when a player
  * believes another player's displayed/community skill is materially inaccurate. Submitter identity is
  * stored but never publicly displayed (RLS: requester + staff only). A tournament context is
  * optional; organizers may attach one (only an organizer may submit a tournament-context review).

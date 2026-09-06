@@ -1,5 +1,5 @@
 /**
- * Community Skill Level + Skill-Trust Score (STS_V1) — handover §10.6–§10.8, §3.3.
+ * Community Skill Level + Skill-Trust Score (STS_V1) - handover §10.6–§10.8, §3.3.
  *
  * These are PURE, DETERMINISTIC functions (the Phase-3 gate). They take the active, non-invalidated
  * vouches for one target plus the Admin-configurable constants, and return a full calculation
@@ -7,7 +7,7 @@
  * version for auditability (§10.10).
  *
  * Separation of concepts (LOCKED, §3.3, §72):
- *  - Community Skill Level (CSL) = weighted MEDIAN of vouch skill ordinals — a SKILL measure.
+ *  - Community Skill Level (CSL) = weighted MEDIAN of vouch skill ordinals - a SKILL measure.
  *  - STS (0–5) = CONFIDENCE in that assessment, NOT skill. Never used to rank players.
  *  - Skill Verified is derived from STS + unique-voucher count; it does NOT feed back into weight.
  */
@@ -20,7 +20,7 @@ export interface VouchInput {
   skillOrdinal: number;
   /** Effective weight already resolved from the weight model (§10.5). Must be > 0. */
   effectiveWeight: number;
-  /** Voucher id — used to count UNIQUE active vouchers (§10.7A). */
+  /** Voucher id - used to count UNIQUE active vouchers (§10.7A). */
   voucherId: string;
 }
 
@@ -49,7 +49,7 @@ export interface SkillVerifiedThresholds {
 export interface SkillProfileComputation {
   /** Weighted-median skill ordinal, or null when there are no active vouches. */
   communitySkillLevel: number | null;
-  /** Weighted mean — internal diagnostics only (§10.6.5), never shown as the skill. */
+  /** Weighted mean - internal diagnostics only (§10.6.5), never shown as the skill. */
   weightedMean: number | null;
   /** STS 0.0–scale, rounded to 1 decimal. */
   sts: number;

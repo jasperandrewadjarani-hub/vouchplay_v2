@@ -26,7 +26,7 @@ function bool(formData: FormData, name: string): boolean {
  * Create or update a vouch (handover §10.1–§10.6). Enforces the LOCKED rules server-side:
  * no self-vouch, both accounts active, not blocked either way, coach weight only for approved
  * coaches, one active vouch per pair (update replaces + records a revision), rolling 24h limit,
- * and the 30-day update cooldown. Recomputes the target's skill profile on success.
+ * and the update cooldown (admin setting; default 1 day). Recomputes the target's skill profile on success.
  */
 export async function submitVouch(
   _prev: VouchActionState,
@@ -194,7 +194,7 @@ export async function submitVouch(
       });
     }
 
-    // Optional comment — ALWAYS attributed (§10.1), never anonymous.
+    // Optional comment - ALWAYS attributed (§10.1), never anonymous.
     if (v.comment && v.comment.trim()) {
       await svc.from('vouch_comments').insert({
         vouch_id: vouchId,

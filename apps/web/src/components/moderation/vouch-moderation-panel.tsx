@@ -21,8 +21,8 @@ function bandLabel(ordinal: number): string {
 
 /**
  * Staff vouch-invalidation panel (handover §11.1, §11.3, §37). Loads a target's active vouches on
- * demand — this is an authorized moderation path, so it reveals the real (otherwise-anonymous)
- * voucher identity — and lets staff invalidate a vouch with a mandatory reason (audited + recomputed).
+ * demand - this is an authorized moderation path, so it reveals the real (otherwise-anonymous)
+ * voucher identity - and lets staff invalidate a vouch with a mandatory reason (audited + recomputed).
  */
 export function VouchModerationPanel({
   targetId,

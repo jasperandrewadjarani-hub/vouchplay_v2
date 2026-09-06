@@ -5,7 +5,7 @@ import { Share2, Check } from 'lucide-react';
 
 /**
  * Share action (handover §28): native Web Share API where available, else copy-link fallback.
- * Not a protected action — available to everyone.
+ * Not a protected action - available to everyone.
  */
 export function ShareButton({
   url,
@@ -29,14 +29,14 @@ export function ShareButton({
         return;
       }
     } catch {
-      // user cancelled or share failed — fall through to copy
+      // user cancelled or share failed - fall through to copy
     }
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard blocked — no-op
+      // clipboard blocked - no-op
     }
   }
 

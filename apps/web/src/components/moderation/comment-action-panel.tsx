@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { hideComment, removeComment, restoreComment } from '@/lib/actions/moderation';
 
-/** Staff content actions for a reported vouch comment (handover §47 — hide / remove / restore). */
+/** Staff content actions for a reported vouch comment (handover §47 - hide / remove / restore). */
 export function CommentActionPanel({ commentId }: { commentId: string }) {
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);

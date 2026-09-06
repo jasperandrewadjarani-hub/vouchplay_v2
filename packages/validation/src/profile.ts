@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Profile onboarding (handover §7.3). Required: first/last name, nickname, sex, self-rated skill.
  * City is required for the V1 launch region (Admin can relax later). self_rated_skill is a canonical
- * skill-band ordinal 0..6 (§3.1 — order is LOCKED; mirrored in @vouchplay/config SKILL_BANDS).
+ * skill-band ordinal 0..6 (§3.1 - order is LOCKED; mirrored in @vouchplay/config SKILL_BANDS).
  */
 
 export const SEX_VALUES = ['male', 'female'] as const;

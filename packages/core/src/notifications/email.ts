@@ -5,12 +5,12 @@
  * provider and forbids Gmail as primary transport. For the closed pilot we use Gmail SMTP via
  * `vouchplay@gmail.com`. This is deliberately behind the `EmailProvider` interface so switching to
  * Resend/Postmark/SendGrid later is a single-adapter change. Constraints to respect while on Gmail:
- *   - consumer Gmail ≈ 500 sends/day — adequate for the first ~100 pilot users, NOT for scale;
- *   - no delivery/bounce webhooks — keep volume low and prefer in-app notifications;
+ *   - consumer Gmail ≈ 500 sends/day - adequate for the first ~100 pilot users, NOT for scale;
+ *   - no delivery/bounce webhooks - keep volume low and prefer in-app notifications;
  *   - MUST switch to a dedicated provider before the public launch / any real send volume.
  *
  * Auth-flow emails (signup verification, password reset) are sent by Supabase Auth using the same
- * Gmail account configured as Supabase Custom SMTP — they do NOT flow through this interface.
+ * Gmail account configured as Supabase Custom SMTP - they do NOT flow through this interface.
  * This interface is for APP notification emails, which are queued via the outbox in Phase 11.
  */
 

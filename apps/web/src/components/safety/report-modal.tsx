@@ -11,7 +11,7 @@ import { SubmitButton } from '@/components/ui/button';
 const empty: SafetyActionState = {};
 
 /**
- * Report modal (handover §14.2). Works for any reportable UGC — a player profile or a vouch comment.
+ * Report modal (handover §14.2). Works for any reportable UGC - a player profile or a vouch comment.
  * Reporter identity is always stored server-side (never anonymous to Admin).
  */
 export function ReportModal({

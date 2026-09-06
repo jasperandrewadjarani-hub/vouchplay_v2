@@ -46,7 +46,7 @@ export function SkillDistribution({
       {total === 0 ? (
         <EmptyNote>
           No community vouches yet. Once players vouch for this profile, their skill ratings appear
-          here by band — the community skill level is the weighted median of those vouches.
+          here by band - the community skill level is the weighted median of those vouches.
         </EmptyNote>
       ) : (
         <ul className="space-y-1.5">

@@ -4,12 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { getViewerContext } from '@/lib/auth';
 
 /**
- * Admin MFA framework (handover §7, §30 Admin Control Center — admins must use MFA).
+ * Admin MFA framework (handover §7, §30 Admin Control Center - admins must use MFA).
  *
  * V1 policy: MFA is available to everyone and REQUIRED for staff (moderator/support/admin/
  * super_admin) before they use privileged surfaces. Enrollment + step-up verification happen
  * client-side via the Supabase browser client (see components/auth/mfa-manager.tsx); this module is
- * the server side — read current status and guard staff routes.
+ * the server side - read current status and guard staff routes.
  *
  * Supabase assurance levels: `aal1` = password/OTP session; `aal2` = a verified MFA factor was used
  * this session. A staff member with a verified TOTP factor still needs an aal2 step-up each session
@@ -32,7 +32,7 @@ const EMPTY: MfaStatus = {
   factors: [],
 };
 
-/** Current viewer's MFA status. Never throws — returns a safe empty status if unavailable. */
+/** Current viewer's MFA status. Never throws - returns a safe empty status if unavailable. */
 export async function getMfaStatus(): Promise<MfaStatus> {
   try {
     const supabase = await createClient();

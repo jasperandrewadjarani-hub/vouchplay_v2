@@ -6,7 +6,7 @@ export const SYSTEM_SETTINGS_TAG = 'system_settings';
 
 /**
  * Live operational settings (handover §30.7): read from `system_settings` (public read) with the
- * canonical config values as fallback. Business numbers are NEVER hardcoded in domain logic — this
+ * canonical config values as fallback. Business numbers are NEVER hardcoded in domain logic - this
  * is the single runtime source. STS algorithm constants come from @vouchplay/config (they are
  * version-locked with STS_V1, not admin-tunable), everything else is admin-configurable.
  */

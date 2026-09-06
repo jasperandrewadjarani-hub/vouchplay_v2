@@ -80,7 +80,7 @@ function invalidate(slug: string | null, tournamentId: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Create (§17.1 — approved organizer/admin only)
+// Create (§17.1 - approved organizer/admin only)
 // ---------------------------------------------------------------------------
 export async function createTournament(
   _prev: TournamentActionState,
@@ -429,7 +429,7 @@ export async function setDivisionStatus(
 }
 
 // ---------------------------------------------------------------------------
-// Interest (§36.22) — any active player
+// Interest (§36.22) - any active player
 // ---------------------------------------------------------------------------
 export async function toggleInterest(
   tournamentId: string,
@@ -509,7 +509,7 @@ export async function postAnnouncement(
 }
 
 // ---------------------------------------------------------------------------
-// Co-organizers (§17.4) — owner only
+// Co-organizers (§17.4) - owner only
 // ---------------------------------------------------------------------------
 const PERM_KEYS: OrganizerPerm[] = [
   'edit',

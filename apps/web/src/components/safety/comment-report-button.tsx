@@ -5,7 +5,7 @@ import { Flag } from 'lucide-react';
 import { ReportModal } from './report-modal';
 
 /**
- * Small "Report" affordance shown on each vouch comment (handover §14.2 — all public UGC is
+ * Small "Report" affordance shown on each vouch comment (handover §14.2 - all public UGC is
  * reportable). Anonymous viewers are not shown the control (the profile-level Report gate handles
  * signup).
  */

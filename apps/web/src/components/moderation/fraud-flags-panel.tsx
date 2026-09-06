@@ -31,7 +31,7 @@ export function FraudFlagsPanel({ items }: { items: FraudFlagItem[] }) {
   if (items.length === 0)
     return (
       <p className="text-foreground-muted border-border bg-surface rounded-2xl border p-6 text-center text-sm">
-        No open fraud flags. Detectors run later — staff can raise a flag manually from a profile.
+        No open fraud flags. Detectors run later - staff can raise a flag manually from a profile.
       </p>
     );
   return (

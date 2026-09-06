@@ -19,6 +19,7 @@ interface Params {
 }
 
 const toLocalInput = (iso: string | null) => (iso ? iso.slice(0, 16) : '');
+const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
 
 export default async function ManageTournamentPage({ params }: Params) {
   const { slug } = await params;
@@ -73,8 +74,8 @@ export default async function ManageTournamentPage({ params }: Params) {
             venueName: t.venueName ?? '',
             description: t.description ?? '',
             visibility: t.visibility,
-            startAt: toLocalInput(t.startAt),
-            endAt: toLocalInput(t.endAt),
+            startAt: toDateInput(t.startAt),
+            endAt: toDateInput(t.endAt),
             registrationOpenAt: toLocalInput(t.registrationOpenAt),
             registrationCloseAt: toLocalInput(t.registrationCloseAt),
             contact: t.contact ?? '',

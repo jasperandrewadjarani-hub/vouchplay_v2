@@ -59,9 +59,9 @@ export type SkillReviewStatus = (typeof SKILL_REVIEW_STATUSES)[number];
 export const SKILL_REVIEW_STATUS_LABELS: Record<SkillReviewStatus, string> = {
   open: 'Open',
   under_review: 'Under review',
-  resolved_no_change: 'Resolved — no change',
-  resolved_admin_note: 'Resolved — admin note',
-  resolved_vouch_action: 'Resolved — vouch action',
+  resolved_no_change: 'Resolved - no change',
+  resolved_admin_note: 'Resolved - admin note',
+  resolved_vouch_action: 'Resolved - vouch action',
   closed: 'Closed',
 };
 

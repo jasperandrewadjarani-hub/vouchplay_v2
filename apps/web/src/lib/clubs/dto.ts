@@ -51,7 +51,7 @@ export interface ClubDetailDTO extends ClubCardDTO {
   canManage: boolean;
 }
 
-/** The exact column lists every club read selects — never `select('*')` (§34A/§35). */
+/** The exact column lists every club read selects - never `select('*')` (§34A/§35). */
 export const CLUB_CARD_COLUMNS =
   'id, slug, name, city, logo_path, privacy, verification_status, activity_status';
 export const CLUB_DETAIL_COLUMNS = `${CLUB_CARD_COLUMNS}, description, contact, social_links, created_by, created_at`;

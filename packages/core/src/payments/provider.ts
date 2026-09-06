@@ -1,5 +1,5 @@
 /**
- * Payment provider abstraction (handover §24.5). V1 ships the MANUAL provider — the organizer
+ * Payment provider abstraction (handover §24.5). V1 ships the MANUAL provider - the organizer
  * verifies proof by hand and there is no gateway call. The interface exists so a real gateway
  * (PayMongo, Stripe, GCash API, …) can be added later without touching registration domain logic.
  */

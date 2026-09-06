@@ -42,8 +42,8 @@ export function CreateClubForm() {
 
       <Field label="Who can join?" htmlFor="privacy" required>
         <Select id="privacy" name="privacy" defaultValue="public" required>
-          <option value="public">Public — anyone can join instantly</option>
-          <option value="approval_required">Approval required — admins approve requests</option>
+          <option value="public">Public - anyone can join instantly</option>
+          <option value="approval_required">Approval required - admins approve requests</option>
         </Select>
       </Field>
 

@@ -9,7 +9,7 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   player_vouches_per_24h: 5,
   coach_vouches_per_24h: 20,
   vouch_requests_per_24h: 10,
-  vouch_update_cooldown_days: 30,
+  vouch_update_cooldown_days: 1,
 
   // Vouch weight model (handover §10.5). Skill-Verified status and Facebook do NOT affect weight.
   weight_normal: 1.0,
@@ -49,7 +49,7 @@ export type SystemSettingsKey = keyof typeof DEFAULT_SYSTEM_SETTINGS;
 
 /**
  * STS_V1 algorithm constants (handover §10.6, §10.7). Changing any of these is a new algorithm
- * version — increment `STS_ALGORITHM_VERSION` and never mutate historical calculation semantics.
+ * version - increment `STS_ALGORITHM_VERSION` and never mutate historical calculation semantics.
  */
 export const STS_ALGORITHM_VERSION = 'STS_V1';
 

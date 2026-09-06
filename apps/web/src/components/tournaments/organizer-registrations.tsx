@@ -11,7 +11,7 @@ import {
 } from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
 
-/** Organizer registrations dashboard (handover §26.4) — confirm / reject with waitlist release. */
+/** Organizer registrations dashboard (handover §26.4) - confirm / reject with waitlist release. */
 export function OrganizerRegistrations({
   tournamentId,
   registrations,

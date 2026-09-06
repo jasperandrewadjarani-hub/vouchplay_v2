@@ -43,7 +43,7 @@ export async function requestEmailOtp(_prev: FormState, formData: FormData): Pro
       options: { shouldCreateUser: true, emailRedirectTo: callbackUrl(next) },
     });
     if (error) return { error: error.message };
-    return { ok: true, email: parsed.data.email, message: 'Code sent — check your email.', next };
+    return { ok: true, email: parsed.data.email, message: 'Code sent - check your email.', next };
   } catch {
     return { error: 'Sign-in is not available yet. Please try again shortly.' };
   }
@@ -113,7 +113,7 @@ export async function setPassword(_prev: FormState, formData: FormData): Promise
   }
 }
 
-/** Begin Google OAuth — returns a redirect to Google's consent screen. */
+/** Begin Google OAuth - returns a redirect to Google's consent screen. */
 export async function signInWithGoogle(next?: string): Promise<FormState> {
   try {
     const supabase = await createClient();
@@ -161,7 +161,7 @@ export async function signOut(): Promise<void> {
     const supabase = await createClient();
     await supabase.auth.signOut();
   } catch {
-    // ignore — fall through to redirect
+    // ignore - fall through to redirect
   }
   redirect('/login');
 }

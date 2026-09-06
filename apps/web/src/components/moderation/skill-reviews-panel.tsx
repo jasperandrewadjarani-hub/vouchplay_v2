@@ -22,9 +22,9 @@ interface SkillReviewItem {
 
 const STATUSES = [
   { value: 'under_review', label: 'Mark under review' },
-  { value: 'resolved_no_change', label: 'Resolve — no change' },
-  { value: 'resolved_admin_note', label: 'Resolve — admin note' },
-  { value: 'resolved_vouch_action', label: 'Resolve — vouch action' },
+  { value: 'resolved_no_change', label: 'Resolve - no change' },
+  { value: 'resolved_admin_note', label: 'Resolve - admin note' },
+  { value: 'resolved_vouch_action', label: 'Resolve - vouch action' },
   { value: 'closed', label: 'Close' },
 ];
 const CLOSING = ['resolved_no_change', 'resolved_admin_note', 'resolved_vouch_action', 'closed'];

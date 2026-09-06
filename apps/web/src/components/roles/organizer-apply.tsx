@@ -36,7 +36,7 @@ export function OrganizerApply({
       <div className="border-border bg-surface flex items-center gap-2 rounded-2xl border p-4 text-sm">
         <Trophy size={16} className="text-primary" aria-hidden />
         <span className="text-foreground">
-          You&apos;re an approved organizer — create tournaments anytime.
+          You&apos;re an approved organizer - create tournaments anytime.
         </span>
       </div>
     );

@@ -1,6 +1,6 @@
 /**
  * Vouch effective-weight model (handover §10.5). Weights are Admin settings (system_settings),
- * passed in here — NEVER hardcoded into domain logic. The chosen weight is copied onto each vouch
+ * passed in here - NEVER hardcoded into domain logic. The chosen weight is copied onto each vouch
  * row as a calculation snapshot for auditability (§10.5), alongside the weight_rule_version.
  *
  * LOCKED invariants (non-negotiable, handover §3.3/§10.5):

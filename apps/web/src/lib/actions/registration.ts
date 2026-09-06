@@ -113,6 +113,48 @@ export async function invitePartner(
   return { ok: true, message: 'Partner invite sent.' };
 }
 
+export interface PlayerSearchResult {
+  slug: string;
+  name: string;
+  city: string | null;
+}
+
+/** Search active, onboarded players by name/nickname/city to invite as a partner (§20.1). */
+export async function searchInvitablePlayers(q: string): Promise<PlayerSearchResult[]> {
+  const user = await getOptionalUser();
+  if (!user) return [];
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const svc = createServiceClient();
+  const safe = term.replace(/[%,()]/g, ' ');
+  const { data } = await svc
+    .from('profiles')
+    .select('slug, first_name, last_name, nickname, city')
+    .eq('account_status', 'active')
+    .not('onboarded_at', 'is', null)
+    .neq('id', user.id)
+    .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,nickname.ilike.%${safe}%`)
+    .limit(8);
+  return (
+    (data ?? []) as {
+      slug: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      nickname: string | null;
+      city: string | null;
+    }[]
+  )
+    .filter((p) => p.slug)
+    .map((p) => ({
+      slug: p.slug as string,
+      name:
+        [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
+        p.nickname ||
+        'VouchPlay player',
+      city: p.city,
+    }));
+}
+
 export async function respondInvitation(
   invitationId: string,
   accept: boolean,
@@ -145,7 +187,7 @@ export async function respondInvitation(
   }
   return {
     ok: true,
-    message: accept ? 'Partner confirmed — your team is formed.' : 'Invitation declined.',
+    message: accept ? 'Partner confirmed - your team is formed.' : 'Invitation declined.',
   };
 }
 
@@ -171,7 +213,7 @@ export async function cancelInvitation(invitationId: string): Promise<Registrati
 }
 
 // ---------------------------------------------------------------------------
-// Registration (§21, §23) — transactional via RPCs
+// Registration (§21, §23) - transactional via RPCs
 // ---------------------------------------------------------------------------
 export async function registerTeam(
   teamId: string,
@@ -191,7 +233,7 @@ export async function registerTeam(
       ok: true,
       message:
         status === 'waitlisted'
-          ? 'Division is full — your team is on the waitlist.'
+          ? 'Division is full - your team is on the waitlist.'
           : 'Slot held. Complete the next steps before the hold expires.',
     };
   } catch {
@@ -218,7 +260,7 @@ export async function registerSolo(
     const div = division as { format: string; status: string } | null;
     if (!div) return { error: 'Division not found.' };
     if (div.format !== 'singles')
-      return { error: 'This is a doubles division — form a team first.' };
+      return { error: 'This is a doubles division - form a team first.' };
 
     // Reuse an existing active team for this player in this division, else create a solo team.
     const { data: myTeamRows } = await svc
@@ -259,7 +301,7 @@ export async function registerSolo(
     return {
       ok: true,
       message:
-        status === 'waitlisted' ? "Division is full — you're on the waitlist." : 'Slot held.',
+        status === 'waitlisted' ? "Division is full - you're on the waitlist." : 'Slot held.',
     };
   } catch {
     return { error: 'Registration is temporarily unavailable.' };
@@ -304,7 +346,7 @@ export async function withdrawRegistration(
 }
 
 // ---------------------------------------------------------------------------
-// Club representation (§22) — player selects the clubs they represent for a tournament.
+// Club representation (§22) - player selects the clubs they represent for a tournament.
 // ---------------------------------------------------------------------------
 export async function setClubRepresentations(
   tournamentId: string,
@@ -370,7 +412,7 @@ export async function setClubRepresentations(
 }
 
 // ---------------------------------------------------------------------------
-// Organizer actions on registrations (§26.4) — confirm / reject.
+// Organizer actions on registrations (§26.4) - confirm / reject.
 // ---------------------------------------------------------------------------
 export async function confirmRegistration(
   registrationId: string,

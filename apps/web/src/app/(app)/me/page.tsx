@@ -38,7 +38,7 @@ export default async function MePage({
 
   const profile = await getMyProfile();
   const isStaff = await viewerIsStaff();
-  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '—';
+  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '-';
 
   // Organizer role state (§17.1) for the apply-as-organizer card.
   const svc = createServiceClient();
@@ -70,8 +70,8 @@ export default async function MePage({
           <p className="text-foreground-muted text-sm">&ldquo;{profile.nickname}&rdquo;</p>
         )}
         <dl className="mt-4 space-y-1 text-sm">
-          <Row label="Email" value={user.email ?? '—'} />
-          <Row label="City" value={profile?.city ?? '—'} />
+          <Row label="Email" value={user.email ?? '-'} />
+          <Row label="City" value={profile?.city ?? '-'} />
           <Row label="Account" value={profile?.account_status ?? 'active'} />
         </dl>
         {!profile?.onboarded_at ? (

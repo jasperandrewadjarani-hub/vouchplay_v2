@@ -11,7 +11,7 @@ import { SubmitButton } from '@/components/ui/button';
 const empty: SafetyActionState = {};
 
 /**
- * Skill review modal (handover §14.1) — separate from a report. Flags that a player's displayed /
+ * Skill review modal (handover §14.1) - separate from a report. Flags that a player's displayed /
  * community skill looks materially inaccurate. Submitter identity is stored but never shown publicly.
  */
 export function SkillReviewModal({
@@ -39,7 +39,7 @@ export function SkillReviewModal({
   return (
     <Modal
       title={`Request a skill review`}
-      subtitle={`For ${targetName}. This is not a report — use Report for policy issues.`}
+      subtitle={`For ${targetName}. This is not a report - use Report for policy issues.`}
       onClose={onClose}
     >
       <form action={action} className="space-y-4">

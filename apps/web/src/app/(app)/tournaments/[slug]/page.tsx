@@ -11,6 +11,7 @@ import { InterestButton } from '@/components/tournaments/interest-button';
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { RegistrationPanel } from '@/components/tournaments/registration-panel';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const url = `${publicEnv.siteUrl}/tournaments/${slug}`;
   const description =
     t.description?.trim() ||
-    `${t.name}${t.city ? ` · ${t.city}` : ''} — a tournament on VouchPlay.`;
+    `${t.name}${t.city ? ` · ${t.city}` : ''} - a tournament on VouchPlay.`;
   return {
     title: t.name,
     description,
@@ -127,6 +128,7 @@ export default async function TournamentPage({ params }: Params) {
               >
                 <Settings size={15} aria-hidden />
                 Manage
+                <LinkSpinner />
               </Link>
             )}
           </div>

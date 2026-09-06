@@ -3,7 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 
 /**
  * Server-side account-status & block enforcement (handover §11, §14.3, §47). Every interaction
- * initiation point (vouch, vouch request, and — Phase 5 — partner/recruit/sponsor) runs these before
+ * initiation point (vouch, vouch request, and - Phase 5 - partner/recruit/sponsor) runs these before
  * writing, so restricted/suspended/banned users and blocked pairs are stopped regardless of what the
  * client sent. Banned/suspended/deactivated profiles are already invisible in the public directory
  * (queries select account_status='active'); these guards cover the authenticated action paths.

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/theme-toggle';
 
-/** Minimal, focused layout for auth + onboarding — no bottom nav or sidebar. */
+/** Minimal, focused layout for auth + onboarding - no bottom nav or sidebar. */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="vp-hero flex min-h-dvh flex-col">

@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Create a tournament' };
 
 export default async function NewTournamentPage() {
   const user = await requireUser('/tournaments/new');
-  // Gate the page on the organizer role (§17.1) — the action re-checks server-side.
+  // Gate the page on the organizer role (§17.1) - the action re-checks server-side.
   const svc = createServiceClient();
   const { data } = await svc
     .from('user_roles')
@@ -30,11 +30,12 @@ export default async function NewTournamentPage() {
           Create a tournament
         </h1>
         <p className="text-foreground-muted mt-1 text-sm">
-          It starts as a draft. You&apos;ll add divisions and publish when ready.
+          Start with the basics. It saves as a draft; add divisions, venue, registration dates, and
+          payment details afterward.
         </p>
       </div>
       <div className="border-border bg-surface rounded-2xl border p-5">
-        <TournamentForm action={createTournament} submitLabel="Create tournament" />
+        <TournamentForm action={createTournament} submitLabel="Create tournament" minimal />
       </div>
     </section>
   );

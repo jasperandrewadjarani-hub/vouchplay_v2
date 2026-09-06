@@ -8,9 +8,9 @@ import { getMfaStatus } from '@/lib/auth/mfa';
  * Staff authorization for moderation surfaces (handover §4.3, §30, §37).
  *
  * Two layers, both enforced server-side:
- *  - Route guard (`requireStaffPage`) — redirects non-staff away and steps staff up through MFA
+ *  - Route guard (`requireStaffPage`) - redirects non-staff away and steps staff up through MFA
  *    (reuses the Admin MFA framework: verified TOTP + an aal2 session).
- *  - Action guard (`assertStaffActor`) — defense in depth inside every mutating server action, so a
+ *  - Action guard (`assertStaffActor`) - defense in depth inside every mutating server action, so a
  *    forged request that skips the page never reaches a privileged write.
  */
 
@@ -48,7 +48,7 @@ export interface StaffActor {
 
 /**
  * Action-layer guard. Returns the actor when the caller is authenticated staff with an aal2 (MFA)
- * session, else null — the caller returns a safe error. Anonymous voucher identity, account
+ * session, else null - the caller returns a safe error. Anonymous voucher identity, account
  * actions, and content actions are all gated on this.
  */
 export async function assertStaffActor(): Promise<StaffActor | null> {
@@ -63,7 +63,7 @@ export async function assertStaffActor(): Promise<StaffActor | null> {
 }
 
 /**
- * Action-layer guard requiring ADMIN (admin/super_admin) with an aal2 session — for privileged ops
+ * Action-layer guard requiring ADMIN (admin/super_admin) with an aal2 session - for privileged ops
  * like approving role applications (§4.3: only Admin/Super Admin approve roles). Returns null otherwise.
  */
 export async function assertAdminActor(): Promise<StaffActor | null> {
@@ -87,7 +87,7 @@ export async function requireStaffPage(returnTo: string): Promise<StaffActor> {
 
   const roles = await myRoles();
   const role = highestStaffRole(roles);
-  if (!role) redirect('/'); // not staff — no moderation access
+  if (!role) redirect('/'); // not staff - no moderation access
 
   const mfa = await getMfaStatus();
   const suffix = `next=${encodeURIComponent(returnTo)}`;

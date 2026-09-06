@@ -4,6 +4,9 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   // Lint runs as its own CI step; don't let it gate the production build (Next 15 lints on build).
   eslint: { ignoreDuringBuilds: true },
+  // Server Actions handle file uploads (avatars 2MB, club logos 2MB, tournament covers 4MB, payment
+  // proofs 5MB). Next's default action body limit is 1MB, which errored those uploads — raise it.
+  experimental: { serverActions: { bodySizeLimit: '8mb' } },
   // Domain logic lives in workspace packages; transpile them for the app.
   transpilePackages: [
     '@vouchplay/core',

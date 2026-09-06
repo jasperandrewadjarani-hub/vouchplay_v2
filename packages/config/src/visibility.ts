@@ -6,13 +6,13 @@
  * and authorized staff (moderation/admin) always see every field regardless of these settings; that
  * elevation is applied in the server DTO layer, never here.
  *
- * Enforcement is server-side (DTO projection) — RLS lets the public read the profile row, so hidden
+ * Enforcement is server-side (DTO projection) - RLS lets the public read the profile row, so hidden
  * fields must be dropped before the payload ever reaches the client. Never send a hidden field to a
  * non-privileged viewer.
  *
  * Defaults mirror §8.1 (the player card shows sex + city when available) and take the
  * privacy-preserving option for the more sensitive derived field (age is hidden by default; it is not
- * shown on the card at all, and organizers reach it only for age-defined divisions — a later phase).
+ * shown on the card at all, and organizers reach it only for age-defined divisions - a later phase).
  */
 
 export type VisibilityLevel = 'public' | 'hidden';

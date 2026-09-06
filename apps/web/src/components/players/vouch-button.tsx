@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ThumbsUp } from 'lucide-react';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 import { VouchForm } from './vouch-form';
 
 /**
@@ -70,6 +71,7 @@ export function VouchButton({
       >
         <ThumbsUp size={iconSize} aria-hidden />
         Vouch
+        <LinkSpinner size={iconSize} />
       </Link>
     );
   }

@@ -9,7 +9,7 @@ import type { SafetyActionState } from './report';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Submit a support ticket / appeal (handover §36.38, §47 — appeal/support path for material account
+ * Submit a support ticket / appeal (handover §36.38, §47 - appeal/support path for material account
  * actions). Suspended and banned users can still file an appeal here. Rate-limited to curb spam.
  */
 export async function submitSupportTicket(

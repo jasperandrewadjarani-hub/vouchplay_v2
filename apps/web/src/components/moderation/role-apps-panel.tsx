@@ -14,7 +14,7 @@ interface RoleAppItem {
   applicantSlug: string | null;
 }
 
-/** Admin role-application review (handover §30.2, §4.3 — approve grants the global role). */
+/** Admin role-application review (handover §30.2, §4.3 - approve grants the global role). */
 export function RoleAppsPanel({ items }: { items: RoleAppItem[] }) {
   if (items.length === 0)
     return (

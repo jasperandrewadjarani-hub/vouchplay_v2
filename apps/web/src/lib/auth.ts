@@ -9,12 +9,13 @@ export interface ProfileRow {
   nickname: string | null;
   slug: string | null;
   city: string | null;
+  avatar_path: string | null;
   onboarded_at: string | null;
   account_status: string;
 }
 
 /**
- * Returns the signed-in user or null. Never throws — if Supabase env is not yet configured, or the
+ * Returns the signed-in user or null. Never throws - if Supabase env is not yet configured, or the
  * request is anonymous, it resolves to null so public pages and the shell keep rendering.
  */
 export async function getOptionalUser(): Promise<User | null> {
@@ -39,7 +40,9 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
     if (!user) return null;
     const { data } = await supabase
       .from('profiles')
-      .select('id, first_name, last_name, nickname, slug, city, onboarded_at, account_status')
+      .select(
+        'id, first_name, last_name, nickname, slug, city, avatar_path, onboarded_at, account_status',
+      )
       .eq('id', user.id)
       .maybeSingle();
     return (data as ProfileRow | null) ?? null;
@@ -85,7 +88,7 @@ const STAFF_ROLES = ['moderator', 'support', 'admin', 'super_admin'];
 
 /**
  * Viewer context for DTO projection: the current user's id (or null) and whether they are staff.
- * Reads only the caller's OWN roles (RLS-permitted). Never throws — degrades to an anonymous viewer.
+ * Reads only the caller's OWN roles (RLS-permitted). Never throws - degrades to an anonymous viewer.
  */
 export async function getViewerContext(): Promise<{
   viewerId: string | null;

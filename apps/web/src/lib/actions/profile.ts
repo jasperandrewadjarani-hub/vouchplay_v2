@@ -20,7 +20,7 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
  * Upload an avatar for `userId` to the public `avatars` bucket via the service client. The path is
  * keyed to the user's own id (authorization: the caller already verified this is that user), so a
  * user can only ever write their own avatar. Returns the stored path, or null on any problem
- * (avatar is optional — a failure must never block onboarding).
+ * (avatar is optional - a failure must never block onboarding).
  */
 async function uploadAvatar(userId: string, file: File): Promise<string | null> {
   const ext = AVATAR_MIME_EXT[file.type];

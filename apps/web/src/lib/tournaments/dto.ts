@@ -1,6 +1,6 @@
 /**
  * Tournament DTO projections (handover §17–§19, §37). Public reads expose non-draft tournaments;
- * organizer/staff see drafts. Division names are composed from attributes (§18 — never hardcoded).
+ * organizer/staff see drafts. Division names are composed from attributes (§18 - never hardcoded).
  */
 import type {
   TournamentRow,

@@ -23,7 +23,7 @@ import { avatarUrl } from '@/lib/storage';
 export interface ViewerContext {
   /** The signed-in viewer's user id, or null for anonymous. */
   viewerId: string | null;
-  /** Authorized moderation/admin — sees otherwise-hidden fields. */
+  /** Authorized moderation/admin - sees otherwise-hidden fields. */
   isStaff: boolean;
 }
 
@@ -48,7 +48,7 @@ export interface PlayerCardDTO {
   city: string | null;
   /** Community Skill Level (Phase 3). Null until vouches exist. */
   communitySkill: SkillBand | null;
-  /** Self-rated band — shown (clearly labeled) when there is no community skill yet. */
+  /** Self-rated band - shown (clearly labeled) when there is no community skill yet. */
   selfRatedSkill: SkillBand | null;
   /** Skill-Trust Score 0–5 (Phase 3). Null until computed. Never used to rank the directory. */
   sts: number | null;
@@ -63,7 +63,7 @@ export interface PlayerCardDTO {
 }
 
 export interface PlayerProfileDTO extends PlayerCardDTO {
-  /** The target's user id — needed by the vouch form (profile only). */
+  /** The target's user id - needed by the vouch form (profile only). */
   id: string;
   bio: string | null;
   facebookUrl: string | null;
@@ -177,7 +177,7 @@ export function toPlayerProfileDTO(
   };
 }
 
-/** The exact column list every player read selects — never `select('*')` (handover §34A, §35). */
+/** The exact column list every player read selects - never `select('*')` (handover §34A, §35). */
 export const PLAYER_CARD_COLUMNS =
   'id, slug, first_name, last_name, nickname, city, sex, avatar_path, self_rated_skill, ' +
   'looking_for_partner, open_for_sponsorship, profile_visibility, account_status, ' +

@@ -13,8 +13,8 @@ const ACTIONS: { value: AccountAction; label: string; timed?: boolean; danger?: 
 ];
 
 /**
- * Staff account-action panel (handover §47). Applies warn / restrict / suspend / ban / lift — each
- * with a mandatory reason (and optional duration for timed actions) — via applyAccountAction, which
+ * Staff account-action panel (handover §47). Applies warn / restrict / suspend / ban / lift - each
+ * with a mandatory reason (and optional duration for timed actions) - via applyAccountAction, which
  * writes an append-only audit_logs row server-side.
  */
 export function AccountActionPanel({ userId, userName }: { userId: string; userName: string }) {

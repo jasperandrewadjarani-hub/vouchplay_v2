@@ -377,7 +377,7 @@ export async function getOrganizerRegistrations(
 }
 
 // ---------------------------------------------------------------------------
-// Partner finder (§20.1) — players looking for a partner, for a doubles division.
+// Partner finder (§20.1) - players looking for a partner, for a doubles division.
 // ---------------------------------------------------------------------------
 export interface PartnerCandidate {
   slug: string;

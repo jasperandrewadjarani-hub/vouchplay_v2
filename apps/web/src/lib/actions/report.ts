@@ -21,7 +21,7 @@ function buildEvidence(note?: string, link?: string): Record<string, unknown> {
 }
 
 /**
- * Submit a report (handover §14.2, §36.33). Reports are NEVER anonymous to Admin — reporter_id is
+ * Submit a report (handover §14.2, §36.33). Reports are NEVER anonymous to Admin - reporter_id is
  * stored. Any public UGC (a player profile or a vouch comment) is reportable. Server-side: requires
  * auth, blocks banned accounts, validates the target exists, and rate-limits per §30.7. Blocking a
  * user does NOT prevent reporting them (safety valve).
@@ -104,5 +104,5 @@ export async function submitReport(
     return { error: 'Reporting is temporarily unavailable. Please try again shortly.' };
   }
 
-  return { ok: true, message: 'Report submitted. Thank you — our team will review it.' };
+  return { ok: true, message: 'Report submitted. Thank you - our team will review it.' };
 }

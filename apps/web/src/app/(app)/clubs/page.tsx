@@ -4,10 +4,12 @@ import { Plus } from 'lucide-react';
 import { listClubs, type ClubFilters } from '@/lib/clubs/queries';
 import { getOptionalUser } from '@/lib/auth';
 import { ClubCard } from '@/components/clubs/club-card';
+import { LinkSpinner } from '@/components/ui/link-spinner';
+import { InstantFilterForm } from '@/components/ui/instant-filter-form';
 
 export const metadata: Metadata = {
   title: 'Clubs',
-  description: 'Discover pickleball clubs on VouchPlay — find your community, join, and represent.',
+  description: 'Discover pickleball clubs on VouchPlay - find your community, join, and represent.',
 };
 
 type SP = Record<string, string | string[] | undefined>;
@@ -41,9 +43,6 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
     getOptionalUser(),
   ]);
 
-  const inputCls =
-    'rounded-xl border border-border bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-foreground-muted focus-visible:outline-2 focus-visible:outline-offset-2';
-
   return (
     <div className="space-y-5">
       <div className="vp-in flex items-end justify-between gap-3">
@@ -59,33 +58,18 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
         >
           <Plus size={16} aria-hidden />
           Create club
+          <LinkSpinner size={16} />
         </Link>
       </div>
 
-      <form method="get" className="flex flex-wrap gap-2">
-        <input
-          name="q"
-          defaultValue={filters.q ?? ''}
-          placeholder="Search clubs…"
-          className={`${inputCls} min-w-40 flex-1`}
-        />
-        <input
-          name="city"
-          defaultValue={filters.city ?? ''}
-          placeholder="City"
-          className={`${inputCls} w-32`}
-        />
-        <label className="border-border bg-surface text-foreground flex items-center gap-2 rounded-xl border px-3 py-2 text-sm">
-          <input type="checkbox" name="verified" value="1" defaultChecked={filters.verifiedOnly} />
-          Verified only
-        </label>
-        <button
-          type="submit"
-          className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
-        >
-          Search
-        </button>
-      </form>
+      <InstantFilterForm
+        basePath="/clubs"
+        initialQ={filters.q ?? ''}
+        initialCity={filters.city ?? ''}
+        initialVerified={filters.verifiedOnly}
+        showVerified
+        placeholder="Search clubs"
+      />
 
       <p className="text-foreground-muted text-sm" aria-live="polite">
         {total === 0 ? 'No clubs yet.' : `${total} club${total === 1 ? '' : 's'}`}

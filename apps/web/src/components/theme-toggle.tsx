@@ -2,40 +2,31 @@
 
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
-import { Sun, Moon, Monitor } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
-/** Cycles light → dark → system. Icon-only. Avoids hydration mismatch by rendering after mount. */
+/**
+ * Light/Dark toggle. The initial theme is "system" (set on the provider), but this control switches
+ * explicitly between light and dark based on what's currently showing. Icon-only.
+ */
 export function ThemeToggle() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Standard next-themes hydration guard: theme is only known client-side, so we render a stable
-  // placeholder until mounted to avoid a server/client mismatch.
+  // Hydration guard: resolvedTheme is only known client-side.
   useEffect(() => setMounted(true), []);
 
-  const label = !mounted
-    ? 'Theme'
-    : theme === 'system'
-      ? `System (${resolvedTheme})`
-      : theme === 'dark'
-        ? 'Dark'
-        : 'Light';
-
-  function cycle() {
-    setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light');
-  }
-
-  const Icon = !mounted ? Sun : theme === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
+  const isDark = mounted && resolvedTheme === 'dark';
+  const label = !mounted ? 'Theme' : isDark ? 'Switch to light' : 'Switch to dark';
 
   return (
     <button
       type="button"
-      onClick={cycle}
-      aria-label={`Switch theme. Current: ${label}`}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label={label}
       title={label}
       className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
     >
-      <Icon size={16} aria-hidden suppressHydrationWarning />
+      {isDark ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}
     </button>
   );
 }

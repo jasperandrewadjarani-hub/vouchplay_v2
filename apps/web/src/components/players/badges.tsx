@@ -10,7 +10,7 @@ import type { SkillBand } from '@vouchplay/config';
 
 /**
  * Skill pill: named, color-coded skill band with a source label. Community Skill and Self-Rated are
- * DISTINCT concepts (§3.3) — the label makes clear which one is shown. Never derived from STS.
+ * DISTINCT concepts (§3.3) - the label makes clear which one is shown. Never derived from STS.
  */
 export function SkillPill({
   band,
@@ -40,7 +40,7 @@ export function SkillPill({
 }
 
 /**
- * STS chip (Skill-Trust Score, 0–5 confidence). Shown only when computed. Purely informational —
+ * STS chip (Skill-Trust Score, 0–5 confidence). Shown only when computed. Purely informational -
  * VouchPlay never ranks players by STS (§6, §8.4).
  */
 export function StsChip({ sts }: { sts: number | null }) {
@@ -48,7 +48,7 @@ export function StsChip({ sts }: { sts: number | null }) {
   return (
     <span
       className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-      title="Skill-Trust Score — confidence in this player's community skill (0–5). Not a ranking."
+      title="Skill-Trust Score - confidence in this player's community skill (0–5). Not a ranking."
     >
       STS {sts.toFixed(1)}
     </span>
@@ -74,7 +74,7 @@ export function SkillVerifiedBadge() {
   return (
     <span
       className={`${chip} bg-primary/15 text-primary`}
-      title="Skill Verified — meets the community-verification threshold (does not affect vouch weight)"
+      title="Skill Verified - meets the community-verification threshold (does not affect vouch weight)"
     >
       <BadgeCheck size={12} aria-hidden />
       Skill Verified

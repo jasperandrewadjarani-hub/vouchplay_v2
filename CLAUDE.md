@@ -1,4 +1,4 @@
-# VouchPlay v2 — Agent Guide (CLAUDE.md)
+# VouchPlay v2 - Agent Guide (CLAUDE.md)
 
 Project-specific instructions for Claude Code / coding agents working in this repo. The global
 JT conventions in `~/.claude/CLAUDE.md` still apply on top of this.
@@ -11,7 +11,7 @@ JT conventions in `~/.claude/CLAUDE.md` still apply on top of this.
 ## Stack & layout
 Next.js (App Router) + React 19 + TypeScript strict + Tailwind v4, Supabase (Postgres/Auth/Storage),
 Vercel. npm-workspaces monorepo: `apps/web` (the app) + `packages/{config,core,db,ui,validation,analytics}`.
-Modular monolith — no microservices in V1.
+Modular monolith - no microservices in V1.
 
 ## Commands
 ```bash
@@ -23,7 +23,7 @@ npm run typecheck && npm run lint && npm run test && npm run format:check
 
 ---
 
-## ⚠️ DEPLOYMENT GOTCHA #1 — Vercel × Next.js 16 "immutable static file upload" bug
+## ⚠️ DEPLOYMENT GOTCHA #1 - Vercel × Next.js 16 "immutable static file upload" bug
 
 **Status:** ACTIVE WORKAROUND IN PLACE (2026-09-05). Do not "fix" this by upgrading Next back to 16
 without reading this section.
@@ -40,10 +40,10 @@ Upgrade to next@v16.3.0-canary.32 or newer to resolve this.
 ### What we verified
 - It is a **Vercel platform + Next 16 output** interaction, NOT our code. The build (compile,
   typecheck, static generation) always succeeded; only the output-upload/deploy step failed.
-- Reproduced on **Next 16.3.4 (stable)** AND **16.4.0-canary.18** — so the message's "upgrade Next"
+- Reproduced on **Next 16.3.4 (stable)** AND **16.4.0-canary.18** - so the message's "upgrade Next"
   advice is misleading; the newer canary did NOT fix it.
 - Reproduced via **both** the Vercel CLI (`vercel --prod`, incl. `--archive=tgz`) and **Git**
-  (push-to-deploy), and with git disconnected — so it is not upload-method or git-comment specific.
+  (push-to-deploy), and with git disconnected - so it is not upload-method or git-comment specific.
 - Disabling the project's **Vercel Toolbar** (Pre-Production + Production → Off) did **not** fix it,
   and those project settings would not even persist through browser automation.
 
@@ -56,7 +56,7 @@ Upgrade to next@v16.3.0-canary.32 or newer to resolve this.
    the Next-16 `proxy`).
 4. Removed the Next-16-only `agentRules: false` from `next.config.ts`.
 
-### DEPLOYMENT GOTCHA #2 — Vercel monorepo detection (bundled with the fix)
+### DEPLOYMENT GOTCHA #2 - Vercel monorepo detection (bundled with the fix)
 The Vercel project's **Root Directory** and **Framework Preset** settings could not be persisted via
 automation (confirmed by screenshot: they stayed `./` and `Other`). Vercel therefore runs framework
 detection at the **repo root**. To make deploys deterministic without any dashboard step:
@@ -66,7 +66,7 @@ detection at the **repo root**. To make deploys deterministic without any dashbo
   passes at the root (next is hoisted anyway; this is detection-only).
 
 Do not delete the root `vercel.json` or the root-level `next` dependency while Root Directory can't
-be set to `apps/web` in the dashboard — deploys will fail with `No Next.js version detected` or
+be set to `apps/web` in the dashboard - deploys will fail with `No Next.js version detected` or
 `No Output Directory named "public"`.
 
 ### How this WILL be dealt with (exit plan)
@@ -83,7 +83,7 @@ Log the change in `notes.md` and this file.
 
 ---
 
-## Non-negotiables (from the handover — never violate)
+## Non-negotiables (from the handover - never violate)
 - Canonical skill order is LOCKED (Newbie→Pro). CSL, STS, Identity Verified and Skill Verified are
   four separate concepts; Skill-Verified and Facebook never affect vouch weight.
 - All operational values (vouch limits/weights/thresholds) are Admin settings in `system_settings`,
@@ -94,5 +94,5 @@ Log the change in `notes.md` and this file.
 
 ## Secrets
 Never commit secrets. `apps/web/.env.local` is gitignored. The `SUPABASE_SERVICE_ROLE_KEY` bypasses
-RLS — server-only, never in a `NEXT_PUBLIC_*` var or client bundle. Live env also lives in Vercel →
+RLS - server-only, never in a `NEXT_PUBLIC_*` var or client bundle. Live env also lives in Vercel →
 Project → Settings → Environment Variables.

@@ -33,11 +33,14 @@ export function TournamentForm({
   initial = {},
   submitLabel,
   refreshOnSuccess = false,
+  minimal = false,
 }: {
   action: (state: TournamentActionState, formData: FormData) => Promise<TournamentActionState>;
   initial?: TournamentFormInitial;
   submitLabel: string;
   refreshOnSuccess?: boolean;
+  /** Minimal mode (create): just the essentials; the rest is edited later on Manage. */
+  minimal?: boolean;
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(action, empty);
@@ -58,44 +61,23 @@ export function TournamentForm({
         <Field label="City" htmlFor="city">
           <Input id="city" name="city" maxLength={120} defaultValue={initial.city ?? ''} />
         </Field>
-        <Field label="Venue" htmlFor="venueName">
-          <Input
-            id="venueName"
-            name="venueName"
-            maxLength={200}
-            defaultValue={initial.venueName ?? ''}
-          />
-        </Field>
+        {!minimal && (
+          <Field label="Venue" htmlFor="venueName">
+            <Input
+              id="venueName"
+              name="venueName"
+              maxLength={200}
+              defaultValue={initial.venueName ?? ''}
+            />
+          </Field>
+        )}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Start" htmlFor="startAt">
-          <Input
-            id="startAt"
-            name="startAt"
-            type="datetime-local"
-            defaultValue={initial.startAt ?? ''}
-          />
+        <Field label="Start date" htmlFor="startAt" hint="Time is optional; a date is enough.">
+          <Input id="startAt" name="startAt" type="date" defaultValue={initial.startAt ?? ''} />
         </Field>
-        <Field label="End" htmlFor="endAt">
-          <Input id="endAt" name="endAt" type="datetime-local" defaultValue={initial.endAt ?? ''} />
-        </Field>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Registration opens" htmlFor="registrationOpenAt">
-          <Input
-            id="registrationOpenAt"
-            name="registrationOpenAt"
-            type="datetime-local"
-            defaultValue={initial.registrationOpenAt ?? ''}
-          />
-        </Field>
-        <Field label="Registration closes" htmlFor="registrationCloseAt">
-          <Input
-            id="registrationCloseAt"
-            name="registrationCloseAt"
-            type="datetime-local"
-            defaultValue={initial.registrationCloseAt ?? ''}
-          />
+        <Field label="End date" htmlFor="endAt">
+          <Input id="endAt" name="endAt" type="date" defaultValue={initial.endAt ?? ''} />
         </Field>
       </div>
       <Field label="Visibility" htmlFor="visibility" required>
@@ -105,68 +87,111 @@ export function TournamentForm({
           defaultValue={initial.visibility ?? 'public'}
           required
         >
-          <option value="public">Public — listed in discovery</option>
-          <option value="unlisted">Unlisted — reachable by link only</option>
+          <option value="public">Public (listed in discovery)</option>
+          <option value="unlisted">Unlisted (reachable by link only)</option>
         </Select>
       </Field>
-      <Field label="Description" htmlFor="description">
-        <textarea
-          id="description"
-          name="description"
-          rows={3}
-          maxLength={4000}
-          defaultValue={initial.description ?? ''}
-          className={textarea}
-        />
-      </Field>
-      <Field label="Contact" htmlFor="contact" hint="A page link, email, or phone for enquiries.">
-        <Input id="contact" name="contact" maxLength={200} defaultValue={initial.contact ?? ''} />
-      </Field>
-      <Field label="Terms / rules" htmlFor="termsText">
-        <textarea
-          id="termsText"
-          name="termsText"
-          rows={3}
-          maxLength={8000}
-          defaultValue={initial.termsText ?? ''}
-          className={textarea}
-        />
-      </Field>
-      <Field
-        label="Payment instructions"
-        htmlFor="paymentInstructions"
-        hint="Shown to registrants (payments come in a later phase)."
-      >
-        <textarea
-          id="paymentInstructions"
-          name="paymentInstructions"
-          rows={2}
-          maxLength={2000}
-          defaultValue={initial.paymentInstructions ?? ''}
-          className={textarea}
-        />
-      </Field>
-      <Field
-        label="Accepted payment methods"
-        htmlFor="paymentMethods"
-        hint="Comma-separated labels, e.g. GCash, Maya, bank transfer."
-      >
-        <Input
-          id="paymentMethods"
-          name="paymentMethods"
-          maxLength={300}
-          defaultValue={initial.paymentMethods ?? ''}
-        />
-      </Field>
-      <Field label="Cover photo (optional)" htmlFor="cover" hint="PNG, JPG or WebP, up to 4 MB.">
-        <input
-          id="cover"
-          name="cover"
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
-        />
-      </Field>
+      {minimal && (
+        <p className="text-foreground-muted text-xs">
+          You can add divisions, venue, registration dates, and payment details after creating the
+          tournament.
+        </p>
+      )}
+      {!minimal && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="Registration opens" htmlFor="registrationOpenAt">
+            <Input
+              id="registrationOpenAt"
+              name="registrationOpenAt"
+              type="datetime-local"
+              defaultValue={initial.registrationOpenAt ?? ''}
+            />
+          </Field>
+          <Field label="Registration closes" htmlFor="registrationCloseAt">
+            <Input
+              id="registrationCloseAt"
+              name="registrationCloseAt"
+              type="datetime-local"
+              defaultValue={initial.registrationCloseAt ?? ''}
+            />
+          </Field>
+        </div>
+      )}
+      {!minimal && (
+        <>
+          <Field label="Description" htmlFor="description">
+            <textarea
+              id="description"
+              name="description"
+              rows={3}
+              maxLength={4000}
+              defaultValue={initial.description ?? ''}
+              className={textarea}
+            />
+          </Field>
+          <Field
+            label="Contact"
+            htmlFor="contact"
+            hint="A page link, email, or phone for enquiries."
+          >
+            <Input
+              id="contact"
+              name="contact"
+              maxLength={200}
+              defaultValue={initial.contact ?? ''}
+            />
+          </Field>
+          <Field label="Terms / rules" htmlFor="termsText">
+            <textarea
+              id="termsText"
+              name="termsText"
+              rows={3}
+              maxLength={8000}
+              defaultValue={initial.termsText ?? ''}
+              className={textarea}
+            />
+          </Field>
+          <Field
+            label="Payment instructions"
+            htmlFor="paymentInstructions"
+            hint="Shown to registrants (payments come in a later phase)."
+          >
+            <textarea
+              id="paymentInstructions"
+              name="paymentInstructions"
+              rows={2}
+              maxLength={2000}
+              defaultValue={initial.paymentInstructions ?? ''}
+              className={textarea}
+            />
+          </Field>
+          <Field
+            label="Accepted payment methods"
+            htmlFor="paymentMethods"
+            hint="Comma-separated labels, e.g. GCash, Maya, bank transfer."
+          >
+            <Input
+              id="paymentMethods"
+              name="paymentMethods"
+              maxLength={300}
+              defaultValue={initial.paymentMethods ?? ''}
+            />
+          </Field>
+          <Field
+            label="Cover photo (optional)"
+            htmlFor="cover"
+            hint="PNG, JPG or WebP, up to 4 MB."
+          >
+            <input
+              id="cover"
+              name="cover"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
+            />
+          </Field>
+        </>
+      )}
 
       <SubmitButton pendingLabel="Saving…">{submitLabel}</SubmitButton>
     </form>

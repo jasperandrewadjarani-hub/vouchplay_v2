@@ -249,7 +249,7 @@ export async function getClubBySlug(
   };
 }
 
-/** The viewer's own membership row (any status) — read with their session (RLS: own rows). */
+/** The viewer's own membership row (any status) - read with their session (RLS: own rows). */
 async function viewerMembership(
   clubId: string,
   viewerId: string,
@@ -350,7 +350,7 @@ export async function getUserClubsBulk(userIds: string[]): Promise<Record<string
       });
     }
   } catch {
-    // Clubs are decoration on player cards — never fail the card render.
+    // Clubs are decoration on player cards - never fail the card render.
   }
   return out;
 }

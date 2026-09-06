@@ -138,7 +138,7 @@ export async function submitPayment(
   } catch {
     return { error: 'Payment submission is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Payment proof submitted — the organizer will review it.' };
+  return { ok: true, message: 'Payment proof submitted - the organizer will review it.' };
 }
 
 /** Issue a short-lived signed URL to a payment proof (§38). Team members / organizers / staff only. */
@@ -185,7 +185,7 @@ export async function getProofSignedUrl(
 }
 
 // ---------------------------------------------------------------------------
-// Organizer payment review (§24.4) — verify / reject-resubmit / mark refunded.
+// Organizer payment review (§24.4) - verify / reject-resubmit / mark refunded.
 // ---------------------------------------------------------------------------
 async function loadPaymentContext(paymentId: string) {
   const svc = createServiceClient();
@@ -251,7 +251,7 @@ export async function verifyPayment(
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Payment verified — registration confirmed.' };
+  return { ok: true, message: 'Payment verified - registration confirmed.' };
 }
 
 export async function rejectPayment(
@@ -303,7 +303,7 @@ export async function rejectPayment(
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Payment rejected — the team can resubmit.' };
+  return { ok: true, message: 'Payment rejected - the team can resubmit.' };
 }
 
 export async function markRefunded(

@@ -1,6 +1,6 @@
-# VouchPlay v2 — Agent Guide (AGENTS.md)
+# VouchPlay v2 - Agent Guide (AGENTS.md)
 
-For Codex and any coding agent. This mirrors [`CLAUDE.md`](./CLAUDE.md) — read that for full detail.
+For Codex and any coding agent. This mirrors [`CLAUDE.md`](./CLAUDE.md) - read that for full detail.
 The global JT conventions in `~/.claude/CLAUDE.md` also apply (Codex imports it as its source of truth).
 
 ## Orientation
@@ -11,7 +11,7 @@ The global JT conventions in `~/.claude/CLAUDE.md` also apply (Codex imports it 
 
 ---
 
-## ⚠️ DEPLOYMENT GOTCHA — Vercel × Next.js 16 "immutable static file upload" bug (ACTIVE WORKAROUND)
+## ⚠️ DEPLOYMENT GOTCHA - Vercel × Next.js 16 "immutable static file upload" bug (ACTIVE WORKAROUND)
 
 Do NOT upgrade Next.js back to 16 without reading this and testing a preview deploy first.
 
@@ -35,8 +35,8 @@ via CLI and Git, with the Vercel Toolbar disabled. Build always succeeds; only o
 **Exit plan (how this will be dealt with):** when Vercel/Next fix the immutable-upload/preview-comments
 deploy step (watch Next.js + Vercel changelogs and the `vercel/vercel` issue tracker for that string):
 bump `next`/`eslint-config-next` back to `^16`, rename `middleware.ts` → `proxy.ts` (+ re-add
-`agentRules`), verify with a throwaway preview deploy, and — if Root Directory can then be set to
-`apps/web` — drop the root-level `next` dep and the `buildCommand`/`outputDirectory` overrides
+`agentRules`), verify with a throwaway preview deploy, and - if Root Directory can then be set to
+`apps/web` - drop the root-level `next` dep and the `buildCommand`/`outputDirectory` overrides
 (keep `framework: nextjs`) and remove `eslint.ignoreDuringBuilds`. Record it in `notes.md` + `CLAUDE.md`.
 
 ---

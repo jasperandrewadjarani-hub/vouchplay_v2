@@ -8,6 +8,7 @@ import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ShareButton } from '@/components/players/share-button';
 import { JoinButton } from '@/components/clubs/join-button';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -20,7 +21,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const url = `${publicEnv.siteUrl}/clubs/${slug}`;
   const description =
     club.description?.trim() ||
-    `${club.name}${club.city ? ` · ${club.city}` : ''} — a pickleball club on VouchPlay.`;
+    `${club.name}${club.city ? ` · ${club.city}` : ''} - a pickleball club on VouchPlay.`;
   return {
     title: club.name,
     description,
@@ -108,6 +109,7 @@ export default async function ClubPage({ params }: Params) {
             >
               <Settings size={15} aria-hidden />
               Manage
+              <LinkSpinner />
             </Link>
           )}
         </div>
@@ -116,7 +118,7 @@ export default async function ClubPage({ params }: Params) {
           <p className="text-foreground-muted mt-3 text-xs">
             {club.verificationStatus === 'rejected'
               ? 'Verification was declined. Contact support via /me/support if you think this is a mistake.'
-              : 'Verification pending — our team reviews new clubs for the verified badge.'}
+              : 'Verification pending - our team reviews new clubs for the verified badge.'}
           </p>
         )}
       </header>

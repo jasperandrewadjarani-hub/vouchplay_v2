@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 /**
  * Refreshes the Supabase auth session cookie on navigation (handover §34A: middleware stays
- * lightweight — only an auth check, and the matcher excludes static assets). No-ops until Supabase
+ * lightweight - only an auth check, and the matcher excludes static assets). No-ops until Supabase
  * env is configured, so the app shell still runs before credentials are wired.
  */
 export async function updateSession(request: NextRequest) {

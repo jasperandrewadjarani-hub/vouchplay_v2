@@ -52,7 +52,7 @@ function filtersKey(f: PlayerFilters): string {
 // ----------------------------------------------------------------------------
 // Public-by-design badge facts (§8.2). RLS-clean: read through the anon client via the
 // `public_player_facts()` SECURITY DEFINER RPC (migration 0003), which returns ONLY safe booleans
-// — never the sensitive columns of user_roles / identity_verifications. The service client is no
+// - never the sensitive columns of user_roles / identity_verifications. The service client is no
 // longer on the per-card badge path (only the opt-in role/identity FILTER id-lists below still use
 // it, reading a single safe `user_id` column).
 // ----------------------------------------------------------------------------
@@ -336,13 +336,13 @@ export async function getPlayerBySlug(
   return toPlayerProfileDTO(row, extras, viewer);
 }
 
-/** Lightweight fetch for metadata generation (§28) — reuses the cached profile read. */
+/** Lightweight fetch for metadata generation (§28) - reuses the cached profile read. */
 export async function getPlayerMetaBySlug(slug: string): Promise<PlayerProfileDTO | null> {
   return getPlayerBySlug(slug, { viewerId: null, isStaff: false });
 }
 
 // ----------------------------------------------------------------------------
-// Vouch comments (§9.3) — always attributed; public read of active comments.
+// Vouch comments (§9.3) - always attributed; public read of active comments.
 // ----------------------------------------------------------------------------
 
 export interface PlayerComment {

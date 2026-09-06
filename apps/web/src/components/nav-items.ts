@@ -1,7 +1,7 @@
 import { Home, Users, Shield, Trophy, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-/** Locked primary navigation — five tabs (handover §5.1). Settings is NOT a primary tab. */
+/** Locked primary navigation - five tabs (handover §5.1). Settings is NOT a primary tab. */
 export interface NavItem {
   href: string;
   label: string;

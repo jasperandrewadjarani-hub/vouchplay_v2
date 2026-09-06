@@ -42,7 +42,7 @@ export function PaymentForm({
   if (paymentStatus === 'submitted') {
     return (
       <p className="text-foreground-muted mt-2 text-xs">
-        Payment proof submitted — awaiting organizer review.
+        Payment proof submitted - awaiting organizer review.
       </p>
     );
   }

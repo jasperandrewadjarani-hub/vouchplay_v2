@@ -5,11 +5,13 @@ import { listTournaments, type TournamentFilters } from '@/lib/tournaments/queri
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { TournamentCard } from '@/components/tournaments/tournament-card';
+import { LinkSpinner } from '@/components/ui/link-spinner';
+import { InstantFilterForm } from '@/components/ui/instant-filter-form';
 
 export const metadata: Metadata = {
   title: 'Tournaments',
   description:
-    'Find pickleball tournaments on VouchPlay — discover events, divisions, and organizers.',
+    'Find pickleball tournaments on VouchPlay - discover events, divisions, and organizers.',
 };
 
 type SP = Record<string, string | string[] | undefined>;
@@ -56,9 +58,6 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
   ]);
   const canCreate = user ? await viewerIsOrganizer(user.id) : false;
 
-  const inputCls =
-    'rounded-xl border border-border bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-foreground-muted focus-visible:outline-2 focus-visible:outline-offset-2';
-
   return (
     <div className="space-y-5">
       <div className="vp-in flex items-end justify-between gap-3">
@@ -74,29 +73,16 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
         >
           <Plus size={16} aria-hidden />
           {canCreate ? 'Create tournament' : 'Become an organizer'}
+          <LinkSpinner size={16} />
         </Link>
       </div>
 
-      <form method="get" className="flex flex-wrap gap-2">
-        <input
-          name="q"
-          defaultValue={filters.q ?? ''}
-          placeholder="Search tournaments…"
-          className={`${inputCls} min-w-40 flex-1`}
-        />
-        <input
-          name="city"
-          defaultValue={filters.city ?? ''}
-          placeholder="City"
-          className={`${inputCls} w-32`}
-        />
-        <button
-          type="submit"
-          className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
-        >
-          Search
-        </button>
-      </form>
+      <InstantFilterForm
+        basePath="/tournaments"
+        initialQ={filters.q ?? ''}
+        initialCity={filters.city ?? ''}
+        placeholder="Search tournaments"
+      />
 
       <p className="text-foreground-muted text-sm" aria-live="polite">
         {total === 0 ? 'No tournaments yet.' : `${total} tournament${total === 1 ? '' : 's'}`}

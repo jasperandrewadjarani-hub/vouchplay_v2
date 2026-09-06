@@ -4,7 +4,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 /**
  * Append-only audit trail (handover §30.8, §36.40, §47). Every sensitive moderation action writes one
  * immutable row here via the service role. `audit_logs` has no UPDATE/DELETE policy for any role
- * (migration 0001), so entries can never be altered. Never throws — auditing failure is logged but
+ * (migration 0001), so entries can never be altered. Never throws - auditing failure is logged but
  * must not silently swallow the action; callers should treat a false return as a hard failure.
  */
 export interface AuditEntry {

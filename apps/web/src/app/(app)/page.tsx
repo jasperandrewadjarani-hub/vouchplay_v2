@@ -18,7 +18,7 @@ export default async function HomePage() {
           actually play with.
         </h1>
         <p className="text-foreground-muted mt-3 max-w-xl text-sm sm:text-base">
-          Skill reputation built by real community vouches — not self-declaration. Find players,
+          Skill reputation built by real community vouches - not self-declaration. Find players,
           build a trusted profile, and give organizers the evidence to run fair brackets.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
@@ -61,7 +61,7 @@ export default async function HomePage() {
       </section>
 
       <p className="text-foreground-muted text-center text-xs">
-        Your personalized dashboard — skill summary, requests, and tournament activity — arrives in
+        Your personalized dashboard - skill summary, requests, and tournament activity - arrives in
         a later release (handover §6).
       </p>
     </div>

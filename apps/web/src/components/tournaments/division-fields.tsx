@@ -54,7 +54,7 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
             name="minimumSkill"
             defaultValue={initial?.minimumSkill != null ? String(initial.minimumSkill) : ''}
           >
-            <option value="">—</option>
+            <option value="">-</option>
             {SKILL_BANDS.map((b) => (
               <option key={b.key} value={b.ordinal}>
                 {b.label}
@@ -68,7 +68,7 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
             name="maximumSkill"
             defaultValue={initial?.maximumSkill != null ? String(initial.maximumSkill) : ''}
           >
-            <option value="">—</option>
+            <option value="">-</option>
             {SKILL_BANDS.map((b) => (
               <option key={b.key} value={b.ordinal}>
                 {b.label}
