@@ -11,6 +11,7 @@ import { DivisionBuilder } from '@/components/tournaments/division-builder';
 import { AnnouncementForm } from '@/components/tournaments/announcement-form';
 import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manager';
 import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
+import { TournamentExport } from '@/components/tournaments/tournament-export';
 
 export const metadata: Metadata = { title: 'Manage tournament' };
 
@@ -64,6 +65,11 @@ export default async function ManageTournamentPage({ params }: Params) {
             teamSize: d.teamSize,
           }))}
         />
+      </section>
+
+      <section className="border-border bg-surface rounded-2xl border p-5">
+        <h2 className="text-foreground mb-3 text-base font-semibold">Export</h2>
+        <TournamentExport slug={slug} />
       </section>
 
       <section className="border-border bg-surface rounded-2xl border p-5">

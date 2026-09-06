@@ -701,10 +701,50 @@ Getting the first deploy up hit two issues:
     `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**. Handover updated: §19.2,
     §19.3, §28.1.
 
+- **2026-09-06** - **PHASE 10 (part 1 of 2) - Export (§26.11): BUILT + deployed + live.** Scope
+  decision (Jasper): **export-first**, then dashboard analytics as part 2. No migration. exceljs 4.4.0
+  added to `apps/web`.
+  - **Inspected the canonical workbook FIRST** (§26.11.1, LOCKED contract): unzipped +
+    XML-parsed `sample_data_/tournament_googlesheets_sample.xlsx`. It is the JT tournament-system
+    operational workbook (P002 PICPA system). Recorded the full contract in
+    **`docs/TOURNAMENT_SYSTEM_XLSX_CONTRACT.md`**: 8 sheets, LOCKED order (Standings, Matches, Teams,
+    Players, Divisions, TournamentDates, Sponsors, Config), exact headers/column order per sheet,
+    dates-as-Excel-serial, ID formats (DIV-01/TEAM-001/PLY-001), status vocab. VouchPlay owns
+    Teams/Players/Divisions/TournamentDates/Config; the tournament backend fills Standings/Matches
+    (emit header-only). **Never emit secrets** (the sample has an AdminPassword key - we don't).
+  - **Decoupled architecture (§26.11.2):** `apps/web/src/lib/exports/` - `schema.ts` (single source of
+    truth for the locked sheet/header constants + `TournamentExportSnapshot` typed rows + status/
+    eligibility/payment label maps + division defaults), `build.ts` (server: assembles the snapshot
+    from the live DB via the service client after authz; emails via `auth.admin.getUserById` since
+    profiles carry none; skill labels, club reps, payments, waitlist), and 3 adapters:
+    `system-xlsx.ts` (**canonical** `TournamentSystemXlsxExporter`), `normalized-xlsx.ts` (human-
+    readable Summary/Registrations/Players/Divisions), `csv.ts` (per-entity flat CSV, RFC-4180).
+  - **Structural compatibility test** (`system-xlsx.test.ts`, §26.11.1 step 6): regenerates the
+    workbook from a fixture, re-reads it with exceljs, and **fails the build** if a sheet is missing,
+    order/headers drift, the date columns stop being real dates, or the Status vocabulary drifts.
+    8 tests green (apps/web suite now 11).
+  - **Download route** `app/api/tournaments/[slug]/export/route.ts`: `?format=system|normalized|csv`
+    (+`&entity=`). Server-authorized via `authorizeOrganizer(..., 'export')`; every export writes an
+    `audit_logs` row (authorized data egress); files `no-store`; CSV gets a UTF-8 BOM for Excel.
+    UI: an **Export** section on the manage dashboard (`components/tournaments/tournament-export.tsx`)
+    with the canonical XLSX (primary) + normalized XLSX + 4 CSV links.
+  - **Native-integrity check:** generated demo workbooks from the adapters and re-read them with a
+    fresh exceljs load (8 sheets, exact headers, RegisteredAt = real `yyyy-mm-dd` date, Standings
+    header-only) - well-formed OOXML. **Per the JT rule, library reopen alone is not sufficient:**
+    sent the 3 demo files to Jasper to open in **desktop Excel** and confirm no repair prompt (pending
+    that manual confirmation before it's treated as a shippable deliverable).
+  - Gates green (typecheck/lint/format/test 11-web/build). Committed `<hash>`, pushed; deployed;
+    **re-aliased `vouchplayph.vercel.app`**.
+  - **Deferred to Phase 10 part 2:** the dashboard analytics/overview tiles (§26.1: totals, pending
+    payments, waitlist, eligibility review count, revenue), richer registration filters, waitlist
+    management UI. Bracket-config Division columns emit documented defaults (organizer tunes them in
+    the tournament system). CSV ZIP bundle (per-entity links used instead).
+
 ## Next up
-- **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** - confirm plan before building.
-  Includes the canonical Tournament-System XLSX adapter (inspect
-  `sample_data_/tournament_googlesheets_sample.xlsx` FIRST, never guess - §26.11.1).
+- **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
+  (mandatory gate before the export is a shippable deliverable).
+- **Phase 10 part 2 - Organizer Dashboard analytics (§26.1-§26.9)** - overview tiles, filters,
+  waitlist management, eligibility review rollup.
 - **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
   Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →

@@ -187,10 +187,22 @@ registration deep link** (`?register=1` scrolls straight to the registration sec
 stays clean; behaviour-only, bypasses nothing). Migrations 0010 + 0011 **applied** (vouch tweaks +
 eligibility thresholds) - Phase 9 fully active. Gates green; live.
 
-**Next:** Phase 10 - Organizer Dashboard analytics + Export (§26, §27), incl. the canonical
-Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
-(Open ops: approve an organizer via `/staff` → Role apps; seed Tane's admin; both JT admins enroll
-TOTP to reach `/staff`; clear Supabase over-quota before 21 Sep 2026.)
+**Phase 10 - Export (§26.11): ✅ BUILT + live (part 1 of 2 - export-first).** Decoupled export
+(§26.11.2): `TournamentExportSnapshot` + three adapters - the **canonical `TournamentSystemXlsxExporter`**
+(the LOCKED compatibility contract, reproduced exactly from the inspected sample workbook - see
+`docs/TOURNAMENT_SYSTEM_XLSX_CONTRACT.md`: 8 sheets, locked order, exact headers, dates-as-serial,
+ID/status vocab; secrets never emitted), a normalized human-readable workbook, and per-entity CSV. A
+**structural compatibility test fails the build** on any sheet/header/order/date/status drift
+(§26.11.1 step 6). Authorized organizer download route (`export` permission, audit-logged) + an Export
+panel on the manage dashboard. Generated demo files re-read cleanly (exceljs); desktop-Excel
+native-integrity confirmation is the one manual gate before it's a shippable deliverable. Gates green;
+live. **Deferred to Phase 10 part 2:** dashboard analytics/overview tiles (§26.1-§26.9).
+
+**Next:** Phase 10 part 2 - Organizer Dashboard analytics (§26.1-§26.9): overview tiles (totals,
+pending payments, waitlist, eligibility review count, revenue), registration filters, waitlist
+management. (Open ops: Jasper confirm the demo XLSX open cleanly in desktop Excel; approve an organizer
+via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear
+Supabase over-quota before 21 Sep 2026.)
 
 ---
 
