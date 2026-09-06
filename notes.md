@@ -826,7 +826,7 @@ Getting the first deploy up hit two issues:
     `lib/eligibility/compute.ts` (`hasHistoricalSkillMismatch`).
   - **UI:** real Achievements + Skill-tags panels + Playing-history section replace the empty profile
     scaffolds; organizer Award control per confirmed team.
-  - Gates green (typecheck/lint/format/test - core 37, apps/web 15, config 4/build). Committed `<hash>`,
+  - Gates green (typecheck/lint/format/test - core 37, apps/web 15, config 4/build). Committed `817135d`,
     pushed; deployed; **re-aliased `vouchplayph.vercel.app`**.
   - **DB step handed to Jasper:** paste `scripts/apply-0013.sql` + return verify numbers. Until then
     reads degrade to empty, writes error gracefully; deploy is safe pre-0013.
