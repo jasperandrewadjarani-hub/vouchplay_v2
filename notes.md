@@ -753,7 +753,7 @@ Getting the first deploy up hit two issues:
     loaded list (cache-first, no round-trip).
   - Confirmed Jasper's migrations context (SQL editor "untitled" tab = unsaved snippet text only; the
     0010/0011 DB changes are already committed - safe to close without saving).
-  - Gates green (typecheck/lint/format/test 15-web/build). Committed `<hash>`, pushed; deployed;
+  - Gates green (typecheck/lint/format/test 15-web/build). Committed `41af8d9`, pushed; deployed;
     **re-aliased `vouchplayph.vercel.app`**.
   - **Deferred (later):** §26.6 manual waitlist reprioritize (auto-promotion on release already works,
     §23.3); §26.8 participants search; §26.9 broader comms beyond announcements. Export desktop-Excel
