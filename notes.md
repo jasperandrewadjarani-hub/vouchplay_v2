@@ -849,7 +849,7 @@ Getting the first deploy up hit two issues:
     per-control spinner via `useTransition` (same-segment param nav doesn't trigger route `loading.tsx`,
     so an in-control spinner is required); **club cards** + **tournament cards** now embed a `LinkSpinner`
     (`useLinkStatus`) so a spinner appears on the tapped card while its detail page loads.
-  - Gates green (typecheck/lint/format/build). Committed `<hash>`, pushed; deployed; **re-aliased**.
+  - Gates green (typecheck/lint/format/build). Committed `d3d3ce8`, pushed; deployed; **re-aliased**.
 
 ## Next up
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
