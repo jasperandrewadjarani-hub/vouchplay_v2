@@ -11,11 +11,8 @@ import { InterestButton } from '@/components/tournaments/interest-button';
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { RegistrationPanel } from '@/components/tournaments/registration-panel';
-import {
-  RegisterButton,
-  RegisterAnchorScroll,
-  registerNext,
-} from '@/components/tournaments/register-cta';
+import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
+import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 
 interface Params {

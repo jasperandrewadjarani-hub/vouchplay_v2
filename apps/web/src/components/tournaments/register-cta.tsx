@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect } from 'react';
 import { ClipboardCheck } from 'lucide-react';
+import { registerNext } from '@/lib/tournaments/register-link';
 
 /**
  * Registration entry points on a tournament page (handover §19.2, §19.3, §28.1).
@@ -14,10 +15,6 @@ import { ClipboardCheck } from 'lucide-react';
  *    scrolls to and briefly highlights the registration section so it "leads directly to
  *    registration options" for whoever opens the link.
  */
-
-export function registerNext(slug: string): string {
-  return `/tournaments/${slug}?register=1`;
-}
 
 const btn =
   'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2';

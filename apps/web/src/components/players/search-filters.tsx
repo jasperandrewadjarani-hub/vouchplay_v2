@@ -1,8 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useRef, useState, type FormEvent } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { useRef, useState, useTransition, type FormEvent } from 'react';
+import { Search, SlidersHorizontal, X, Loader2 } from 'lucide-react';
 import { SKILL_BANDS, PH_CITIES } from '@vouchplay/config';
 
 export interface ActiveFilters {
@@ -39,6 +39,8 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
   );
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [action, setAction] = useState<'search' | 'clear' | null>(null);
 
   function apply(form: HTMLFormElement) {
     const fd = new FormData(form);
@@ -56,7 +58,8 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
     if (fd.get('lookingForPartner')) params.set('lookingForPartner', '1');
     if (fd.get('openForSponsorship')) params.set('openForSponsorship', '1');
     const qs = params.toString();
-    router.push(qs ? `/players?${qs}` : '/players');
+    setAction('search');
+    startTransition(() => router.push(qs ? `/players?${qs}` : '/players'));
   }
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -117,8 +120,12 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
         </button>
         <button
           type="submit"
-          className="bg-primary inline-flex items-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+          disabled={pending && action === 'search'}
+          className="bg-primary inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-70"
         >
+          {pending && action === 'search' && (
+            <Loader2 size={14} className="animate-spin" aria-hidden />
+          )}
           Search
         </button>
       </div>
@@ -199,10 +206,18 @@ export function SearchFilters({ current }: { current: ActiveFilters }) {
       {hasAny && (
         <button
           type="button"
-          onClick={() => router.push('/players')}
-          className="text-foreground-muted hover:text-foreground inline-flex items-center gap-1 text-xs"
+          disabled={pending && action === 'clear'}
+          onClick={() => {
+            setAction('clear');
+            startTransition(() => router.push('/players'));
+          }}
+          className="text-foreground-muted hover:text-foreground inline-flex items-center gap-1 text-xs disabled:opacity-60"
         >
-          <X size={12} aria-hidden />
+          {pending && action === 'clear' ? (
+            <Loader2 size={12} className="animate-spin" aria-hidden />
+          ) : (
+            <X size={12} aria-hidden />
+          )}
           Clear filters
         </button>
       )}

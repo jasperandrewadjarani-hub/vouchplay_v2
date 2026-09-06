@@ -2972,6 +2972,28 @@ Prefer:
 
 Avoid crowded horizontal button rows.
 
+## 33.5A Loading & Navigation Feedback
+
+Every user-initiated navigation or filter MUST give immediate visual feedback on the element the user
+acted on - never leave a tapped control looking inert while the server responds. Conventions:
+- **Links / cards** (player, club, tournament cards; "View profile", "Manage", "Create …" links):
+  render a `LinkSpinner` (App Router `useLinkStatus`) inside the `<Link>` so a spinner appears on the
+  card/button the instant it is clicked, without losing native link semantics (prefetch, middle-click).
+- **Filter / search controls** that navigate by changing URL params (the directory Search button,
+  "Clear filters", instant-filter forms): wrap the `router.push` in `useTransition` and show a spinner
+  on the specific control that is pending (`Search` shows it when searching, `Clear filters` when
+  clearing). Same-segment param changes do NOT trigger the route `loading.tsx`, so an in-control
+  spinner is required, not optional.
+- **Full-page navigations** to a new route segment additionally show the route `loading.tsx` spinner.
+- **Form submissions / server actions**: the submit button shows a pending spinner (`useFormStatus` /
+  `useTransition`) and is disabled while pending.
+- All spinners respect `prefers-reduced-motion` and carry an accessible pending label.
+
+**Client/server boundary (coding rule that prevents a class of runtime crash):** a plain function
+exported from a `'use client'` module becomes a client reference and MUST NOT be called from a Server
+Component - doing so throws "Attempted to call X() from the server". Put any helper a Server Component
+needs (e.g. a deep-link path builder) in a **non-`'use client'` module** and import it into both sides.
+
 ## 33.6 Accessibility
 
 Minimum target:

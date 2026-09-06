@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Shield, MapPin, BadgeCheck, Users } from 'lucide-react';
 import type { ClubCardDTO } from '@/lib/clubs/dto';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 /** Concise club card for the directory (handover §15.5). Never ranked by anything sensitive. */
 export function ClubCard({ club }: { club: ClubCardDTO }) {
@@ -21,6 +22,9 @@ export function ClubCard({ club }: { club: ClubCardDTO }) {
         <div className="flex items-center gap-1.5">
           <h3 className="text-foreground truncate font-semibold">{club.name}</h3>
           {club.verified && <BadgeCheck size={15} aria-hidden className="text-primary shrink-0" />}
+          <span className="text-primary ml-auto shrink-0">
+            <LinkSpinner size={15} />
+          </span>
         </div>
         <div className="text-foreground-muted mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
           {club.city && (

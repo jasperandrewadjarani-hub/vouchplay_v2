@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Trophy, MapPin, CalendarDays } from 'lucide-react';
 import type { TournamentCardDTO } from '@/lib/tournaments/dto';
 import { TournamentStatusPill } from './status-pill';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 function dateRange(startAt: string | null, endAt: string | null): string | null {
   if (!startAt) return null;
@@ -38,7 +39,12 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
         </span>
       </div>
       <div className="p-3.5">
-        <h3 className="text-foreground truncate font-semibold">{tournament.name}</h3>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-foreground truncate font-semibold">{tournament.name}</h3>
+          <span className="text-primary ml-auto shrink-0">
+            <LinkSpinner size={15} />
+          </span>
+        </div>
         <div className="text-foreground-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
           {tournament.city && (
             <span className="inline-flex items-center gap-1">

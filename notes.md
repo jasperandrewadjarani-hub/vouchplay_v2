@@ -834,9 +834,25 @@ Getting the first deploy up hit two issues:
     later); admin-issued (vs organizer-issued) achievements; the "repeated podiums" nuance in §50 (V1
     flags any organizer-confirmed higher-division entry).
 
+- **2026-09-06** - **Migration 0013 APPLIED (Phase 12 fully live).** Jasper ran `scripts/apply-0013.sql`;
+  results as expected. Achievements/skill-tags/history + §50 signal fully active.
+
+- **2026-09-06** - **Bugfix + navigation loading cues (Jasper).** Shipped:
+  - **FIXED tournament-page crash** ("Application error: server-side exception", digest 1910515799).
+    Root cause: `registerNext()` was exported from `register-cta.tsx` (a `'use client'` module) and
+    **called from the Server Component** tournament page (`Attempted to call registerNext() from the
+    server`) - it runs on every render, so the page 500'd for signed-in users. Reproduced locally by
+    forcing the authed branch on the dev server and reading the stack. Fix: moved `registerNext` into a
+    server-safe util `lib/tournaments/register-link.ts` (no `'use client'`), imported by both the page
+    and the client CTA. Documented the client/server-function boundary rule in handover §33.5A.
+  - **Loading cues (handover §33.5A, new):** directory **Search** button + **Clear filters** now show a
+    per-control spinner via `useTransition` (same-segment param nav doesn't trigger route `loading.tsx`,
+    so an in-control spinner is required); **club cards** + **tournament cards** now embed a `LinkSpinner`
+    (`useLinkStatus`) so a spinner appears on the tapped card while its detail page loads.
+  - Gates green (typecheck/lint/format/build). Committed `<hash>`, pushed; deployed; **re-aliased**.
+
 ## Next up
-- **Manual: apply `scripts/apply-0013.sql`** (migration 0013, achievements/skill-tags) + return verify
-  numbers (expect ach_tables=5, skill_tags_seeded=10, ach_rls_policies=5).
+- **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
 - **Phase 13 - Admin Control Center** (§30+) or another priority - confirm next scope with Jasper.
