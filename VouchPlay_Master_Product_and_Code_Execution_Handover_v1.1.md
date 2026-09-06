@@ -1811,6 +1811,28 @@ Rules:
   behaviour-only: it never bypasses auth, eligibility (§25), capacity/slot reservation (§23), or
   visibility rules (an unlisted tournament stays unlisted).
 
+## 19.4 Unverified / under-vouched skill prompt at registration
+
+When a player registers whose skill is **not yet community-vouched or Skill-Verified** (unrated, or
+below the division's required vouch count / STS - the ELIG_V1 "REVIEW"/unrated conditions, §25.3/§25.4),
+the registration panel MUST show a clear, non-blocking **prompt** before they submit. The player can
+still register - this is decision-support, not a hard gate (§25.6) - but they are told plainly:
+
+- their skill isn't vouched yet, so **the organizer may not approve their entry**;
+- to **get vouched by players who actually know their game** (teammates, opponents, coaches) so their
+  displayed skill is credible - with a link to share their profile / request a vouch (§12);
+- that vouches from people they've genuinely played with are what make the rating trustworthy (and
+  that fake/reciprocal-only vouches are detected, §11.2).
+
+Copy is neutral and encouraging, never accusatory (§25.6 - no "sandbagger"/"smurf"). The organizer
+side already supports this: an unrated/under-vouched registration lands in **REVIEW** on the
+eligibility panel (§25.5), and the organizer has the explicit option to **reject/disapprove** it (with
+an audited reason) or approve with an override. This prompt simply sets the player's expectation up
+front and channels them to get vouched, which also feeds the vouch-density flywheel (§13A).
+
+The prompt is a per-registration UI requirement (Definition of Done for the registration surface) and
+respects §33.5A loading feedback like every other control.
+
 ---
 
 # 20. Partner Finder
@@ -2215,6 +2237,11 @@ Actions:
 - Reject.
 
 Every override requires optional/required reason according to action and creates audit log.
+
+An **unrated / under-vouched** registrant (no community vouches yet, or below the required vouch
+count / STS) lands here in `REVIEW`, and the organizer may **reject/disapprove** the entry (audited
+reason) - the player is warned of this up front by the §19.4 registration prompt, which channels them
+to get vouched by players who know their game. This is decision-support, never an automatic block.
 
 ## 25.6 No Automated Defamation
 
@@ -2979,6 +3006,10 @@ Build reusable components:
 - BrandLockup (enlarged logo + "by JT Consulting & Analytics" microcopy, links to JT FB - §5.2.1).
 - LeaderboardCard + MedalBadge (🥇🥈🥉) - Home leaderboards (§6.1).
 - BidCard + BidModal + BidSpotlightRow - gamified player bidding (§16A, §6.1).
+- **Button / ButtonLink / SubmitButton / LinkSpinner** - the loading-feedback primitives (§33.5A).
+  `ButtonLink` is a `<Link>` styled as a Button with a built-in `LinkSpinner`; use it for navigating
+  CTAs so the loading cue is guaranteed by construction. `SubmitButton` shows a pending spinner for
+  form/server-action submits. Every interactive control that waits on the server uses one of these.
 
 ## 33.5 Mobile Interaction
 
@@ -2993,19 +3024,27 @@ Avoid crowded horizontal button rows.
 
 ## 33.5A Loading & Navigation Feedback
 
-Every user-initiated navigation or filter MUST give immediate visual feedback on the element the user
-acted on - never leave a tapped control looking inert while the server responds. Conventions:
-- **Links / cards** (player, club, tournament cards; "View profile", "Manage", "Create …" links):
-  render a `LinkSpinner` (App Router `useLinkStatus`) inside the `<Link>` so a spinner appears on the
-  card/button the instant it is clicked, without losing native link semantics (prefetch, middle-click).
+**This is a MANDATORY, cross-cutting acceptance criterion, not a nicety.** Every button, link, card,
+tab, filter, or form control that triggers a page load, a route change, or a server round-trip MUST
+show an immediate visual loading cue on the exact element the user tapped. It is part of the
+**Definition of Done for every feature/module in every phase**: a UI surface is not "done" until each
+of its interactive controls that waits on the server gives feedback the instant it is pressed. A tap
+that leaves the control looking inert while the server responds is a defect, to be caught in that
+phase's UI review (see each phase's gate). Conventions:
+- **Links / cards** (player, club, tournament cards; "View profile", "Manage", "Create …", "Open …"
+  links; admin tiles; settings-list rows): render a `LinkSpinner` (App Router `useLinkStatus`) inside
+  the `<Link>` so a spinner appears on the card/button the instant it is clicked, without losing
+  native link semantics (prefetch, middle-click).
+- **Link-as-button CTAs**: use the shared **`ButtonLink`** primitive (a `<Link>` styled as a Button
+  with a built-in `LinkSpinner`) rather than a bare `<Link><Button>` - it guarantees the cue by
+  construction. Prefer it for every primary/secondary CTA that navigates.
 - **Filter / search controls** that navigate by changing URL params (the directory Search button,
-  "Clear filters", instant-filter forms): wrap the `router.push` in `useTransition` and show a spinner
-  on the specific control that is pending (`Search` shows it when searching, `Clear filters` when
-  clearing). Same-segment param changes do NOT trigger the route `loading.tsx`, so an in-control
-  spinner is required, not optional.
+  "Clear filters", instant-filter forms, admin search): wrap the `router.push` in `useTransition` and
+  show a spinner on the specific control that is pending. Same-segment param changes do NOT trigger
+  the route `loading.tsx`, so an in-control spinner is required, not optional.
 - **Full-page navigations** to a new route segment additionally show the route `loading.tsx` spinner.
 - **Form submissions / server actions**: the submit button shows a pending spinner (`useFormStatus` /
-  `useTransition`) and is disabled while pending.
+  `useTransition` via the shared `SubmitButton`) and is disabled while pending.
 - All spinners respect `prefers-reduced-motion` and carry an accessible pending label.
 
 **Client/server boundary (coding rule that prevents a class of runtime crash):** a plain function
@@ -5621,6 +5660,66 @@ or its repository-relative equivalent.
 
 ---
 
+## Phase 13A - Vouching Incentives (Community Contribution)
+
+Growth/engagement layer that rewards *giving* vouches, to drive the vouch density that makes CSL/STS
+and the eligibility engine useful. Full design brief: `docs/BRAINSTORM_Vouch_Incentives_and_Partner_
+Finder_(2026-09).md`.
+
+**Non-negotiable:** this is a SEPARATE contribution dimension. It must NEVER feed CSL, STS,
+Skill-Verified status, vouch weight, or eligibility (the anti-circular-scoring rule, §72). A
+build-time guard (mirroring the §25.6 label guard) fails the build if the contribution field is read
+by any skill/weight/eligibility code path.
+
+### Build
+- Pure versioned engine in `@vouchplay/core` (`CONTRIB_V1`), unit-tested: contribution level/XP +
+  badge eligibility computed from a player's OUTGOING vouches/endorsements only.
+- Cached public aggregate (`player_contribution`), recompute-on-write; never joined into skill reads.
+- Badges: First Vouch; 10/50/100 distinct players vouched (coverage); Newcomer Champion (vouched
+  thinly-vouched players); Consistent Voucher (weekly streak); Community Pillar (rare, top tier).
+- Anti-gaming: per-distinct-player (not per-pair-repeat) XP; reciprocity-ring dampening (reuse
+  fraud-flag machinery); diminishing returns/decay; consensus-accuracy bonus deferred to v2 (needs
+  volume). All thresholds are admin settings in `system_settings` (Admin Control Center).
+- Display ties into the Phase-12 achievements/skill-tags UI + Home leaderboards (§6.1).
+
+**Recommended timing:** a MINIMAL nudge (progress-to-Skill-Verified meter + "get vouched / vouch
+others" prompts, no full gamification) can ship before/during the pilot to lift vouching; the full
+level/badge/streak system lands post-pilot. Non-blocking for the pilot.
+
+### Gate
+- contribution value provably isolated from skill/weight/eligibility (build guard passes).
+- no reward for reciprocal-only rings; per-pair spam earns nothing.
+
+---
+
+## Phase 13B - Partner Finder (skill + community matchmaking)
+
+Suggests compatible doubles partners; unblocks the profile "Request to partner" action and the LFP
+(`looking_for_partner`) flag. Full design brief in the same doc.
+
+### Build
+- Pure versioned engine `@vouchplay/core` (`MATCH_V1`), unit-tested + explainable: ranks candidates
+  by skill compatibility (CSL proximity; similar or complementary mode) + same/nearby city + shared
+  clubs + vouch-graph proximity (mutual vouchers as an AGGREGATE only - never expose anonymous
+  voucher identity, §4.5/§72) + past co-play (`team_members`) + play-style tags + both-LFP intent.
+  All weights admin-tunable.
+- Cache-first data layer (server-side authz, no `select(*)`, no N+1); cold-start falls back to
+  skill + city + LFP.
+- `/partners` (Partner Finder) page; each suggestion shows a "why you match" reason line; wire the
+  profile "Request to partner" button to it and to the Phase-7 tournament partner-invitation flow
+  (suggestion → invite in one hop).
+- Privacy/safety: respect profile visibility + directory opt-out; suggest only among discoverable /
+  LFP players; never across an active block; exclude suspended/banned.
+
+**Recommended timing:** POST-pilot. Collaborative-filtering match signals ("players who partnered
+with your partners") come later once `team_members` history has volume. Non-blocking for the pilot.
+
+### Gate
+- suggestions respect visibility, blocks, and account status; anonymous voucher identity never exposed.
+- every suggestion is explainable (reasons shown).
+
+---
+
 ## Phase 14 - Hardening & Beta
 
 ### Build/Test
@@ -6114,6 +6213,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.3 (2026-09-07)
+- **§33.5A Loading & Navigation Feedback made a MANDATORY, cross-cutting Definition-of-Done** for
+  every feature/module: any control that triggers a load/route-change/server round-trip must show an
+  immediate loading cue on the tapped element, checked in each phase's UI review. Documented the
+  `ButtonLink`/`SubmitButton`/`LinkSpinner` primitives in §33.4.
+- **Added Phase 13A - Vouching Incentives (Community Contribution)** and **Phase 13B - Partner
+  Finder (`MATCH_V1`)** as growth features (non-blocking for the pilot; 13A light-nudge pullable
+  pre-pilot; 13B post-pilot). Both provably isolated from the skill model (anti-circular, §72).
+  Full design brief: `docs/BRAINSTORM_Vouch_Incentives_and_Partner_Finder_(2026-09).md`.
+- **Added §19.4 Unverified / under-vouched skill prompt at registration:** a non-blocking prompt
+  warns an unrated/under-vouched registrant that the organizer may disapprove and channels them to
+  get vouched by players who know their game; §25.5 reaffirms the organizer's audited reject option.
+- **Vouch per-24h limits default to 0 = unlimited** (JT 2026-09-07): a player may vouch for unlimited
+  distinct players/day; the one-active-vouch-per-pair rule + cooldown are unchanged; still admin-tunable.
 
 ## v1.2 (2026-09-05)
 - Added **§0Z Current Build Status** - Phases 0–1 built and LIVE (https://vouchplayph.vercel.app);

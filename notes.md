@@ -925,7 +925,36 @@ Getting the first deploy up hit two issues:
   - Gates green (typecheck/lint/format/test - core 47, config 19, web 15/build 31 pages). Committed +
     pushed to `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
 
+- **2026-09-07** - **Toggle fix + master-plan updates + pilot-prep handover (Jasper).**
+  - **Notification toggle glitch FIXED (for real):** the switch knob overshot the track when ON. Root
+    cause was an `absolute` knob (`h-5 w-5`, `translate-x-5`) whose geometry sat flush at the edge.
+    Replaced with the canonical Headless-UI pattern - `inline-flex items-center` track + smaller
+    `h-4 w-4` knob + `translate-x-1`/`translate-x-6` - which sits cleanly inside at the app's 14px root
+    (ON knob spans [21,35]px in a 38.5px track). Only one switch instance in the app; fixed it.
+  - **Master plan (handover) updated to content v1.3:**
+    - **§33.5A** promoted to a **MANDATORY, cross-cutting Definition-of-Done**: every control that
+      triggers a load/route-change/server round-trip must show an immediate loading cue on the tapped
+      element, checked in each phase's UI review. Documented `ButtonLink`/`SubmitButton`/`LinkSpinner`
+      in §33.4.
+    - **Phase 13A - Vouching Incentives** + **Phase 13B - Partner Finder** added (growth, non-blocking
+      for the pilot; 13A light-nudge pullable pre-pilot, 13B post-pilot; both walled off from the skill
+      model per §72). Brief: `docs/BRAINSTORM_Vouch_Incentives_and_Partner_Finder_(2026-09).md`.
+    - **§19.4 Unverified/under-vouched registration prompt** added (+ §25.5 cross-ref): a non-blocking
+      prompt warns an unrated/under-vouched registrant that the organizer may disapprove and channels
+      them to get vouched by players who know their game. Spec only this turn; **implementation is item
+      #1 of Pilot Prep**.
+    - Changelog v1.3 entry.
+  - **Pilot-prep handover written:** `docs/PHASE_PILOT_PREP_KICKOFF.md` - the next phase, scoped to
+    making the live app ready to open Hermosa Cup registration (implement §19.4 prompt; turn on critical
+    email via SMTP env; clear Supabase over-quota; E2E dress rehearsal + desktop-Excel export check;
+    onboard the organizer + JT admins w/ TOTP; optional hold-expiry/waitlist cron).
+  - Gates green (typecheck/lint/format/build; tests unaffected). Committed + pushed; deployed;
+    **re-aliased `vouchplayph.vercel.app`**.
+
 ## Next up
+- **PILOT PREP (next phase):** see `docs/PHASE_PILOT_PREP_KICKOFF.md`. First code item = the §19.4
+  unverified-skill registration prompt. Config/ops items for Jasper: SMTP env for critical email;
+  clear Supabase over-quota; grant the Hermosa Cup organizer + enroll JT admin TOTP.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
