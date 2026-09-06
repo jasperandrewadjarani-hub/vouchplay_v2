@@ -106,6 +106,7 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     kind: 'int',
     min: 0,
     max: 1000,
+    help: '0 = unlimited. The one-active-vouch-per-player rule always applies.',
   },
   {
     key: 'coach_vouches_per_24h',
@@ -114,6 +115,7 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     kind: 'int',
     min: 0,
     max: 1000,
+    help: '0 = unlimited.',
   },
   {
     key: 'vouch_requests_per_24h',

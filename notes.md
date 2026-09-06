@@ -891,6 +891,40 @@ Getting the first deploy up hit two issues:
     Users merge-duplicate + revoke-sessions; per-viewer settings-change diff email. **Next: pick with
     Jasper** - §16/§16A recruitment+bidding, organizer dashboard depth (§26.6/§26.8/§26.9), or §13.
 
+- **2026-09-07** - **Post-Phase-13 fix batch + 2 brainstorms (Jasper).** BUILT + deployed + live.
+  No migration.
+  - **Loading cues (§33.5A):** new `ButtonLink` (a `<Link>` styled as a Button with a built-in
+    `LinkSpinner`) - swapped in for the `<Link><Button>` CTAs on `/me` (Sign in / Create account /
+    Complete profile / View public profile), home hero (Browse players / My profile / Create your
+    profile), and the header Sign-in. `SettingsLink` rows on `/me` and the `/admin` landing tiles now
+    show a `LinkSpinner` on tap. (SignOutButton / OrganizerApply already used `SubmitButton` pending.)
+  - **Bottom-nav / "notification glitch":** the fixed mobile bottom nav was translucent
+    (`bg-surface/95 backdrop-blur`), so content scrolling under it bled through at its edge (the
+    gradient "Save preferences" button showed as a blue sliver - Jasper's screenshot). Made the nav
+    **opaque** (`bg-surface`) so content is cleanly hidden beneath it, added
+    `pb-[env(safe-area-inset-bottom)]`, and bumped app content bottom padding `pb-24 → pb-28` for
+    clearance. (Verify on-device: the sliver should be gone.)
+  - **Request a vouch - NOW WORKS.** The profile "Request a vouch" button was a stale stub
+    ("opens in the next release") even though the `requestVouch` action (§12) shipped in Phase 3. Wired
+    it to a real `RequestVouchForm` modal (attributed request + optional note), with auth-resume via
+    `?intent=request-vouch`. **Request to partner** stays honest: partner invites are tournament-scoped
+    today (a standalone Partner Finder is a later phase - see brainstorm), so the button now points
+    players to invite a partner when registering for a tournament (the working path) instead of a dead
+    "next release" message.
+  - **Vouches unlimited by default (JT 2026-09-07):** `player_vouches_per_24h` + `coach_vouches_per_24h`
+    default **0 = unlimited**; `submitVouch` treats `limit <= 0` as no cap. The one-active-vouch-per-pair
+    rule + update cooldown are unchanged, so a player can vouch for unlimited *distinct* players/day but
+    still only one active vouch each. Still admin-tunable (a cap can be set anytime from
+    `/admin/settings`); catalog help documents "0 = unlimited". Updated the config default test.
+  - **Brainstorms (no code):** `docs/BRAINSTORM_Vouch_Incentives_and_Partner_Finder_(2026-09).md` -
+    (1) a **vouching-incentive** layer (separate "Community Contribution" level + badges + streak,
+    coverage/quality-weighted, with a hard wall so it never feeds CSL/STS/weight - the anti-circular
+    rule) and (2) a **Partner Finder** (`MATCH_V1` rules-based, explainable: skill + geo + shared
+    clubs + vouch-graph proximity + LFP; privacy/anonymity-safe). Both mapped onto the existing
+    pure-core-engine + admin-settings patterns; sequencing proposed.
+  - Gates green (typecheck/lint/format/test - core 47, config 19, web 15/build 31 pages). Committed +
+    pushed to `main`; Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
+
 ## Next up
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt

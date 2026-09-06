@@ -2,80 +2,23 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Ban, Handshake, Flag, ClipboardCheck } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { ReportModal } from '@/components/safety/report-modal';
 import { SkillReviewModal } from '@/components/safety/skill-review-modal';
 import { BlockControl } from '@/components/safety/block-control';
+import { RequestVouchForm } from './request-vouch-form';
 
 /**
- * Profile actions (handover §9.1). Phase 4 wires the real Safety & Moderation entry points: Report,
- * Request skill review, and Block/Unblock. Request-a-vouch and partner invites remain gated stubs
- * until their UI phases. Anonymous viewers gate to signup with a resume `next`.
+ * Profile actions (handover §9.1, §12). Request-a-vouch is a real request (§12); Report, Request
+ * skill review, and Block/Unblock are the Phase-4 safety entry points. Partner invites are
+ * tournament-scoped today (a standalone Partner Finder is a later phase), so the partner action
+ * points players to the working path. Anonymous viewers gate to signup with a resume `next`.
  */
-type StubIntent = 'request-vouch' | 'partner';
-
-const STUBS: Record<StubIntent, { label: string; icon: LucideIcon; soon: string }> = {
-  'request-vouch': {
-    label: 'Request a vouch',
-    icon: ClipboardCheck,
-    soon: 'Requesting vouches opens in the next release.',
-  },
-  partner: {
-    label: 'Request to partner',
-    icon: Handshake,
-    soon: 'Partner requests arrive with the Partner Finder.',
-  },
-};
-
 const secondaryBtn =
   'inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2';
 const dangerBtn =
   'inline-flex items-center gap-2 rounded-xl border border-border px-3.5 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2';
-
-function StubAction({
-  intent,
-  slug,
-  authed,
-}: {
-  intent: StubIntent;
-  slug: string;
-  authed: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const { label, icon: Icon, soon } = STUBS[intent];
-
-  if (!authed) {
-    const next = `/players/${slug}?intent=${intent}`;
-    return (
-      <Link href={`/signup?next=${encodeURIComponent(next)}`} className={secondaryBtn}>
-        <Icon size={15} aria-hidden />
-        {label}
-      </Link>
-    );
-  }
-  return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={secondaryBtn}
-        aria-expanded={open}
-      >
-        <Icon size={15} aria-hidden />
-        {label}
-      </button>
-      {open && (
-        <span
-          role="status"
-          className="border-border bg-surface text-foreground-muted absolute top-full left-0 z-10 mt-2 w-60 rounded-xl border p-3 text-xs shadow-lg"
-        >
-          {soon}
-        </span>
-      )}
-    </span>
-  );
-}
 
 export function ProfileActions({
   slug,
@@ -92,7 +35,20 @@ export function ProfileActions({
   targetName: string;
   iBlocked: boolean;
 }) {
-  const [modal, setModal] = useState<'report' | 'skill-review' | null>(null);
+  const params = useSearchParams();
+  const intent = params.get('intent');
+  const [modal, setModal] = useState<'report' | 'skill-review' | 'request-vouch' | null>(
+    !isOwnProfile && authed
+      ? intent === 'request-vouch'
+        ? 'request-vouch'
+        : intent === 'report'
+          ? 'report'
+          : intent === 'skill-review'
+            ? 'skill-review'
+            : null
+      : null,
+  );
+  const [partnerNote, setPartnerNote] = useState(false);
 
   if (isOwnProfile) {
     return (
@@ -108,15 +64,50 @@ export function ProfileActions({
     );
   }
 
-  // Signed-in viewers get real actions; anonymous viewers gate to signup.
-  const gateReport = `/signup?next=${encodeURIComponent(`/players/${slug}?intent=report`)}`;
-  const gateReview = `/signup?next=${encodeURIComponent(`/players/${slug}?intent=skill-review`)}`;
+  // Signed-in viewers get real actions; anonymous viewers gate to signup (resumes after auth).
+  const gate = (i: string) => `/signup?next=${encodeURIComponent(`/players/${slug}?intent=${i}`)}`;
 
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <StubAction intent="request-vouch" slug={slug} authed={authed} />
-        <StubAction intent="partner" slug={slug} authed={authed} />
+        {/* Request a vouch (§12) - real request */}
+        {authed ? (
+          <button type="button" onClick={() => setModal('request-vouch')} className={secondaryBtn}>
+            <ClipboardCheck size={15} aria-hidden />
+            Request a vouch
+          </button>
+        ) : (
+          <Link href={gate('request-vouch')} className={secondaryBtn}>
+            <ClipboardCheck size={15} aria-hidden />
+            Request a vouch
+          </Link>
+        )}
+
+        {/* Request to partner - tournament-scoped today; a standalone finder is a later phase */}
+        <span className="relative inline-flex">
+          <button
+            type="button"
+            onClick={() => setPartnerNote((v) => !v)}
+            className={secondaryBtn}
+            aria-expanded={partnerNote}
+          >
+            <Handshake size={15} aria-hidden />
+            Request to partner
+          </button>
+          {partnerNote && (
+            <span
+              role="status"
+              className="border-border bg-surface text-foreground-muted absolute top-full left-0 z-10 mt-2 w-64 rounded-xl border p-3 text-xs shadow-lg"
+            >
+              You partner up inside a tournament: open a{' '}
+              <Link href="/tournaments" className="text-primary font-medium">
+                tournament
+              </Link>{' '}
+              and invite {targetName} as your partner when you register. A profile-level Partner
+              Finder is coming.
+            </span>
+          )}
+        </span>
 
         {authed ? (
           <button type="button" onClick={() => setModal('skill-review')} className={secondaryBtn}>
@@ -124,7 +115,7 @@ export function ProfileActions({
             Request skill review
           </button>
         ) : (
-          <Link href={gateReview} className={secondaryBtn}>
+          <Link href={gate('skill-review')} className={secondaryBtn}>
             <ClipboardCheck size={15} aria-hidden />
             Request skill review
           </Link>
@@ -136,7 +127,7 @@ export function ProfileActions({
             Report
           </button>
         ) : (
-          <Link href={gateReport} className={dangerBtn}>
+          <Link href={gate('report')} className={dangerBtn}>
             <Flag size={15} aria-hidden />
             Report
           </Link>
@@ -152,6 +143,13 @@ export function ProfileActions({
         )}
       </div>
 
+      {modal === 'request-vouch' && (
+        <RequestVouchForm
+          recipientId={targetId}
+          recipientName={targetName}
+          onClose={() => setModal(null)}
+        />
+      )}
       {modal === 'report' && (
         <ReportModal
           targetType="player"

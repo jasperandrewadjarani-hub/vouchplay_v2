@@ -117,9 +117,11 @@ export async function submitVouch(
     const usedCoachWeight = v.asCoach && isCoach;
     const weight = effectiveWeight({ usedCoachWeight, voucherIdentityVerified }, settings.weights);
 
-    // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window.
+    // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window. A limit of 0 (or
+    // less) means unlimited - the default (JT 2026-09-07); the one-active-vouch-per-pair rule below
+    // still prevents duplicate vouches for the same player.
     const limit = isCoach ? settings.limits.coachPer24h : settings.limits.playerPer24h;
-    if ((actionsRes.count ?? 0) >= limit) {
+    if (limit > 0 && (actionsRes.count ?? 0) >= limit) {
       return {
         error: `You've reached your vouch limit for now (${limit} per 24 hours). Try again later.`,
       };

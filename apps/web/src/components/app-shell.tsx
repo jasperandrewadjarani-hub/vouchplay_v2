@@ -35,7 +35,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
       <Header />
       <div className="mx-auto flex w-full max-w-6xl">
         <Sidebar />
-        <main className="min-w-0 flex-1 px-4 pt-4 pb-24 md:pb-8">
+        <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">
           {gated ? <MaintenanceScreen /> : children}
         </main>
       </div>

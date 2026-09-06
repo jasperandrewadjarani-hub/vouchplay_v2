@@ -5,7 +5,8 @@ import { viewerIsStaff, viewerIsAdmin } from '@/lib/moderation/staff';
 import { createServiceClient } from '@/lib/supabase/service';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { OrganizerApply } from '@/components/roles/organizer-apply';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = { title: 'Me' };
 
@@ -25,12 +26,10 @@ export default async function MePage({
           Sign in to build your profile, vouch for players, and join clubs and tournaments.
         </p>
         <div className="flex justify-center gap-2">
-          <Link href="/login">
-            <Button>Sign in</Button>
-          </Link>
-          <Link href="/signup">
-            <Button variant="secondary">Create account</Button>
-          </Link>
+          <ButtonLink href="/login">Sign in</ButtonLink>
+          <ButtonLink href="/signup" variant="secondary">
+            Create account
+          </ButtonLink>
         </div>
       </section>
     );
@@ -75,14 +74,14 @@ export default async function MePage({
           <Row label="Account" value={profile?.account_status ?? 'active'} />
         </dl>
         {!profile?.onboarded_at ? (
-          <Link href="/onboarding" className="mt-4 inline-block">
-            <Button>Complete your profile</Button>
-          </Link>
+          <ButtonLink href="/onboarding" className="mt-4">
+            Complete your profile
+          </ButtonLink>
         ) : (
           profile?.slug && (
-            <Link href={`/players/${profile.slug}`} className="mt-4 inline-block">
-              <Button variant="secondary">View public profile</Button>
-            </Link>
+            <ButtonLink href={`/players/${profile.slug}`} variant="secondary" className="mt-4">
+              View public profile
+            </ButtonLink>
           )
         )}
       </div>
@@ -121,8 +120,8 @@ function SettingsLink({ href, label }: { href: string; label: string }) {
       className="text-foreground hover:bg-surface-muted flex items-center justify-between px-4 py-3 font-medium first:rounded-t-2xl last:rounded-b-2xl"
     >
       <span>{label}</span>
-      <span aria-hidden className="text-foreground-muted">
-        ›
+      <span aria-hidden className="text-foreground-muted flex items-center gap-2">
+        <LinkSpinner />›
       </span>
     </Link>
   );

@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { LinkSpinner } from './link-spinner';
 
 type Variant = 'primary' | 'secondary' | 'ghost';
 
@@ -26,6 +28,31 @@ export function Button({
     <button className={`${base} ${variants[variant]} ${className}`} {...props}>
       {children}
     </button>
+  );
+}
+
+/**
+ * A Next `<Link>` styled as a Button, with a built-in navigation spinner (handover §33.5A - every
+ * primary CTA gives immediate feedback on tap). Use for links that read as buttons; keeps native
+ * link semantics (prefetch, middle/cmd-click).
+ */
+export function ButtonLink({
+  href,
+  variant = 'primary',
+  className = '',
+  children,
+  ...props
+}: {
+  href: string;
+  variant?: Variant;
+  className?: string;
+  children: ReactNode;
+} & Omit<React.ComponentProps<typeof Link>, 'href' | 'className'>) {
+  return (
+    <Link href={href} className={`${base} ${variants[variant]} ${className}`} {...props}>
+      {children}
+      <LinkSpinner />
+    </Link>
   );
 }
 

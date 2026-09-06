@@ -2,7 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Bell } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
-import { Button } from './ui/button';
+import { ButtonLink } from './ui/button';
 import { PlayerAvatar } from './players/player-avatar';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
 import { getUnreadCount } from '@/lib/notifications/queries';
@@ -66,9 +66,9 @@ export async function Header() {
               </Link>
             </>
           ) : (
-            <Link href="/login">
-              <Button className="px-4 py-2">Sign in</Button>
-            </Link>
+            <ButtonLink href="/login" className="px-4 py-2">
+              Sign in
+            </ButtonLink>
           )}
         </div>
       </div>

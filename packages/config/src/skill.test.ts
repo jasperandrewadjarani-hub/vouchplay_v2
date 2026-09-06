@@ -25,8 +25,9 @@ describe('canonical skill bands (handover §3.1, locked order)', () => {
 
 describe('default system settings (handover §30.7)', () => {
   it('carries the locked vouch defaults', () => {
-    expect(DEFAULT_SYSTEM_SETTINGS.player_vouches_per_24h).toBe(5);
-    expect(DEFAULT_SYSTEM_SETTINGS.coach_vouches_per_24h).toBe(20);
+    // Per-24h vouch limits default to 0 = unlimited (JT 2026-09-07); still admin-tunable.
+    expect(DEFAULT_SYSTEM_SETTINGS.player_vouches_per_24h).toBe(0);
+    expect(DEFAULT_SYSTEM_SETTINGS.coach_vouches_per_24h).toBe(0);
     expect(DEFAULT_SYSTEM_SETTINGS.skill_verified_min_sts).toBe(3.0);
     expect(DEFAULT_SYSTEM_SETTINGS.weight_identity_verified_coach).toBe(2.5);
   });

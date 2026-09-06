@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
-import Link from 'next/link';
 import { Users, ShieldCheck, Trophy } from 'lucide-react';
 import { getOptionalUser } from '@/lib/auth';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button';
 
 export default async function HomePage() {
   const user = await getOptionalUser();
@@ -22,21 +21,17 @@ export default async function HomePage() {
           build a trusted profile, and give organizers the evidence to run fair brackets.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/players">
-            <Button className="px-5 py-3">Browse players</Button>
-          </Link>
+          <ButtonLink href="/players" className="px-5 py-3">
+            Browse players
+          </ButtonLink>
           {user ? (
-            <Link href="/me">
-              <Button variant="secondary" className="px-5 py-3">
-                My profile
-              </Button>
-            </Link>
+            <ButtonLink href="/me" variant="secondary" className="px-5 py-3">
+              My profile
+            </ButtonLink>
           ) : (
-            <Link href="/signup">
-              <Button variant="secondary" className="px-5 py-3">
-                Create your profile
-              </Button>
-            </Link>
+            <ButtonLink href="/signup" variant="secondary" className="px-5 py-3">
+              Create your profile
+            </ButtonLink>
           )}
         </div>
       </section>

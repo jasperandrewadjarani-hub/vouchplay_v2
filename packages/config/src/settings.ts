@@ -5,9 +5,11 @@
  */
 
 export const DEFAULT_SYSTEM_SETTINGS = {
-  // Vouch rate limits (rolling 24h windows, not calendar-day).
-  player_vouches_per_24h: 5,
-  coach_vouches_per_24h: 20,
+  // Vouch rate limits (rolling 24h windows, not calendar-day). 0 = unlimited. Default is unlimited
+  // vouches/day per player (the one-active-vouch-per-pair rule still applies), per JT decision
+  // 2026-09-07; still admin-tunable, so an anti-abuse cap can be set anytime.
+  player_vouches_per_24h: 0,
+  coach_vouches_per_24h: 0,
   vouch_requests_per_24h: 10,
   vouch_update_cooldown_days: 1,
 

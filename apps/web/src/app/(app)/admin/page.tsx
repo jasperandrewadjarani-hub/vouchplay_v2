@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Sliders, ScrollText, Users, BarChart3, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { requireAdminPage } from '@/lib/moderation/staff';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = { title: 'Admin Control Center' };
 
@@ -62,7 +63,10 @@ export default async function AdminHome() {
               href={t.href}
               className="border-border bg-surface vp-card flex flex-col gap-2 rounded-2xl border p-4"
             >
-              <Icon className="text-primary" size={20} aria-hidden />
+              <div className="flex items-center gap-2">
+                <Icon className="text-primary" size={20} aria-hidden />
+                <LinkSpinner size={16} />
+              </div>
               <span className="text-foreground text-base font-semibold">{t.label}</span>
               <span className="text-foreground-muted text-xs">{t.desc}</span>
             </Link>
@@ -76,6 +80,7 @@ export default async function AdminHome() {
       >
         <ShieldAlert className="text-primary" size={18} aria-hidden />
         Open the moderation queue
+        <LinkSpinner size={16} />
       </Link>
     </section>
   );
