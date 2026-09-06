@@ -789,7 +789,7 @@ Getting the first deploy up hit two issues:
     (per-category mute toggles; critical locked on; email opt-in with accurate "not switched on yet"
     copy). nodemailer + @types/nodemailer added to `apps/web`.
   - Gates green (typecheck/lint/format/test - core 37 incl. 5 catalog, apps/web 15, config 4/build).
-    Committed `<hash>`, pushed; deployed; **re-aliased `vouchplayph.vercel.app`**.
+    Committed `ad69690`, pushed; deployed; **re-aliased `vouchplayph.vercel.app`**.
   - **DB step handed to Jasper:** paste `scripts/apply-0012.sql` + return verify numbers. Until then:
     the bell shows 0, the notifications page/prefs read empty, and emission is a graceful no-op (reads
     degrade, writes swallow) - deploy is safe pre-0012.
