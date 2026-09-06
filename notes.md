@@ -759,11 +759,51 @@ Getting the first deploy up hit two issues:
     §23.3); §26.8 participants search; §26.9 broader comms beyond announcements. Export desktop-Excel
     integrity confirmation still pending from Jasper (§26.11 deliverable gate).
 
+- **2026-09-06** - **PHASE 11 - Notifications (§27): BUILT + deployed + live.** In-app notifications
+  complete; email-for-critical is ready-but-inert (Jasper's scope call); push = later. Awaiting one
+  manual SQL paste (migration 0012).
+  - **Migration 0012 (`0012_notifications.sql`, WRITTEN - apply pending):** `notifications` (recipient/
+    type/category/title/body/link/actor/entity/is_critical/read_at/created_at - the §27 record shape)
+    + `notification_preferences` (muted_categories text[], email_enabled) + RLS (recipients read their
+    OWN; all writes via service role). One-paste apply: **`scripts/apply-0012.sql`** (expect
+    notif_tables=2, notif_rls_policies=2).
+  - **Core catalog (`@vouchplay/core/notifications/catalog.ts`, 5 unit tests):** the single source of
+    truth for notification COPY, each type's category (for preferences), and criticality. Critical =
+    moderation + account/security (cannot be muted, email-eligible). Pure/testable.
+  - **Service (`lib/notifications/`):** `notify`/`notifyMany` (in-app insert via service client;
+    skips a recipient's muted non-critical categories; routes critical → the email channel; never
+    self-notifies; best-effort - never breaks the triggering action). `queries` (unread count, list,
+    prefs), `recipients` (organizer/team/club/actor/tournament resolvers), `registration-notify`
+    (shared team fan-out). **Email channel (`email.ts`): READY BUT INERT** - sends only when SMTP_USER
+    + SMTP_PASS are in the app env AND the user opted in; nodemailer is dynamic-imported so it's never
+    bundled/loaded until enabled. No SMTP env now = pure no-op (safe deploy).
+  - **Emission wired** at the high-value events (§27.1/§27.2/§27.3): vouch received (ANONYMOUS - never
+    names the voucher) + vouch request; partner invite + accepted; registration submitted→organizers /
+    confirmed / rejected / waitlisted / promoted / team withdrawn→organizers; eligibility-review-
+    required→organizers; payment submitted→organizers / verified / rejected; eligibility reclassified;
+    tournament announcement (audience fan-out); club join request→managers / accepted / rejected;
+    organizer/coach application result; **moderation account action (critical)**. Admin fan-out (§27.4)
+    deferred - the `/staff` queue already surfaces those.
+  - **UI:** header **bell now shows a live unread badge**; `/me/notifications` center (list, tap to
+    open+read, mark-all-read, deep-links) with a Preferences link; `/me/settings/notifications`
+    (per-category mute toggles; critical locked on; email opt-in with accurate "not switched on yet"
+    copy). nodemailer + @types/nodemailer added to `apps/web`.
+  - Gates green (typecheck/lint/format/test - core 37 incl. 5 catalog, apps/web 15, config 4/build).
+    Committed `<hash>`, pushed; deployed; **re-aliased `vouchplayph.vercel.app`**.
+  - **DB step handed to Jasper:** paste `scripts/apply-0012.sql` + return verify numbers. Until then:
+    the bell shows 0, the notifications page/prefs read empty, and emission is a graceful no-op (reads
+    degrade, writes swallow) - deploy is safe pre-0012.
+  - **Deferred:** live email (add SMTP_USER/SMTP_PASS to the app env + a user opt-in to switch it on);
+    a true async email outbox worker; web/native push adapters; admin notifications (§27.4);
+    reciprocal/coach/sponsorship/recruitment events not yet in the product.
+
 ## Next up
+- **Manual: apply `scripts/apply-0012.sql`** (migration 0012, notifications) + return verify numbers
+  (expect notif_tables=2, notif_rls_policies=2).
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).
-- **Phase 11 - Notifications (§27)** next - in-app + email-for-critical, push adapter (per the phase
-  plan; confirm scope before building).
+- **Phase 12 - Achievements / Skill-tags / History (§ later phase)** - also unlocks the real
+  `HISTORICAL_SKILL_MISMATCH` eligibility signal (currently a no-op). Confirm scope before building.
 - **Phase 10 - Organizer Dashboard analytics + Export (§26, §27)** next - includes the canonical
   Tournament-System XLSX adapter (inspect `sample_data_/tournament_googlesheets_sample.xlsx` FIRST).
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →

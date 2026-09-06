@@ -513,6 +513,30 @@ export interface PaymentRow {
   updated_at: string;
 }
 
+// ---------- Notifications (migration 0012) ----------
+export interface NotificationRow {
+  id: string;
+  recipient_id: string;
+  type: string;
+  category: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  actor_id: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  is_critical: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationPreferenceRow {
+  user_id: string;
+  muted_categories: string[];
+  email_enabled: boolean;
+  updated_at: string;
+}
+
 export interface AuditLogRow {
   id: string;
   actor_id: string | null;

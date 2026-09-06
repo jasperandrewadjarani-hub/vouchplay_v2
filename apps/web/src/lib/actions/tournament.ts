@@ -19,6 +19,8 @@ import {
   tournamentDivisionsTag,
   tournamentAnnouncementsTag,
 } from '@/lib/tournaments/queries';
+import { notifyMany } from '@/lib/notifications/create';
+import { getTournamentMini } from '@/lib/notifications/recipients';
 
 export interface TournamentActionState {
   ok?: boolean;
@@ -502,6 +504,48 @@ export async function postAnnouncement(
     if (error) return { error: 'Could not post the announcement.' };
     revalidateTag(tournamentAnnouncementsTag(tournamentId));
     if (slug) revalidateTag(tournamentTag(slug));
+
+    // Fan out to the audience (§27.1). Map audience -> registration statuses, then team members.
+    const ALL_STATUSES = [
+      'confirmed',
+      'waitlisted',
+      'payment_pending',
+      'payment_submitted',
+      'under_review',
+    ];
+    const AUDIENCE_STATUSES: Record<string, string[]> = {
+      all: ALL_STATUSES,
+      confirmed: ['confirmed'],
+      waitlisted: ['waitlisted'],
+      pending: ['payment_pending', 'payment_submitted', 'under_review'],
+    };
+    const statuses = AUDIENCE_STATUSES[a.audience] ?? ALL_STATUSES;
+    const { data: regRows } = await svc
+      .from('registrations')
+      .select('team_id')
+      .eq('tournament_id', tournamentId)
+      .in('status', statuses);
+    const teamIds = Array.from(
+      new Set(((regRows ?? []) as { team_id: string }[]).map((r) => r.team_id)),
+    );
+    if (teamIds.length > 0) {
+      const { data: memRows } = await svc
+        .from('team_members')
+        .select('player_id')
+        .in('team_id', teamIds);
+      const recipients = Array.from(
+        new Set(((memRows ?? []) as { player_id: string }[]).map((m) => m.player_id)),
+      );
+      const tm = await getTournamentMini(tournamentId);
+      await notifyMany(recipients, {
+        type: 'tournament_announcement',
+        actorId: user.id,
+        params: { tournamentName: tm.name, extra: a.title, reason: a.body },
+        link: slug ? `/tournaments/${slug}` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }

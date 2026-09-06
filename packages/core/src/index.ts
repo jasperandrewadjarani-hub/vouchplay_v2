@@ -9,6 +9,7 @@
 export const CORE_PACKAGE = '@vouchplay/core';
 
 export * from './notifications/email';
+export * from './notifications/catalog';
 export * from './vouches';
 export * from './eligibility';
 export * from './payments/provider';

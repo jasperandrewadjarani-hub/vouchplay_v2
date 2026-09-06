@@ -9,6 +9,32 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { AVATARS_BUCKET } from '@/lib/storage';
 import { loadSettingFlag } from '@/lib/settings';
 import { CLUBS_LIST_TAG, clubTag, clubMembersTag, userClubsTag } from '@/lib/clubs/queries';
+import { notify, notifyMany } from '@/lib/notifications/create';
+import { getActorMini, getClubManagerIds } from '@/lib/notifications/recipients';
+
+/** Notify one user about the outcome of their club join request (§27.1). Best-effort. */
+async function notifyClubJoinResult(
+  userId: string,
+  clubId: string,
+  slug: string,
+  accepted: boolean,
+) {
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc.from('clubs').select('name').eq('id', clubId).maybeSingle();
+    const name = (data as { name: string } | null)?.name;
+    await notify({
+      recipientId: userId,
+      type: accepted ? 'club_join_accepted' : 'club_join_rejected',
+      params: { clubName: name },
+      link: `/clubs/${slug}`,
+      entityType: 'club',
+      entityId: clubId,
+    });
+  } catch {
+    // best-effort
+  }
+}
 
 export interface ClubActionState {
   ok?: boolean;
@@ -239,6 +265,21 @@ export async function requestJoin(clubId: string, slug: string): Promise<ClubAct
     if (error) return { error: 'Could not join. Please try again.' };
     invalidateClub(slug, clubId);
     revalidateTag(userClubsTag(user.id));
+    if (status === 'requested') {
+      const [managers, me, clubRow] = await Promise.all([
+        getClubManagerIds(clubId),
+        getActorMini(user.id),
+        svc.from('clubs').select('name').eq('id', clubId).maybeSingle(),
+      ]);
+      await notifyMany(managers, {
+        type: 'club_join_request',
+        actorId: user.id,
+        params: { actorName: me.name, clubName: (clubRow.data as { name: string } | null)?.name },
+        link: `/clubs/${slug}/manage`,
+        entityType: 'club',
+        entityId: clubId,
+      });
+    }
     return {
       ok: true,
       message:
@@ -324,26 +365,30 @@ export async function approveMember(
   slug: string,
   userId: string,
 ): Promise<ClubActionState> {
-  return setMembership(
+  const res = await setMembership(
     clubId,
     slug,
     userId,
     { status: 'active', approved_at: new Date().toISOString() },
     ['requested', 'invited'],
   );
+  if (res.ok) await notifyClubJoinResult(userId, clubId, slug, true);
+  return res;
 }
 export async function rejectMember(
   clubId: string,
   slug: string,
   userId: string,
 ): Promise<ClubActionState> {
-  return setMembership(
+  const res = await setMembership(
     clubId,
     slug,
     userId,
     { status: 'rejected', ended_at: new Date().toISOString() },
     ['requested', 'invited'],
   );
+  if (res.ok) await notifyClubJoinResult(userId, clubId, slug, false);
+  return res;
 }
 export async function removeMember(
   clubId: string,

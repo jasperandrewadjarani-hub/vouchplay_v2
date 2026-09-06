@@ -9,6 +9,9 @@ import { loadSettingNumber } from '@/lib/settings';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { writeAudit } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
+import { notifyMany } from '@/lib/notifications/create';
+import { getTournamentMini, getTournamentOrganizerIds } from '@/lib/notifications/recipients';
+import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 
 export interface PaymentActionState {
   ok?: boolean;
@@ -134,6 +137,17 @@ export async function submitPayment(
       from_status: r.status,
       to_status: 'payment_submitted',
     });
+    const [organizers, tm] = await Promise.all([
+      getTournamentOrganizerIds(tournamentId),
+      getTournamentMini(tournamentId),
+    ]);
+    await notifyMany(organizers, {
+      type: 'payment_submitted',
+      params: { tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
     await revalTournament(tournamentId);
   } catch {
     return { error: 'Payment submission is temporarily unavailable.' };
@@ -247,6 +261,7 @@ export async function verifyPayment(
       entityId: paymentId,
       after: { status: 'verified' },
     });
+    await notifyRegistrationTeam(payment.registration_id, tournamentId, 'payment_verified');
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -299,6 +314,12 @@ export async function rejectPayment(
       after: { status: 'rejected' },
       reason: reason.trim(),
     });
+    await notifyRegistrationTeam(
+      payment.registration_id,
+      tournamentId,
+      'payment_rejected',
+      reason.trim(),
+    );
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };

@@ -8,6 +8,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { checkActorCanVouch } from '@/lib/moderation/enforcement';
+import { notify } from '@/lib/notifications/create';
+import { getActorMini } from '@/lib/notifications/recipients';
 
 export interface VouchActionState {
   ok?: boolean;
@@ -213,6 +215,20 @@ export async function submitVouch(
       .eq('status', 'pending');
 
     await recomputePlayerSkillProfile(v.targetId);
+
+    // Notify the target (§27.1). Vouches are ANONYMOUS - never reveal the voucher's identity here.
+    const { data: tp } = await svc
+      .from('profiles')
+      .select('slug')
+      .eq('id', v.targetId)
+      .maybeSingle();
+    const targetSlug = (tp as { slug: string | null } | null)?.slug;
+    await notify({
+      recipientId: v.targetId,
+      type: 'vouch_received',
+      link: targetSlug ? `/players/${targetSlug}` : '/me',
+      entityType: 'vouch',
+    });
   } catch {
     return { error: 'Vouching is temporarily unavailable. Please try again shortly.' };
   }
@@ -301,6 +317,20 @@ export async function requestVouch(
       message: message && message.trim() ? message.trim() : null,
     });
     if (error) return { error: 'Could not send the request. Please try again.' };
+
+    // Notify the recipient that they were asked to vouch (§27.1). Requests are attributed.
+    const me = await getActorMini(user.id);
+    await notify({
+      recipientId,
+      type: 'vouch_request_received',
+      actorId: user.id,
+      params: {
+        actorName: me.name,
+        reason: message && message.trim() ? message.trim() : undefined,
+      },
+      link: me.slug ? `/players/${me.slug}?intent=vouch` : '/players',
+      entityType: 'vouch_request',
+    });
   } catch {
     return { error: 'Requests are temporarily unavailable. Please try again shortly.' };
   }

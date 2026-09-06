@@ -6,6 +6,7 @@ import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { writeAudit } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
+import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 import { revalidateTag } from 'next/cache';
 
 /**
@@ -223,6 +224,7 @@ export async function reclassifyRegistration(
 
     // Recompute eligibility against the new division rules and refresh the dashboard.
     await computeRegistrationEligibility(registrationId);
+    await notifyRegistrationTeam(registrationId, tournamentId, 'eligibility_reclassified');
     await revalTournament(svc, tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };

@@ -11,6 +11,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { assertStaffActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
+import { notify } from '@/lib/notifications/create';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
 import { CLUBS_LIST_TAG, clubTag } from '@/lib/clubs/queries';
 import { listActiveVouchesForModeration, type ModerationVouch } from '@/lib/moderation/queries';
@@ -495,6 +496,14 @@ export async function applyAccountAction(
         after: { account_status: b.account_status },
         reason: reason.trim(),
       });
+      await notify({
+        recipientId: userId,
+        type: 'moderation_action',
+        params: { reason: `You received a warning: ${reason.trim()}` },
+        link: '/me/support',
+        entityType: 'profile',
+        entityId: userId,
+      });
       revalidatePath('/staff/moderation');
       return { ok: true, message: 'Warning recorded.' };
     }
@@ -544,6 +553,25 @@ export async function applyAccountAction(
       },
       after: patch,
       reason: reason.trim(),
+    });
+
+    // Notify the affected user (§27.1 - critical, cannot be muted; emailed when the channel is on).
+    const ACTION_COPY: Record<string, string> = {
+      restrict_vouching: 'Your vouching has been restricted',
+      restrict_account: 'Your account has been restricted',
+      suspend: 'Your account has been suspended',
+      ban: 'Your account has been banned',
+      lift_status: 'A restriction on your account has been lifted',
+    };
+    await notify({
+      recipientId: userId,
+      type: 'moderation_action',
+      params: {
+        reason: `${ACTION_COPY[action] ?? 'Your account was updated'}. Reason: ${reason.trim()}`,
+      },
+      link: '/me/support',
+      entityType: 'profile',
+      entityId: userId,
     });
 
     // Status affects directory visibility + the public profile.

@@ -6,6 +6,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertAdminActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
+import { notify } from '@/lib/notifications/create';
 import type { SafetyActionState } from './report';
 
 /**
@@ -112,6 +113,17 @@ async function decideApplication(
       before: { status: a.status },
       after: { status: decision },
       reason: reason?.trim() || null,
+    });
+
+    // Notify the applicant of the outcome (§27.1).
+    await notify({
+      recipientId: a.user_id,
+      type:
+        a.role_requested === 'coach' ? 'coach_application_result' : 'organizer_application_result',
+      params: { outcome: decision, reason: reason?.trim() || undefined },
+      link: '/me',
+      entityType: 'role_application',
+      entityId: applicationId,
     });
   } catch {
     return { error: 'That action failed. Please try again.' };

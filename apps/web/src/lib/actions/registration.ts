@@ -8,6 +8,14 @@ import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforc
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
+import { notify, notifyMany } from '@/lib/notifications/create';
+import {
+  getActorMini,
+  getTournamentMini,
+  getTournamentOrganizerIds,
+  getTeamMemberIds,
+} from '@/lib/notifications/recipients';
+import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 
 export interface RegistrationActionState {
   ok?: boolean;
@@ -37,6 +45,63 @@ function friendly(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
   for (const [key, text] of Object.entries(RPC_ERRORS)) if (msg.includes(key)) return text;
   return 'That action failed. Please try again.';
+}
+
+const ELIG_REVIEW = new Set(['review', 'skill_mismatch', 'ineligible_hard_rule']);
+
+/** Fan out registration notifications after a team registers (§27.1, §27.3). Best-effort. */
+async function notifyAfterRegister(
+  tournamentId: string,
+  teamId: string,
+  registrationId: string,
+  status: string | undefined,
+) {
+  try {
+    const svc = createServiceClient();
+    const [organizers, tm] = await Promise.all([
+      getTournamentOrganizerIds(tournamentId),
+      getTournamentMini(tournamentId),
+    ]);
+    const manageLink = tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments';
+    const registerLink = tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments';
+
+    await notifyMany(organizers, {
+      type: 'registration_submitted',
+      params: { tournamentName: tm.name },
+      link: manageLink,
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+
+    const { data: reg } = await svc
+      .from('registrations')
+      .select('eligibility_status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const elig = (reg as { eligibility_status: string } | null)?.eligibility_status;
+    if (elig && ELIG_REVIEW.has(elig)) {
+      await notifyMany(organizers, {
+        type: 'eligibility_review_required',
+        params: { tournamentName: tm.name },
+        link: manageLink,
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+
+    if (status === 'waitlisted') {
+      const members = await getTeamMemberIds(teamId);
+      await notifyMany(members, {
+        type: 'registration_waitlisted',
+        params: { tournamentName: tm.name },
+        link: registerLink,
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 async function revalTournament(tournamentId: string) {
@@ -107,6 +172,16 @@ export async function invitePartner(
       }
       return { error: 'Could not send the invite. Please try again.' };
     }
+    const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
+    await notify({
+      recipientId: inv.id,
+      type: 'partner_invite_received',
+      actorId: user.id,
+      params: { actorName: me.name, tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
     await revalTournament(tournamentId);
   } catch {
     return { error: 'Invites are temporarily unavailable. Please try again shortly.' };
@@ -166,10 +241,15 @@ export async function respondInvitation(
   try {
     const { data: inv } = await svc
       .from('partner_invitations')
-      .select('id, invitee_id, tournament_id, status')
+      .select('id, inviter_id, invitee_id, tournament_id, status')
       .eq('id', invitationId)
       .maybeSingle();
-    const row = inv as { invitee_id: string; tournament_id: string; status: string } | null;
+    const row = inv as {
+      inviter_id: string;
+      invitee_id: string;
+      tournament_id: string;
+      status: string;
+    } | null;
     if (!row || row.invitee_id !== user.id) return { error: 'Invitation not found.' };
     if (row.status !== 'sent') return { error: 'This invitation is no longer pending.' };
 
@@ -179,6 +259,20 @@ export async function respondInvitation(
         p_actor: user.id,
       });
       if (error) return { error: friendly(error.message) };
+      // Notify the inviter that their invite was accepted and the team is formed (§27.1).
+      const [me, tm] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(row.tournament_id),
+      ]);
+      await notify({
+        recipientId: row.inviter_id,
+        type: 'partner_accepted',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: row.tournament_id,
+      });
     } else {
       await svc.from('partner_invitations').update({ status: 'declined' }).eq('id', invitationId);
     }
@@ -229,9 +323,10 @@ export async function registerTeam(
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
     const regId = (data as { registration_id?: string } | null)?.registration_id;
-    if (regId) await computeRegistrationEligibility(regId);
-    await revalTournament(tournamentId);
     const status = (data as { status?: string } | null)?.status;
+    if (regId) await computeRegistrationEligibility(regId);
+    if (regId) await notifyAfterRegister(tournamentId, teamId, regId, status);
+    await revalTournament(tournamentId);
     return {
       ok: true,
       message:
@@ -300,9 +395,10 @@ export async function registerSolo(
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
     const regId = (data as { registration_id?: string } | null)?.registration_id;
-    if (regId) await computeRegistrationEligibility(regId);
-    await revalTournament(tournamentId);
     const status = (data as { status?: string } | null)?.status;
+    if (regId) await computeRegistrationEligibility(regId);
+    if (regId && teamId) await notifyAfterRegister(tournamentId, teamId, regId, status);
+    await revalTournament(tournamentId);
     return {
       ok: true,
       message:
@@ -337,12 +433,26 @@ export async function withdrawRegistration(
       .maybeSingle();
     if (!member) return { error: 'You are not on this team.' };
 
-    const { error } = await svc.rpc('release_slot', {
+    const { data, error } = await svc.rpc('release_slot', {
       p_registration_id: registrationId,
       p_actor: user.id,
       p_new_status: 'withdrawn',
     });
     if (error) return { error: friendly(error.message) };
+    // Notify organizers of the withdrawal, and any promoted team (§27.1, §27.3).
+    const [organizers, tm] = await Promise.all([
+      getTournamentOrganizerIds(tournamentId),
+      getTournamentMini(tournamentId),
+    ]);
+    await notifyMany(organizers, {
+      type: 'team_withdrawn',
+      params: { tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+    const promoted = (data as { promoted?: string | null } | null)?.promoted;
+    if (promoted) await notifyRegistrationTeam(promoted, tournamentId, 'registration_promoted');
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -456,6 +566,7 @@ export async function confirmRegistration(
       from_status: prev,
       to_status: 'confirmed',
     });
+    await notifyRegistrationTeam(registrationId, tournamentId, 'registration_confirmed');
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -475,7 +586,7 @@ export async function rejectRegistration(
   }
   const svc = createServiceClient();
   try {
-    const { error } = await svc.rpc('release_slot', {
+    const { data, error } = await svc.rpc('release_slot', {
       p_registration_id: registrationId,
       p_actor: user.id,
       p_new_status: 'rejected',
@@ -487,6 +598,14 @@ export async function rejectRegistration(
         .update({ review_reason: reason.trim() })
         .eq('id', registrationId);
     }
+    await notifyRegistrationTeam(
+      registrationId,
+      tournamentId,
+      'registration_rejected',
+      reason.trim() || undefined,
+    );
+    const promoted = (data as { promoted?: string | null } | null)?.promoted;
+    if (promoted) await notifyRegistrationTeam(promoted, tournamentId, 'registration_promoted');
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };

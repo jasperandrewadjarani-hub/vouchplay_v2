@@ -205,10 +205,22 @@ panel on the manage dashboard. Generated demo files re-read cleanly (exceljs); d
 native-integrity confirmation is the one manual gate before it's a shippable deliverable. Gates green;
 live. **Deferred to Phase 10 part 2:** dashboard analytics/overview tiles (§26.1-§26.9).
 
-**Next:** Phase 11 - Notifications (§27): in-app + email-for-critical, push-notification adapter.
-(Open ops: Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer via
-`/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear Supabase
-over-quota before 21 Sep 2026.)
+**Phase 11 - Notifications (§27): ✅ BUILT + live.** In-app notifications complete; email-for-critical
+ready-but-inert; push later. `notifications` + `notification_preferences` (migration 0012 - **apply
+pending**) with RLS (recipients read own; writes via service role). Version-centralized COPY + category +
+criticality in `@vouchplay/core` catalog (critical = moderation + account/security, un-mutable +
+email-eligible; unit-tested). `notify`/`notifyMany` service (skips muted non-critical; routes critical
+to the inert-until-configured email channel; best-effort). Emission wired across the vouch (anonymous-
+safe) / partner / registration lifecycle / payment / eligibility / announcement (audience fan-out) /
+club-join / role-result / moderation events. UI: header unread badge, `/me/notifications` center,
+`/me/settings/notifications` preferences. Email switches on by adding SMTP_USER/SMTP_PASS to the app env.
+Gates green; live.
+
+**Next:** Phase 12 - Achievements / Skill-tags / History; also lights up the real
+`HISTORICAL_SKILL_MISMATCH` eligibility signal (a no-op until history exists). (Open ops: apply
+migration 0012; Jasper confirm the demo export XLSX open cleanly in desktop Excel; approve an organizer
+via `/staff` → Role apps; seed Tane's admin; both JT admins enroll TOTP to reach `/staff`; clear
+Supabase over-quota before 21 Sep 2026.)
 
 ---
 
