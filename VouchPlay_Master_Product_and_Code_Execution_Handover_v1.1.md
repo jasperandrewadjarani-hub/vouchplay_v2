@@ -1708,6 +1708,44 @@ Interested lists can be filtered by division.
 
 Organizers should not receive a notification for every Interest action by default.
 
+## 19.2 Frictionless Join (no account required to start)
+
+A visitor must be able to **start joining a tournament before they have an account**, then be led into
+account creation, and resume exactly where they left off. Signup is a step inside the join flow, not a
+wall in front of it.
+
+Rules:
+- The public tournament page shows a prominent **Register / Join** call-to-action to everyone,
+  including signed-out visitors (whenever registration is open).
+- An anonymous visitor who taps Register is routed to **account creation** carrying a resume target
+  (`next` = the tournament's registration view, e.g. `/tournaments/{slug}?register=1`). This reuses the
+  same sanitized, open-redirect-safe resume plumbing as the vouch/report gates (the sitewide
+  login-gate resume pattern - "the original action is resumed after authentication", §8):
+  signup → onboarding (if incomplete) → back to the registration options, with no lost context.
+- The anonymous Register affordance is honest about what happens next ("Create a free account to
+  register your team - you'll pick up right where you left off") and offers a **Sign in** path for
+  returning users. It never implies a slot is reserved before an account exists.
+- No slot, team, or payment state is ever created for an anonymous visitor; registration writes still
+  require an authenticated, onboarded account (§21, §23) and all server-side authz/RLS is unchanged.
+- Logical flow: **see the tournament → tap Register → (create account or sign in) → land on the
+  registration options for the division(s) they want → register / invite a partner / pay.**
+
+## 19.3 Shareable Registration Link
+
+Sharing a tournament should be able to take the recipient **straight to the registration options**, not
+just the description.
+
+Rules:
+- The tournament page's Share action produces a **registration deep link** (`?register=1`) whenever the
+  tournament is publicly registerable (published or registration-open); otherwise it shares the plain
+  tournament URL. The canonical/OG URL for indexing stays the clean `/tournaments/{slug}` (§28).
+- Opening a registration deep link scrolls to and highlights the registration section so it "leads
+  directly to registration options" for whoever opens it - on any device.
+- For a signed-out recipient the deep link lands on the §19.2 Join call-to-action (create account →
+  resume). For a signed-in recipient it lands on the live registration panel. The deep link is
+  behaviour-only: it never bypasses auth, eligibility (§25), capacity/slot reservation (§23), or
+  visibility rules (an unlisted tournament stays unlisted).
+
 ---
 
 # 20. Partner Finder
@@ -2517,6 +2555,15 @@ Requirements:
 Share actions:
 - copy link,
 - native share API where supported.
+
+## 28.1 Registration Deep Link
+
+For a tournament, the share action can produce a **registration deep link** (`/tournaments/{slug}?register=1`)
+that lands the recipient directly on the registration options (§19.3), while the canonical/OG/indexing
+URL stays the clean `/tournaments/{slug}`. A signed-out recipient lands on the §19.2 Join call-to-action
+(create account → resume back to registration); a signed-in recipient lands on the live registration
+panel. The deep link is behaviour-only - it never bypasses auth, eligibility (§25), slot reservation
+(§23), or visibility rules.
 
 Future share-card types:
 - My VouchPlay Profile.

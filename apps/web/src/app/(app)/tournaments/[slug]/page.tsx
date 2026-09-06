@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Users, Settings, ExternalLink } from 'lucide-react';
+import { MapPin, CalendarDays, Users, Settings, ExternalLink, ClipboardCheck } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
 import { getViewerRegistrationState } from '@/lib/tournaments/registration-queries';
@@ -11,6 +11,11 @@ import { InterestButton } from '@/components/tournaments/interest-button';
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { RegistrationPanel } from '@/components/tournaments/registration-panel';
+import {
+  RegisterButton,
+  RegisterAnchorScroll,
+  registerNext,
+} from '@/components/tournaments/register-cta';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 
 interface Params {
@@ -57,17 +62,21 @@ export default async function TournamentPage({ params }: Params) {
   if (!t) notFound();
 
   const authed = viewer.viewerId !== null;
+  const isOpen = t.status === 'registration_open';
+  const registerable = isOpen || t.status === 'published';
   const regState =
-    authed && t.status === 'registration_open'
-      ? await getViewerRegistrationState(t.id, viewer.viewerId as string)
-      : null;
-  const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}`;
+    authed && isOpen ? await getViewerRegistrationState(t.id, viewer.viewerId as string) : null;
+  // Shareable link that lands on the registration options (§28.1) when registration is relevant.
+  const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
+  const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
+  const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
   const start = fmt(t.startAt);
   const regOpen = fmt(t.registrationOpenAt);
   const regClose = fmt(t.registrationCloseAt);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
+      <RegisterAnchorScroll />
       <Link href="/tournaments" className="text-foreground-muted hover:text-foreground text-sm">
         ← All tournaments
       </Link>
@@ -114,13 +123,18 @@ export default async function TournamentPage({ params }: Params) {
           {t.description && <p className="text-foreground text-sm">{t.description}</p>}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
+            <RegisterButton slug={slug} authed={authed} open={isOpen} />
             <InterestButton
               tournamentId={t.id}
               slug={slug}
               authed={authed}
               interested={t.myInterest}
             />
-            <ShareButton url={shareUrl} title={`${t.name} on VouchPlay`} />
+            <ShareButton
+              url={shareUrl}
+              title={`${t.name} on VouchPlay`}
+              text={registerable ? `Register for ${t.name} on VouchPlay` : `${t.name} on VouchPlay`}
+            />
             {t.canManage && (
               <Link
                 href={`/tournaments/${slug}/manage`}
@@ -135,34 +149,64 @@ export default async function TournamentPage({ params }: Params) {
         </div>
       </header>
 
-      {(regOpen || regClose) && (
-        <section className="border-border bg-surface rounded-2xl border p-4">
-          <h2 className="text-foreground mb-2 text-base font-semibold">Registration</h2>
-          <p className="text-foreground-muted text-sm">
-            {regOpen && <>Opens {regOpen}. </>}
-            {regClose && <>Closes {regClose}.</>}
-          </p>
-          <p className="text-foreground-muted mt-1 text-xs">
-            Registration &amp; team entry open in a later release.
-          </p>
-        </section>
-      )}
-
       <section className="border-border bg-surface rounded-2xl border p-4">
         <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
         <DivisionList divisions={t.divisions} />
       </section>
 
-      {regState && (
-        <RegistrationPanel
-          tournamentId={t.id}
-          maxClubsPerPlayer={t.maxClubsPerPlayer}
-          paymentInstructions={t.paymentInstructions}
-          paymentMethods={t.paymentMethods}
-          divisions={t.divisions}
-          state={regState}
-        />
-      )}
+      {/* Registration - the shared ?register=1 link scrolls here (handover §19.2, §19.3, §28.1). */}
+      <div id="register" className="scroll-mt-24">
+        {isOpen && authed && regState ? (
+          <RegistrationPanel
+            tournamentId={t.id}
+            maxClubsPerPlayer={t.maxClubsPerPlayer}
+            paymentInstructions={t.paymentInstructions}
+            paymentMethods={t.paymentMethods}
+            divisions={t.divisions}
+            state={regState}
+          />
+        ) : (
+          <section className="border-primary/30 bg-primary/5 rounded-2xl border p-4">
+            <h2 className="text-foreground mb-2 text-base font-semibold">Register</h2>
+            {(regOpen || regClose) && (
+              <p className="text-foreground-muted text-sm">
+                {regOpen && <>Opens {regOpen}. </>}
+                {regClose && <>Closes {regClose}.</>}
+              </p>
+            )}
+            {isOpen && !authed ? (
+              <div className="mt-3">
+                <p className="text-foreground text-sm font-medium">Join this tournament</p>
+                <p className="text-foreground-muted mt-1 text-sm">
+                  Create a free VouchPlay account to register your team. It only takes a minute, and
+                  you&apos;ll pick up right where you left off.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Link
+                    href={signupToRegister}
+                    className="vp-gradient vp-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+                  >
+                    <ClipboardCheck size={16} aria-hidden />
+                    Create account &amp; register
+                  </Link>
+                  <Link
+                    href={loginToRegister}
+                    className="border-border text-foreground hover:bg-surface-muted inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
+                  >
+                    Sign in
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="text-foreground-muted mt-1 text-sm">
+                {t.status === 'published'
+                  ? 'Registration has not opened yet - tap "I\'m interested" to get notified.'
+                  : 'Registration is closed for this tournament.'}
+              </p>
+            )}
+          </section>
+        )}
+      </div>
 
       {t.announcements.length > 0 && (
         <section className="border-border bg-surface rounded-2xl border p-4">
