@@ -666,7 +666,7 @@ Getting the first deploy up hit two issues:
     eligibility), **Request Skill Review** (per member, reuses Phase-4 `skill_reviews`), **Reject**
     (existing). Every override writes an append-only `audit_logs` row + a `registration_events` row
     (`lib/actions/eligibility.ts`).
-  - **Gates green** (typecheck/lint/format/test 32-core/build). Committed `<hash>`, pushed to `main`;
+  - **Gates green** (typecheck/lint/format/test 32-core/build). Committed `b430fda`, pushed to `main`;
     Vercel auto-deployed; **re-aliased `vouchplayph.vercel.app`**.
   - **DB step handed to Jasper:** paste `scripts/apply-0011.sql` + return the verify number. Until then:
     eligibility reads/writes degrade gracefully (settings fall back to config defaults; snapshots still
