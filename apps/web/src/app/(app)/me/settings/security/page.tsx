@@ -18,11 +18,11 @@ const REASONS: Record<string, string> = {
 export default async function SecurityPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reason?: string }>;
+  searchParams: Promise<{ reason?: string; next?: string }>;
 }) {
   await requireUser('/me/settings/security');
   const [{ isStaff }, status] = await Promise.all([getViewerContext(), getMfaStatus()]);
-  const { reason } = await searchParams;
+  const { reason, next } = await searchParams;
   const notice = reason ? REASONS[reason] : null;
 
   return (
@@ -47,7 +47,12 @@ export default async function SecurityPage({
         </p>
       )}
 
-      <MfaManager factors={status.factors} hasVerified={status.hasVerifiedTotp} />
+      <MfaManager
+        factors={status.factors}
+        hasVerified={status.hasVerifiedTotp}
+        stepUpRequired={reason === 'step_up_required'}
+        nextPath={next}
+      />
     </div>
   );
 }

@@ -20,18 +20,51 @@ interface FactorView {
 export function MfaManager({
   factors,
   hasVerified,
+  stepUpRequired = false,
+  nextPath = '/me',
 }: {
   factors: FactorView[];
   hasVerified: boolean;
+  stepUpRequired?: boolean;
+  nextPath?: string;
 }) {
   const router = useRouter();
   const [enroll, setEnroll] = useState<{ factorId: string; qr: string; secret: string } | null>(
     null,
   );
   const [code, setCode] = useState('');
+  const [stepUpCode, setStepUpCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const verifiedFactor = factors.find((factor) => factor.status === 'verified');
+
+  async function stepUp() {
+    if (!verifiedFactor) return;
+    setError(null);
+    setMessage(null);
+    setBusy(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: verifiedFactor.id,
+        code: stepUpCode.trim(),
+      });
+      if (error) {
+        setError('That code could not be verified. Check your authenticator and try again.');
+        return;
+      }
+      setStepUpCode('');
+      setMessage('Two-factor verification complete. Continuing…');
+      const safeNext = nextPath.startsWith('/') && !nextPath.startsWith('//') ? nextPath : '/me';
+      router.replace(safeNext);
+      router.refresh();
+    } catch {
+      setError('Verification failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function startEnroll() {
     setError(null);
@@ -109,6 +142,33 @@ export function MfaManager({
     <div className="space-y-4">
       <FormMessage>{message}</FormMessage>
       <FormError>{error}</FormError>
+
+      {stepUpRequired && verifiedFactor && (
+        <div className="border-border bg-surface space-y-3 rounded-xl border p-4">
+          <p className="text-foreground text-sm font-medium">
+            Enter the current 6-digit code from your authenticator app.
+          </p>
+          <Field label="6-digit verification code" htmlFor="mfa-step-up-code" required>
+            <Input
+              id="mfa-step-up-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={stepUpCode}
+              onChange={(event) => setStepUpCode(event.target.value)}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={stepUp}
+            disabled={busy || stepUpCode.trim().length < 6}
+            aria-busy={busy}
+            className="bg-primary rounded-xl px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {busy ? 'Verifying…' : 'Verify to continue'}
+          </button>
+        </div>
+      )}
 
       {factors.length > 0 && (
         <ul className="space-y-2">
