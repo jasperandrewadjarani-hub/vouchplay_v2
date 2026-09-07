@@ -1109,8 +1109,12 @@ Getting the first deploy up hit two issues:
   - `npm audit --omit=dev` still reports 4 transitive advisories (Next-bundled PostCSS and ExcelJS's
     UUID). Its suggested force-fix would upgrade to Next 16 (known Vercel deploy blocker) and downgrade
     ExcelJS across a compatibility-sensitive exporter, so it was not applied; revisit with the
-    documented Next-16 exit test and export regression suite. Production deployment verification is
-    pending the release commit.
+    documented Next-16 exit test and export regression suite.
+  - **Deployed:** commit `7c8d680` pushed to `main`; Vercel deployment
+    `vouchplayph-5dn04cfj1-jasperandrewadjarani-hubs-projects.vercel.app` reached Ready and automatically
+    attached `vouchplayph.vercel.app` + `vouchplay-v2.vercel.app`. A controlled live-Storage smoke
+    normalized a 3,587,842-byte JPEG (above the old 2 MB failure boundary) to a 720,770-byte WebP,
+    uploaded/fetched it with HTTP 200, then deleted the `_smoke` object; no tournament data changed.
 
 ## Next up
 - **PILOT PREP (in progress):** apply/verify migrations 0014 and 0015; verify a real opted-in critical

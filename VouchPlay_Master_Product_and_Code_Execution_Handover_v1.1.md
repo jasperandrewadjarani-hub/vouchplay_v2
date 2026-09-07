@@ -286,7 +286,11 @@ has independent Show/Hide controls for Draft, Cancelled, and Archived; those con
 signed-in organizer's managed query and preserve public-discovery rules. No migration is required.
 This revision also makes the Coach application/approval journey and the engagement-led Home
 leaderboards implementation-ready in §4.4 and §6.1. Coaching and leaderboards remain the next-phase
-build, not part of this pilot-fix release. Deployment verification is pending the release commit.
+build, not part of this pilot-fix release. Commit `7c8d680` deployed Ready at
+`vouchplayph-5dn04cfj1-jasperandrewadjarani-hubs-projects.vercel.app`; configured domains attached
+automatically. A controlled live-Storage smoke test normalized a 3,587,842-byte source (above the old
+2 MB failure boundary) to 720,770 bytes, fetched it publicly with HTTP 200, then deleted the temporary
+object without touching tournament data.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
