@@ -276,6 +276,8 @@ Lifecycle UX v1.6 is code-complete: Manage uses one consequence-aware selector f
 backward movement between every non-archived status, preserves child records, and notifies active
 participants when moving to Cancelled. Migration 0015 supplies the authenticated transactional RPC
 and immutable audit write; apply `scripts/apply-0015.sql` before accepting status changes in production.
+Commit `5322e0b` is deployed Ready; both production domains return HTTP 200 and the signed-in Manage
+screen was verified with all eight normal statuses, consequence copy, and disabled unchanged submit.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth

@@ -1073,6 +1073,12 @@ Getting the first deploy up hit two issues:
     to active/pending registered players.
   - Master handover updated to content v1.6. Required DB step: run `scripts/apply-0015.sql` after
     migration 0014; expect `lifecycle_function=1`, `lifecycle_authenticated_grant=1`.
+  - **Deployed:** commit `5322e0b` pushed to `main`; production deployment
+    `vouchplayph-h56ytp57g-jasperandrewadjarani-hubs-projects.vercel.app` reached Ready and all project
+    domains attached automatically. `vouchplayph.vercel.app`, `vouchplay-v2.vercel.app`, and the
+    deployment URL returned HTTP 200. Signed-in verification confirmed all eight normal status
+    options, consequence guidance, unchanged-submit disabling, archive separation, and mobile-safe
+    layout. No live status was changed because migration 0015 is not applied yet.
 
 ## Next up
 - **PILOT PREP (in progress):** apply/verify migrations 0014 and 0015; verify a real opted-in critical
