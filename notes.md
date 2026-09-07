@@ -1048,6 +1048,12 @@ Getting the first deploy up hit two issues:
     Archive/Restore and Remove return a safe error.
   - Gates currently green: typecheck; lint (0 warnings); core tests 58/58 including four new preset/
     retention tests; format; Next 15.5.25 production build (34 routes including `/me/edit`).
+  - **Deployed:** commit `faf562f` pushed to `main`; Vercel deployment
+    `vouchplayph-4o3nf3tsx-jasperandrewadjarani-hubs-projects.vercel.app` reached Ready. The production
+    domain listing automatically attached `vouchplayph.vercel.app` and `vouchplay-v2.vercel.app` to
+    this deployment (no manual alias command needed); both returned HTTP 200 and the new “fair
+    tournaments” copy. Signed-in browser verification confirmed the visible Edit profile action,
+    correctly pre-filled `/me/edit` form, division Remove control, and Archive confirmation section.
 
 ## Next up
 - **PILOT PREP (in progress):** apply/verify migration 0014; verify a real opted-in critical email;

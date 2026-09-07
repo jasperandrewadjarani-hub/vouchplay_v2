@@ -269,6 +269,9 @@ owners have reversible Archive/Restore controls with exact-name confirmation; ar
 hidden from public reads; and the Home promise now says “fair tournaments.” Migration 0014 adds the
 capacity setting, archive RLS, and transactional audited RPCs; apply `scripts/apply-0014.sql` before
 accepting archive/remove actions in production.
+Commit `faf562f` is deployed Ready at
+`vouchplayph-4o3nf3tsx-jasperandrewadjarani-hubs-projects.vercel.app`; both configured production
+domains returned HTTP 200 with the v1.5 Home copy, and the signed-in Me/Edit/Manage UI was verified.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
