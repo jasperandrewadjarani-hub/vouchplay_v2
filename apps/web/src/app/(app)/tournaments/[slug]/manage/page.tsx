@@ -116,6 +116,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             termsText: t.termsText ?? '',
             paymentInstructions: t.paymentInstructions ?? '',
             paymentMethods: t.paymentMethods ?? '',
+            coverUrl: t.coverUrl ?? '',
           }}
         />
       </section>

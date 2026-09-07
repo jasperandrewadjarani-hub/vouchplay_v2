@@ -116,6 +116,7 @@ export async function listTournaments(
 export async function listManagedTournaments(
   userId: string,
   filters: TournamentFilters,
+  hiddenStatuses: readonly TournamentStatus[] = [],
 ): Promise<TournamentCardDTO[]> {
   try {
     const supabase = await createClient();
@@ -145,6 +146,10 @@ export async function listManagedTournaments(
     if (filters.city && filters.city.trim()) {
       query = query.ilike('city', `%${filters.city.trim()}%`);
     }
+    const hidden = hiddenStatuses.filter((status) =>
+      (['draft', 'cancelled', 'archived'] as TournamentStatus[]).includes(status),
+    );
+    if (hidden.length > 0) query = query.not('status', 'in', `(${hidden.join(',')})`);
 
     const { data } = await query.order('created_at', { ascending: false });
     return ((data as TournamentRow[] | null) ?? []).map(toTournamentCardDTO);

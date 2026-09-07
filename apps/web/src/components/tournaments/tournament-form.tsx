@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TournamentActionState } from '@/lib/actions/tournament';
 import { Field, Input, Select, FormError, FormMessage } from '@/components/ui/field';
@@ -22,6 +22,7 @@ export interface TournamentFormInitial {
   termsText?: string;
   paymentInstructions?: string;
   paymentMethods?: string;
+  coverUrl?: string;
 }
 
 const textarea =
@@ -44,10 +45,26 @@ export function TournamentForm({
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(action, empty);
+  const [coverPreview, setCoverPreview] = useState<string | null>(initial.coverUrl ?? null);
+  const [selectedCoverName, setSelectedCoverName] = useState<string | null>(null);
 
   useEffect(() => {
-    if (state.ok && refreshOnSuccess) router.refresh();
+    if (state.ok) {
+      setSelectedCoverName(null);
+      if (refreshOnSuccess) router.refresh();
+    }
   }, [state.ok, refreshOnSuccess, router]);
+
+  useEffect(() => {
+    if (!selectedCoverName) setCoverPreview(initial.coverUrl ?? null);
+  }, [initial.coverUrl, selectedCoverName]);
+
+  useEffect(
+    () => () => {
+      if (coverPreview?.startsWith('blob:')) URL.revokeObjectURL(coverPreview);
+    },
+    [coverPreview],
+  );
 
   return (
     <form action={formAction} className="space-y-4">
@@ -180,15 +197,44 @@ export function TournamentForm({
           <Field
             label="Cover photo (optional)"
             htmlFor="cover"
-            hint="PNG, JPG or WebP, up to 4 MB."
+            hint="PNG, JPG or WebP, up to 4 MB. Landscape images work best; VouchPlay optimizes the file automatically."
           >
-            <input
-              id="cover"
-              name="cover"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
-            />
+            <div className="space-y-3">
+              {coverPreview && (
+                <div className="border-border bg-surface-muted aspect-video w-full max-w-xl overflow-hidden rounded-xl border">
+                  {/* Browser-selected blob URLs and existing public storage URLs both need a preview. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={coverPreview}
+                    alt={
+                      selectedCoverName
+                        ? 'Selected tournament cover preview'
+                        : 'Current tournament cover'
+                    }
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+              <input
+                id="cover"
+                name="cover"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedCoverName(file?.name ?? null);
+                  setCoverPreview(file ? URL.createObjectURL(file) : (initial.coverUrl ?? null));
+                }}
+                className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
+              />
+              <p className="text-foreground-muted text-xs" aria-live="polite">
+                {selectedCoverName
+                  ? `Ready to upload: ${selectedCoverName}`
+                  : initial.coverUrl
+                    ? 'Choose a new image only if you want to replace the current cover.'
+                    : 'No cover selected.'}
+              </p>
+            </div>
           </Field>
         </>
       )}

@@ -28,19 +28,13 @@ import {
 import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentParticipantIds } from '@/lib/notifications/recipients';
 import { loadSettingNumber } from '@/lib/settings';
+import { prepareTournamentCover } from '@/lib/tournaments/cover-image';
 
 export interface TournamentActionState {
   ok?: boolean;
   error?: string;
   message?: string;
 }
-
-const COVER_MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-};
-const MAX_COVER_BYTES = 4 * 1024 * 1024;
 
 function slugify(input: string): string {
   return input
@@ -65,19 +59,28 @@ function toIso(v: FormDataEntryValue | null): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-async function uploadCover(tournamentId: string, file: File): Promise<string | null> {
-  const ext = COVER_MIME_EXT[file.type];
-  if (!ext || file.size === 0 || file.size > MAX_COVER_BYTES) return null;
+async function uploadCover(
+  tournamentId: string,
+  bytes: Uint8Array,
+): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  const path = `tournament-covers/${tournamentId}/cover-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.webp`;
+  const svc = createServiceClient();
+  const { error } = await svc.storage.from(AVATARS_BUCKET).upload(path, bytes, {
+    contentType: 'image/webp',
+    cacheControl: '31536000',
+    upsert: false,
+  });
+  return error
+    ? { ok: false, error: 'Cover photo could not be uploaded. Please try again.' }
+    : { ok: true, path };
+}
+
+async function deleteGeneratedCover(path: string | null | undefined): Promise<void> {
+  if (!path?.startsWith('tournament-covers/')) return;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const path = `tournament-covers/${tournamentId}/cover-${Date.now()}.${ext}`;
-    const svc = createServiceClient();
-    const { error } = await svc.storage
-      .from(AVATARS_BUCKET)
-      .upload(path, bytes, { contentType: file.type, upsert: true });
-    return error ? null : path;
+    await createServiceClient().storage.from(AVATARS_BUCKET).remove([path]);
   } catch {
-    return null;
+    // Best-effort orphan cleanup; never undo a successful tournament save because cleanup failed.
   }
 }
 
@@ -123,12 +126,24 @@ export async function createTournament(
       return { error: 'You need an approved Organizer role to create tournaments.' };
     }
     const svc = createServiceClient();
+    const tournamentId = crypto.randomUUID();
     const slug = `${slugify(v.name) || 'tournament'}-${crypto.randomUUID().slice(0, 6)}`;
+    const cover = formData.get('cover');
+    let uploadedCoverPath: string | null = null;
+    if (cover instanceof File && cover.size > 0) {
+      const prepared = await prepareTournamentCover(cover);
+      if (!prepared.ok) return { error: prepared.error };
+      const uploaded = await uploadCover(tournamentId, prepared.bytes);
+      if (!uploaded.ok) return { error: uploaded.error };
+      uploadedCoverPath = uploaded.path;
+    }
     const { data: created, error } = await svc
       .from('tournaments')
       .insert({
+        id: tournamentId,
         name: v.name,
         slug,
+        cover_path: uploadedCoverPath,
         city: v.city || null,
         venue_name: v.venueName || null,
         description: v.description || null,
@@ -146,7 +161,10 @@ export async function createTournament(
       })
       .select('id, slug')
       .single();
-    if (error || !created) return { error: 'Could not create the tournament. Please try again.' };
+    if (error || !created) {
+      await deleteGeneratedCover(uploadedCoverPath);
+      return { error: 'Could not create the tournament. Please try again.' };
+    }
     const t = created as { id: string; slug: string };
     newSlug = t.slug;
 
@@ -162,13 +180,8 @@ export async function createTournament(
     if (divisionError) {
       // Creation is one logical operation: compensate by removing the empty draft and all children.
       await svc.from('tournaments').delete().eq('id', t.id);
+      await deleteGeneratedCover(uploadedCoverPath);
       return { error: 'Could not create the starter divisions. No tournament was saved.' };
-    }
-
-    const cover = formData.get('cover');
-    if (cover instanceof File && cover.size > 0) {
-      const path = await uploadCover(t.id, cover);
-      if (path) await svc.from('tournaments').update({ cover_path: path }).eq('id', t.id);
     }
     revalidateTag(TOURNAMENTS_LIST_TAG);
   } catch {
@@ -209,6 +222,8 @@ export async function updateTournament(
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   const v = parsed.data;
+  const submittedCover = formData.get('cover');
+  const coverSelected = submittedCover instanceof File && submittedCover.size > 0;
   try {
     const svc = createServiceClient();
     const patch: Record<string, unknown> = {
@@ -226,18 +241,42 @@ export async function updateTournament(
       payment_instructions: v.paymentInstructions || null,
       payment_methods: v.paymentMethods || null,
     };
-    const cover = formData.get('cover');
-    if (cover instanceof File && cover.size > 0) {
-      const path = await uploadCover(tournamentId, cover);
-      if (path) patch.cover_path = path;
+    let uploadedCoverPath: string | null = null;
+    let previousCoverPath: string | null = null;
+    if (coverSelected) {
+      const prepared = await prepareTournamentCover(submittedCover);
+      if (!prepared.ok) return { error: prepared.error };
+      const { data: current, error: currentError } = await svc
+        .from('tournaments')
+        .select('cover_path')
+        .eq('id', tournamentId)
+        .single();
+      if (currentError || !current)
+        return { error: 'Could not read the current tournament cover.' };
+      previousCoverPath = (current as { cover_path: string | null }).cover_path;
+      const uploaded = await uploadCover(tournamentId, prepared.bytes);
+      if (!uploaded.ok) {
+        return { error: `${uploaded.error} Your current cover was kept.` };
+      }
+      uploadedCoverPath = uploaded.path;
+      patch.cover_path = uploaded.path;
     }
     const { error } = await svc.from('tournaments').update(patch).eq('id', tournamentId);
-    if (error) return { error: 'Could not save changes.' };
+    if (error) {
+      await deleteGeneratedCover(uploadedCoverPath);
+      return { error: 'Could not save changes. Your current cover was kept.' };
+    }
+    if (uploadedCoverPath && previousCoverPath !== uploadedCoverPath) {
+      await deleteGeneratedCover(previousCoverPath);
+    }
     invalidate(slug, tournamentId);
   } catch {
     return { error: 'Editing is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Tournament updated.' };
+  return {
+    ok: true,
+    message: coverSelected ? 'Tournament and cover updated.' : 'Tournament updated.',
+  };
 }
 
 // ---------------------------------------------------------------------------

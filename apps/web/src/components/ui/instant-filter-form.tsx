@@ -19,6 +19,7 @@ export function InstantFilterForm({
   initialVerified = false,
   showVerified = false,
   placeholder = 'Search',
+  preservedParams = {},
 }: {
   basePath: string;
   initialQ?: string;
@@ -26,6 +27,7 @@ export function InstantFilterForm({
   initialVerified?: boolean;
   showVerified?: boolean;
   placeholder?: string;
+  preservedParams?: Record<string, string>;
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initialQ);
@@ -54,12 +56,14 @@ export function InstantFilterForm({
       if (nextQ.trim()) p.set('q', nextQ.trim());
       if (nextCity.trim()) p.set('city', nextCity.trim());
       if (showVerified && nextVerified) p.set('verified', '1');
+      for (const [key, value] of Object.entries(preservedParams)) p.set(key, value);
       const s = p.toString();
       const target = s ? `${basePath}?${s}` : basePath;
       const current = new URLSearchParams();
       if (initialQ.trim()) current.set('q', initialQ.trim());
       if (initialCity.trim()) current.set('city', initialCity.trim());
       if (showVerified && initialVerified) current.set('verified', '1');
+      for (const [key, value] of Object.entries(preservedParams)) current.set(key, value);
       const currentString = current.toString();
       const currentTarget = currentString ? `${basePath}?${currentString}` : basePath;
       if (target === currentTarget) {

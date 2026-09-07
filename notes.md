@@ -1080,6 +1080,38 @@ Getting the first deploy up hit two issues:
     options, consequence guidance, unchanged-submit disabling, archive separation, and mobile-safe
     layout. No live status was changed because migration 0015 is not applied yet.
 
+- **2026-09-07** - **Tournament cover reliability + organizer list controls + growth-spec v1.7
+  (Jasper).** Code complete; no migration.
+  - **Cover upload bug fixed at the real boundary:** the form/action accepted a 4 MB source while the
+    shared public `avatars` bucket capped each object at 2 MB; Storage rejected 2–4 MB covers and the
+    action silently continued without `cover_path`. Selected PNG/JPEG/WebP files are now decoded,
+    auto-oriented, metadata-stripped, bounded to a landscape-friendly maximum, and re-encoded as WebP
+    under 1.9 MB before upload. Invalid/corrupt/oversized or failed uploads return actionable errors;
+    a replacement uploads before the row changes, preserves the current cover on failure, uses a
+    versioned immutable path, and cleans up superseded/orphaned generated objects best-effort. The
+    Details form now previews the current/selected cover and explains the 4 MB/landscape guidance.
+  - **Your tournaments visibility controls:** organizers can independently show/hide Draft,
+    Cancelled, and Archived cards. All remain shown by default so records never appear lost. Sanitized
+    `hideDraft`/`hideCancelled`/`hideArchived` URL state survives search and pagination, Back/Forward
+    works, each control shows an immediate §33.5A spinner, and Show all/empty states remain available.
+    Filtering is applied only to the authenticated managed query; public discovery, counts, RLS, and
+    direct-read authorization are unchanged.
+  - **Master handover updated to content v1.7:** §4.4 now locks the Coach application/evidence/AAL2
+    review/approval/revocation/badge flow; §6.1 now locks visually engaging but transparent Home
+    leaderboards (Your momentum, accessible podium, Players, Community Champions/Top Vouchers, Clubs,
+    engagement CTAs, `LEADER_V1`, snapshots, privacy, anti-gaming). Added Phase 13C Coach Flow and
+    Phase 13D Leaderboards; Most Bidded stays gated on §16A rather than blocking the first release.
+    Next-session prompt: `docs/PHASE_13C_13D_COACHING_LEADERBOARDS_KICKOFF.md` (includes Phase 13A's
+    `CONTRIB_V1` dependency for Community Champions).
+  - Verification green: typecheck; lint (0 warnings/errors); tests 102 total (web 17, config 19, core
+    66), including real Sharp image normalization + corrupt-image handling and pure cover boundary
+    tests; format check; Next 15.5.25 production build (34 generated pages / 38 listed routes).
+  - `npm audit --omit=dev` still reports 4 transitive advisories (Next-bundled PostCSS and ExcelJS's
+    UUID). Its suggested force-fix would upgrade to Next 16 (known Vercel deploy blocker) and downgrade
+    ExcelJS across a compatibility-sensitive exporter, so it was not applied; revisit with the
+    documented Next-16 exit test and export regression suite. Production deployment verification is
+    pending the release commit.
+
 ## Next up
 - **PILOT PREP (in progress):** apply/verify migrations 0014 and 0015; verify a real opted-in critical
   email; clear Supabase over-quota; run the full live dress rehearsal + native-Excel export gate;

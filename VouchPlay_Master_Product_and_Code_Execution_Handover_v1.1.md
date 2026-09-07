@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.6
+# VouchPlay Master Product & Code Execution Handover v1.7
 
-_(File retains its `…v1.1.md` name; content is v1.6 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.7 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -278,6 +278,15 @@ participants when moving to Cancelled. Migration 0015 supplies the authenticated
 and immutable audit write; apply `scripts/apply-0015.sql` before accepting status changes in production.
 Commit `5322e0b` is deployed Ready; both production domains return HTTP 200 and the signed-in Manage
 screen was verified with all eight normal statuses, consequence copy, and disabled unchanged submit.
+
+Pilot usability v1.7 is code-complete: tournament cover replacements are validated, normalized to an
+efficient bounded WebP derivative, uploaded before the tournament row changes, and return actionable
+errors instead of silently saving without the selected image. The private **Your tournaments** surface
+has independent Show/Hide controls for Draft, Cancelled, and Archived; those controls affect only the
+signed-in organizer's managed query and preserve public-discovery rules. No migration is required.
+This revision also makes the Coach application/approval journey and the engagement-led Home
+leaderboards implementation-ready in §4.4 and §6.1. Coaching and leaderboards remain the next-phase
+build, not part of this pilot-fix release. Deployment verification is pending the release commit.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -657,6 +666,46 @@ Contextual roles are relationships, not global roles:
 
 All authorization must be enforced server-side and through database row-level security where appropriate.
 
+## 4.4 Coach Application, Review & Badge Flow (implementation contract, 2026-09-07)
+
+Coach is an **approved global role**, never a self-declared profile label. Identity Verified, Skill
+Verified, and Coach are separate facts; none implies another.
+
+Player application:
+- The primary entry is **Me → Roles → Become a Coach**. A contextual Coach action may deep-link there,
+  but must not duplicate the form.
+- Eligibility: signed-in active profile, no active Coach role, no other open Coach application, and
+  `coach_applications_enabled = true` in `system_settings`.
+- Use a short progressive form: coaching experience/years; clubs or organizations coached; locations;
+  coaching specialties; certification/accreditation details; one or more public reference links;
+  private supporting evidence where needed; consent that claims may be checked; optional note.
+- Draft client state may be preserved locally, but submission validation is server-side. Evidence is
+  stored in a dedicated private role-evidence bucket, never in public profile media; staff receive only
+  short-lived signed URLs after Admin/TOTP authorization.
+- After submission, Me shows one clear status card: Pending review, Under review, More information
+  needed, Approved, Rejected, or Withdrawn. The applicant may withdraw while not approved and may
+  respond to an information request without creating a duplicate application.
+
+JT review:
+- Review lives in **Staff → Role applications → Coaches** and requires an active Admin/Super Admin
+  session with verified TOTP/AAL2. Reviewers see the answers, references, private evidence, relevant
+  account/moderation facts, and prior decisions in one decision panel.
+- Actions are **Request information**, **Approve**, and **Reject**. Request/reject require a useful
+  applicant-facing reason; approval requires an internal confirmation note. The final transaction
+  updates the application, grants the active `coach` role on approval, and appends audit history.
+- The applicant receives an in-app notification and critical email for request/approval/rejection.
+  Revocation is a separate Admin user action with a reason, audit entry, and notification; it does not
+  rewrite historical vouches, whose stored `used_coach_weight` remains an auditable event-time fact.
+
+Public display and capability:
+- Only an active `user_roles.role = coach` produces the **Coach** badge on PlayerCard and Player
+  Profile. Pending/rejected claims are never public. The badge has visible text/icon plus an accessible
+  label and tooltip: “Coach role approved by VouchPlay.”
+- Coach approval enables the existing optional **Vouch as a Coach** control. It remains off by default
+  for each vouch; approval never changes CSL/STS directly and never makes Skill Verified automatic.
+- Admin-configurable application fields, evidence limits, notification templates, and review SLA live
+  in `system_settings`; no operational threshold is hardcoded.
+
 ---
 
 # 5. Information Architecture & Navigation
@@ -781,36 +830,71 @@ Example action cards:
 - "Your Coach application was approved."
 - "🔥 3 clubs are bidding to sponsor you - review offers."
 
-## 6.1 Leaderboards & Bidding Spotlight (2026-09-05)
+## 6.1 Home Leaderboards & Engagement Spotlight (implementation contract, updated 2026-09-07)
 
-The Home button surfaces **leaderboards** and a **bidding spotlight**, integrated into the existing
-card layout (a horizontally-scrollable "podium" row + tappable leaderboard cards), not a separate
-screen.
+The Home button surfaces a visually engaging but trustworthy **community scoreboard**, integrated into
+the existing dashboard rather than becoming a popularity feed. Its purpose is to turn verified play
+and healthy community contribution into the next useful action: play, vouch someone genuinely known,
+complete a profile, join a club, or register for a tournament.
 
-**Leaderboards (medal styling 🥇🥈🥉 for the top 3):**
-- **Top Players** - ranked by an **engagement/credibility composite**, NOT raw STS. Suggested inputs:
-  verified-match/tournament participation, achievements/medals, Skill-Verified status, number of
-  distinct credible vouchers, and bidding interest - deliberately excluding a raw "highest STS"
-  ranking to avoid incentivizing vouch manipulation (handover gamification guardrail).
-- **Most Bidded** - players with the most/highest active bids (see §16A). This is the headline
-  gamified metric.
-- **Top Clubs** - ranked by club activity: verified members, players sponsored/recruited via winning
-  bids, tournament participation, medals won by represented players.
+Information hierarchy and interaction:
+- A compact **Your momentum** card appears first for signed-in players: current eligible rank or
+  “Complete the next step to qualify,” trend since the previous snapshot, the components that helped,
+  and exactly one contextual CTA. It is private when the player opts out of public ranking.
+- A high-impact **podium** presents ranks 1–3 with portraits/club marks, medal plus numeric rank,
+  concise reason text, and restrained celebratory motion. Motion respects `prefers-reduced-motion` and
+  never blocks use. Ranks 4–10 use a scannable list; **View full leaderboard** opens the complete view.
+- Category tabs are **Players**, **Community Champions**, **Clubs**, and, only after §16A ships,
+  **Most Bidded**. Scope chips are Local/City, Region, and Global; period chips are This month,
+  Season, and All time where the category supports them. Filters remain in the URL and show an
+  immediate §33.5A pending cue.
+- Every row is tappable and includes a `LinkSpinner`; medals are never communicated by color alone.
+  Empty/cold-start states invite qualifying activity instead of displaying fake seed rankings.
 
-**Bidding spotlight:** a "🔥 Hot right now" row of players receiving active bids, each card showing the
-current top bid, number of bidding clubs, and a countdown to bid close - tap to view the player and
-(if it's you) to accept/decline.
+Versioned ranking categories (`LEADER_V1`):
+- **Players** - organizer-verified tournament participation and official placements/achievements,
+  with capped supporting credit for profile completeness and Skill-Verified status. It is never a
+  “highest skill” or raw STS table.
+- **Community Champions / Top Vouchers** - healthy contribution from distinct outgoing vouches and
+  newcomer support, using §13A `CONTRIB_V1`. Rating values, anonymous identities, repeat-pair spam,
+  and simple raw vouch counts are excluded. The UI says what was rewarded, e.g. “Helped 8 distinct
+  players build credible profiles.”
+- **Clubs** - verified club participation, active unique members, represented-player attendance,
+  official placements, and community contribution, normalized so large clubs do not win on member
+  count alone.
+- **Most Bidded** - active §16A interest after bidding exists, based on distinct eligible clubs and
+  a capped bid-interest score; points remain non-monetary and wash-bidding flags exclude entries.
 
-**Rules & guardrails:**
-- Leaderboards are **scoped** (by city/region and by tournament where relevant), refreshed on a cadence
-  (not real-time), and cache-first per §34A. Never rank by raw STS or expose internal effective weights.
-- Bidding uses **reputation/points, not money** in V1 (see §16A) - no real-currency wagering.
-- Respect privacy/visibility: a player can opt out of appearing in public leaderboards (profile
-  setting); minors and restricted/suspended accounts are excluded.
-- Admin can hide/reset leaderboards and exclude flagged accounts.
+Engagement loop:
+- Below the leaderboard, show one personalized **Keep your momentum** action: Register for a nearby
+  tournament; Vouch someone you played; Request a vouch; Complete profile; Join a club; or Share your
+  profile. Never reward indiscriminate vouching or imply that a vouch must be favorable.
+- After a qualifying action, show lightweight progress toward eligibility for the relevant board;
+  do not promise a rank before the next published snapshot.
+- Notifications are milestone-based (entered top 10, reached podium, club moved up), deduplicated, and
+  preference-controlled; do not send noisy rank-change notifications for every recalculation.
 
-Leaderboards + bidding are **Phase 2+ / a dedicated gamification sub-phase** - foundational player
-directory & profiles (Phase 2) land first, then bidding (§16A), then leaderboards read from it.
+Data, scoring, and trust guardrails:
+- All category weights, minimum activity, lookback windows, scope rules, decay, tie-breakers, and
+  publication cadence are `system_settings`. The pure deterministic `LEADER_V1` engine in
+  `@vouchplay/core` receives normalized facts and returns score components plus stable tie-break data.
+- Public rows come from generated `leaderboard_snapshots` keyed by version/category/scope/period/
+  subject, not expensive live joins. Generate daily and after verified tournament-result publication;
+  serve cache-first and invalidate only the affected category/scope snapshot.
+- Show **How rankings work** beside every category. Expose friendly component explanations, never raw
+  STS, vouch weight, private evidence, anonymous voucher identity, internal fraud scores, or exact
+  anti-abuse thresholds.
+- A player can opt out of public leaderboards in Privacy while retaining a private momentum card.
+  Exclude minors by default, private/directory-hidden profiles, restricted/suspended/banned/deactivated
+  accounts, unresolved high-risk fraud entries, and ineligible/unverified clubs. Admin can pause a
+  category, exclude an entity with a reason, rebuild a snapshot, or roll back the active scoring version;
+  each action is audited.
+- Rate-limit and flag reciprocal rings, synthetic tournaments, repeated low-diversity vouching, and
+  bid inflation. Leaderboard outcomes never change CSL, STS, Skill Verified, vouch weight, or
+  tournament eligibility.
+
+Delivery sequence: build Coach Flow first, then the non-bidding Players/Community/Clubs boards; add
+Most Bidded and the bidding spotlight only after §16A. Do not block the useful leaderboards on bidding.
 
 ---
 
@@ -1675,6 +1759,18 @@ Organizer status control:
   stronger owner-only, exact-name-confirmed retention flow below; Restore returns to Draft, after
   which the organizer can select any normal status.
 
+Organizer managed-list visibility:
+- `/tournaments` keeps a distinct, authenticated **Your tournaments** surface for owned and active
+  co-organized events. Public discovery remains a separate query and never gains Draft/Archived data.
+- The surface provides three independent, compact controls: **Show Draft**, **Show Cancelled**, and
+  **Show Archived**. All are shown by default so a tournament cannot appear lost; an organizer may
+  turn any off to declutter the list. Active filtering is summarized and easy to reset.
+- Filter state uses sanitized URL query parameters so browser Back/Forward works and search/pagination
+  preserve the choice. These parameters affect only the private managed query, never public results,
+  counts, cache keys, or direct-read authorization.
+- Changing a filter shows an immediate in-control §33.5A cue. If everything is hidden or no events
+  match, keep the controls visible and show an explanatory empty state with **Show all**.
+
 Pilot removal policy:
 - There is no hard-delete action for organizers. Tournament deletion is represented by reversible
   **Archive** so registrations, payments, eligibility decisions, announcements, and audit history
@@ -1710,6 +1806,19 @@ Optional:
 - external map,
 - payment instructions,
 - registration notes.
+
+Cover-media save contract:
+- Accept PNG/JPEG/WebP source images up to the uploader limit shown beside the control. Validate MIME,
+  non-zero size, and decodability server-side; do not trust filename extensions.
+- Normalize accepted sources to an auto-oriented, metadata-stripped, bounded landscape WebP derivative
+  suitable for cards and hero use. Preserve aspect ratio without enlarging small images; public output
+  must fit the storage object limit and the responsive-size strategy in §34A.8.
+- Upload the new object successfully **before** changing `cover_path`. On replacement failure, retain
+  the current cover and return a specific actionable form error; never report “Tournament updated”
+  while silently dropping the selected image.
+- After the database update succeeds, delete the superseded generated object best-effort. On database
+  failure, delete the newly uploaded object best-effort. Generated/versioned names prevent stale CDN
+  content; all waiting controls show §33.5A pending feedback.
 
 ## 17.4 Co-organizers
 
@@ -5819,6 +5928,57 @@ with your partners") come later once `team_members` history has volume. Non-bloc
 
 ---
 
+## Phase 13C - Coach Application & Verification
+
+Build the complete §4.4 workflow on the existing role-application foundation.
+
+### Build
+- Me entry/status experience and progressive Coach application form.
+- Private role-evidence storage with MIME/size validation, retention rule, signed staff access, and no
+  public object URLs.
+- Application state machine including request-information/resubmission/withdrawal; prevent duplicate
+  open applications transactionally.
+- TOTP/AAL2 Staff Coach review queue with request information, approve, reject, and reasoned revoke.
+- Transactional role grant/revoke, append-only audit, critical in-app/email notifications, and public
+  Coach badge sourced only from active roles.
+- Feature flag/settings catalog entries, narrow DTOs, analytics events, loading/empty/error/success
+  states, accessibility, and mobile/dark/light QA.
+
+### Gate
+- A user cannot self-grant Coach or expose private evidence; pending status never produces a badge.
+- Approval/revocation requires authorized AAL2 staff and is auditable; historical vouch facts remain
+  reproducible.
+- Coach-weight vouching is available only to active Coaches and remains explicit/off by default.
+
+---
+
+## Phase 13D - Home Leaderboards & Engagement
+
+Build §6.1 after 13C. The first release includes Players, Community Champions, and Clubs; it does not
+wait for bidding. Most Bidded is feature-gated until §16A exists.
+
+### Build
+- Pure deterministic `LEADER_V1` scoring/ranking/tie-break engine in `@vouchplay/core`, with every
+  operational weight/window/threshold in `system_settings` and build guards preventing reads by skill,
+  weight, or eligibility engines.
+- Snapshot schema/job/versioning, bounded aggregate queries, cache tags, stale/failure fallback, Admin
+  category controls/exclusions/rebuild, and append-only audit for interventions.
+- Home Your-momentum card, accessible top-three podium, ranks 4–10, category/scope/period controls,
+  full leaderboard route, How-rankings-work explanation, contextual engagement CTAs, milestone
+  notifications, privacy opt-out, and complete cold-start/empty/loading/error states.
+- Anti-gaming/exclusion rules, minors/privacy/account-status handling, analytics events, mobile and
+  desktop layouts, dark/light, reduced-motion, WCAG 2.2 AA, and §33.5A feedback on every interaction.
+
+### Gate
+- Golden fixtures prove deterministic ranks/ties and category isolation; no raw STS leaderboard and no
+  leaderboard output can influence CSL/STS/Skill Verified/vouch weight/eligibility.
+- Anonymous voucher identity and private/fraud evidence never enter snapshots or responses.
+- Direct RLS/API tests cover public rows, private momentum, opt-out, staff controls, and excluded users.
+- Load/cost test proves snapshot reads are bounded and cache-first; production UI passes signed-in and
+  signed-out responsive/browser smoke tests.
+
+---
+
 ## Phase 14 - Hardening & Beta
 
 ### Build/Test
@@ -6312,6 +6472,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.7 (2026-09-07)
+- **Tournament cover reliability (§17.3):** locked non-silent validation, WebP normalization, bounded
+  output, upload-before-row-change ordering, current-cover preservation on failure, generated object
+  cleanup, actionable errors, and loading feedback.
+- **Organizer list filters (§17.2):** added independent Show/Hide controls for Draft, Cancelled, and
+  Archived inside the private Your tournaments surface, with URL-preserved state, reset/empty UX, and
+  no change to public discovery or RLS.
+- **Coach flow (§4.4, Phase 13C):** specified application evidence, private review, request-information,
+  TOTP/AAL2 approval/rejection/revocation, notifications/audit, and active-role-only Coach badges while
+  preserving the separation of Coach, Identity Verified, Skill Verified, and skill metrics.
+- **Leaderboards (§6.1, Phase 13D):** expanded to a visually engaging Your-momentum + accessible podium
+  system for Players, Community Champions/Top Vouchers, and Clubs; locked `LEADER_V1`, snapshots,
+  transparent component explanations, privacy/anti-gaming safeguards, and action-oriented engagement.
+  Most Bidded remains gated on §16A rather than blocking the initial leaderboard release.
 
 ## v1.6 (2026-09-07)
 - **Free tournament lifecycle control (§17.2):** replaced the directional transition-only UI with a

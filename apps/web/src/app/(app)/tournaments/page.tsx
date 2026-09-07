@@ -11,6 +11,10 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { TournamentCard } from '@/components/tournaments/tournament-card';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { InstantFilterForm } from '@/components/ui/instant-filter-form';
+import {
+  ManagedTournamentFilters,
+  type ManagedVisibilityStatus,
+} from '@/components/tournaments/managed-tournament-filters';
 
 export const metadata: Metadata = {
   title: 'Tournaments',
@@ -29,11 +33,28 @@ function parseFilters(sp: SP): TournamentFilters {
     page: Number.isInteger(pageNum) && pageNum > 0 ? pageNum : 1,
   };
 }
-function qs(f: TournamentFilters, page: number): string {
+const HIDE_PARAM: Record<ManagedVisibilityStatus, string> = {
+  draft: 'hideDraft',
+  cancelled: 'hideCancelled',
+  archived: 'hideArchived',
+};
+
+function parseHiddenStatuses(sp: SP): ManagedVisibilityStatus[] {
+  return (Object.entries(HIDE_PARAM) as Array<[ManagedVisibilityStatus, string]>)
+    .filter(([, param]) => one(sp[param]) === '1')
+    .map(([status]) => status);
+}
+
+function preservedManagedParams(hidden: ManagedVisibilityStatus[]): Record<string, string> {
+  return Object.fromEntries(hidden.map((status) => [HIDE_PARAM[status], '1']));
+}
+
+function qs(f: TournamentFilters, page: number, preserved: Record<string, string>): string {
   const p = new URLSearchParams();
   if (f.q) p.set('q', f.q);
   if (f.city) p.set('city', f.city);
   if (page > 1) p.set('page', String(page));
+  for (const [key, value] of Object.entries(preserved)) p.set(key, value);
   const s = p.toString();
   return s ? `?${s}` : '';
 }
@@ -56,9 +77,11 @@ async function viewerIsOrganizer(userId: string): Promise<boolean> {
 export default async function TournamentsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
+  const hiddenStatuses = parseHiddenStatuses(sp);
+  const managedParams = preservedManagedParams(hiddenStatuses);
   const user = await getOptionalUser();
   const [managedTournaments, canCreate] = await Promise.all([
-    user ? listManagedTournaments(user.id, filters) : Promise.resolve([]),
+    user ? listManagedTournaments(user.id, filters, hiddenStatuses) : Promise.resolve([]),
     user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
   ]);
   const { tournaments, total, page, pageCount } = await listTournaments(
@@ -90,9 +113,10 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
         initialQ={filters.q ?? ''}
         initialCity={filters.city ?? ''}
         placeholder="Search tournaments"
+        preservedParams={managedParams}
       />
 
-      {managedTournaments.length > 0 && (
+      {(canCreate || managedTournaments.length > 0) && (
         <section className="space-y-3" aria-labelledby="managed-tournaments-heading">
           <div>
             <h2
@@ -105,11 +129,26 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
               Events you own or co-organize, including drafts and unlisted tournaments.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {managedTournaments.map((t) => (
-              <TournamentCard key={`managed-${t.slug}`} tournament={t} />
-            ))}
-          </div>
+          <ManagedTournamentFilters
+            hiddenStatuses={hiddenStatuses}
+            queryString={new URLSearchParams({
+              ...(filters.q ? { q: filters.q } : {}),
+              ...(filters.city ? { city: filters.city } : {}),
+              ...(filters.page && filters.page > 1 ? { page: String(filters.page) } : {}),
+              ...managedParams,
+            }).toString()}
+          />
+          {managedTournaments.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {managedTournaments.map((t) => (
+                <TournamentCard key={`managed-${t.slug}`} tournament={t} />
+              ))}
+            </div>
+          ) : (
+            <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-6 text-center text-sm">
+              No managed tournaments match the current search and display choices.
+            </div>
+          )}
         </section>
       )}
 
@@ -143,7 +182,7 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
           <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
             {page > 1 ? (
               <Link
-                href={`/tournaments${qs(filters, page - 1)}`}
+                href={`/tournaments${qs(filters, page - 1, managedParams)}`}
                 className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
               >
                 Previous
@@ -156,7 +195,7 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
             </span>
             {page < pageCount ? (
               <Link
-                href={`/tournaments${qs(filters, page + 1)}`}
+                href={`/tournaments${qs(filters, page + 1, managedParams)}`}
                 className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
               >
                 Next

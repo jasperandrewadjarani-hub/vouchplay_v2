@@ -15,5 +15,6 @@ export * from './eligibility';
 export * from './payments/provider';
 export * from './analytics/summary';
 export * from './tournaments/default-divisions';
+export * from './tournaments/cover';
 export * from './tournaments/lifecycle';
 export * from './tournaments/retention';
