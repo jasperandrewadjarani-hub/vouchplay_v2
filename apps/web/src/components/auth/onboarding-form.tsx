@@ -2,20 +2,34 @@
 
 import { useActionState } from 'react';
 import { SKILL_BANDS } from '@vouchplay/config';
-import { completeOnboarding, type ProfileFormState } from '@/lib/actions/profile';
+import { completeOnboarding, updateProfile, type ProfileFormState } from '@/lib/actions/profile';
 import { Field, Input, Select, FormError } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: ProfileFormState = {};
 
 export function OnboardingForm({
-  defaultFirstName = '',
+  initial = {},
   next,
+  mode = 'onboarding',
 }: {
-  defaultFirstName?: string;
+  initial?: {
+    firstName?: string;
+    lastName?: string;
+    nickname?: string;
+    sex?: string;
+    selfRatedSkill?: number | null;
+    city?: string;
+    facebookUrl?: string;
+    bio?: string;
+  };
   next?: string;
+  mode?: 'onboarding' | 'edit';
 }) {
-  const [state, action] = useActionState(completeOnboarding, empty);
+  const [state, action] = useActionState(
+    mode === 'edit' ? updateProfile : completeOnboarding,
+    empty,
+  );
 
   return (
     <form action={action} className="space-y-4">
@@ -24,20 +38,20 @@ export function OnboardingForm({
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="First name" htmlFor="firstName" required>
-          <Input id="firstName" name="firstName" defaultValue={defaultFirstName} required />
+          <Input id="firstName" name="firstName" defaultValue={initial.firstName ?? ''} required />
         </Field>
         <Field label="Last name" htmlFor="lastName" required>
-          <Input id="lastName" name="lastName" required />
+          <Input id="lastName" name="lastName" defaultValue={initial.lastName ?? ''} required />
         </Field>
       </div>
 
       <Field label="Nickname / IGN" htmlFor="nickname" required hint="How you're known on court.">
-        <Input id="nickname" name="nickname" required />
+        <Input id="nickname" name="nickname" defaultValue={initial.nickname ?? ''} required />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
         <Field label="Sex" htmlFor="sex" required>
-          <Select id="sex" name="sex" defaultValue="" required>
+          <Select id="sex" name="sex" defaultValue={initial.sex ?? ''} required>
             <option value="" disabled>
               Select…
             </option>
@@ -46,7 +60,7 @@ export function OnboardingForm({
           </Select>
         </Field>
         <Field label="City" htmlFor="city" required>
-          <Input id="city" name="city" required />
+          <Input id="city" name="city" defaultValue={initial.city ?? ''} required />
         </Field>
       </div>
 
@@ -56,7 +70,12 @@ export function OnboardingForm({
         required
         hint="Your own estimate. The community's rating builds from vouches."
       >
-        <Select id="selfRatedSkill" name="selfRatedSkill" defaultValue="" required>
+        <Select
+          id="selfRatedSkill"
+          name="selfRatedSkill"
+          defaultValue={initial.selfRatedSkill != null ? String(initial.selfRatedSkill) : ''}
+          required
+        >
           <option value="" disabled>
             Select…
           </option>
@@ -74,14 +93,23 @@ export function OnboardingForm({
           name="facebookUrl"
           type="url"
           placeholder="https://facebook.com/…"
+          defaultValue={initial.facebookUrl ?? ''}
         />
       </Field>
 
       <Field label="Short bio" htmlFor="bio" hint="Optional, up to 300 characters.">
-        <Input id="bio" name="bio" maxLength={300} />
+        <Input id="bio" name="bio" maxLength={300} defaultValue={initial.bio ?? ''} />
       </Field>
 
-      <Field label="Profile photo" htmlFor="avatar" hint="Optional. PNG, JPG or WebP, up to 2 MB.">
+      <Field
+        label="Profile photo"
+        htmlFor="avatar"
+        hint={
+          mode === 'edit'
+            ? 'Optional. Leave blank to keep your current photo. PNG, JPG or WebP, up to 2 MB.'
+            : 'Optional. PNG, JPG or WebP, up to 2 MB.'
+        }
+      >
         <input
           id="avatar"
           name="avatar"
@@ -91,7 +119,9 @@ export function OnboardingForm({
         />
       </Field>
 
-      <SubmitButton pendingLabel="Saving…">Finish setup</SubmitButton>
+      <SubmitButton pendingLabel="Saving…">
+        {mode === 'edit' ? 'Save changes' : 'Finish setup'}
+      </SubmitButton>
     </form>
   );
 }

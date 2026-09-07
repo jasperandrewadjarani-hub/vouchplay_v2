@@ -9,7 +9,10 @@ import {
   announcementSchema,
 } from '@vouchplay/validation';
 import type { TournamentStatus } from '@vouchplay/db';
+import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
+import { buildDefaultDivisionPreset, tournamentArchiveNameMatches } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
+import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { AVATARS_BUCKET } from '@/lib/storage';
 import { authorizeOrganizer, hasOrganizerRole, type OrganizerPerm } from '@/lib/tournaments/authz';
@@ -21,6 +24,7 @@ import {
 } from '@/lib/tournaments/queries';
 import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini } from '@/lib/notifications/recipients';
+import { loadSettingNumber } from '@/lib/settings';
 
 export interface TournamentActionState {
   ok?: boolean;
@@ -143,6 +147,21 @@ export async function createTournament(
     const t = created as { id: string; slug: string };
     newSlug = t.slug;
 
+    const configuredCapacity = await loadSettingNumber(
+      'default_division_capacity_teams',
+      DEFAULT_SYSTEM_SETTINGS.default_division_capacity_teams,
+    );
+    const starterDivisions = buildDefaultDivisionPreset(configuredCapacity).map((division) => ({
+      tournament_id: t.id,
+      ...division,
+    }));
+    const { error: divisionError } = await svc.from('divisions').insert(starterDivisions);
+    if (divisionError) {
+      // Creation is one logical operation: compensate by removing the empty draft and all children.
+      await svc.from('tournaments').delete().eq('id', t.id);
+      return { error: 'Could not create the starter divisions. No tournament was saved.' };
+    }
+
     const cover = formData.get('cover');
     if (cover instanceof File && cover.size > 0) {
       const path = await uploadCover(t.id, cover);
@@ -228,7 +247,7 @@ const TRANSITIONS: Record<TournamentStatus, TournamentStatus[]> = {
   registration_closed: ['locked', 'registration_open', 'cancelled'],
   locked: ['live', 'registration_closed', 'cancelled'],
   live: ['completed', 'cancelled'],
-  completed: ['archived'],
+  completed: [],
   archived: [],
   cancelled: [],
 };
@@ -428,6 +447,112 @@ export async function setDivisionStatus(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Division updated.' };
+}
+
+/** Remove an unused division through the audited, transactional database function (§18.6). */
+export async function removeDivision(
+  divisionId: string,
+  tournamentId: string,
+  slug: string,
+): Promise<TournamentActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_divisions'))) {
+    return { error: 'You do not have permission to manage divisions.' };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      'remove_unused_division' as never,
+      { p_division_id: divisionId } as never,
+    );
+    if (error) {
+      if (error.message.includes('division_has_activity')) {
+        return { error: 'This division already has player activity and cannot be removed.' };
+      }
+      return { error: 'Could not remove the division. Please try again.' };
+    }
+    invalidate(slug, tournamentId);
+    return { ok: true, message: 'Division removed.' };
+  } catch {
+    return { error: 'Division removal is temporarily unavailable.' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reversible owner-only archive / restore (§17.2)
+// ---------------------------------------------------------------------------
+async function changeArchiveState(
+  tournamentId: string,
+  slug: string,
+  expectedName: string,
+  restore: boolean,
+): Promise<TournamentActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+
+  const authorization = await authorizeOrganizer(user.id, tournamentId);
+  if (!authorization?.isOwner) return { error: 'Only the tournament owner can do this.' };
+
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc(
+      'set_tournament_archived_state' as never,
+      {
+        p_tournament_id: tournamentId,
+        p_expected_name: expectedName,
+        p_restore: restore,
+      } as never,
+    );
+    if (error) {
+      if (error.message.includes('tournament_name_mismatch')) {
+        return { error: 'The tournament name does not match.' };
+      }
+      if (error.message.includes('unsafe_archive_status')) {
+        return {
+          error: 'Move this tournament to Draft, Cancelled, or Completed before archiving.',
+        };
+      }
+      if (error.message.includes('not_archived')) {
+        return { error: 'This tournament is not archived.' };
+      }
+      return { error: `Could not ${restore ? 'restore' : 'archive'} the tournament.` };
+    }
+    invalidate(slug, tournamentId);
+    return {
+      ok: true,
+      message: restore ? 'Tournament restored to Draft.' : 'Tournament archived.',
+    };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+export async function archiveTournament(
+  tournamentId: string,
+  slug: string,
+  expectedName: string,
+  _prev: TournamentActionState,
+  formData: FormData,
+): Promise<TournamentActionState> {
+  const typedName = String(formData.get('tournamentName') ?? '').trim();
+  if (!tournamentArchiveNameMatches(expectedName, typedName)) {
+    return { error: 'Type the exact tournament name to continue.' };
+  }
+  return changeArchiveState(tournamentId, slug, typedName, false);
+}
+
+export async function restoreTournament(
+  tournamentId: string,
+  slug: string,
+  expectedName: string,
+  _prev: TournamentActionState,
+  _formData: FormData,
+): Promise<TournamentActionState> {
+  void _prev;
+  void _formData;
+  return changeArchiveState(tournamentId, slug, expectedName, true);
 }
 
 // ---------------------------------------------------------------------------

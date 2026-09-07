@@ -1019,13 +1019,40 @@ Getting the first deploy up hit two issues:
     `vouchplayph.vercel.app`.
   - **Vercel domain diagnosis:** `vouchplay-v2.vercel.app` is the project-generated domain;
     `vouchplayph.vercel.app` is a working manual deployment alias. Keep re-aliasing until Jasper adds
-    the vanity `.vercel.app` address as a Project Settings domain so production assignment is automatic.
+  the vanity `.vercel.app` address as a Project Settings domain so production assignment is automatic.
+
+- **2026-09-07** - **PILOT PREP profile + organizer usability v1.5 (Jasper).** Code complete; migration
+  0014 pending Jasper's SQL-editor application.
+  - **Me → Edit profile:** added a visible primary action plus `/me/edit`, with all editable fields
+    pre-filled, stable public slug, current-avatar preservation, shared server validation/RLS, cache
+    invalidation, success feedback, and a `Saving…` control state.
+  - **Starter divisions:** new tournaments now create 15 draft doubles divisions - Beginner, Novice,
+    Low Intermediate, High Intermediate, and Advanced × Men/Women/Mixed. The default 20-team capacity
+    is `default_division_capacity_teams` in `system_settings`/Admin Settings. Preset construction is
+    pure in `@vouchplay/core` and unit-tested; failed starter insertion compensates by removing the
+    new empty draft.
+  - **Division removal:** every division row has an inline, confirmed Remove action with `Removing…`
+    feedback. The transactional RPC permits owner or `manage_divisions` co-organizer, refuses any
+    registration/team/invitation/interest/announcement/achievement activity, writes immutable audit,
+    then deletes.
+  - **Tournament retention:** chose reversible Archive/Restore over hard delete. Only the owner can
+    archive from Draft/Cancelled/Completed, after typing the exact tournament name; restore returns
+    to Draft. The transactional RPC changes status and writes audit together. App-level hiding plus
+    migration 0014 RLS keep archived details/divisions/announcements private to organizers/staff.
+  - **Home copy:** “fair brackets” → “fair tournaments.” Master handover bumped to content v1.5 and
+    documents all decisions. Vercel domains recorded as permanent project domains (verify after deploy;
+    manual alias only if automatic attachment fails).
+  - **Required DB step:** run `scripts/apply-0014.sql` in Supabase `itrosesiywpbaxtmucbb`; expected
+    verify counts: `pilot_prep_functions=2`, `default_capacity_setting=1`,
+    `archive_read_policies=3`. Until applied, profile edit/starter divisions/home copy work, but
+    Archive/Restore and Remove return a safe error.
+  - Gates currently green: typecheck; lint (0 warnings); core tests 58/58 including four new preset/
+    retention tests; format; Next 15.5.25 production build (34 routes including `/me/edit`).
 
 ## Next up
-- **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built and production SMTP is
-  configured. Next: verify a real opted-in critical email; clear Supabase over-quota; run the full
-  live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
-  admin TOTP. Hold-expiry/waitlist cron is deferred.
+- **PILOT PREP (in progress):** apply/verify migration 0014; verify a real opted-in critical email;
+  clear Supabase over-quota; run the full live dress rehearsal + native-Excel export gate; grant the
+  Hermosa Cup organizer and enroll JT admin TOTP. Hold-expiry/waitlist cron is deferred.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).

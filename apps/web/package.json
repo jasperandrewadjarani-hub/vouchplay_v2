@@ -14,6 +14,7 @@
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.47.10",
     "@vouchplay/config": "*",
+    "@vouchplay/core": "*",
     "@vouchplay/db": "*",
     "@vouchplay/validation": "*",
     "exceljs": "^4.4.0",

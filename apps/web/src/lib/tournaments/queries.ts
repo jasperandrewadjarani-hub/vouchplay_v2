@@ -203,6 +203,23 @@ export async function getTournamentBySlug(
     const row = data as TournamentRow | null;
     if (!row) return null;
 
+    // Defense in depth while archived visibility is also enforced by RLS (migration 0014).
+    if (
+      row.status === 'archived' &&
+      viewer.viewerId !== row.owner_organizer_id &&
+      !viewer.isStaff
+    ) {
+      if (!viewer.viewerId) return null;
+      const { data: archivedCoOrganizer } = await supabase
+        .from('tournament_organizers')
+        .select('id')
+        .eq('tournament_id', row.id)
+        .eq('user_id', viewer.viewerId)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (!archivedCoOrganizer) return null;
+    }
+
     const [divRes, orgRes, annRes] = await Promise.all([
       supabase
         .from('divisions')

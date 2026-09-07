@@ -20,7 +20,7 @@ export default async function HomePage() {
         </h1>
         <p className="text-foreground-muted mt-3 max-w-xl text-sm sm:text-base">
           Skill reputation built by real community vouches - not self-declaration. Find players,
-          build a trusted profile, and give organizers the evidence to run fair brackets.
+          build a trusted profile, and give organizers the evidence to run fair tournaments.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <ButtonLink href="/players" className="px-5 py-3">

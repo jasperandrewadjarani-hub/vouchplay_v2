@@ -2,11 +2,13 @@
 
 import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2, Trash2 } from 'lucide-react';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import {
   addDivision,
   updateDivision,
   cloneDivision,
+  removeDivision,
   setDivisionStatus,
   type TournamentActionState,
 } from '@/lib/actions/tournament';
@@ -94,6 +96,8 @@ function DivisionRow({
   const [editing, setEditing] = useState(false);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<'status' | 'clone' | 'remove' | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const editAction = updateDivision.bind(null, division.id, tournamentId, slug);
   const [editState, editFormAction] = useActionState(editAction, empty);
@@ -111,7 +115,8 @@ function DivisionRow({
         <div className="flex flex-wrap items-center gap-1.5">
           <select
             defaultValue={division.status}
-            onChange={(e) =>
+            onChange={(e) => {
+              setActiveAction('status');
               start(async () => {
                 const res = await setDivisionStatus(
                   division.id,
@@ -121,8 +126,9 @@ function DivisionRow({
                 );
                 setMsg(res.error ?? null);
                 if (res.ok) router.refresh();
-              })
-            }
+                setActiveAction(null);
+              });
+            }}
             disabled={pending}
             className="border-border bg-background rounded-lg border px-2 py-1 text-xs"
           >
@@ -132,19 +138,31 @@ function DivisionRow({
               </option>
             ))}
           </select>
+          {pending && activeAction === 'status' && (
+            <Loader2
+              size={14}
+              className="text-foreground-muted animate-spin"
+              aria-label="Updating"
+            />
+          )}
           <button
             type="button"
             disabled={pending}
-            onClick={() =>
+            onClick={() => {
+              setActiveAction('clone');
               start(async () => {
                 const res = await cloneDivision(division.id, tournamentId, slug);
                 setMsg(res.error ?? null);
                 if (res.ok) router.refresh();
-              })
-            }
+                setActiveAction(null);
+              });
+            }}
             className="border-border text-foreground rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
           >
-            Clone
+            {pending && activeAction === 'clone' && (
+              <Loader2 size={12} className="animate-spin" aria-hidden />
+            )}
+            {pending && activeAction === 'clone' ? 'Cloning…' : 'Clone'}
           </button>
           <button
             type="button"
@@ -153,8 +171,63 @@ function DivisionRow({
           >
             {editing ? 'Close' : 'Edit'}
           </button>
+          {!confirmRemove && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setMsg(null);
+                setConfirmRemove(true);
+              }}
+              className="border-danger/40 text-danger inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+            >
+              <Trash2 size={12} aria-hidden />
+              Remove
+            </button>
+          )}
         </div>
       </div>
+      {confirmRemove && (
+        <div className="border-danger/30 bg-danger/5 mt-3 rounded-xl border p-3">
+          <p className="text-foreground text-sm font-medium">Remove {division.name}?</p>
+          <p className="text-foreground-muted mt-1 text-xs">
+            This is only allowed before the division has registrations, teams, invitations, or
+            player interest.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setActiveAction('remove');
+                start(async () => {
+                  const res = await removeDivision(division.id, tournamentId, slug);
+                  setMsg(res.error ?? res.message ?? null);
+                  if (res.ok) {
+                    setConfirmRemove(false);
+                    router.refresh();
+                  }
+                  setActiveAction(null);
+                });
+              }}
+              className="bg-danger inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {pending && activeAction === 'remove' && (
+                <Loader2 size={12} className="animate-spin" aria-hidden />
+              )}
+              {pending && activeAction === 'remove' ? 'Removing…' : 'Yes, remove'}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setConfirmRemove(false)}
+              className="border-border text-foreground rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            >
+              Keep division
+            </button>
+          </div>
+        </div>
+      )}
       {msg && <p className="text-danger mt-1 text-xs">{msg}</p>}
 
       {editing && (

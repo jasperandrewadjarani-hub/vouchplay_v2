@@ -236,6 +236,15 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     max: 10,
   },
   {
+    key: 'default_division_capacity_teams',
+    label: 'Starter division capacity (teams)',
+    group: 'tournament',
+    kind: 'int',
+    min: 1,
+    max: 512,
+    help: 'Applied to each of the 15 starter divisions created with a new tournament.',
+  },
+  {
     key: 'club_representation_required',
     label: 'Club representation required',
     group: 'tournament',

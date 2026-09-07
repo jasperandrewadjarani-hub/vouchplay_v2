@@ -14,7 +14,7 @@ const TRANSITIONS: Record<TournamentStatus, TournamentStatus[]> = {
   registration_closed: ['locked', 'registration_open', 'cancelled'],
   locked: ['live', 'registration_closed', 'cancelled'],
   live: ['completed', 'cancelled'],
-  completed: ['archived'],
+  completed: [],
   archived: [],
   cancelled: [],
 };

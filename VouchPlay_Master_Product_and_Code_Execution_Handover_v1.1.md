@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.4
+# VouchPlay Master Product & Code Execution Handover v1.5
 
-_(File retains its `…v1.1.md` name; content is v1.4 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.5 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -26,8 +26,9 @@ Gmail account (for SMTP): vouchplay@gmail.com
 > `notes.md`; `CLAUDE.md` / `AGENTS.md` hold agent working rules + deploy gotchas.
 
 **Live:** https://vouchplayph.vercel.app (public, connected to Supabase). Auto-deploys on push to
-`main`; `vouchplayph.vercel.app` is currently a manual alias - re-alias after each deploy (or promote
-it to a project domain) until it's made a permanent production domain.
+`main`; `vouchplayph.vercel.app` and `vouchplay-v2.vercel.app` are configured production project
+domains. Verify both domains after each production deploy; manual re-aliasing is only a fallback if
+Vercel does not attach the project domain automatically.
 
 **Phase 0 - Foundations: ✅ DONE.** npm-workspaces monorepo (`apps/web` + `packages/{config,core,db,
 ui,validation,analytics}`), Next.js + React 19 + Tailwind v4 + TS strict, locked theme tokens +
@@ -262,6 +263,12 @@ Pilot-prep discovery/loading hardening now gives signed-in owners and active co-
 **Your tournaments** section that includes draft and unlisted events without widening public discovery;
 unlisted cards are visibly labelled. Tournament directory typing, the notification bell, and the
 notification Preferences link now meet §33.5A with an immediate pending indicator. No migration.
+Pilot usability v1.5 is code-complete: Me has a visible, pre-filled Edit profile flow; tournament
+creation seeds the §18.6 15-division starter set; unused divisions have an audited Remove flow;
+owners have reversible Archive/Restore controls with exact-name confirmation; archived events are
+hidden from public reads; and the Home promise now says “fair tournaments.” Migration 0014 adds the
+capacity setting, archive RLS, and transactional audited RPCs; apply `scripts/apply-0014.sql` before
+accepting archive/remove actions in production.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -954,6 +961,11 @@ Primary actions:
 - Request to Partner.
 - Share.
 
+On the signed-in player's own **Me** summary, always show a visible **Edit profile** action after
+onboarding. It opens a pre-filled edit form for the §7.3 profile fields, preserves the current
+avatar unless a replacement is uploaded, validates and authorizes the update server-side, and
+shows the mandatory §33.5A pending state while saving. The public-profile action remains secondary.
+
 Contextual actions:
 - Recruit Player - club owner/admin.
 - Sponsor Player - club owner/admin.
@@ -1630,8 +1642,22 @@ Rules:
 - Locked freezes team/club/division changes except organizer override.
 - Live indicates event is underway.
 - Completed permits results/achievements.
-- Archived is historical.
+- Archived is historical and hidden from public discovery/direct public reads; the owner, active
+  co-organizers, and staff retain access for records and administration.
 - Cancelled triggers participant notification.
+
+Pilot removal policy:
+- There is no hard-delete action for organizers. Tournament deletion is represented by reversible
+  **Archive** so registrations, payments, eligibility decisions, announcements, and audit history
+  remain intact.
+- Only the tournament owner may archive or restore. Co-organizers cannot perform either action.
+- Archive is allowed from `DRAFT`, `CANCELLED`, or `COMPLETED`; an active event must first follow the
+  normal lifecycle to a safe state. Restore always returns the event to `DRAFT` for review before
+  republishing.
+- The confirmation UI requires the owner to type the exact tournament name. Password re-entry is
+  not used because Google/OTP accounts may not have a password; server-side session authentication,
+  owner authorization, exact-name confirmation, and an append-only `audit_logs` entry are required.
+- Archive/restore controls show an immediate §33.5A pending state and an actionable error on failure.
 
 ## 17.3 Tournament Fields
 
@@ -1752,6 +1778,23 @@ Examples:
 - Open age.
 
 Age is calculated at tournament start date.
+
+## 18.6 New Tournament Division Preset
+
+Creating a tournament also creates an editable starter set of **15 draft doubles divisions**:
+
+- Skill bands: Beginner, Novice, Low Intermediate, High Intermediate, Advanced.
+- Sex classifications for every band: Men, Women, Mixed.
+- Minimum and maximum skill are both set to that band's canonical ordinal; names continue to be
+  composed from attributes (§18.1) and are not stored as hardcoded display names.
+- Default capacity is `default_division_capacity_teams` from `system_settings` (initial value 20).
+  The remaining values use the normal division defaults (PHP 0 fee, no age bound, no minimum STS,
+  no Skill-Verified requirement, no organizer-approval requirement).
+- Pro, Genderless, and Singles are available through edit/add but are not included in the starter set.
+- Organizers may edit, clone, or remove an inapplicable draft division. Removal is server-authorized,
+  confirmed in the UI, audited, and refused once the division has registrations or team activity.
+- Tournament creation is treated as one logical operation: if the starter divisions cannot be
+  created, the newly created empty tournament is rolled back and the organizer receives an error.
 
 ---
 
@@ -2808,6 +2851,7 @@ At minimum:
 | Skill Verified minimum unique vouchers | 2 |
 | Default max divisions/player | 3 |
 | Default max clubs/player/tournament | 3 |
+| Default division capacity (teams) | 20 |
 | Club representation required | false |
 | Verified clubs only | false |
 | Slot hold minutes | 30 |
@@ -6239,6 +6283,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.5 (2026-09-07)
+- **Pilot organizer/profile usability:** made **Edit profile** a first-class action on Me with a
+  pre-filled, server-authorized edit flow and §33.5A save feedback.
+- **New-tournament starter divisions (§18.6):** specified 15 editable draft doubles divisions
+  (Beginner through Advanced × Men/Women/Mixed), with the initial 20-team capacity controlled by
+  `system_settings`; specified safe, audited removal only before registration/team activity.
+- **Tournament retention (§17.2):** replaced organizer hard-delete with reversible owner-only
+  Archive/Restore, exact-name confirmation, public hiding, lifecycle guards, and append-only audit.
+- **Home message (§6):** changed the hero promise from “fair brackets” to “fair tournaments.”
+- **Deployment:** recorded `vouchplayph.vercel.app` as a permanent production project domain; domain
+  verification remains a release check and manual aliasing is now fallback-only.
 
 ## v1.4 (2026-09-07)
 - **Branding refresh (§5.2.1):** swapped in the new full-colour horizontal VouchPlay logo; added a

@@ -36,7 +36,7 @@ export default async function OnboardingPage({
           A few details so players can find and vouch for you. You can edit these anytime.
         </p>
       </div>
-      <OnboardingForm defaultFirstName={firstName} next={next} />
+      <OnboardingForm initial={{ firstName }} next={next} />
     </div>
   );
 }

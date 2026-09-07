@@ -9,6 +9,10 @@ export interface ProfileRow {
   nickname: string | null;
   slug: string | null;
   city: string | null;
+  sex: 'male' | 'female' | null;
+  bio: string | null;
+  self_rated_skill: number | null;
+  facebook_url: string | null;
   avatar_path: string | null;
   onboarded_at: string | null;
   account_status: string;
@@ -41,7 +45,7 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
     const { data } = await supabase
       .from('profiles')
       .select(
-        'id, first_name, last_name, nickname, slug, city, avatar_path, onboarded_at, account_status',
+        'id, first_name, last_name, nickname, slug, city, sex, bio, self_rated_skill, facebook_url, avatar_path, onboarded_at, account_status',
       )
       .eq('id', user.id)
       .maybeSingle();

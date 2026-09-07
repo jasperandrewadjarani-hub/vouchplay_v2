@@ -30,8 +30,8 @@ export default async function NewTournamentPage() {
           Create a tournament
         </h1>
         <p className="text-foreground-muted mt-1 text-sm">
-          Start with the basics. It saves as a draft; add divisions, venue, registration dates, and
-          payment details afterward.
+          Start with the basics. It saves as a draft with 15 editable doubles divisions, each with
+          20 team slots by default. Adjust or remove any division that does not apply.
         </p>
       </div>
       <div className="border-border bg-surface rounded-2xl border p-5">

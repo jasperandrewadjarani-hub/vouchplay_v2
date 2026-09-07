@@ -14,3 +14,5 @@ export * from './vouches';
 export * from './eligibility';
 export * from './payments/provider';
 export * from './analytics/summary';
+export * from './tournaments/default-divisions';
+export * from './tournaments/retention';

@@ -63,6 +63,11 @@ export default async function MePage({
 
   return (
     <section className="mx-auto max-w-md space-y-6">
+      {(Array.isArray(sp.profile) ? sp.profile[0] : sp.profile) === 'updated' && (
+        <p className="bg-success/10 text-success rounded-xl px-4 py-3 text-sm" role="status">
+          Profile updated.
+        </p>
+      )}
       <div className="border-border bg-surface rounded-2xl border p-5">
         <h1 className="text-foreground text-lg font-semibold">{fullName}</h1>
         {profile?.nickname && (
@@ -78,11 +83,14 @@ export default async function MePage({
             Complete your profile
           </ButtonLink>
         ) : (
-          profile?.slug && (
-            <ButtonLink href={`/players/${profile.slug}`} variant="secondary" className="mt-4">
-              View public profile
-            </ButtonLink>
-          )
+          <div className="mt-4 flex flex-wrap gap-2">
+            <ButtonLink href="/me/edit">Edit profile</ButtonLink>
+            {profile?.slug && (
+              <ButtonLink href={`/players/${profile.slug}`} variant="secondary">
+                View public profile
+              </ButtonLink>
+            )}
+          </div>
         )}
       </div>
 

@@ -14,6 +14,7 @@ import { OrganizerRegistrations } from '@/components/tournaments/organizer-regis
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
 import { computeOverview } from '@/lib/tournaments/overview';
+import { ArchiveControls } from '@/components/tournaments/archive-controls';
 
 export const metadata: Metadata = { title: 'Manage tournament' };
 
@@ -128,6 +129,13 @@ export default async function ManageTournamentPage({ params }: Params) {
         <section className="border-border bg-surface rounded-2xl border p-5">
           <h2 className="text-foreground mb-3 text-base font-semibold">Co-organizers</h2>
           <CoOrganizerManager tournamentId={t.id} slug={slug} organizers={t.organizers} />
+        </section>
+      )}
+
+      {t.isOwner && (
+        <section className="border-danger/30 bg-danger/5 rounded-2xl border p-5">
+          <h2 className="text-foreground mb-1 text-base font-semibold">Archive tournament</h2>
+          <ArchiveControls tournamentId={t.id} slug={slug} name={t.name} status={t.status} />
         </section>
       )}
     </div>

@@ -121,3 +121,70 @@ export async function completeOnboarding(
 
   redirect(next ?? '/');
 }
+
+/** Updates the signed-in player's editable profile fields without changing their stable slug. */
+export async function updateProfile(
+  _prev: ProfileFormState,
+  formData: FormData,
+): Promise<ProfileFormState> {
+  const parsed = onboardingSchema.safeParse({
+    firstName: formData.get('firstName'),
+    lastName: formData.get('lastName'),
+    nickname: formData.get('nickname'),
+    sex: formData.get('sex'),
+    selfRatedSkill: formData.get('selfRatedSkill'),
+    city: formData.get('city'),
+    facebookUrl: formData.get('facebookUrl') ?? '',
+    bio: formData.get('bio') ?? '',
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Please check your input.' };
+  }
+
+  let savedSlug: string | null = null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: 'Please sign in again.' };
+
+    const { data: current } = await supabase
+      .from('profiles')
+      .select('slug, onboarded_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!(current as { onboarded_at: string | null } | null)?.onboarded_at) {
+      return { error: 'Complete your profile setup before editing it.' };
+    }
+
+    const avatarFile = formData.get('avatar');
+    const avatarPath =
+      avatarFile instanceof File && avatarFile.size > 0
+        ? await uploadAvatar(user.id, avatarFile)
+        : null;
+    const v = parsed.data;
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        first_name: v.firstName,
+        last_name: v.lastName,
+        nickname: v.nickname,
+        sex: v.sex,
+        self_rated_skill: v.selfRatedSkill,
+        city: v.city,
+        facebook_url: v.facebookUrl || null,
+        bio: v.bio || null,
+        ...(avatarPath ? { avatar_path: avatarPath } : {}),
+      })
+      .eq('id', user.id);
+    if (error) return { error: 'Could not save your profile. Please try again.' };
+    savedSlug = (current as { slug: string | null }).slug;
+  } catch {
+    return { error: 'Profile editing is temporarily unavailable. Please try again shortly.' };
+  }
+
+  revalidateTag(PLAYERS_LIST_TAG);
+  if (savedSlug) revalidateTag(playerTag(savedSlug));
+  redirect('/me?profile=updated');
+}

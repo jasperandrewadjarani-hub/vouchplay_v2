@@ -26,6 +26,7 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // Tournament defaults (handover §21.3, §22.1).
   default_max_divisions_per_player: 3,
   default_max_clubs_per_player: 3,
+  default_division_capacity_teams: 20,
   club_representation_required: false,
   verified_clubs_only: false,
 
