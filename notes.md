@@ -995,9 +995,18 @@ Getting the first deploy up hit two issues:
     verified; **re-aliased `vouchplayph.vercel.app`**. §19.4 authenticated visual/E2E remains part of
     the dress rehearsal once the user-owned account/TOTP prerequisites are ready.
 
+- **2026-09-07** - **PILOT PREP ops - production SMTP enabled (Jasper).** No code or migration.
+  - Jasper added `SMTP_USER` and `SMTP_PASS` as hidden **Production** secrets in the Vercel project;
+    the CLI confirmed both variable names without exposing their values.
+  - Redeployed the already-gated Pilot Prep release with Next.js **15.5.25**. Deployment
+    `vouchplayph-acuk33hfe-jasperandrewadjarani-hubs-projects.vercel.app` reached **READY**; production
+    root and login returned HTTP 200; **re-aliased `vouchplayph.vercel.app`**.
+  - The app email transport is now configuration-ready. A recipient opt-in plus one real critical-event
+    inbox confirmation remain required before the critical-email E2E gate is complete.
+
 ## Next up
-- **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built. Next: Jasper adds
-  `SMTP_USER`/`SMTP_PASS`, then verify a real critical email; clear Supabase over-quota; run the full
+- **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built and production SMTP is
+  configured. Next: verify a real opted-in critical email; clear Supabase over-quota; run the full
   live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
   admin TOTP. Hold-expiry/waitlist cron is deferred.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.

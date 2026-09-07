@@ -252,15 +252,17 @@ non-blocking warning before submission with Share-profile and Request-a-vouch pa
 cover unrated, thin-evidence, global/division STS, Skill-Verified, and clean cases. No migration.
 Pilot-critical lifecycle email now includes registration confirmed/rejected, waitlist promotion, and
 payment verified/rejected, and critical team fan-out invokes the same opt-in email sender as a single
-notification. App SMTP remains off until `SMTP_USER`/`SMTP_PASS` are added to Vercel. Remaining Pilot
-Prep gates: SMTP real-send verification; Supabase quota clearance; live dress rehearsal + native Excel
+notification. `SMTP_USER`/`SMTP_PASS` are now configured as hidden Vercel Production secrets and the
+SMTP-enabled deployment is live; one opted-in real critical-event inbox confirmation remains. Remaining
+Pilot Prep gates: SMTP real-send verification; Supabase quota clearance; live dress rehearsal + native Excel
 export open; and Hermosa organizer/JT admin role + TOTP readiness. Hold-expiry cron is deferred by JT.
-Code deployment `8962b31` was verified Ready and re-aliased to `vouchplayph.vercel.app`.
+Code deployment `8962b31` plus the production SMTP configuration were verified Ready and re-aliased to
+`vouchplayph.vercel.app`.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
 (§27.4). (Open ops: Jasper confirm the demo export XLSX open cleanly in desktop Excel; seed Tane's admin;
-both JT admins enroll TOTP to reach `/staff` + `/admin`; add SMTP creds to switch on critical email; clear
+both JT admins enroll TOTP to reach `/staff` + `/admin`; confirm one real opted-in critical email; clear
 Supabase over-quota before 21 Sep 2026.)
 
 ---
