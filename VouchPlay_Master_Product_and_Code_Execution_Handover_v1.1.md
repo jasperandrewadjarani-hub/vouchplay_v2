@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.5
+# VouchPlay Master Product & Code Execution Handover v1.6
 
-_(File retains its `…v1.1.md` name; content is v1.5 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.6 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -272,6 +272,10 @@ accepting archive/remove actions in production.
 Commit `faf562f` is deployed Ready at
 `vouchplayph-4o3nf3tsx-jasperandrewadjarani-hubs-projects.vercel.app`; both configured production
 domains returned HTTP 200 with the v1.5 Home copy, and the signed-in Me/Edit/Manage UI was verified.
+Lifecycle UX v1.6 is code-complete: Manage uses one consequence-aware selector for free forward/
+backward movement between every non-archived status, preserves child records, and notifies active
+participants when moving to Cancelled. Migration 0015 supplies the authenticated transactional RPC
+and immutable audit write; apply `scripts/apply-0015.sql` before accepting status changes in production.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -1623,7 +1627,7 @@ A Player may apply for Organizer role from:
 
 ## 17.2 Tournament Lifecycle
 
-Locked states:
+Lifecycle statuses:
 
 1. `DRAFT`
 2. `PUBLISHED`
@@ -1648,6 +1652,26 @@ Rules:
 - Archived is historical and hidden from public discovery/direct public reads; the owner, active
   co-organizers, and staff retain access for records and administration.
 - Cancelled triggers participant notification.
+
+Organizer status control:
+- The tournament owner and active co-organizers with `edit` permission may move a tournament freely
+  between **any non-archived lifecycle statuses**, forward or backward. Examples include Published →
+  Draft, Registration Closed → Registration Open, Completed → Live, and Cancelled → Published.
+- The Manage screen uses one labelled status selector plus an explicit **Update status** action. It
+  shows the selected status's player-facing effect before submission, disables no valid non-archived
+  destination, and shows an immediate §33.5A `Updating…` cue on the submitting control.
+- Status changes are transactional and append an immutable `audit_logs` row containing actor,
+  previous status, new status, tournament, and timestamp. Server-side session authorization is
+  authoritative; the UI never grants permission.
+- Moving backward changes what the current status permits but does **not** delete or roll back
+  registrations, teams, payments, eligibility decisions, announcements, or achievements. Those
+  records remain available to authorized organizers and follow their own state machines.
+- Moving to `CANCELLED` notifies existing tournament participants. Moving away from Cancelled does
+  not silently re-confirm or modify registrations; organizers should post an announcement when
+  reopening so players understand the revised schedule/process.
+- `ARCHIVED` is intentionally excluded from the free-movement selector. Archive/Restore keeps the
+  stronger owner-only, exact-name-confirmed retention flow below; Restore returns to Draft, after
+  which the organizer can select any normal status.
 
 Pilot removal policy:
 - There is no hard-delete action for organizers. Tournament deletion is represented by reversible
@@ -6286,6 +6310,13 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.6 (2026-09-07)
+- **Free tournament lifecycle control (§17.2):** replaced the directional transition-only UI with a
+  consequence-aware status selector. Authorized organizers may move freely forward/backward between
+  any non-archived statuses, including recovery from Cancelled; every change is transactional and
+  audited, preserves child records, shows §33.5A pending feedback, and Cancelled still notifies
+  participants. Archive/Restore remains a separate owner-only retention workflow.
 
 ## v1.5 (2026-09-07)
 - **Pilot organizer/profile usability:** made **Edit profile** a first-class action on Me with a

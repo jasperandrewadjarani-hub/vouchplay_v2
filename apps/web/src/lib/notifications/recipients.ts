@@ -38,6 +38,35 @@ export async function getTournamentMini(
   return { slug: t?.slug ?? null, name: t?.name ?? 'a tournament' };
 }
 
+/** Players attached to an active/pending registration in the tournament, deduplicated. */
+export async function getTournamentParticipantIds(tournamentId: string): Promise<string[]> {
+  const svc = createServiceClient();
+  const { data: registrations } = await svc
+    .from('registrations')
+    .select('team_id')
+    .eq('tournament_id', tournamentId)
+    .in('status', [
+      'team_formed',
+      'payment_pending',
+      'payment_submitted',
+      'under_review',
+      'confirmed',
+      'waitlisted',
+    ]);
+  const teamIds = Array.from(
+    new Set(((registrations ?? []) as { team_id: string }[]).map((row) => row.team_id)),
+  );
+  if (teamIds.length === 0) return [];
+
+  const { data: members } = await svc
+    .from('team_members')
+    .select('player_id')
+    .in('team_id', teamIds);
+  return Array.from(
+    new Set(((members ?? []) as { player_id: string }[]).map((row) => row.player_id)),
+  );
+}
+
 /** Player ids on a team (§27.1 recipients). */
 export async function getTeamMemberIds(teamId: string): Promise<string[]> {
   const svc = createServiceClient();

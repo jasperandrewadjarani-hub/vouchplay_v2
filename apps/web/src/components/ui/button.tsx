@@ -62,17 +62,19 @@ export function SubmitButton({
   pendingLabel = 'Working…',
   variant = 'primary',
   className = '',
+  disabled = false,
 }: {
   children: ReactNode;
   pendingLabel?: string;
   variant?: Variant;
   className?: string;
+  disabled?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       className={`${base} ${variants[variant]} w-full ${className}`}
     >
       {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}

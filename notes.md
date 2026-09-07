@@ -1055,10 +1055,29 @@ Getting the first deploy up hit two issues:
     tournaments” copy. Signed-in browser verification confirmed the visible Edit profile action,
     correctly pre-filled `/me/edit` form, division Remove control, and Archive confirmation section.
 
+- **2026-09-07** - **Free tournament lifecycle control v1.6 (Jasper).** Code complete; migration 0015
+  pending Jasper's SQL-editor application.
+  - Replaced directional transition buttons with one mobile-friendly **Change status** selector plus
+    explicit **Update status** action. Every non-archived status is available from every other
+    non-archived status, including Published → Draft and Cancelled → Published.
+  - The selected status displays its player-facing operational effect before saving; Cancelled uses
+    a warning treatment. Unchanged submission is disabled, and the submit control shows
+    `Updating status…` for §33.5A.
+  - Archive remains outside the selector and keeps the v1.5 owner-only exact-name retention flow.
+    Backward moves never delete/rewind registrations, teams, payments, eligibility, announcements,
+    or achievements.
+  - Added pure lifecycle status validation/free-movement rules and exhaustive pair coverage in
+    `@vouchplay/core`. Server action revalidates status + `edit` permission and invokes migration
+    0015's SECURITY DEFINER RPC; the database row lock, status update, and append-only audit insert
+    are one transaction. Moving to Cancelled fans out the existing tournament-cancelled notification
+    to active/pending registered players.
+  - Master handover updated to content v1.6. Required DB step: run `scripts/apply-0015.sql` after
+    migration 0014; expect `lifecycle_function=1`, `lifecycle_authenticated_grant=1`.
+
 ## Next up
-- **PILOT PREP (in progress):** apply/verify migration 0014; verify a real opted-in critical email;
-  clear Supabase over-quota; run the full live dress rehearsal + native-Excel export gate; grant the
-  Hermosa Cup organizer and enroll JT admin TOTP. Hold-expiry/waitlist cron is deferred.
+- **PILOT PREP (in progress):** apply/verify migrations 0014 and 0015; verify a real opted-in critical
+  email; clear Supabase over-quota; run the full live dress rehearsal + native-Excel export gate;
+  grant the Hermosa Cup organizer and enroll JT admin TOTP. Hold-expiry/waitlist cron is deferred.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).

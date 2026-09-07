@@ -1,23 +1,19 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TournamentStatus } from '@vouchplay/db';
-import { setTournamentStatus } from '@/lib/actions/tournament';
+import {
+  MANAGEABLE_TOURNAMENT_STATUSES,
+  TOURNAMENT_STATUS_GUIDANCE,
+  isManageableTournamentStatus,
+} from '@vouchplay/core';
+import { setTournamentStatus, type TournamentActionState } from '@/lib/actions/tournament';
+import { SubmitButton } from '@/components/ui/button';
+import { Field, FormError, FormMessage, Select } from '@/components/ui/field';
 import { tournamentStatusLabel, TournamentStatusPill } from './status-pill';
 
-// Mirrors the server-side transition map (§17.2). The server re-validates.
-const TRANSITIONS: Record<TournamentStatus, TournamentStatus[]> = {
-  draft: ['published', 'cancelled'],
-  published: ['registration_open', 'draft', 'cancelled'],
-  registration_open: ['registration_closed', 'cancelled'],
-  registration_closed: ['locked', 'registration_open', 'cancelled'],
-  locked: ['live', 'registration_closed', 'cancelled'],
-  live: ['completed', 'cancelled'],
-  completed: [],
-  archived: [],
-  cancelled: [],
-};
+const empty: TournamentActionState = {};
 
 export function LifecycleControls({
   tournamentId,
@@ -29,52 +25,83 @@ export function LifecycleControls({
   status: TournamentStatus;
 }) {
   const router = useRouter();
-  const [msg, setMsg] = useState<string | null>(null);
-  const [pending, start] = useTransition();
-  const next = TRANSITIONS[status];
+  const [selected, setSelected] = useState<string>(status);
+  const action = setTournamentStatus.bind(null, tournamentId, slug);
+  const [state, formAction] = useActionState(action, empty);
 
-  function go(to: TournamentStatus) {
-    if (
-      (to === 'cancelled' || to === 'archived') &&
-      !confirm(`Set status to ${tournamentStatusLabel(to)}?`)
-    )
-      return;
-    setMsg(null);
-    start(async () => {
-      const res = await setTournamentStatus(tournamentId, slug, to);
-      setMsg(res.error ?? res.message ?? null);
-      if (res.ok) router.refresh();
-    });
+  useEffect(() => setSelected(status), [status]);
+  useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [router, state.ok]);
+
+  if (status === 'archived') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-foreground-muted text-sm">Current:</span>
+          <TournamentStatusPill status={status} />
+        </div>
+        <p className="text-foreground-muted text-sm">
+          Archived tournaments use the owner-only Restore control at the bottom of this page.
+        </p>
+      </div>
+    );
   }
 
+  const guidance = isManageableTournamentStatus(selected)
+    ? TOURNAMENT_STATUS_GUIDANCE[selected]
+    : '';
+  const selectedStatus = selected as TournamentStatus;
+
   return (
-    <div className="space-y-2">
+    <form action={formAction} className="space-y-3">
       <div className="flex items-center gap-2">
         <span className="text-foreground-muted text-sm">Current:</span>
         <TournamentStatusPill status={status} />
       </div>
-      {next.length === 0 ? (
-        <p className="text-foreground-muted text-sm">This is a terminal status.</p>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {next.map((to) => (
-            <button
-              key={to}
-              type="button"
-              disabled={pending}
-              onClick={() => go(to)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${
-                to === 'cancelled'
-                  ? 'text-danger border-border border'
-                  : 'border-border text-foreground hover:bg-surface-muted border'
-              }`}
-            >
-              → {tournamentStatusLabel(to)}
-            </button>
+
+      <Field
+        label="Change status"
+        htmlFor="nextStatus"
+        hint="You can move forward or backward at any time. Archived uses the separate retention control."
+      >
+        <Select
+          id="nextStatus"
+          name="nextStatus"
+          value={selected}
+          onChange={(event) => setSelected(event.target.value)}
+        >
+          {MANAGEABLE_TOURNAMENT_STATUSES.map((option) => (
+            <option key={option} value={option}>
+              {tournamentStatusLabel(option as TournamentStatus)}
+            </option>
           ))}
-        </div>
-      )}
-      {msg && <p className="text-foreground-muted text-xs">{msg}</p>}
-    </div>
+        </Select>
+      </Field>
+
+      <div
+        className={`rounded-xl border p-3 ${
+          selected === 'cancelled'
+            ? 'border-danger/30 bg-danger/5'
+            : 'border-border bg-surface-muted/40'
+        }`}
+        aria-live="polite"
+      >
+        <p className="text-foreground text-sm font-medium">
+          {tournamentStatusLabel(selectedStatus)}
+        </p>
+        <p className="text-foreground-muted mt-1 text-xs">{guidance}</p>
+      </div>
+
+      <p className="text-foreground-muted text-xs">
+        Changing status does not delete or roll back registrations, teams, payments, eligibility
+        decisions, announcements, or achievements.
+      </p>
+      <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
+      <FormError>{state.error}</FormError>
+      <SubmitButton pendingLabel="Updating status…" disabled={selected === status}>
+        Update status
+      </SubmitButton>
+    </form>
   );
 }

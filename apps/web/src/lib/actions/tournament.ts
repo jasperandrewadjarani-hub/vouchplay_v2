@@ -8,9 +8,12 @@ import {
   divisionSchema,
   announcementSchema,
 } from '@vouchplay/validation';
-import type { TournamentStatus } from '@vouchplay/db';
 import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
-import { buildDefaultDivisionPreset, tournamentArchiveNameMatches } from '@vouchplay/core';
+import {
+  buildDefaultDivisionPreset,
+  isManageableTournamentStatus,
+  tournamentArchiveNameMatches,
+} from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -23,7 +26,7 @@ import {
   tournamentAnnouncementsTag,
 } from '@/lib/tournaments/queries';
 import { notifyMany } from '@/lib/notifications/create';
-import { getTournamentMini } from '@/lib/notifications/recipients';
+import { getTournamentMini, getTournamentParticipantIds } from '@/lib/notifications/recipients';
 import { loadSettingNumber } from '@/lib/settings';
 
 export interface TournamentActionState {
@@ -238,51 +241,62 @@ export async function updateTournament(
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle state machine (§17.2)
+// Free non-archived lifecycle control (§17.2)
 // ---------------------------------------------------------------------------
-const TRANSITIONS: Record<TournamentStatus, TournamentStatus[]> = {
-  draft: ['published', 'cancelled'],
-  published: ['registration_open', 'draft', 'cancelled'],
-  registration_open: ['registration_closed', 'cancelled'],
-  registration_closed: ['locked', 'registration_open', 'cancelled'],
-  locked: ['live', 'registration_closed', 'cancelled'],
-  live: ['completed', 'cancelled'],
-  completed: [],
-  archived: [],
-  cancelled: [],
-};
-
 export async function setTournamentStatus(
   tournamentId: string,
   slug: string,
-  next: TournamentStatus,
+  _prev: TournamentActionState,
+  formData: FormData,
 ): Promise<TournamentActionState> {
+  const next = formData.get('nextStatus');
+  if (!isManageableTournamentStatus(next)) return { error: 'Select a valid tournament status.' };
+
   const user = await getOptionalUser();
   if (!user) return { error: 'Please sign in.' };
   if (!(await authorizeOrganizer(user.id, tournamentId, 'edit'))) {
     return { error: 'You do not have permission to change this tournament.' };
   }
+
+  let changed = false;
   try {
-    const svc = createServiceClient();
-    const { data: t } = await svc
-      .from('tournaments')
-      .select('status')
-      .eq('id', tournamentId)
-      .maybeSingle();
-    const current = (t as { status: TournamentStatus } | null)?.status;
-    if (!current) return { error: 'Tournament not found.' };
-    if (!TRANSITIONS[current].includes(next)) {
-      return {
-        error: `Cannot move from ${current.replace('_', ' ')} to ${next.replace('_', ' ')}.`,
-      };
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc(
+      'set_tournament_status' as never,
+      { p_tournament_id: tournamentId, p_next_status: next } as never,
+    );
+    if (error) {
+      if (error.message.includes('archived_requires_retention_flow')) {
+        return { error: 'Use the separate Archive/Restore control for archived tournaments.' };
+      }
+      return { error: 'Could not update the status. Please try again.' };
     }
-    const { error } = await svc.from('tournaments').update({ status: next }).eq('id', tournamentId);
-    if (error) return { error: 'Could not update the status.' };
+    changed = Boolean((data as unknown as { changed?: boolean } | null)?.changed);
     invalidate(slug, tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: `Status set to ${next.replace('_', ' ')}.` };
+
+  if (changed && next === 'cancelled') {
+    const [participantIds, tournament] = await Promise.all([
+      getTournamentParticipantIds(tournamentId),
+      getTournamentMini(tournamentId),
+    ]);
+    await notifyMany(participantIds, {
+      type: 'tournament_cancelled',
+      actorId: user.id,
+      params: {
+        tournamentName: tournament.name,
+        reason: 'The organizer changed the tournament status to Cancelled.',
+      },
+      link: `/tournaments/${slug}`,
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+  }
+
+  const label = next.replaceAll('_', ' ');
+  return { ok: true, message: changed ? `Status set to ${label}.` : `Status is already ${label}.` };
 }
 
 // ---------------------------------------------------------------------------
