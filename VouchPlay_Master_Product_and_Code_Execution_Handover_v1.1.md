@@ -1,8 +1,8 @@
-# VouchPlay Master Product & Code Execution Handover v1.2
+# VouchPlay Master Product & Code Execution Handover v1.4
 
-_(File retains its `…v1.1.md` name; content is v1.2 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.4 - see Changelog.)_
 
-**Status:** LOCKED FOR EXECUTION - Phases 0–1 built (see §0Z Current Build Status)  
+**Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
 **Founders / Product Leads:** Jasper Adjarani, Tane Valdez  
 **Product:** VouchPlay  
@@ -20,7 +20,7 @@ Gmail account (for SMTP): vouchplay@gmail.com
 
 ---
 
-# 0Z. Current Build Status - as of 2026-09-05
+# 0Z. Current Build Status - as of 2026-09-07
 
 > Living status block. Update this whenever a phase completes. Full detail lives in
 > `notes.md`; `CLAUDE.md` / `AGENTS.md` hold agent working rules + deploy gotchas.
@@ -243,6 +243,18 @@ pure `computeAnalyticsSummary` in `@vouchplay/core` over cheap COUNT queries - g
 clubs/safety + the North Star (Skill-Verified active profiles). Gates green (core 47, config 19, web 15;
 build 31 pages incl. 6 `/admin` routes). Deferred: §13 Identity Verification full flow (private id-docs
 bucket + submission/review + retention - its own sub-phase), users merge-duplicate + revoke-sessions.
+
+**Pilot Prep - IN PROGRESS (§19.4 + Hermosa readiness).** The unverified/under-vouched registration
+prompt is built: the signed-in viewer's CSL, STS, unique-voucher count, Skill-Verified state, and
+profile slug are loaded with a tight server-side projection; a pure `@vouchplay/core` evaluator reuses
+the exact ELIG_V1 evidence/confidence rules per division; and the registration panel shows a neutral,
+non-blocking warning before submission with Share-profile and Request-a-vouch paths. Six focused tests
+cover unrated, thin-evidence, global/division STS, Skill-Verified, and clean cases. No migration.
+Pilot-critical lifecycle email now includes registration confirmed/rejected, waitlist promotion, and
+payment verified/rejected, and critical team fan-out invokes the same opt-in email sender as a single
+notification. App SMTP remains off until `SMTP_USER`/`SMTP_PASS` are added to Vercel. Remaining Pilot
+Prep gates: SMTP real-send verification; Supabase quota clearance; live dress rehearsal + native Excel
+export open; and Hermosa organizer/JT admin role + TOTP readiness. Hold-expiry cron is deferred by JT.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -6304,4 +6316,3 @@ Maintain a changelog at the bottom.
 - Defined UI/UX system.
 - Defined test, deployment, beta, and native rollout plan.
 - Marked document LOCKED FOR EXECUTION.
-

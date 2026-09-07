@@ -967,10 +967,31 @@ Getting the first deploy up hit two issues:
   - Gates green (typecheck/lint/format/test/build - 33 routes incl. /about + /faq). Committed + pushed;
     deployed; **re-aliased `vouchplayph.vercel.app`**.
 
+- **2026-09-07** - **PILOT PREP part 1 - §19.4 registration prompt + critical-email path (Jasper).**
+  Built; no migration.
+  - **§19.4 player prompt:** registration state now includes a tight, viewer-scoped projection of
+    profile slug + CSL/STS/unique-voucher/Skill-Verified status (no voucher identities). A pure
+    `evaluateRegistrationSkillPrompt` helper in `@vouchplay/core` shares ELIG_V1's exact evidence,
+    confidence, division-minimum-STS, and Skill-Verified review reasons, preventing UI/organizer-rule
+    drift. Each open division shows neutral, non-blocking expectation-setting before registration,
+    with current evidence facts plus Share-my-profile and Request-a-vouch paths. Six focused tests;
+    core eligibility suite is 27/27.
+  - **Critical email made operationally complete in code:** registration confirmed/rejected, waitlist
+    promotion, and payment verified/rejected are now critical/email-eligible. `notifyMany` now invokes
+    the email sender for each critical team recipient (the previous fan-out path only inserted in-app
+    rows). Recipient email opt-in is still respected. Preferences copy and `SECRETS_SETUP.md` now match
+    the actual `SMTP_USER`/`SMTP_PASS` names.
+  - **Config check:** Vercel and local env currently have neither `SMTP_USER` nor `SMTP_PASS`; a real
+    send remains pending Jasper's Gmail App Password + one opted-in recipient. Supabase quota, dress
+    rehearsal/native-Excel gate, and organizer/JT TOTP onboarding remain the next Pilot Prep steps.
+    JT explicitly deferred the hold-expiry/waitlist cron.
+  - Gates green: typecheck, lint, test (web 15, config 19, core 54), format, build (33 pages).
+
 ## Next up
-- **PILOT PREP (next phase):** see `docs/PHASE_PILOT_PREP_KICKOFF.md`. First code item = the §19.4
-  unverified-skill registration prompt. Config/ops items for Jasper: SMTP env for critical email;
-  clear Supabase over-quota; grant the Hermosa Cup organizer + enroll JT admin TOTP.
+- **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built. Next: Jasper adds
+  `SMTP_USER`/`SMTP_PASS`, then verify a real critical email; clear Supabase over-quota; run the full
+  live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
+  admin TOTP. Hold-expiry/waitlist cron is deferred.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).

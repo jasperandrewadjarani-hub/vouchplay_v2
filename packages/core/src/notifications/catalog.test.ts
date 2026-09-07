@@ -19,6 +19,18 @@ describe('notification catalog (§27)', () => {
     expect(notificationDef('account_security')!.critical).toBe(true);
   });
 
+  it('marks pilot-critical registration and payment outcomes as email-eligible', () => {
+    for (const type of [
+      'registration_confirmed',
+      'registration_rejected',
+      'registration_promoted',
+      'payment_verified',
+      'payment_rejected',
+    ]) {
+      expect(notificationDef(type)!.critical, type).toBe(true);
+    }
+  });
+
   it('critical categories are NOT mutable', () => {
     expect(MUTABLE_CATEGORIES).not.toContain('moderation');
     expect(MUTABLE_CATEGORIES).not.toContain('security');

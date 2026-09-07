@@ -119,13 +119,30 @@ export async function notifyMany(
     if (!def) return;
     const muted = def.critical ? new Map<string, string[]>() : await mutedSet(svc, unique);
 
-    const rows: Prepared[] = [];
+    const preparedRows: Prepared[] = [];
     for (const recipientId of unique) {
       if (!def.critical && (muted.get(recipientId) ?? []).includes(def.category)) continue;
       const prepared = prepare({ ...input, recipientId });
-      if (prepared) rows.push(prepared.row);
+      if (prepared) preparedRows.push(prepared.row);
     }
-    if (rows.length > 0) await svc.from('notifications').insert(rows);
+    if (preparedRows.length === 0) return;
+
+    await svc.from('notifications').insert(preparedRows);
+
+    // Team lifecycle notifications use this fan-out path. Critical rows must reach the same email
+    // channel as single-recipient notifications; each send still respects the recipient's opt-in.
+    if (def.critical) {
+      await Promise.all(
+        preparedRows.map((row) =>
+          sendCriticalEmail({
+            recipientId: row.recipient_id,
+            subject: row.title,
+            text: row.body ? `${row.title}\n\n${row.body}` : row.title,
+            idempotencyKey: `${input.type}:${row.recipient_id}:${input.entityId ?? ''}:${Date.now()}`,
+          }),
+        ),
+      );
+    }
   } catch {
     // best-effort
   }

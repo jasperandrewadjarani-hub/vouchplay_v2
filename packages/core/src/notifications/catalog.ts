@@ -84,13 +84,13 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
   ),
   registration_confirmed: t(
     'registrations',
-    false,
+    true,
     (p) => `You're confirmed for ${tour(p)}`,
     (p) => (p.divisionName ? `Division: ${p.divisionName}.` : undefined),
   ),
   registration_rejected: t(
     'registrations',
-    false,
+    true,
     (p) => `Registration not accepted for ${tour(p)}`,
     (p) => p.reason,
   ),
@@ -102,7 +102,7 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
   ),
   registration_promoted: t(
     'registrations',
-    false,
+    true,
     (p) => `A waitlist spot opened up in ${tour(p)}`,
     () => 'Complete the next steps before the hold expires.',
   ),
@@ -120,10 +120,10 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `Payment proof submitted in ${tour(p)}`,
     () => 'Review it in the registrations dashboard.',
   ),
-  payment_verified: t('payments', false, (p) => `Your payment was verified for ${tour(p)}`),
+  payment_verified: t('payments', true, (p) => `Your payment was verified for ${tour(p)}`),
   payment_rejected: t(
     'payments',
-    false,
+    true,
     (p) => `Your payment needs another look for ${tour(p)}`,
     (p) => p.reason,
   ),

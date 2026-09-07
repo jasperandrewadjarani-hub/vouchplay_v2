@@ -60,6 +60,68 @@ export interface EligibilityThresholds {
   reviewBelowSts: number;
 }
 
+/**
+ * The skill-evidence reasons that must be surfaced before registration (§19.4). These are the
+ * neutral ELIG_V1 REVIEW conditions a player can improve by collecting genuine vouches; hard-rule
+ * and above-band decisions stay on the organizer eligibility surface.
+ */
+export type RegistrationSkillPromptReasonCode = Extract<
+  EligibilityReasonCode,
+  | 'STS_BELOW_REQUIRED'
+  | 'LOW_CONFIDENCE'
+  | 'INSUFFICIENT_EVIDENCE'
+  | 'UNRATED'
+  | 'SKILL_VERIFIED_REQUIRED_MISSING'
+>;
+
+export interface RegistrationSkillPromptInput {
+  communitySkillLevel: number | null;
+  sts: number;
+  uniqueVoucherCount: number;
+  skillVerified: boolean;
+}
+
+export interface RegistrationSkillPromptRules {
+  skillVerifiedRequired: boolean;
+  /** Division-specific minimum STS, or null to use the admin review threshold. */
+  minimumSts: number | null;
+}
+
+export interface RegistrationSkillPromptResult {
+  showPrompt: boolean;
+  reasonCodes: RegistrationSkillPromptReasonCode[];
+}
+
+/**
+ * Evaluate the pre-registration skill-evidence prompt (§19.4) using the same injected thresholds as
+ * ELIG_V1. Pure and UI-agnostic so the registration panel cannot drift from organizer review logic.
+ */
+export function evaluateRegistrationSkillPrompt(
+  player: RegistrationSkillPromptInput,
+  rules: RegistrationSkillPromptRules,
+  thresholds: EligibilityThresholds,
+): RegistrationSkillPromptResult {
+  const reasonCodes: RegistrationSkillPromptReasonCode[] = [];
+
+  if (player.communitySkillLevel == null) {
+    reasonCodes.push('UNRATED');
+  } else if (player.uniqueVoucherCount < thresholds.minEvidenceVouchers) {
+    reasonCodes.push('INSUFFICIENT_EVIDENCE');
+  }
+
+  if (rules.minimumSts != null && player.sts < rules.minimumSts) {
+    reasonCodes.push('STS_BELOW_REQUIRED');
+  } else if (player.sts < thresholds.reviewBelowSts) {
+    reasonCodes.push('LOW_CONFIDENCE');
+  }
+
+  if (rules.skillVerifiedRequired && !player.skillVerified) {
+    reasonCodes.push('SKILL_VERIFIED_REQUIRED_MISSING');
+  }
+
+  return { showPrompt: reasonCodes.length > 0, reasonCodes: uniq(reasonCodes) };
+}
+
 /** One division's eligibility-relevant rules (already stored on `divisions`, §18). */
 export interface DivisionEligibilityRules {
   skillPolicy: DivisionSkillPolicy;
@@ -200,22 +262,8 @@ export function evaluatePlayerEligibility(
   }
 
   // ---- Review gates (§25.4): evidence, confidence, verification ----
-  if (player.communitySkillLevel == null) {
-    reasonCodes.push('UNRATED');
-  } else if (player.uniqueVoucherCount < thresholds.minEvidenceVouchers) {
-    reasonCodes.push('INSUFFICIENT_EVIDENCE');
-  }
-
-  const requiredSts = rules.minimumSts;
-  if (requiredSts != null && player.sts < requiredSts) {
-    reasonCodes.push('STS_BELOW_REQUIRED');
-  } else if (player.sts < thresholds.reviewBelowSts) {
-    reasonCodes.push('LOW_CONFIDENCE');
-  }
-
-  if (rules.skillVerifiedRequired && !player.skillVerified) {
-    reasonCodes.push('SKILL_VERIFIED_REQUIRED_MISSING');
-  }
+  // Shared with the player-facing §19.4 prompt so both surfaces stay on the same ELIG_V1 rules.
+  reasonCodes.push(...evaluateRegistrationSkillPrompt(player, rules, thresholds).reasonCodes);
 
   // A SKILL_MISMATCH stays a mismatch; otherwise any review reason or advisory flag -> REVIEW.
   if (result !== 'SKILL_MISMATCH') {

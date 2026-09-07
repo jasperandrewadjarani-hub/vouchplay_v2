@@ -14,6 +14,7 @@ import { RegistrationPanel } from '@/components/tournaments/registration-panel';
 import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { getEligibilitySettings } from '@/lib/settings';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -61,8 +62,13 @@ export default async function TournamentPage({ params }: Params) {
   const authed = viewer.viewerId !== null;
   const isOpen = t.status === 'registration_open';
   const registerable = isOpen || t.status === 'published';
-  const regState =
-    authed && isOpen ? await getViewerRegistrationState(t.id, viewer.viewerId as string) : null;
+  const [regState, eligibilitySettings] =
+    authed && isOpen
+      ? await Promise.all([
+          getViewerRegistrationState(t.id, viewer.viewerId as string),
+          getEligibilitySettings(),
+        ])
+      : [null, null];
   // Shareable link that lands on the registration options (§28.1) when registration is relevant.
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
@@ -161,6 +167,7 @@ export default async function TournamentPage({ params }: Params) {
             paymentMethods={t.paymentMethods}
             divisions={t.divisions}
             state={regState}
+            eligibilityThresholds={eligibilitySettings!.thresholds}
           />
         ) : (
           <section className="border-primary/30 bg-primary/5 rounded-2xl border p-4">

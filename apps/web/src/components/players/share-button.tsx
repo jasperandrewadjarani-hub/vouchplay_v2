@@ -12,11 +12,13 @@ export function ShareButton({
   title,
   text,
   size = 'md',
+  label = 'Share',
 }: {
   url: string;
   title: string;
   text?: string;
   size?: 'sm' | 'md';
+  label?: string;
 }) {
   const [copied, setCopied] = useState(false);
   const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
@@ -51,7 +53,7 @@ export function ShareButton({
       ) : (
         <Share2 size={size === 'sm' ? 14 : 16} aria-hidden />
       )}
-      {copied ? 'Link copied' : 'Share'}
+      {copied ? 'Link copied' : label}
     </button>
   );
 }

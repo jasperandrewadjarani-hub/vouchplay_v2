@@ -77,7 +77,9 @@ export function NotificationPreferencesForm({
 
       <div className="border-border space-y-1 rounded-xl border p-3">
         <label className="flex items-center justify-between gap-3">
-          <span className="text-foreground text-sm">Email me about critical account events</span>
+          <span className="text-foreground text-sm">
+            Email me about critical registration, payment, and account events
+          </span>
           <input
             type="checkbox"
             checked={email}

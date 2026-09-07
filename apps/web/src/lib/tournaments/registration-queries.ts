@@ -76,12 +76,22 @@ export interface EligibleClub {
   name: string;
 }
 
+export interface ViewerRegistrationSkillProfile {
+  playerId: string;
+  profileSlug: string | null;
+  communitySkillLevel: number | null;
+  sts: number;
+  uniqueVoucherCount: number;
+  skillVerified: boolean;
+}
+
 export interface ViewerRegistrationState {
   teamsByDivision: Record<string, ViewerTeam>;
   registrationsByDivision: Record<string, ViewerRegistration>;
   invitations: ViewerInvitation[];
   clubReps: ClubRep[];
   eligibleClubs: EligibleClub[];
+  viewerSkill: ViewerRegistrationSkillProfile;
 }
 
 export async function getViewerRegistrationState(
@@ -89,6 +99,32 @@ export async function getViewerRegistrationState(
   userId: string,
 ): Promise<ViewerRegistrationState> {
   const svc = createServiceClient();
+
+  // Tight, viewer-scoped projection for the §19.4 pre-registration prompt. The aggregate contains
+  // no voucher identities; a missing row means the player has no community vouches yet.
+  const [{ data: viewerProfileRow }, { data: viewerSkillRow }] = await Promise.all([
+    svc.from('profiles').select('slug').eq('id', userId).maybeSingle(),
+    svc
+      .from('player_skill_profiles')
+      .select('community_skill_level, sts, unique_voucher_count, skill_verified')
+      .eq('player_id', userId)
+      .maybeSingle(),
+  ]);
+  const viewerProfile = viewerProfileRow as { slug: string | null } | null;
+  const skill = viewerSkillRow as {
+    community_skill_level: number | null;
+    sts: number | string;
+    unique_voucher_count: number;
+    skill_verified: boolean;
+  } | null;
+  const viewerSkill: ViewerRegistrationSkillProfile = {
+    playerId: userId,
+    profileSlug: viewerProfile?.slug ?? null,
+    communitySkillLevel: skill?.community_skill_level ?? null,
+    sts: Number(skill?.sts ?? 0),
+    uniqueVoucherCount: skill?.unique_voucher_count ?? 0,
+    skillVerified: skill?.skill_verified ?? false,
+  };
 
   // Teams I'm on in this tournament.
   const { data: myMemberRows } = await svc
@@ -254,7 +290,14 @@ export async function getViewerRegistrationState(
     name: clubNames.get(id) ?? 'Club',
   }));
 
-  return { teamsByDivision, registrationsByDivision, invitations, clubReps, eligibleClubs };
+  return {
+    teamsByDivision,
+    registrationsByDivision,
+    invitations,
+    clubReps,
+    eligibleClubs,
+    viewerSkill,
+  };
 }
 
 // ---------------------------------------------------------------------------

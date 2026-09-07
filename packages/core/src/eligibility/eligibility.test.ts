@@ -4,6 +4,7 @@ import { join, resolve, relative, sep } from 'node:path';
 import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
 import {
   evaluatePlayerEligibility,
+  evaluateRegistrationSkillPrompt,
   evaluateTeamEligibility,
   ELIGIBILITY_ALGORITHM_VERSION,
   BANNED_ELIGIBILITY_TERMS,
@@ -45,6 +46,54 @@ const strongPlayer = (over: Partial<PlayerEligibilityInput> = {}): PlayerEligibi
   ageAtStart: 30,
   accountActive: true,
   ...over,
+});
+
+describe('evaluateRegistrationSkillPrompt (§19.4)', () => {
+  const evaluate = (
+    player: Partial<PlayerEligibilityInput> = {},
+    rules: Partial<DivisionEligibilityRules> = {},
+  ) =>
+    evaluateRegistrationSkillPrompt(
+      strongPlayer(player),
+      {
+        minimumSts: rules.minimumSts ?? band.minimumSts,
+        skillVerifiedRequired: rules.skillVerifiedRequired ?? band.skillVerifiedRequired,
+      },
+      TH,
+    );
+
+  it('prompts an unrated player without blocking registration', () => {
+    const result = evaluate({ communitySkillLevel: null, sts: 0, uniqueVoucherCount: 0 });
+    expect(result.showPrompt).toBe(true);
+    expect(result.reasonCodes).toEqual(expect.arrayContaining(['UNRATED', 'LOW_CONFIDENCE']));
+  });
+
+  it('prompts when unique community evidence is below the admin threshold', () => {
+    const result = evaluate({ uniqueVoucherCount: TH.minEvidenceVouchers - 1 });
+    expect(result.showPrompt).toBe(true);
+    expect(result.reasonCodes).toContain('INSUFFICIENT_EVIDENCE');
+  });
+
+  it('uses a division-specific minimum STS when one is configured', () => {
+    const result = evaluate({ sts: 4 }, { minimumSts: 4.5 });
+    expect(result.reasonCodes).toContain('STS_BELOW_REQUIRED');
+    expect(result.reasonCodes).not.toContain('LOW_CONFIDENCE');
+  });
+
+  it('uses the admin review threshold when the division has no minimum STS', () => {
+    const result = evaluate({ sts: TH.reviewBelowSts - 0.1 });
+    expect(result.reasonCodes).toContain('LOW_CONFIDENCE');
+  });
+
+  it('prompts for missing Skill Verified only when the division requires it', () => {
+    expect(evaluate({ skillVerified: false }).showPrompt).toBe(false);
+    const required = evaluate({ skillVerified: false }, { skillVerifiedRequired: true });
+    expect(required.reasonCodes).toContain('SKILL_VERIFIED_REQUIRED_MISSING');
+  });
+
+  it('does not prompt a well-evidenced player who meets the division requirements', () => {
+    expect(evaluate().showPrompt).toBe(false);
+  });
 });
 
 describe('evaluatePlayerEligibility (ELIG_V1)', () => {

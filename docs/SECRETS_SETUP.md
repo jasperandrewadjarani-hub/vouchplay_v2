@@ -65,8 +65,9 @@ Gmail SMTP requires an **App Password**, which requires **2-Step Verification** 
    - **Password:** the 16-char App Password
    - **Sender email:** `vouchplay@gmail.com` · **Sender name:** `VouchPlay`
    - **Save.** (Optional: raise Auth rate limits under Authentication → Rate Limits.)
-5. Mirror the same values in `apps/web/.env.local` (`GMAIL_SMTP_*`, `EMAIL_FROM`) for the Phase-11
-   app-notification outbox.
+5. Mirror the app-level values in `apps/web/.env.local` (`SMTP_USER`, `SMTP_PASS`, and optionally
+   `SMTP_HOST`/`SMTP_PORT`) for the Phase-11 notification channel. Supabase Auth keeps its own SMTP
+   configuration in the Supabase dashboard.
 
 > Pilot only: Gmail caps ~500 sends/day and has no bounce webhooks. Switch to a dedicated provider
 > (Resend/Postmark/SendGrid) before public launch — the code is already behind an interface for it.
@@ -81,12 +82,10 @@ NEXT_PUBLIC_SUPABASE_URL=https://itrosesiywpbaxtmucbb.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx        # or the anon JWT
 SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx                 # or the service_role JWT — server only
 NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true
-EMAIL_TRANSPORT=gmail-smtp
-GMAIL_SMTP_HOST=smtp.gmail.com
-GMAIL_SMTP_PORT=465
-GMAIL_SMTP_USER=vouchplay@gmail.com
-GMAIL_SMTP_APP_PASSWORD=xxxxxxxxxxxxxxxx
-EMAIL_FROM=VouchPlay <vouchplay@gmail.com>
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=vouchplay@gmail.com
+SMTP_PASS=xxxxxxxxxxxxxxxx
 ```
 
 Never commit `.env.local` (it's gitignored). Tell me when these are in place — I'll then
