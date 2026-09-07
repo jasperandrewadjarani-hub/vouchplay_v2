@@ -1,6 +1,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Sliders, ScrollText, Users, BarChart3, ShieldAlert, ShieldCheck } from 'lucide-react';
+import {
+  Sliders,
+  ScrollText,
+  Users,
+  BarChart3,
+  ShieldAlert,
+  ShieldCheck,
+  Trophy,
+} from 'lucide-react';
 import { requireAdminPage } from '@/lib/moderation/staff';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 
@@ -11,6 +19,12 @@ export default async function AdminHome() {
   const actor = await requireAdminPage('/admin');
 
   const tiles = [
+    {
+      href: '/admin/leaderboards',
+      label: 'Leaderboards',
+      desc: 'Rebuild, exclude, pause, and roll back snapshots.',
+      icon: Trophy,
+    },
     {
       href: '/admin/settings',
       label: 'System settings',

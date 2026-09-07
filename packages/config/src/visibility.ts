@@ -18,7 +18,7 @@
 export type VisibilityLevel = 'public' | 'hidden';
 
 /** Fields whose public visibility a player can control. */
-export type VisibilityField = 'sex' | 'city' | 'age' | 'directory';
+export type VisibilityField = 'sex' | 'city' | 'age' | 'directory' | 'leaderboards';
 
 export type ProfileVisibility = Partial<Record<VisibilityField, VisibilityLevel>>;
 
@@ -29,6 +29,7 @@ export const VISIBILITY_DEFAULTS: Record<VisibilityField, VisibilityLevel> = {
   // `directory` controls whether the profile is listed in the public /players directory.
   // (Individual profile pages remain reachable by direct link; this only affects listing.)
   directory: 'public',
+  leaderboards: 'public',
 };
 
 /** Coerce an unknown jsonb value into a safe ProfileVisibility map. */
@@ -36,7 +37,7 @@ export function parseVisibility(raw: unknown): ProfileVisibility {
   if (!raw || typeof raw !== 'object') return {};
   const out: ProfileVisibility = {};
   const obj = raw as Record<string, unknown>;
-  for (const field of ['sex', 'city', 'age', 'directory'] as const) {
+  for (const field of ['sex', 'city', 'age', 'directory', 'leaderboards'] as const) {
     if (obj[field] === 'public' || obj[field] === 'hidden') {
       out[field] = obj[field] as VisibilityLevel;
     }

@@ -7,7 +7,9 @@ import { applyAccountAction, type AccountAction } from '@/lib/actions/moderation
 
 type Msg = { ok: boolean; text: string } | null;
 
-const GRANTABLE = ['coach', 'organizer', 'moderator', 'support'] as const;
+// Coach grants are created only by the transactional Coach-application decision RPC. Active Coach
+// roles still appear below and remain explicitly revocable from this Admin user surface.
+const GRANTABLE = ['organizer', 'moderator', 'support'] as const;
 const PRIVILEGED = ['admin', 'super_admin'] as const;
 
 const ACCOUNT_ACTIONS: {

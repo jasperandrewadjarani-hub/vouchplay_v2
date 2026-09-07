@@ -3,12 +3,14 @@
 import { revalidatePath, revalidateTag } from 'next/cache';
 import type { GlobalRole } from '@vouchplay/db';
 import { createServiceClient } from '@/lib/supabase/service';
+import { createClient } from '@/lib/supabase/server';
 import { assertAdminActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { notify } from '@/lib/notifications/create';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import type { SafetyActionState } from './report';
+import { emitAnalyticsEvent } from '@/lib/analytics';
 
 /**
  * User administration write actions (handover §30.1, §30.2, §30.8). Admin + aal2 only. Every write
@@ -47,6 +49,9 @@ export async function grantRole(
   if (!actor) return { error: 'Admin access with a stepped-up (two-factor) session is required.' };
   if (!GRANTABLE_ROLES.includes(role as GlobalRole)) return { error: 'Unknown role.' };
   const r = role as GlobalRole;
+  if (r === 'coach') {
+    return { error: 'Approve a Coach application from the AAL2 Coach review workspace.' };
+  }
   if (PRIVILEGED.includes(r) && actor.role !== 'super_admin') {
     return { error: 'Only a Super Admin can grant Admin or Super Admin.' };
   }
@@ -115,6 +120,27 @@ export async function revokeRole(
     return { error: 'You cannot revoke your own privileged role.' };
   }
   if (requireReason(reason)) return { error: 'A reason is required.' };
+
+  if (r === 'coach') {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc('revoke_coach_role', {
+      p_user_id: userId,
+      p_reason: reason.trim(),
+    });
+    if (error) return { error: 'Could not revoke the Coach role.' };
+    await notify({
+      recipientId: userId,
+      type: 'coach_role_revoked',
+      params: { reason: reason.trim() },
+      link: '/me/roles/coach',
+      entityType: 'user_role',
+      entityId: userId,
+    });
+    await invalidatePlayer(createServiceClient(), userId);
+    emitAnalyticsEvent('coach_role_revoked');
+    revalidatePath(`/admin/users/${userId}`);
+    return { ok: true, message: 'Revoked coach.' };
+  }
 
   const svc = createServiceClient();
   try {

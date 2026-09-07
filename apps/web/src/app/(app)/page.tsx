@@ -4,9 +4,37 @@ import { Users, ShieldCheck, Trophy } from 'lucide-react';
 import { BRAND } from '@vouchplay/config';
 import { getOptionalUser } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui/button';
+import { getLeaderboardSettings } from '@/lib/settings';
+import { getLeaderboard, getMyMomentum } from '@/lib/leaderboards/queries';
+import {
+  LeaderboardPanel,
+  MomentumCard,
+  RankingsExplanation,
+} from '@/components/leaderboards/leaderboard-panel';
 
 export default async function HomePage() {
   const user = await getOptionalUser();
+  const settings = await getLeaderboardSettings();
+  const safeBoard = async (request: ReturnType<typeof getLeaderboard>) => {
+    try {
+      return { board: await request, error: false };
+    } catch {
+      return { board: null, error: true };
+    }
+  };
+  const [players, community, clubs, momentum] = settings.enabled
+    ? await Promise.all([
+        safeBoard(getLeaderboard('players', 'global', null, 'all_time', settings.homeLimit)),
+        safeBoard(getLeaderboard('community', 'global', null, 'all_time', settings.homeLimit)),
+        safeBoard(getLeaderboard('clubs', 'global', null, 'all_time', settings.homeLimit)),
+        user ? getMyMomentum(user.id).catch(() => []) : Promise.resolve([]),
+      ])
+    : [
+        { board: null, error: false },
+        { board: null, error: false },
+        { board: null, error: false },
+        [],
+      ];
 
   return (
     <div className="space-y-8">
@@ -38,6 +66,51 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {settings.enabled && (
+        <section className="space-y-5" aria-labelledby="home-rankings-title">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="vp-label text-primary">Verified momentum</p>
+              <h2 id="home-rankings-title" className="text-foreground text-2xl font-extrabold">
+                Community leaderboards
+              </h2>
+              <p className="text-foreground-muted mt-1 max-w-2xl text-sm">
+                Deterministic snapshots that reward verified participation and genuine community
+                support—not raw STS, favorable ratings, or spam.
+              </p>
+            </div>
+            <ButtonLink href="/leaderboards" variant="secondary">
+              Explore all rankings
+            </ButtonLink>
+          </div>
+          {user && <MomentumCard rows={momentum} />}
+          <div className="space-y-5">
+            <LeaderboardPanel
+              board={players.board}
+              error={players.error}
+              category="players"
+              paused={settings.paused.players}
+              compact
+            />
+            <LeaderboardPanel
+              board={community.board}
+              error={community.error}
+              category="community"
+              paused={settings.paused.community}
+              compact
+            />
+            <LeaderboardPanel
+              board={clubs.board}
+              error={clubs.error}
+              category="clubs"
+              paused={settings.paused.clubs}
+              compact
+            />
+          </div>
+          <RankingsExplanation />
+        </section>
+      )}
+
       {/* What you can do */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <FeatureCard
@@ -56,11 +129,6 @@ export default async function HomePage() {
           body="Join clubs, find partners, and register for tournaments with a profile organizers can trust."
         />
       </section>
-
-      <p className="text-foreground-muted text-center text-xs">
-        Your personalized dashboard - skill summary, requests, and tournament activity - arrives in
-        a later release (handover §6).
-      </p>
 
       <footer className="border-border mt-2 border-t pt-5 text-center">
         <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">

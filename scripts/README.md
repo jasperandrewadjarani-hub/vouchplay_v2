@@ -13,13 +13,26 @@ principals.
 node scripts/seed-admin.mjs jasper.andrew.adjarani@gmail.com
 ```
 
-## Pending manual step — apply migration 0003
+## Phase 13C/13D database verification (applied 2026-09-08)
 
-`supabase/migrations/0003_avatars_and_public_facts.sql` is written but NOT yet applied to the live DB
-(it needs DDL, i.e. the Supabase SQL editor — the same method used for 0001/0002). It:
-- records the `avatars` bucket config (the bucket itself is already created at runtime),
-- adds `storage.objects` owner-folder policies,
-- adds `public_player_facts(ids uuid[])` — the RLS-clean way to expose public badge facts.
+Jasper applied the following files in order on Supabase project `itrosesiywpbaxtmucbb` and confirmed
+every embedded verification row:
 
-After applying it, switch the badge reads in `apps/web/src/lib/players/queries.ts` from the
-service-client path to calling `public_player_facts()` via the anon client.
+1. `scripts/apply-0016.sql`
+   - `coach_tables=2`
+   - `coach_rpc_functions=6`
+   - `coach_settings=11`
+   - `coach_bucket=1`
+   - `coach_rls_policies=2`
+   - `existing_organizer_apps_preserved=1` (the recorded pre-migration count)
+2. `scripts/apply-0017.sql`
+   - `leaderboard_tables=7`
+   - `leaderboard_rpcs=4`
+   - `contribution_settings=17`
+   - `leaderboard_settings=32`
+   - `leaderboard_rls_policies=6`
+
+`npm run verify:phase13-controlled` provisions disposable Player and AAL2 Admin sessions, runs all
+direct authorization checks, and removes both accounts. The 2026-09-08 release run passed 20/20 with
+zero failures or skips. `npm run verify:phase13-rls` remains the non-provisioning variant for supplied
+controlled tokens; a skipped controlled-account check is not a release pass.

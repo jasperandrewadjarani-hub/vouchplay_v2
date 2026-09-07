@@ -6,6 +6,9 @@ export const AVATARS_BUCKET = 'avatars';
 /** PRIVATE bucket for payment proof (handover §38; created in migration 0009). Access via signed URLs only. */
 export const PAYMENT_PROOFS_BUCKET = 'payment-proofs';
 
+/** PRIVATE Coach application evidence. Access is service-side and AAL2 signed-URL only. */
+export const ROLE_EVIDENCE_BUCKET = 'role-evidence';
+
 /**
  * Resolve a stored avatar path to a public URL. Avatars live in a PUBLIC bucket, so the URL is
  * derived without a network call. Returns null when there is no avatar (caller renders initials).

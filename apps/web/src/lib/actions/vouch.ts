@@ -7,6 +7,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
+import { recomputePlayerContribution } from '@/lib/contribution/recompute';
 import { checkActorCanVouch } from '@/lib/moderation/enforcement';
 import { notify } from '@/lib/notifications/create';
 import { getActorMini } from '@/lib/notifications/recipients';
@@ -114,7 +115,10 @@ export async function submitVouch(
 
     const isCoach = !!coachRes.data;
     const voucherIdentityVerified = !!idvRes.data;
-    const usedCoachWeight = v.asCoach && isCoach;
+    if (v.asCoach && !settings.coachWeightEnabled) {
+      return { error: 'Coach-weighted vouches are currently disabled.' };
+    }
+    const usedCoachWeight = v.asCoach && isCoach && settings.coachWeightEnabled;
     const weight = effectiveWeight({ usedCoachWeight, voucherIdentityVerified }, settings.weights);
 
     // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window. A limit of 0 (or
@@ -217,6 +221,7 @@ export async function submitVouch(
       .eq('status', 'pending');
 
     await recomputePlayerSkillProfile(v.targetId);
+    await recomputePlayerContribution(user.id);
 
     // Notify the target (§27.1). Vouches are ANONYMOUS - never reveal the voucher's identity here.
     const { data: tp } = await svc
@@ -258,6 +263,7 @@ export async function withdrawVouch(targetId: string): Promise<VouchActionState>
       .from('vouch_revisions')
       .insert({ vouch_id: id, changed_by: user.id, change_type: 'withdrawn' });
     await recomputePlayerSkillProfile(targetId);
+    await recomputePlayerContribution(user.id);
   } catch {
     return { error: 'Could not withdraw the vouch right now.' };
   }

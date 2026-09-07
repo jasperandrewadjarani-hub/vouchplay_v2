@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.7
+# VouchPlay Master Product & Code Execution Handover v1.9
 
-_(File retains its `…v1.1.md` name; content is v1.7 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.9 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -291,6 +291,26 @@ build, not part of this pilot-fix release. Commit `7c8d680` deployed Ready at
 automatically. A controlled live-Storage smoke test normalized a 3,587,842-byte source (above the old
 2 MB failure boundary) to 720,770 bytes, fetched it publicly with HTTP 200, then deleted the temporary
 object without touching tournament data.
+
+Phase 13C/13D kickoff v1.8 is approved. Migrations 0014 and 0015 were confirmed in the Supabase SQL
+Editor with `pilot_prep_functions=2`, `default_capacity_setting=1`, `archive_read_policies=3`,
+`lifecycle_function=1`, and `lifecycle_authenticated_grant=1`. Implementation order is Coach Flow,
+then the Phase 13A contribution foundation, then Players/Community Champions/Clubs leaderboards.
+For public leaderboard eligibility, a missing date of birth is treated conservatively like a minor
+until supplied; private momentum remains available. Season defaults to the configurable calendar year,
+and Region uses an Admin-managed city-to-region mapping rather than a new mandatory profile field.
+Coach evidence defaults are five files, 5 MB each, JPEG/PNG/WebP/PDF, 60-second signed access, a
+seven-day review SLA, and 90-day post-decision retention; every value remains Admin-configurable.
+
+Phase 13C/13A/13D is code-complete and its database foundation is live in content v1.9. On 2026-09-08,
+Jasper applied migrations 0016 and 0017 in order and confirmed every embedded verification count.
+Direct anon/Player/AAL2 Admin authorization passed 20/20 with no skips. The first bounded build
+published 14 active global/city snapshots, 24 private momentum rows, and two contribution aggregates;
+public entries correctly remain empty because all current real profiles lack DOB and the current club
+is pending. The Coach-weight safety kill switch is enabled by default so approval grants the locked
+Coach capability; each individual “Vouch as a Coach” control remains explicitly unchecked by default.
+Most Bidded remains false and its adapter returns no fabricated data. Production application/UI flow
+exercise and deployment of this code revision remain the final release gates.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -6476,6 +6496,28 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.9 (2026-09-07)
+- **Phase 13C implementation:** staged the progressive Coach application/status/withdraw/resubmit
+  experience, private decoded evidence with retention, AAL2 Admin review and signed access,
+  transactional approval/revocation/audit, critical notifications, active-role-only public badges,
+  and the enabled kill switch plus off-by-default per-vouch Coach control.
+- **Phase 13A implementation:** staged pure deterministic `CONTRIB_V1`, anti-volume/anti-ring controls,
+  bounded aggregates, progress/badges, settings, fixtures, and build-failing isolation guards.
+- **Phase 13D implementation:** staged pure deterministic `LEADER_V1`, versioned privacy-safe public
+  snapshots and private momentum, bounded cache-first publication, Admin controls/audit, Home/full
+  Players/Community Champions/Clubs UI, milestone notifications, and the empty gated Most Bidded
+  boundary. Jasper applied migrations 0016/0017 on 2026-09-08; direct authorization passed 20/20 and
+  the first bounded live publication completed without fabricating ineligible public rows.
+
+## v1.8 (2026-09-07)
+- **Phase 13C/13D kickoff:** recorded the verified 0014/0015 SQL Editor counts and approved the
+  Coach → contribution → non-bidding leaderboard delivery sequence using migrations 0016 and 0017.
+- **Leaderboard privacy/period/scope refinement (§6.1):** players with unknown date of birth are
+  excluded publicly until supplied while retaining private momentum; Season defaults to a configurable
+  calendar year; Region is derived from an Admin-managed city-to-region mapping.
+- **Coach evidence operations (§4.4):** seeded Admin-configurable defaults of five files, 5 MB each,
+  JPEG/PNG/WebP/PDF, 60-second signed URLs, seven-day review SLA, and 90-day post-decision retention.
 
 ## v1.7 (2026-09-07)
 - **Tournament cover reliability (§17.3):** locked non-silent validation, WebP normalization, bounded

@@ -11,6 +11,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { assertStaffActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
+import { recomputePlayerContribution } from '@/lib/contribution/recompute';
 import { notify } from '@/lib/notifications/create';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
 import { CLUBS_LIST_TAG, clubTag } from '@/lib/clubs/queries';
@@ -306,11 +307,11 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
   try {
     const { data: before } = await svc
       .from('vouches')
-      .select('id, status, target_id, skill_level')
+      .select('id, status, target_id, voucher_id, skill_level')
       .eq('id', vouchId)
       .maybeSingle();
     if (!before) return { error: 'Vouch not found.' };
-    const b = before as { status: string; target_id: string };
+    const b = before as { status: string; target_id: string; voucher_id: string };
     if (b.status !== 'active') return { error: 'That vouch is not active.' };
 
     const { error } = await svc
@@ -339,6 +340,7 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
       reason: reason.trim(),
     });
     await recomputePlayerSkillProfile(b.target_id);
+    await recomputePlayerContribution(b.voucher_id);
   } catch {
     return { error: 'Moderation action failed. Please try again.' };
   }

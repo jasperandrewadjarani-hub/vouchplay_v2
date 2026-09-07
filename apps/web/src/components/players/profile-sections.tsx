@@ -71,6 +71,69 @@ export function SkillDistribution({
   );
 }
 
+export function ContributionProgress({
+  progress,
+}: {
+  progress: {
+    score: number;
+    level: number;
+    distinctPlayersHelped: number;
+    newcomerPlayersHelped: number;
+    currentStreakWeeks: number;
+    badges: string[];
+  } | null;
+}) {
+  return (
+    <SectionCard title="Community contribution">
+      {!progress ? (
+        <EmptyNote>
+          No contribution progress yet. This grows by helping distinct players you genuinely
+          know—not by favorable ratings or repeated vouches.
+        </EmptyNote>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <strong className="text-foreground text-2xl">Level {progress.level}</strong>
+            <span className="text-foreground-muted text-sm">
+              {progress.score.toFixed(1)} contribution points
+            </span>
+          </div>
+          <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-foreground-muted text-xs">Players helped</dt>
+              <dd className="text-foreground font-semibold">{progress.distinctPlayersHelped}</dd>
+            </div>
+            <div>
+              <dt className="text-foreground-muted text-xs">Newcomers supported</dt>
+              <dd className="text-foreground font-semibold">{progress.newcomerPlayersHelped}</dd>
+            </div>
+            <div>
+              <dt className="text-foreground-muted text-xs">Current streak</dt>
+              <dd className="text-foreground font-semibold">{progress.currentStreakWeeks} weeks</dd>
+            </div>
+          </dl>
+          {progress.badges.length > 0 && (
+            <ul className="flex flex-wrap gap-2" aria-label="Contribution badges">
+              {progress.badges.map((badge) => (
+                <li
+                  key={badge}
+                  className="border-primary/30 bg-primary/10 text-primary rounded-full border px-3 py-1 text-xs font-semibold"
+                >
+                  {badge.replaceAll('_', ' ')}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-foreground-muted text-xs">
+            Distinct-pair credit, newcomer support, decay, and anti-gaming dampening use CONTRIB_V1.
+            Anonymous voucher identity is never shown here.
+          </p>
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 export interface CommentView {
   id: string;
   authorName: string;

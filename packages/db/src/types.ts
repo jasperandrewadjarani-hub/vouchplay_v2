@@ -13,7 +13,8 @@ export type AccountStatus = 'active' | 'restricted' | 'suspended' | 'banned' | '
 export type GlobalRole = 'coach' | 'organizer' | 'moderator' | 'support' | 'admin' | 'super_admin';
 export type RoleStatus = 'active' | 'revoked';
 export type ApplicationRole = 'coach' | 'organizer';
-export type ApplicationStatus = 'pending' | 'reviewing' | 'approved' | 'rejected' | 'withdrawn';
+export type ApplicationStatus =
+  'pending' | 'reviewing' | 'information_requested' | 'approved' | 'rejected' | 'withdrawn';
 export type IdentityVerificationStatus =
   'pending' | 'reviewing' | 'approved' | 'rejected' | 'resubmit_required';
 
@@ -56,6 +57,49 @@ export interface UserRoleRow {
   revoked_by: string | null;
   revoked_at: string | null;
   reason: string | null;
+  created_at: string;
+}
+
+export interface RoleApplicationRow {
+  id: string;
+  user_id: string;
+  role_requested: ApplicationRole;
+  answers: Record<string, unknown>;
+  evidence: Record<string, unknown>;
+  status: ApplicationStatus;
+  reviewed_by: string | null;
+  review_reason: string | null;
+  submitted_at: string;
+  review_started_at: string | null;
+  information_requested_at: string | null;
+  responded_at: string | null;
+  decided_at: string | null;
+  withdrawn_at: string | null;
+  retention_delete_after: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RoleApplicationEvidenceRow {
+  id: string;
+  application_id: string;
+  user_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  sha256: string;
+  uploaded_at: string;
+  delete_after: string | null;
+  deleted_at: string | null;
+}
+
+export interface RoleApplicationEventRow {
+  id: string;
+  application_id: string;
+  event_type: string;
+  actor_kind: 'applicant' | 'staff' | 'system';
+  applicant_message: string | null;
   created_at: string;
 }
 
@@ -598,4 +642,73 @@ export interface AuditLogRow {
   reason: string | null;
   request_id: string | null;
   created_at: string;
+}
+
+// ---------- Community contribution + leaderboard snapshots (migration 0017) ----------
+export interface PlayerContributionRow {
+  player_id: string;
+  algorithm_version: string;
+  score: number;
+  level: number;
+  distinct_players_helped: number;
+  newcomer_players_helped: number;
+  current_streak_weeks: number;
+  badges: string[];
+  explanation_facts: Record<string, unknown>;
+  calculated_at: string;
+}
+
+export interface LeaderboardSnapshotRunRow {
+  id: string;
+  scoring_version: string;
+  category: 'players' | 'community' | 'clubs';
+  scope_type: 'city' | 'region' | 'global';
+  scope_value: string | null;
+  period: 'month' | 'season' | 'all_time';
+  status: 'building' | 'published' | 'failed' | 'rolled_back';
+  active: boolean;
+  settings_fingerprint: string;
+  source_cutoff: string;
+  published_at: string | null;
+  stale_after: string | null;
+  row_count: number;
+  error_code: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LeaderboardSnapshotEntryRow {
+  id: string;
+  run_id: string;
+  subject_type: 'player' | 'club';
+  subject_id: string;
+  rank: number;
+  score: number;
+  components: Record<string, number>;
+  explanation: string;
+  display_name: string;
+  slug: string;
+  image_path: string | null;
+  city: string | null;
+  region: string | null;
+  is_public: boolean;
+  created_at: string;
+}
+
+export interface PlayerLeaderboardMomentumRow {
+  player_id: string;
+  category: 'players' | 'community';
+  scope_type: 'city' | 'region' | 'global';
+  scope_value: string;
+  period: 'month' | 'season' | 'all_time';
+  scoring_version: string;
+  run_id: string | null;
+  eligible_public: boolean;
+  exclusion_code: string | null;
+  private_rank: number | null;
+  previous_rank: number | null;
+  score: number;
+  components: Record<string, number>;
+  cta_key: string | null;
+  updated_at: string;
 }

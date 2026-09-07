@@ -14,6 +14,7 @@ export type NotificationCategory =
   | 'eligibility'
   | 'tournaments'
   | 'clubs'
+  | 'leaderboards'
   | 'roles'
   | 'moderation'
   | 'security';
@@ -192,9 +193,27 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
   ),
   coach_application_result: t(
     'roles',
-    false,
+    true,
     (p) => `Your coach application was ${p.outcome ?? 'reviewed'}`,
     (p) => p.reason,
+  ),
+  coach_information_requested: t(
+    'roles',
+    true,
+    () => 'More information is needed for your Coach application',
+    (p) => p.reason,
+  ),
+  coach_role_revoked: t(
+    'roles',
+    true,
+    () => 'Your Coach role was revoked',
+    (p) => p.reason,
+  ),
+  leaderboard_milestone: t(
+    'leaderboards',
+    false,
+    (p) => p.outcome ?? 'You reached a leaderboard milestone',
+    (p) => p.extra,
   ),
 
   // --- Moderation + security (§27.1) - CRITICAL: cannot be muted, email-eligible ---
@@ -233,6 +252,7 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   eligibility: 'Eligibility',
   tournaments: 'Tournament updates',
   clubs: 'Clubs',
+  leaderboards: 'Leaderboards',
   roles: 'Role applications',
   moderation: 'Moderation',
   security: 'Account & security',

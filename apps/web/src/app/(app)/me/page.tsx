@@ -102,6 +102,15 @@ export default async function MePage({
         />
       )}
 
+      {profile?.onboarded_at && (
+        <nav
+          className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm"
+          aria-label="Roles"
+        >
+          <SettingsLink href="/me/roles/coach" label="Roles · Become a Coach" />
+        </nav>
+      )}
+
       {isStaff && (
         <nav className="border-primary/40 bg-primary/5 divide-border divide-y rounded-2xl border text-sm">
           {isAdmin && <SettingsLink href="/admin" label="Admin Control Center" />}
@@ -112,6 +121,8 @@ export default async function MePage({
       <nav className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm">
         <SettingsLink href="/me/blocked" label="Blocked users" />
         <SettingsLink href="/me/support" label="Support & appeals" />
+        <SettingsLink href="/me/settings/privacy" label="Privacy & leaderboard visibility" />
+        <SettingsLink href="/me/settings/notifications" label="Notification preferences" />
         <SettingsLink href="/me/settings/security" label="Security & two-factor" />
         <SettingsLink href="/me/settings/password" label="Password" />
       </nav>

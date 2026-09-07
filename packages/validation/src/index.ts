@@ -9,3 +9,4 @@ export * from './safety';
 export * from './club';
 export * from './tournament';
 export * from './payment';
+export * from './coach';

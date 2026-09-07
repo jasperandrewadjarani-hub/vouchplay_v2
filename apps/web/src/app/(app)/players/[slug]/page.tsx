@@ -26,6 +26,7 @@ import {
   SkillDistribution,
   VouchComments,
   PlayingHistory,
+  ContributionProgress,
 } from '@/components/players/profile-sections';
 import { AchievementsPanel } from '@/components/players/achievements-panel';
 import { SkillTagsPanel } from '@/components/players/skill-tags-panel';
@@ -34,6 +35,8 @@ import {
   getPlayerAchievements,
   getPlayerHistory,
 } from '@/lib/players/profile-extras';
+import { getContributionProgress } from '@/lib/leaderboards/queries';
+import { getVouchSettings } from '@/lib/settings';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -76,10 +79,12 @@ export default async function PlayerProfilePage({ params }: Params) {
   if (!player) notFound();
 
   const comments = await getPlayerComments(player.id);
-  const [skillTags, achievements, history] = await Promise.all([
+  const [skillTags, achievements, history, contribution, vouchSettings] = await Promise.all([
     getPlayerSkillTags(player.id, viewer.viewerId),
     getPlayerAchievements(player.id, viewer.viewerId),
     getPlayerHistory(player.id),
+    getContributionProgress(player.id),
+    getVouchSettings(),
   ]);
   const authed = viewer.viewerId !== null;
   const iBlocked =
@@ -187,7 +192,7 @@ export default async function PlayerProfilePage({ params }: Params) {
             targetName={player.displayName}
             authed={authed}
             isOwnProfile={player.isOwnProfile}
-            viewerIsCoach={viewer.isCoach}
+            viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
             mode="profile"
           />
           <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
@@ -205,6 +210,7 @@ export default async function PlayerProfilePage({ params }: Params) {
       </header>
 
       <SkillDistribution distribution={player.distribution} total={distributionTotal} />
+      <ContributionProgress progress={contribution} />
       <AchievementsPanel
         authed={authed}
         isOwnProfile={player.isOwnProfile}

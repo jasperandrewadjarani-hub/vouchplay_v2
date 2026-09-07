@@ -1116,10 +1116,73 @@ Getting the first deploy up hit two issues:
     normalized a 3,587,842-byte JPEG (above the old 2 MB failure boundary) to a 720,770-byte WebP,
     uploaded/fetched it with HTTP 200, then deleted the `_smoke` object; no tournament data changed.
 
+- **2026-09-07** - **Phase 13C/13D kickoff approved (Jasper).** Planning/contract gate complete;
+  implementation now in progress.
+  - Jasper confirmed migration 0014 SQL Editor counts: `pilot_prep_functions=2`,
+    `default_capacity_setting=1`, `archive_read_policies=3`.
+  - Jasper confirmed migration 0015 SQL Editor counts: `lifecycle_function=1`,
+    `lifecycle_authenticated_grant=1`.
+  - Approved implementation order: Phase 13C Coach Flow → Phase 13A `CONTRIB_V1` → Phase 13D
+    Players/Community Champions/Clubs. Most Bidded remains gated until §16A.
+  - Approved refinements/defaults recorded in handover content v1.8: unknown DOB excluded from public
+    rankings while private momentum remains; configurable calendar-year Season; Admin city→region map;
+    Coach evidence defaults of 5 files × 5 MB, JPEG/PNG/WebP/PDF, 60-second signed URLs, 7-day SLA,
+    and 90-day post-decision retention.
+  - Live pre-migration inventory: 3 active profiles (all without DOB), 1 pending Organizer application,
+    1 active Super Admin role, 2 active anonymous vouches, 0 achievements, 1 pending club, 4 tournaments,
+    1 registration, no fraud/moderation cases, and no role-evidence/contribution/leaderboard schema yet.
+
+- **2026-09-07** - **Phase 13C + 13A + 13D implementation staged; DB application pending Jasper.**
+  - **Coach journey:** built Me → Roles → Become a Coach progressive application/status/withdraw/
+    information-response flow; private decoded evidence handling and bounded retention cleanup; AAL2
+    Admin queue/detail/decision workspace; transactional application/grant/revoke/audit RPCs; critical
+    notifications; active-role-only badge; analytics; and server/RLS defenses. The system-level Coach
+    weight kill switch defaults enabled, while the per-vouch “Vouch as a Coach” checkbox remains
+    explicit and unchecked by default.
+  - **Contribution:** added pure deterministic `CONTRIB_V1` with repeat-pair suppression, newcomer
+    support, reciprocity/ring dampening, diminishing daily credit, decay, levels/badges/streak, bounded
+    aggregate recomputation, public progress UI, Admin settings, fixtures, and build-failing isolation
+    guards. No rating favourability, raw volume, anonymous voucher identity, STS, or vouch weight enters
+    the engine.
+  - **Leaderboards:** added pure deterministic `LEADER_V1`, privacy-safe versioned snapshots and private
+    momentum, atomic service-only publisher, Admin AAL2 rebuild/exclude/activate plus settings-based
+    pause controls, cache-first public DTOs, Players/Community Champions/Clubs Home and full-route UI,
+    accessible podium/ranks/filters/explanations/real CTAs, deduplicated milestone notifications, and
+    an intentionally empty Most Bidded adapter behind its false flag.
+  - **Operations/security:** daily authenticated cron, fixed-query bounded source loads, two-query
+    cached public boards, one-query private momentum, migration verification queries, and
+    `scripts/verify-phase13-rls.mjs` for anon/player/Admin direct API abuse checks. Browser QA covered
+    dark/light, 1440px/390px, keyboard-accessible controls, reduced-motion CSS, no horizontal overflow,
+    and a clean console in the honest pre-snapshot state.
+  - **Local gates:** the final post-documentation run is green: typecheck, lint, tests (web 17, config
+    19, core 77), format, and Next 15.5.25 build (40 generated pages). **Not live:** Jasper must apply
+    and return exact counts for `scripts/apply-0016.sql`, then
+    `scripts/apply-0017.sql`; controlled-account tests, snapshot publication, commit/push, Vercel Ready,
+    and both-domain production verification follow only after that.
+
+- **2026-09-08** - **Phase 13 database + direct-authorization gates passed (Jasper/Codex).**
+  - Jasper applied `scripts/apply-0016.sql` then `scripts/apply-0017.sql` to
+    `itrosesiywpbaxtmucbb` and confirmed every embedded count: Coach tables 2/RPCs 6/settings 11/
+    private bucket 1/RLS policies 2/Organizer applications preserved 1; leaderboard tables 7/RPCs 4,
+    contribution settings 17, leaderboard settings 32, and leaderboard RLS policies 6.
+  - `npm run verify:phase13-controlled` provisioned disposable Player and AAL2 Admin sessions, passed
+    **20/20** direct anon/authenticated/staff checks with zero skips, and removed both accounts. Coverage
+    includes Coach self-grant/direct-insert denial, private evidence/bucket/application denial, public
+    snapshot DTOs, private momentum own/other isolation, Admin controls, and privileged RPC boundaries.
+  - The first bounded live builder run published 14 active global/city snapshots, 24 private momentum
+    rows, and two `CONTRIB_V1` aggregates. Public entries are correctly zero: all three current real
+    profiles lack DOB and the sole current club is pending, so no identity or fake bid/rank data was
+    invented. Source-count truncation now fails closed, and §6.1 privacy/club decisions plus engagement
+    CTAs are pure-core fixtures; core is now 90/90.
+  - Remaining release work: final full gates, commit/push, Vercel Ready, production Coach workflow,
+    opt-out/rebuild evidence, both-domain HTTP/browser verification, and `CRON_SECRET` confirmation.
+
 ## Next up
-- **PILOT PREP (in progress):** apply/verify migrations 0014 and 0015; verify a real opted-in critical
-  email; clear Supabase over-quota; run the full live dress rehearsal + native-Excel export gate;
-  grant the Hermosa Cup organizer and enroll JT admin TOTP. Hold-expiry/waitlist cron is deferred.
+- **Phase 13 release gate:** database/direct authorization are green; finish controlled Coach/privacy
+  UI exercises, commit/push/deploy, confirm `CRON_SECRET`, and verify both production domains.
+- **PILOT PREP carry-over:** verify a real opted-in critical email; clear Supabase over-quota; run the
+  full live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
+  admin TOTP. Hold-expiry/waitlist cron is deferred.
 - **Manual (DONE):** ~~apply `scripts/apply-0013.sql`~~ - applied, verify OK.
 - **Excel integrity:** Jasper to open the 2 demo `.xlsx` in desktop Excel + confirm no repair prompt
   (mandatory gate before the export is a shippable deliverable).

@@ -85,6 +85,9 @@ async function decideApplication(
       .maybeSingle();
     const a = app as { id: string; user_id: string; role_requested: string; status: string } | null;
     if (!a) return { error: 'Application not found.' };
+    if (a.role_requested === 'coach') {
+      return { error: 'Coach applications must be decided in the dedicated AAL2 Coach workspace.' };
+    }
     if (!['pending', 'reviewing'].includes(a.status))
       return { error: 'Application already decided.' };
 

@@ -1,14 +1,24 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ShieldAlert, Flag, ClipboardCheck, Search, LifeBuoy, Shield } from 'lucide-react';
+import {
+  ShieldAlert,
+  Flag,
+  ClipboardCheck,
+  Search,
+  LifeBuoy,
+  Shield,
+  BadgeCheck,
+} from 'lucide-react';
 import { requireStaffPage } from '@/lib/moderation/staff';
 import { getModerationCounts } from '@/lib/moderation/queries';
+import { getCoachOpenCount } from '@/lib/coach/queries';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = { title: 'Staff' };
 
 export default async function StaffHome() {
   const actor = await requireStaffPage('/staff');
-  const counts = await getModerationCounts();
+  const [counts, coachCount] = await Promise.all([getModerationCounts(), getCoachOpenCount()]);
 
   const tiles = [
     { href: '/staff/moderation?tab=reports', label: 'Reports', icon: Flag, n: counts.reports },
@@ -31,6 +41,16 @@ export default async function StaffHome() {
       n: counts.supportTickets,
     },
     { href: '/staff/moderation?tab=clubs', label: 'Clubs', icon: Shield, n: counts.clubs },
+    ...(actor.role === 'admin' || actor.role === 'super_admin'
+      ? [
+          {
+            href: '/staff/role-applications/coaches',
+            label: 'Coach applications',
+            icon: BadgeCheck,
+            n: coachCount,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -58,7 +78,10 @@ export default async function StaffHome() {
               href={t.href}
               className="border-border bg-surface vp-card flex flex-col gap-2 rounded-2xl border p-4"
             >
-              <Icon className="text-primary" size={20} aria-hidden />
+              <span className="flex items-center gap-2">
+                <Icon className="text-primary" size={20} aria-hidden />
+                <LinkSpinner size={16} />
+              </span>
               <span className="text-foreground text-2xl font-semibold">{t.n}</span>
               <span className="text-foreground-muted text-xs">{t.label} open</span>
             </Link>
@@ -66,8 +89,11 @@ export default async function StaffHome() {
         })}
       </div>
 
-      <Link href="/staff/moderation" className="text-primary text-sm font-medium">
-        Open the moderation queue →
+      <Link
+        href="/staff/moderation"
+        className="text-primary inline-flex items-center gap-2 text-sm font-medium"
+      >
+        Open the moderation queue → <LinkSpinner size={16} />
       </Link>
     </section>
   );

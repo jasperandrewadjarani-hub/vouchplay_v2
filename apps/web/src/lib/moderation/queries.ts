@@ -189,6 +189,7 @@ export async function getModerationCounts(): Promise<ModerationCounts> {
     svc
       .from('role_applications')
       .select('id', { count: 'exact', head: true })
+      .eq('role_requested', 'organizer')
       .in('status', ['pending', 'reviewing']),
   ]);
   return {
@@ -216,6 +217,7 @@ export async function listRoleApplications(): Promise<RoleAppItem[]> {
   const { data } = await svc
     .from('role_applications')
     .select('id, user_id, role_requested, answers, status, created_at')
+    .eq('role_requested', 'organizer')
     .in('status', ['pending', 'reviewing'])
     .order('created_at', { ascending: true })
     .limit(200);
