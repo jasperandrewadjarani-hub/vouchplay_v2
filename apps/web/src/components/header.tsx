@@ -8,6 +8,7 @@ import { PlayerAvatar } from './players/player-avatar';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
 import { getUnreadCount } from '@/lib/notifications/queries';
 import { avatarUrl } from '@/lib/storage';
+import { LinkSpinner } from './ui/link-spinner';
 
 /** App header (handover §5.2): logo upper-left, notification bell + profile / sign-in upper-right. */
 export async function Header() {
@@ -54,9 +55,10 @@ export async function Header() {
               <Link
                 href="/me/notifications"
                 aria-label={unread > 0 ? `Notifications (${unread} unread)` : 'Notifications'}
-                className="border-border bg-surface text-foreground hover:border-primary relative rounded-full border p-2 transition-colors"
+                className="border-border bg-surface text-foreground hover:border-primary relative inline-flex items-center gap-1 rounded-full border p-2 transition-colors"
               >
                 <Bell size={18} aria-hidden />
+                <LinkSpinner size={14} />
                 {unread > 0 && (
                   <span className="bg-danger absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold text-white">
                     {unread > 9 ? '9+' : unread}

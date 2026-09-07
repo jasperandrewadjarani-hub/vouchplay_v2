@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import { listTournaments, type TournamentFilters } from '@/lib/tournaments/queries';
+import {
+  listManagedTournaments,
+  listTournaments,
+  type TournamentFilters,
+} from '@/lib/tournaments/queries';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { TournamentCard } from '@/components/tournaments/tournament-card';
@@ -52,11 +56,13 @@ async function viewerIsOrganizer(userId: string): Promise<boolean> {
 export default async function TournamentsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
-  const [{ tournaments, total, page, pageCount }, user] = await Promise.all([
-    listTournaments(filters),
-    getOptionalUser(),
-  ]);
-  const canCreate = user ? await viewerIsOrganizer(user.id) : false;
+  const user = await getOptionalUser();
+  const [{ tournaments, total, page, pageCount }, managedTournaments, canCreate] =
+    await Promise.all([
+      listTournaments(filters),
+      user ? listManagedTournaments(user.id, filters) : Promise.resolve([]),
+      user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
+    ]);
 
   return (
     <div className="space-y-5">
@@ -84,49 +90,81 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
         placeholder="Search tournaments"
       />
 
-      <p className="text-foreground-muted text-sm" aria-live="polite">
-        {total === 0 ? 'No tournaments yet.' : `${total} tournament${total === 1 ? '' : 's'}`}
-      </p>
-
-      {tournaments.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {tournaments.map((t) => (
-            <TournamentCard key={t.slug} tournament={t} />
-          ))}
-        </div>
-      ) : (
-        <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-8 text-center text-sm">
-          No tournaments to show yet. Organizers can create one from here.
-        </div>
+      {managedTournaments.length > 0 && (
+        <section className="space-y-3" aria-labelledby="managed-tournaments-heading">
+          <div>
+            <h2
+              id="managed-tournaments-heading"
+              className="text-foreground text-lg font-semibold tracking-tight"
+            >
+              Your tournaments
+            </h2>
+            <p className="text-foreground-muted text-xs">
+              Events you own or co-organize, including drafts and unlisted tournaments.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {managedTournaments.map((t) => (
+              <TournamentCard key={`managed-${t.slug}`} tournament={t} />
+            ))}
+          </div>
+        </section>
       )}
 
-      {pageCount > 1 && (
-        <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
-          {page > 1 ? (
-            <Link
-              href={`/tournaments${qs(filters, page - 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-foreground-muted text-sm">
-            Page {page} of {pageCount}
-          </span>
-          {page < pageCount ? (
-            <Link
-              href={`/tournaments${qs(filters, page + 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Next
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <section className="space-y-3" aria-labelledby="discover-tournaments-heading">
+        <h2
+          id="discover-tournaments-heading"
+          className="text-foreground text-lg font-semibold tracking-tight"
+        >
+          Discover tournaments
+        </h2>
+
+        <p className="text-foreground-muted text-sm" aria-live="polite">
+          {total === 0
+            ? 'No public tournaments yet.'
+            : `${total} tournament${total === 1 ? '' : 's'}`}
+        </p>
+
+        {tournaments.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {tournaments.map((t) => (
+              <TournamentCard key={t.slug} tournament={t} />
+            ))}
+          </div>
+        ) : (
+          <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-8 text-center text-sm">
+            No public tournaments match these filters.
+          </div>
+        )}
+
+        {pageCount > 1 && (
+          <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
+            {page > 1 ? (
+              <Link
+                href={`/tournaments${qs(filters, page - 1)}`}
+                className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              >
+                Previous
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="text-foreground-muted text-sm">
+              Page {page} of {pageCount}
+            </span>
+            {page < pageCount ? (
+              <Link
+                href={`/tournaments${qs(filters, page + 1)}`}
+                className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              >
+                Next
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
+        )}
+      </section>
     </div>
   );
 }

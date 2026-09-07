@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react';
 import { requireUser } from '@/lib/auth';
 import { listNotifications } from '@/lib/notifications/queries';
 import { NotificationList } from '@/components/notifications/notification-list';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = { title: 'Notifications' };
 
@@ -22,6 +23,7 @@ export default async function NotificationsPage() {
         >
           <Settings size={15} aria-hidden />
           Preferences
+          <LinkSpinner size={14} />
         </Link>
       </div>
       <NotificationList initial={notifications} />

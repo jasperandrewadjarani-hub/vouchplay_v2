@@ -37,6 +37,11 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
         <span className="absolute top-2 right-2">
           <TournamentStatusPill status={tournament.status} />
         </span>
+        {tournament.visibility === 'unlisted' && (
+          <span className="bg-surface/90 text-foreground absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-sm">
+            Unlisted
+          </span>
+        )}
       </div>
       <div className="p-3.5">
         <div className="flex items-center gap-1.5">

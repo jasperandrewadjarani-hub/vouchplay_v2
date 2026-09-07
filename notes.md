@@ -1004,6 +1004,23 @@ Getting the first deploy up hit two issues:
   - The app email transport is now configuration-ready. A recipient opt-in plus one real critical-event
     inbox confirmation remain required before the critical-email E2E gate is complete.
 
+- **2026-09-07** - **PILOT PREP discovery + loading-cue bugfixes (Jasper).** No migration.
+  - **Managed tournament discovery fixed:** `/tournaments` now has an authenticated **Your
+    tournaments** section for events the viewer owns or actively co-organizes, including drafts and
+    unlisted events. The query uses the signed-in Supabase client/RLS; these records are not added to
+    anonymous public discovery. Unlisted cards carry a visible label. Live-data diagnosis confirmed
+    Jasper owns two draft tournaments and one unlisted open tournament that the old public-only query
+    omitted.
+  - **§33.5A loading cues:** debounced tournament/club directory typing now immediately shows a
+    `Searching…` spinner through navigation completion; the header notification bell and notification
+    **Preferences** link now show their existing `LinkSpinner` inside the clicked control.
+  - Gates green: typecheck, lint, test (web 15, config 19, core 54), format, build (33 pages).
+    Committed + pushed to `main`; Vercel reached Ready; authenticated UI verified; re-aliased
+    `vouchplayph.vercel.app`.
+  - **Vercel domain diagnosis:** `vouchplay-v2.vercel.app` is the project-generated domain;
+    `vouchplayph.vercel.app` is a working manual deployment alias. Keep re-aliasing until Jasper adds
+    the vanity `.vercel.app` address as a Project Settings domain so production assignment is automatic.
+
 ## Next up
 - **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built and production SMTP is
   configured. Next: verify a real opted-in critical email; clear Supabase over-quota; run the full

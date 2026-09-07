@@ -258,6 +258,10 @@ Pilot Prep gates: SMTP real-send verification; Supabase quota clearance; live dr
 export open; and Hermosa organizer/JT admin role + TOTP readiness. Hold-expiry cron is deferred by JT.
 Code deployment `8962b31` plus the production SMTP configuration were verified Ready and re-aliased to
 `vouchplayph.vercel.app`.
+Pilot-prep discovery/loading hardening now gives signed-in owners and active co-organizers a private
+**Your tournaments** section that includes draft and unlisted events without widening public discovery;
+unlisted cards are visibly labelled. Tournament directory typing, the notification bell, and the
+notification Preferences link now meet §33.5A with an immediate pending indicator. No migration.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth

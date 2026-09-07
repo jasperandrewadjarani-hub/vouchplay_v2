@@ -93,6 +93,51 @@ export async function listTournaments(filters: TournamentFilters): Promise<Tourn
   };
 }
 
+/**
+ * Tournaments the signed-in viewer explicitly owns or co-organizes. This intentionally uses the
+ * authenticated client (and therefore tournament RLS) so draft and unlisted events are never added
+ * to anonymous/public discovery. Search filters match the public directory for a predictable UI.
+ */
+export async function listManagedTournaments(
+  userId: string,
+  filters: TournamentFilters,
+): Promise<TournamentCardDTO[]> {
+  try {
+    const supabase = await createClient();
+    const { data: coOrganizerRows } = await supabase
+      .from('tournament_organizers')
+      .select('tournament_id')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    const coOrganizerIds = Array.from(
+      new Set(
+        (coOrganizerRows ?? [])
+          .map((row) => (row as { tournament_id: string }).tournament_id)
+          .filter(Boolean),
+      ),
+    );
+
+    let query = supabase.from('tournaments').select(TOURNAMENT_CARD_COLUMNS);
+    if (coOrganizerIds.length > 0) {
+      query = query.or(`owner_organizer_id.eq.${userId},id.in.(${coOrganizerIds.join(',')})`);
+    } else {
+      query = query.eq('owner_organizer_id', userId);
+    }
+    if (filters.q && filters.q.trim()) {
+      const term = filters.q.trim().replace(/[%,()]/g, ' ');
+      query = query.or(`name.ilike.%${term}%,city.ilike.%${term}%,venue_name.ilike.%${term}%`);
+    }
+    if (filters.city && filters.city.trim()) {
+      query = query.ilike('city', `%${filters.city.trim()}%`);
+    }
+
+    const { data } = await query.order('created_at', { ascending: false });
+    return ((data as TournamentRow[] | null) ?? []).map(toTournamentCardDTO);
+  } catch {
+    return [];
+  }
+}
+
 interface MiniProfile {
   id: string;
   name: string;
