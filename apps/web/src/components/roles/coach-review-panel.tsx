@@ -19,6 +19,7 @@ export function CoachReviewPanel({ detail }: { detail: CoachReviewDetail }) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
+  const [evidenceLinks, setEvidenceLinks] = useState<Record<string, string>>({});
   const answers = detail.answers;
 
   function run(
@@ -40,10 +41,11 @@ export function CoachReviewPanel({ detail }: { detail: CoachReviewDetail }) {
   }
 
   function openEvidence(id: string) {
+    setMessage(null);
     setBusy(`evidence:${id}`);
     startTransition(async () => {
       const result = await getCoachEvidenceSignedUrl(id);
-      if (result.url) window.open(result.url, '_blank', 'noopener,noreferrer');
+      if (result.url) setEvidenceLinks((current) => ({ ...current, [id]: result.url! }));
       else setMessage({ ok: false, text: result.error ?? 'Could not open evidence.' });
       setBusy(null);
     });
@@ -149,14 +151,26 @@ export function CoachReviewPanel({ detail }: { detail: CoachReviewDetail }) {
                     {file.mimeType} · {(file.sizeBytes / 1024).toFixed(0)} KB
                   </p>
                 </div>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => openEvidence(file.id)}
-                  className="border-border text-foreground rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-                >
-                  {busy === `evidence:${file.id}` ? 'Opening…' : 'Open securely'}
-                </button>
+                {evidenceLinks[file.id] ? (
+                  <a
+                    href={evidenceLinks[file.id]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="border-border text-foreground inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-semibold"
+                  >
+                    Open private file <ExternalLink size={12} aria-hidden />
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={pending}
+                    aria-busy={busy === `evidence:${file.id}`}
+                    onClick={() => openEvidence(file.id)}
+                    className="border-border text-foreground rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                  >
+                    {busy === `evidence:${file.id}` ? 'Authorizing…' : 'Create secure link'}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
