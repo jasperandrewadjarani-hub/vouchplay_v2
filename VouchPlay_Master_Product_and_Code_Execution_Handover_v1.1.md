@@ -245,7 +245,7 @@ build 31 pages incl. 6 `/admin` routes). Deferred: §13 Identity Verification fu
 bucket + submission/review + retention - its own sub-phase), users merge-duplicate + revoke-sessions.
 
 **Pilot Prep - IN PROGRESS (§19.4 + Hermosa readiness).** The unverified/under-vouched registration
-prompt is built: the signed-in viewer's CSL, STS, unique-voucher count, Skill-Verified state, and
+prompt is built and live: the signed-in viewer's CSL, STS, unique-voucher count, Skill-Verified state, and
 profile slug are loaded with a tight server-side projection; a pure `@vouchplay/core` evaluator reuses
 the exact ELIG_V1 evidence/confidence rules per division; and the registration panel shows a neutral,
 non-blocking warning before submission with Share-profile and Request-a-vouch paths. Six focused tests
@@ -255,6 +255,7 @@ payment verified/rejected, and critical team fan-out invokes the same opt-in ema
 notification. App SMTP remains off until `SMTP_USER`/`SMTP_PASS` are added to Vercel. Remaining Pilot
 Prep gates: SMTP real-send verification; Supabase quota clearance; live dress rehearsal + native Excel
 export open; and Hermosa organizer/JT admin role + TOTP readiness. Hold-expiry cron is deferred by JT.
+Code deployment `8962b31` was verified Ready and re-aliased to `vouchplayph.vercel.app`.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth

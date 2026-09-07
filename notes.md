@@ -985,7 +985,15 @@ Getting the first deploy up hit two issues:
     send remains pending Jasper's Gmail App Password + one opted-in recipient. Supabase quota, dress
     rehearsal/native-Excel gate, and organizer/JT TOTP onboarding remain the next Pilot Prep steps.
     JT explicitly deferred the hold-expiry/waitlist cron.
+  - **Live readiness audit:** Jasper's account has active `super_admin` but no verified TOTP. Tane's
+    existing account has no active staff role and no verified TOTP. The Hermosa organizer account is
+    not yet identified. Supabase usage could not be queried through the CLI because no management
+    access token is configured; the known over-quota warning therefore remains unresolved.
   - Gates green: typecheck, lint, test (web 15, config 19, core 54), format, build (33 pages).
+  - Committed `8962b31`, pushed to `main`; Vercel production deployment
+    `vouchplayph-qsiry1uuq-jasperandrewadjarani-hubs-projects.vercel.app` reached Ready; public home
+    verified; **re-aliased `vouchplayph.vercel.app`**. §19.4 authenticated visual/E2E remains part of
+    the dress rehearsal once the user-owned account/TOTP prerequisites are ready.
 
 ## Next up
 - **PILOT PREP (in progress):** §19.4 code + critical email fan-out are built. Next: Jasper adds
