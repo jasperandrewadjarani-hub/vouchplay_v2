@@ -1177,9 +1177,35 @@ Getting the first deploy up hit two issues:
   - Remaining release work: final full gates, commit/push, Vercel Ready, production Coach workflow,
     opt-out/rebuild evidence, both-domain HTTP/browser verification, and `CRON_SECRET` confirmation.
 
+- **2026-09-08** - **Phase 13C + 13A + 13D production release completed.**
+  - Production Coach lifecycle exercised with controlled Player/Admin accounts: progressive submit
+    with normalized private WebP evidence, pending/history/SLA, withdrawal, second submission, AAL2
+    staff review and 60-second signed evidence access, information request, applicant response and
+    resubmit, approval, critical notifications/deep links, and active-role-only public Coach badge.
+  - Fixed two production defects found during exercise: existing verified TOTP factors can now step
+    AAL1 sessions up to AAL2, and evidence links use a popup-safe create-then-open flow. Commits
+    `f043359` and `75ecdb4` are Ready in production.
+  - Explicit Coach vouch and revocation invariant passed: the per-vouch control was unchecked by
+    default; the controlled Coach vouch recorded `used_coach_weight=true`, weight 2, `WEIGHT_V1`;
+    AAL2 revocation changed the role to revoked and appended audit/critical notification records while
+    preserving those event-time vouch facts.
+  - Controlled leaderboard publication produced real eligible rows in Players, Community Champions,
+    and Clubs. Player opt-out removed the fixture from all active public snapshots while the signed-in
+    player retained eight private momentum rows marked `opted_out`. Cleanup deactivated both accounts
+    and the club, removed the evidence object, soft-deleted Auth access, retained application/event/
+    audit history, and published a final zero-synthetic-entry snapshot set.
+  - Privacy hardening found during cleanup: public city/region selectors now derive only from publicly
+    eligible subjects, so private/ineligible rows cannot leave empty scope labels. Added deterministic
+    pure-core coverage. Final clean production state has seven global snapshots and no synthetic public
+    rows; the real-user cold start remains honest because current real profiles lack DOB and the real
+    club is pending.
+  - Production `CRON_SECRET` is configured. Vercel project domains attached automatically; final
+    post-documentation deploy/gates and both-domain verification are the remaining release mechanics.
+
 ## Next up
-- **Phase 13 release gate:** database/direct authorization are green; finish controlled Coach/privacy
-  UI exercises, commit/push/deploy, confirm `CRON_SECRET`, and verify both production domains.
+- **Phase 13 release gate:** feature, database, direct-authorization, controlled production lifecycle,
+  privacy cleanup, and `CRON_SECRET` gates are complete. Finish the final documentation commit,
+  Vercel Ready wait, and both-domain HTTP/browser check.
 - **PILOT PREP carry-over:** verify a real opted-in critical email; clear Supabase over-quota; run the
   full live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
   admin TOTP. Hold-expiry/waitlist cron is deferred.

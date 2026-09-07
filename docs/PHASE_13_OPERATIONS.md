@@ -1,10 +1,19 @@
 # Phase 13C/13D operations
 
-**Release state (2026-09-08):** Jasper applied migrations 0016/0017 and confirmed every embedded
-verification count. Direct anon/Player/AAL2 Admin checks passed 20/20 with no skips. The first bounded
-live build published 14 active snapshots, 24 private momentum rows, and two contribution aggregates;
-public entries are honestly empty because current profiles have no DOB and the current club is
-pending. Production UI flow exercises and deployment of the new application code remain pending.
+**Release state (2026-09-08): COMPLETE.** Jasper applied migrations 0016/0017 and confirmed every
+embedded verification count. Direct anon/Player/AAL2 Admin checks passed 20/20 with no skips. The
+production Coach application, evidence, information-request, resubmit, approval, badge, Coach-vouch,
+revocation, notification, and AAL2 paths were exercised with controlled accounts. Public Players,
+Community Champions, and Clubs snapshots were populated with eligible controlled fixtures; opt-out
+then removed the player from every active public snapshot while preserving eight authenticated private
+momentum rows. The fixtures were deactivated, their evidence object removed, and a final clean build
+published seven global snapshots with zero synthetic public entries. The live accounts remain an
+honest cold start: existing real profiles have no DOB and the real club is pending.
+
+Production fixes discovered during the exercise are included in the release: existing verified TOTP
+factors can now step up an AAL1 session, private evidence uses a popup-safe create-link/open-link flow,
+and public city/region controls are derived only from publicly eligible subjects. The last invariant
+prevents private, opted-out, restricted, under-age, or deleted rows from leaking an empty scope label.
 
 ## Cache and query budget
 
@@ -75,3 +84,8 @@ notify. Most Bidded has an always-empty adapter and a false-by-default flag unti
    momentum remains.
 5. Run all repository gates, deploy, wait for Vercel Ready, and verify both production domains over
    HTTP and in a browser.
+
+The controlled 2026-09-08 release exercise completed steps 1–4. It also proved that revoking Coach
+does not rewrite event-time vouch facts: the controlled vouch retained `used_coach_weight=true`,
+effective weight `2`, and `WEIGHT_V1` after the role became revoked. Controlled accounts and objects
+must never be reactivated or reused.

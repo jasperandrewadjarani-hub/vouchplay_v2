@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rankLeaderboard, type LeaderboardFact } from './leader';
+import { derivePublicLeaderboardScopes, rankLeaderboard, type LeaderboardFact } from './leader';
 
 const cfg = {
   weights: { participation: 2, placement: 4 },
@@ -59,6 +59,32 @@ describe('LEADER_V1', () => {
     const poisoned = { ...clean, components: { ...clean.components, sts: 5, vouchWeight: 9999 } };
     expect(rankLeaderboard([clean], cfg)[0]?.score).toBe(
       rankLeaderboard([poisoned], cfg)[0]?.score,
+    );
+  });
+  it('derives public scopes only from eligible subjects', () => {
+    expect(
+      derivePublicLeaderboardScopes(
+        [
+          { publicEligible: false, city: 'Private City', region: 'Private Region' },
+          { publicEligible: true, city: 'Cebu', region: 'Visayas' },
+          { publicEligible: true, city: 'Bacolod', region: 'Visayas' },
+        ],
+        3,
+      ),
+    ).toEqual({ cities: ['Bacolod', 'Cebu'], regions: ['Visayas'] });
+  });
+  it('caps and sorts public scope metadata deterministically', () => {
+    const subjects = [
+      { publicEligible: true, city: 'Cebu', region: 'Visayas' },
+      { publicEligible: true, city: 'Bacolod', region: 'Visayas' },
+      { publicEligible: true, city: 'Davao', region: 'Mindanao' },
+    ];
+    expect(derivePublicLeaderboardScopes(subjects, 2)).toEqual({
+      cities: ['Bacolod', 'Cebu'],
+      regions: [],
+    });
+    expect(derivePublicLeaderboardScopes([...subjects].reverse(), 2)).toEqual(
+      derivePublicLeaderboardScopes(subjects, 2),
     );
   });
 });

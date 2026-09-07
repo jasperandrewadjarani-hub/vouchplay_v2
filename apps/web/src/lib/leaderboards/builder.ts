@@ -2,6 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import {
   LEADERBOARD_ALGORITHM_VERSION,
+  derivePublicLeaderboardScopes,
   evaluateClubLeaderboardEligibility,
   evaluatePlayerLeaderboardEligibility,
   leaderboardCta,
@@ -543,24 +544,13 @@ export async function buildAllLeaderboards(): Promise<BuildSummary> {
     settings.cityRegionMap,
   );
   const clubs = clubSubjects(source, settings.cityRegionMap);
-  const cities = [
-    ...new Set(
-      [...allPlayerSubjects, ...clubs]
-        .map((subject) => subject.city)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ]
-    .sort()
-    .slice(0, settings.maxScopes);
-  const regions = [
-    ...new Set(
-      [...allPlayerSubjects, ...clubs]
-        .map((subject) => subject.region)
-        .filter((value): value is string => Boolean(value)),
-    ),
-  ]
-    .sort()
-    .slice(0, Math.max(0, settings.maxScopes - cities.length));
+  // Scope controls are public metadata. Derive them only from subjects that may appear publicly so
+  // opted-out, private, restricted, deleted, under-age, or otherwise ineligible records cannot
+  // create an empty city/region label in the public selector.
+  const { cities, regions } = derivePublicLeaderboardScopes(
+    [...allPlayerSubjects, ...clubs],
+    settings.maxScopes,
+  );
   const scopes: { type: LeaderboardScope; value: string | null }[] = [
     { type: 'global', value: null },
     ...cities.map((value) => ({ type: 'city' as const, value })),

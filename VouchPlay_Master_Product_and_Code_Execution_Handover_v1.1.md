@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.9
+# VouchPlay Master Product & Code Execution Handover v1.10
 
-_(File retains its `…v1.1.md` name; content is v1.9 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.10 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -20,7 +20,7 @@ Gmail account (for SMTP): vouchplay@gmail.com
 
 ---
 
-# 0Z. Current Build Status - as of 2026-09-07
+# 0Z. Current Build Status - as of 2026-09-08
 
 > Living status block. Update this whenever a phase completes. Full detail lives in
 > `notes.md`; `CLAUDE.md` / `AGENTS.md` hold agent working rules + deploy gotchas.
@@ -302,15 +302,25 @@ and Region uses an Admin-managed city-to-region mapping rather than a new mandat
 Coach evidence defaults are five files, 5 MB each, JPEG/PNG/WebP/PDF, 60-second signed access, a
 seven-day review SLA, and 90-day post-decision retention; every value remains Admin-configurable.
 
-Phase 13C/13A/13D is code-complete and its database foundation is live in content v1.9. On 2026-09-08,
+Phase 13C/13A/13D is production-complete in content v1.10. On 2026-09-08,
 Jasper applied migrations 0016 and 0017 in order and confirmed every embedded verification count.
 Direct anon/Player/AAL2 Admin authorization passed 20/20 with no skips. The first bounded build
 published 14 active global/city snapshots, 24 private momentum rows, and two contribution aggregates;
 public entries correctly remain empty because all current real profiles lack DOB and the current club
 is pending. The Coach-weight safety kill switch is enabled by default so approval grants the locked
 Coach capability; each individual “Vouch as a Coach” control remains explicitly unchecked by default.
-Most Bidded remains false and its adapter returns no fabricated data. Production application/UI flow
-exercise and deployment of this code revision remain the final release gates.
+Most Bidded remains false and its adapter returns no fabricated data.
+
+The controlled production exercise covered application, normalized private evidence, withdrawal,
+information request/response, resubmit, AAL2 approval, 60-second signed access, notifications/deep
+links, active-role badge, explicit Coach vouch, and AAL2 revocation. The Coach vouch retained its
+event-time `used_coach_weight=true`, effective weight 2, and `WEIGHT_V1` after revocation. Controlled
+eligible fixtures appeared in Players, Community Champions, and Clubs; public opt-out removed the
+player from every public board while preserving eight private momentum rows. Fixtures and Auth access
+were deactivated, the evidence object was removed, and the clean build now has seven global snapshots
+with zero synthetic public entries. Production fixes include existing-factor MFA step-up, popup-safe
+evidence access, and public scope derivation from publicly eligible subjects only. `CRON_SECRET` is
+configured; repository gates and both-domain deployment verification are recorded in `notes.md`.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -6496,6 +6506,19 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.10 (2026-09-08)
+- **Phase 13C production release:** completed the controlled Coach lifecycle through private evidence,
+  information request/resubmit, AAL2 approval, active-role public badge, explicit Coach vouch, audited
+  revocation, and critical notification deep links. Existing-factor MFA step-up and popup-safe signed
+  evidence access were fixed during the exercise.
+- **Phase 13A/13D production release:** proved eligible Players, Community Champions, and Clubs rows,
+  then proved public opt-out with private momentum retention. Controlled fixtures were deactivated and
+  removed from active public snapshots without deleting immutable history or event-time Coach-vouch
+  facts.
+- **Privacy hardening:** city/region scope metadata is now derived only from publicly eligible subjects,
+  preventing ineligible or private-only records from creating visible empty scope labels. Most Bidded
+  remains disabled and empty until §16A.
 
 ## v1.9 (2026-09-07)
 - **Phase 13C implementation:** staged the progressive Coach application/status/withdraw/resubmit
