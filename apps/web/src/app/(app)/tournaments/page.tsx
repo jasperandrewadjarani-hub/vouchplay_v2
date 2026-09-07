@@ -57,12 +57,14 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
   const sp = await searchParams;
   const filters = parseFilters(sp);
   const user = await getOptionalUser();
-  const [{ tournaments, total, page, pageCount }, managedTournaments, canCreate] =
-    await Promise.all([
-      listTournaments(filters),
-      user ? listManagedTournaments(user.id, filters) : Promise.resolve([]),
-      user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
-    ]);
+  const [managedTournaments, canCreate] = await Promise.all([
+    user ? listManagedTournaments(user.id, filters) : Promise.resolve([]),
+    user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
+  ]);
+  const { tournaments, total, page, pageCount } = await listTournaments(
+    filters,
+    managedTournaments.map((t) => t.slug),
+  );
 
   return (
     <div className="space-y-5">

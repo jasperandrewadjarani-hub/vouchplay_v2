@@ -1008,7 +1008,7 @@ Getting the first deploy up hit two issues:
   - **Managed tournament discovery fixed:** `/tournaments` now has an authenticated **Your
     tournaments** section for events the viewer owns or actively co-organizes, including drafts and
     unlisted events. The query uses the signed-in Supabase client/RLS; these records are not added to
-    anonymous public discovery. Unlisted cards carry a visible label. Live-data diagnosis confirmed
+    anonymous public discovery or duplicated in the public results/count. Unlisted cards carry a visible label. Live-data diagnosis confirmed
     Jasper owns two draft tournaments and one unlisted open tournament that the old public-only query
     omitted.
   - **§33.5A loading cues:** debounced tournament/club directory typing now immediately shows a

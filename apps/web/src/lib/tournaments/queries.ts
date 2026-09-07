@@ -48,6 +48,7 @@ export interface TournamentListPage {
 
 async function fetchTournamentList(
   f: TournamentFilters,
+  excludedSlugs: string[],
 ): Promise<{ rows: TournamentRow[]; total: number }> {
   try {
     const supabase = createPublicClient();
@@ -56,6 +57,9 @@ async function fetchTournamentList(
       .select(TOURNAMENT_CARD_COLUMNS, { count: 'exact' })
       .in('status', DISCOVERABLE)
       .eq('visibility', 'public');
+    if (excludedSlugs.length > 0) {
+      query = query.not('slug', 'in', `(${excludedSlugs.join(',')})`);
+    }
     if (f.q && f.q.trim()) {
       const term = f.q.trim().replace(/[%,()]/g, ' ');
       query = query.or(`name.ilike.%${term}%,city.ilike.%${term}%,venue_name.ilike.%${term}%`);
@@ -72,16 +76,27 @@ async function fetchTournamentList(
   }
 }
 
-export async function listTournaments(filters: TournamentFilters): Promise<TournamentListPage> {
+export async function listTournaments(
+  filters: TournamentFilters,
+  excludeManagedSlugs: string[] = [],
+): Promise<TournamentListPage> {
+  const excludedSlugs = Array.from(
+    new Set(excludeManagedSlugs.filter((slug) => /^[a-z0-9-]+$/.test(slug))),
+  ).sort();
   const key = JSON.stringify({
     q: filters.q?.trim().toLowerCase() ?? '',
     city: filters.city?.trim().toLowerCase() ?? '',
     page: filters.page ?? 1,
+    excludedSlugs,
   });
-  const cached = unstable_cache(() => fetchTournamentList(filters), ['tournaments-list', key], {
-    revalidate: 60,
-    tags: [TOURNAMENTS_LIST_TAG],
-  });
+  const cached = unstable_cache(
+    () => fetchTournamentList(filters, excludedSlugs),
+    ['tournaments-list', key],
+    {
+      revalidate: 60,
+      tags: [TOURNAMENTS_LIST_TAG],
+    },
+  );
   const { rows, total } = await cached();
   const page = Math.max(1, filters.page ?? 1);
   return {
