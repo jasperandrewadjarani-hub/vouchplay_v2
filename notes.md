@@ -1199,13 +1199,16 @@ Getting the first deploy up hit two issues:
     pure-core coverage. Final clean production state has seven global snapshots and no synthetic public
     rows; the real-user cold start remains honest because current real profiles lack DOB and the real
     club is pending.
-  - Production `CRON_SECRET` is configured. Vercel project domains attached automatically; final
-    post-documentation deploy/gates and both-domain verification are the remaining release mechanics.
+  - Production `CRON_SECRET` is configured. Final gates are green: typecheck, lint, tests (web 17,
+    config 19, core 92), format, and Next 15.5.25 build (40 generated pages). Release commit `656b49b`
+    reached Ready at `vouchplayph-pralldbow-jasperandrewadjarani-hubs-projects.vercel.app`; both
+    `vouchplayph.vercel.app` and `vouchplay-v2.vercel.app` returned HTTP 200 for Home/leaderboards,
+    and the unauthenticated cron returned 401. Signed-out browser QA on both domains confirmed the
+    LEADER_V1 empty state, working CTA, accessible controls, 390 px dark/light rendering, no horizontal
+    overflow, and no console warnings/errors. Project domains attached automatically.
 
 ## Next up
-- **Phase 13 release gate:** feature, database, direct-authorization, controlled production lifecycle,
-  privacy cleanup, and `CRON_SECRET` gates are complete. Finish the final documentation commit,
-  Vercel Ready wait, and both-domain HTTP/browser check.
+- **Phase 13C + 13A + 13D:** ✅ COMPLETE and production-verified.
 - **PILOT PREP carry-over:** verify a real opted-in critical email; clear Supabase over-quota; run the
   full live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT
   admin TOTP. Hold-expiry/waitlist cron is deferred.
