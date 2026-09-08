@@ -1290,10 +1290,20 @@ Getting the first deploy up hit two issues:
     (QR upload/save/hard-reload/replace, player proof screen, idle/BFCache/expired-auth, two-division
     registration + same-division rejection, club edit before/after lock + reasoned override, My
     registrations expansion). No SQL for Jasper to apply this slice.
+  - **Pushed + production-verified 2026-09-08:** Jasper approved the push. Commit `f89af55` on `main`
+    (fb_posting_assets deliberately excluded from the commit). Vercel reached Ready; both
+    `vouchplayph.vercel.app` and `vouchplay-v2.vercel.app` returned HTTP 200 for Home, Tournaments,
+    Players, and Leaderboards, the new `/api/client-error` telemetry route returned 405 on GET and 200
+    on a valid POST on both domains, and signed-out browser QA of a public tournament page was clean
+    (correct render, no console errors). Still open: controlled authenticated organizer/player browser
+    tests (QR upload/reload/replace + proof screen, idle/BFCache/expired-auth, two-division register +
+    same-division rejection, club edit before/after lock + reasoned override, My registrations
+    expansion) - these need real sessions and are the remaining definition-of-done evidence.
 
 ## Next up
-- **Phase 13.5 (this slice):** code complete + local gates green; awaiting Jasper's push go-ahead and
-  controlled authenticated browser verification. No migration to apply.
+- **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
+  migration to apply. Remaining: controlled authenticated organizer/player browser verification of the
+  six flows above before the phase is fully evidenced as done.
 - **Migration 0021 applied and verified:** Jasper ran `scripts/apply-0021.sql` against
   `itrosesiywpbaxtmucbb` and returned `registration_change_settings=2`,
   `registration_change_functions=4`, and `card_engagement_function=1`. Tournament-card engagement
