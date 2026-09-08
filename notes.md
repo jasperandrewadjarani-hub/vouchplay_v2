@@ -1389,6 +1389,16 @@ Getting the first deploy up hit two issues:
   (web 30, config 19, core 110; build 43 pages). Verified at 375x812: the whole announcement including
   the primary button fits with no scrolling. See `master_plan.md` §1F.
 
+- **2026-09-08** - **STS explainer shipped (live-launch feedback).** Real signups asked "what is STS?"
+  within minutes. Root cause: the STS chip explained itself with an HTML `title` tooltip, which is
+  invisible on touch and to keyboard users. The chip is now a real button opening an accessible
+  explainer dialog (reused `Modal`), with a help icon and descriptive `aria-label`. Copy leads with
+  "confidence, not skill", lists what raises it, reassures that a low STS is not a weak player, keeps
+  skill and STS separate (§3.3), restates that VouchPlay never ranks by STS (§6/§8.4), and ends with
+  "get a vouch" / FAQ links. Extracted to `players/sts-chip.tsx` and re-exported from `badges.tsx`, so
+  the profile and both player-card variants pick it up unchanged. Gates green (web 30, config 19,
+  core 110). See `master_plan.md` §1G.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the
@@ -1439,3 +1449,13 @@ Getting the first deploy up hit two issues:
   `P_006b_VouchPlay_Facebook_Carousel_05_Final_CTA_Clean_(2026-09).png`. The foreground logo,
   wording, CTA hierarchy, URL, and JT credit remain intact; stadium spotlights, arena seating, beams,
   and the reflective realistic court were replaced by a restrained app-inspired graphic backdrop.
+
+- **2026-09-08** - Added the VouchPlay x Hermosa **Rise of the Empires** welcome-modal banner under
+  `deliverables/welcome-modal/` as a 1536 x 1024 master PNG and an app-ready WebP. The 3:2 crop-safe
+  creative combines the official VouchPlay mark with the tournament title, October 17-18, 2026 date,
+  and Zamboanga City identity; the modal screenshot was used only as a placement/crop reference.
+
+- **2026-09-08** - Revised the welcome-modal banner to attribute the tournament to B-STEEL Sports.
+  Added a restrained `BY` plus the supplied B-STEEL SPORTS PICKLEBALL badge after the tournament
+  subtitle, with no white plate. Saved master PNG and web-optimized WebP variants with `B-Steel` in
+  the filename; also retained a verified transparent badge cutout in `deliverables/welcome-modal/`.

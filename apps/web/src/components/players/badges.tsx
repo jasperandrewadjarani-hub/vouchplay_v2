@@ -41,19 +41,10 @@ export function SkillPill({
 
 /**
  * STS chip (Skill-Trust Score, 0–5 confidence). Shown only when computed. Purely informational -
- * VouchPlay never ranks players by STS (§6, §8.4).
+ * VouchPlay never ranks players by STS (§6, §8.4). Lives in its own client component because it
+ * opens a tap-to-explain dialog; re-exported here so existing import sites are unchanged.
  */
-export function StsChip({ sts }: { sts: number | null }) {
-  if (sts == null) return null;
-  return (
-    <span
-      className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium"
-      title="Skill-Trust Score - confidence in this player's community skill (0–5). Not a ranking."
-    >
-      STS {sts.toFixed(1)}
-    </span>
-  );
-}
+export { StsChip } from './sts-chip';
 
 const chip =
   'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide';

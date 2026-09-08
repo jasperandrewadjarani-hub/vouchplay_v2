@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.19
+# VouchPlay Master Product & Code Execution Handover v1.20
 
-_(File retains its `…v1.1.md` name; content is v1.19 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.20 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.20 (2026-09-08)
+- **STS explains itself where players meet it.** Live signups asked "what is STS?" immediately, so the
+  STS chip is no longer a bare number with an HTML `title` tooltip (invisible on touch and to keyboard
+  users). It is now a labelled button opening an accessible explainer dialog. **Locked copy rule for
+  any STS explanation: lead with what STS is NOT.** It measures confidence in a skill rating, never
+  ability, never a ranking. The explainer states that, lists what raises it (more distinct vouchers,
+  ID-verified and coach vouchers, agreement between them), states plainly that a low STS does not mean
+  a weak player, and keeps skill level and STS separate - preserving §3.3 (CSL, STS, Identity Verified
+  and Skill Verified are four distinct concepts) and §6/§8.4 (players are never ranked by STS). Any
+  future surface that displays STS must offer the same explanation rather than a bare number.
 
 ## v1.19 (2026-09-08)
 - **Launch welcome pop-up (Admin-controlled campaign dialog).** A near-full-screen, one-tap-dismissible

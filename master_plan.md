@@ -183,6 +183,28 @@ Rise of Empires, whose registration opens the following day at 5:00 PM.
 - Mobile-first sizing: the image is 3:2 on phones and 16:9 from `sm` up, so the primary button stays
   above the fold on a 375 x 812 device without scrolling.
 
+## 1G. STS explainer (2026-09-08, post-launch)
+
+Real signups asked "what is STS?" within minutes of launch, so the score now explains itself where it
+is met.
+
+- **Root cause:** the STS chip described itself with an HTML `title` tooltip. That is invisible on
+  touch devices and to keyboard users, which is exactly where most players encounter it. A number with
+  no explanation reads as a mysterious rating.
+- The chip is now a real button that opens an accessible explainer dialog (reusing `Modal`: centered
+  on desktop, bottom sheet on mobile, dismissible by X, overlay, Escape). It carries a descriptive
+  `aria-label` and a visible help icon so it reads as tappable.
+- **Copy leads with what STS is not.** The confusion is that people read it as a skill or ranking
+  score, so the first line states it measures confidence, not ability, followed by what raises it
+  (more distinct vouchers, ID-verified/coach vouchers, agreement between them), an explicit
+  reassurance that a low STS does not mean a weak player, and the separation of skill level from STS.
+  This preserves the locked §3.3 rule that CSL, STS, Identity Verified and Skill Verified are four
+  distinct concepts, and §6/§8.4 that VouchPlay never ranks players by STS.
+- It ends with the action that actually helps: get a vouch, or read the FAQ.
+- Implemented as its own client component re-exported from `badges.tsx`, so all existing call sites
+  (player profile and both player-card variants) pick it up unchanged and the remaining badges stay
+  server-rendered.
+
 ## 1. Prompt Contract
 
 ### In scope
