@@ -4,8 +4,10 @@ import { Header } from './header';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { PageResumeRefresh } from './ui/page-resume-refresh';
+import { WelcomeModal } from './welcome-modal';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
+import { getOptionalUser } from '@/lib/auth';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -14,18 +16,64 @@ import { viewerIsStaff } from '@/lib/moderation/staff';
  * access so they can turn it back off from /admin.
  */
 export async function AppShell({ children }: { children: ReactNode }) {
-  const [bannerEnabled, bannerText, maintenance] = await Promise.all([
+  const [bannerEnabled, bannerText, maintenance, welcomeEnabled] = await Promise.all([
     loadSettingFlag('announcement_banner_enabled', false),
     loadSettingText('announcement_banner', ''),
     loadSettingFlag('maintenance_mode', false),
+    loadSettingFlag('welcome_modal_enabled', false),
   ]);
   const showBanner = bannerEnabled && bannerText.trim().length > 0;
   const staff = maintenance ? await viewerIsStaff() : false;
   const gated = maintenance && !staff;
 
+  // Launch/campaign pop-up: only loaded when an Admin has switched it on.
+  const welcome = welcomeEnabled
+    ? await (async () => {
+        const [
+          version,
+          headline,
+          subhead,
+          eventLabel,
+          eventName,
+          detail,
+          ctaNote,
+          imageUrl,
+          linkUrl,
+          user,
+        ] = await Promise.all([
+          loadSettingText('welcome_modal_version', ''),
+          loadSettingText('welcome_modal_headline', ''),
+          loadSettingText('welcome_modal_subhead', ''),
+          loadSettingText('welcome_modal_event_label', ''),
+          loadSettingText('welcome_modal_event_name', ''),
+          loadSettingText('welcome_modal_detail', ''),
+          loadSettingText('welcome_modal_cta_note', ''),
+          loadSettingText('welcome_modal_image_url', ''),
+          loadSettingText('welcome_modal_link_url', ''),
+          getOptionalUser(),
+        ]);
+        if (!headline.trim()) return null;
+        return {
+          copy: {
+            version: version.trim() || 'default',
+            headline,
+            subhead,
+            eventLabel,
+            eventName,
+            detail,
+            ctaNote,
+            imageUrl: imageUrl.trim(),
+            linkUrl: linkUrl.trim(),
+          },
+          authed: !!user,
+        };
+      })()
+    : null;
+
   return (
     <div className="min-h-dvh">
       <PageResumeRefresh />
+      {welcome && !gated && <WelcomeModal copy={welcome.copy} authed={welcome.authed} />}
       {showBanner && (
         <div className="vp-gradient text-white">
           <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-sm font-medium">

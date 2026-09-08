@@ -156,6 +156,33 @@
   copy it exactly to `scripts/apply-00NN.sql`, have Jasper apply it in SQL Editor, and record exact
   verification counts before claiming new database behavior is live.
 
+## 1F. Launch welcome pop-up (2026-09-08)
+
+Built for the public launch night ahead of the B-Steel Hermosa 2026 Grand Pickleball Tournament -
+Rise of Empires, whose registration opens the following day at 5:00 PM.
+
+- A near-full-screen, one-tap-dismissible announcement dialog shown **once per visitor per version**,
+  on whichever route the shared link lands on. It reuses the existing accessible `Modal` (Escape,
+  overlay click, and a 44 px labelled close control) with a new `size="lg"` variant.
+- **All copy, the image, the event link, the version, and the on/off switch are Admin settings**, so a
+  campaign can be changed, re-shown, or killed without a deploy. This is deliberate: the message must
+  change from "Registration opens Sep 9 at 5:00 PM" to "Registration is OPEN" during the busiest hour
+  of the launch, and a deploy at that moment is an unacceptable risk. Bumping
+  `welcome_modal_version` re-shows the dialog to everyone.
+- Settings only, **no migration**: `system_settings` rows merge over the shipped code defaults.
+- The dialog renders nothing during server rendering and decides only after mount, because the
+  "already seen" flag lives in `localStorage`; reading it during render would diverge from the server
+  and trip a hydration mismatch.
+- Conversion logic: the primary action is **Create free account**, because an account made on launch
+  night makes registration fast the next day. A signed-in visitor is instead offered **See the
+  tournament**. There is always a plain "Maybe later" exit alongside the X.
+- Copy safety rule: the pop-up must never promise a reserved slot. Signing up does not hold a place,
+  and the interest flow already states this. The launch line is "Sign-up now to register tomorrow."
+  Event timing uses an **absolute date**, never "tomorrow", because the dialog can be seen after
+  midnight.
+- Mobile-first sizing: the image is 3:2 on phones and 16:9 from `sm` up, so the primary button stays
+  above the fold on a 375 x 812 device without scrolling.
+
 ## 1. Prompt Contract
 
 ### In scope

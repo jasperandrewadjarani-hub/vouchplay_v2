@@ -1377,6 +1377,18 @@ Getting the first deploy up hit two issues:
   `admin/users/[id]`, `admin/settings-form`, `staff/role-applications/coaches`) are low-priority
   internal-tool cleanup, not user-facing.
 
+- **2026-09-08** - **Launch welcome pop-up shipped (Admin-controlled, currently OFF).** Near-full-screen
+  one-tap-dismissible announcement for launch night, shown once per visitor per version on whichever
+  route the shared link lands on. Reuses the accessible `Modal` with a new `size="lg"` variant (Escape,
+  overlay click, 44 px labelled close). **No migration** - all copy/image/link/version/on-off are
+  `system_settings` that merge over code defaults. Renders only after mount (localStorage "seen" flag)
+  so it cannot cause a hydration mismatch. Primary CTA is Create free account (signed-in visitors get
+  See the tournament instead). Copy deliberately avoids promising a reserved slot and uses an absolute
+  date, since the dialog can be seen after midnight. Settings are pre-seeded in the live DB with
+  `welcome_modal_enabled=false`; Jasper flips it on after pasting the image URL. Gates green
+  (web 30, config 19, core 110; build 43 pages). Verified at 375x812: the whole announcement including
+  the primary button fits with no scrolling. See `master_plan.md` §1F.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

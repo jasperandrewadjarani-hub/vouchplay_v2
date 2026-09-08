@@ -137,6 +137,19 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // Site-wide announcement banner (handover §30.7). When enabled, shown to every visitor.
   announcement_banner_enabled: false,
   announcement_banner: '',
+
+  // Launch / campaign welcome modal. Shown once per visitor per version, on any route, while enabled.
+  // Copy is Admin-editable so a campaign can change without a deploy; bump the version to re-show it.
+  welcome_modal_enabled: false,
+  welcome_modal_version: '2026-09-08',
+  welcome_modal_headline: 'Welcome to VouchPlay!',
+  welcome_modal_subhead: 'Be part of the movement.',
+  welcome_modal_event_label: 'Upcoming event',
+  welcome_modal_event_name: 'B-Steel Hermosa 2026 Grand Pickleball Tournament - Rise of Empires',
+  welcome_modal_detail: 'Registration opens Sep 9 at 5:00 PM.',
+  welcome_modal_cta_note: 'Sign-up now to register tomorrow.',
+  welcome_modal_image_url: '',
+  welcome_modal_link_url: '',
 } as const;
 
 export type SystemSettingsKey = keyof typeof DEFAULT_SYSTEM_SETTINGS;

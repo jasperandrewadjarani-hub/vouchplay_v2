@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.18
+# VouchPlay Master Product & Code Execution Handover v1.19
 
-_(File retains its `…v1.1.md` name; content is v1.18 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.19 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.19 (2026-09-08)
+- **Launch welcome pop-up (Admin-controlled campaign dialog).** A near-full-screen, one-tap-dismissible
+  announcement shown once per visitor per version on whichever route a shared link lands on, added for
+  the public launch ahead of B-Steel Hermosa 2026 - Rise of Empires. Every element (copy, image, event
+  link, version, on/off) is a `system_settings` value, so a campaign can be changed, re-shown, or
+  switched off **without a deploy** - required because the message must change the moment registration
+  opens. Settings only; no migration. It renders only after mount because the "seen" flag is in
+  `localStorage`, keeping it free of hydration mismatches. **Locked copy rule: the pop-up must never
+  state or imply that signing up reserves a slot** - it does not, consistent with the interest flow -
+  and event timing must use an absolute date, never "tomorrow", because the dialog can be seen after
+  midnight. The shared `Modal` gained a `size="lg"` variant and a 44 px labelled close control.
 
 ## v1.18 (2026-09-08)
 - **Phase 14A Recruitment / Sponsorship foundation (implemented; needs migration 0023 to activate).**

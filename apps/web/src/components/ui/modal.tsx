@@ -12,11 +12,14 @@ export function Modal({
   subtitle,
   onClose,
   children,
+  size = 'md',
 }: {
   title: string;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;
+  /** 'lg' is a near-full-screen announcement surface; 'md' is the default dialog. */
+  size?: 'md' | 'lg';
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -35,21 +38,33 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="border-border bg-surface max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl"
+        className={`border-border bg-surface w-full overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl ${
+          size === 'lg' ? 'max-h-[94dvh] max-w-2xl sm:p-6' : 'max-h-[90dvh] max-w-md'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-foreground text-lg font-semibold">{title}</h2>
-            {subtitle && <p className="text-foreground-muted text-sm">{subtitle}</p>}
+            <h2
+              className={`text-foreground font-semibold ${
+                size === 'lg' ? 'text-xl sm:text-2xl' : 'text-lg'
+              }`}
+            >
+              {title}
+            </h2>
+            {subtitle && (
+              <p className={`text-foreground-muted ${size === 'lg' ? 'text-base' : 'text-sm'}`}>
+                {subtitle}
+              </p>
+            )}
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="text-foreground-muted hover:text-foreground rounded-lg p-1"
+            className="text-foreground-muted hover:text-foreground hover:bg-surface-muted -m-1.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2"
           >
-            <X size={18} aria-hidden />
+            <X size={20} aria-hidden />
           </button>
         </div>
         {children}
