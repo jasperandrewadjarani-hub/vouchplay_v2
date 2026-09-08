@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Public, privacy-safe build identifier for client error telemetry (short commit SHA on Vercel).
+  env: { NEXT_PUBLIC_DEPLOY_VERSION: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev' },
   // Lint runs as its own CI step; don't let it gate the production build (Next 15 lints on build).
   eslint: { ignoreDuringBuilds: true },
   // Server Actions handle file uploads (avatars 2MB, club logos 2MB, tournament covers 4MB, payment

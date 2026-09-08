@@ -109,6 +109,11 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   demand: TournamentDemandDTO;
   isOwner: boolean;
   canManage: boolean;
+  /** Organizer-only: short-lived signed URL for the saved payment QR, or null if none saved. Never
+   * populated for a viewer without canManage (handover §Payment QR - private, never public). */
+  paymentQrUrl: string | null;
+  /** Single tournament-wide club representation lock, or null when unset (handover Phase 13.5). */
+  clubLockAt: string | null;
 }
 
 const SEX_LABEL: Record<string, string> = {
@@ -216,4 +221,5 @@ export const TOURNAMENT_CARD_COLUMNS =
 export const TOURNAMENT_DETAIL_COLUMNS =
   `${TOURNAMENT_CARD_COLUMNS}, description, venue_name, address_text, timezone, ` +
   'registration_open_at, registration_close_at, contact, terms_text, payment_instructions, payment_methods, ' +
-  'owner_organizer_id, max_divisions_per_player, max_clubs_per_player, club_representation_required, verified_clubs_only';
+  'owner_organizer_id, max_divisions_per_player, max_clubs_per_player, club_representation_required, ' +
+  'verified_clubs_only, payment_qr_path, club_lock_at';

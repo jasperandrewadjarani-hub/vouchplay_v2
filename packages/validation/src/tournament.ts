@@ -23,6 +23,9 @@ export const tournamentCreateSchema = z.object({
   termsText: optionalText(8000),
   paymentInstructions: optionalText(2000),
   paymentMethods: optionalText(300),
+  // Single tournament-wide club representation lock (handover Phase 13.5). Optional date/time; no
+  // per-division exception. Empty clears the lock.
+  clubLockAt: optionalDate,
 });
 export type TournamentCreateInput = z.infer<typeof tournamentCreateSchema>;
 

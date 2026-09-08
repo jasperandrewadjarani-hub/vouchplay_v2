@@ -5,6 +5,7 @@ import { partnerInviteSchema } from '@vouchplay/validation';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
+import { viewerIsStaff } from '@/lib/moderation/staff';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { TOURNAMENTS_LIST_TAG, tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
@@ -573,6 +574,8 @@ export async function setClubRepresentations(
       .maybeSingle();
     const tourn = t as { club_lock_at: string | null; max_clubs_per_player: number } | null;
     if (!tourn) return { error: 'Tournament not found.' };
+    // Single tournament-wide deadline (handover Phase 13.5). Edits are allowed even after payment
+    // submission or confirmation, but never after this lock; only an organizer/Admin can override.
     if (tourn.club_lock_at && new Date(tourn.club_lock_at) < new Date()) {
       return { error: 'Club selections are locked. Contact the organizer for changes.' };
     }
@@ -595,6 +598,16 @@ export async function setClubRepresentations(
       }
     }
 
+    // Snapshot the prior non-override selection for the immutable audit record.
+    const { data: priorRows } = await svc
+      .from('tournament_player_club_representations')
+      .select('club_id, display_order')
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', user.id)
+      .eq('organizer_override', false)
+      .order('display_order');
+    const priorIds = ((priorRows ?? []) as { club_id: string }[]).map((r) => r.club_id);
+
     // Replace the player's non-override representations for this tournament.
     await svc
       .from('tournament_player_club_representations')
@@ -614,11 +627,99 @@ export async function setClubRepresentations(
       const { error } = await svc.from('tournament_player_club_representations').insert(rows);
       if (error) return { error: 'Could not save your club selection.' };
     }
+    await svc.from('audit_logs').insert({
+      actor_id: user.id,
+      actor_role: 'player',
+      action: 'club_representation_updated',
+      entity_type: 'tournament',
+      entity_id: tournamentId,
+      before_snapshot: { player_id: user.id, club_ids: priorIds },
+      after_snapshot: { player_id: user.id, club_ids: ids },
+    });
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Club representation updated.' };
+}
+
+/**
+ * Post-lock organizer/Admin override of a player's club representation (handover Phase 13.5). Allowed
+ * after the tournament-wide club lock only for an authorized organizer (edit permission) or staff
+ * Admin, requires a reason, and appends an immutable audit record. It sets the player's clubs but
+ * never changes their team, division, fee, payment state, or eligibility.
+ */
+export async function overrideClubRepresentations(
+  tournamentId: string,
+  playerId: string,
+  clubIds: string[],
+  reason: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 4) return { error: 'Add a short reason for this override.' };
+
+  const [organizer, staff] = await Promise.all([
+    authorizeOrganizer(user.id, tournamentId, 'edit'),
+    viewerIsStaff(),
+  ]);
+  if (!organizer && !staff) {
+    return { error: 'You do not have permission to override club representation.' };
+  }
+
+  const svc = createServiceClient();
+  try {
+    const { data: t } = await svc
+      .from('tournaments')
+      .select('max_clubs_per_player')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    const tourn = t as { max_clubs_per_player: number } | null;
+    if (!tourn) return { error: 'Tournament not found.' };
+    const ids = Array.from(new Set(clubIds)).slice(0, tourn.max_clubs_per_player);
+
+    const { data: priorRows } = await svc
+      .from('tournament_player_club_representations')
+      .select('club_id')
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId)
+      .order('display_order');
+    const priorIds = ((priorRows ?? []) as { club_id: string }[]).map((r) => r.club_id);
+
+    await svc
+      .from('tournament_player_club_representations')
+      .delete()
+      .eq('tournament_id', tournamentId)
+      .eq('player_id', playerId);
+    if (ids.length > 0) {
+      const rows = ids.map((club_id, i) => ({
+        tournament_id: tournamentId,
+        player_id: playerId,
+        club_id,
+        display_order: i + 1,
+        membership_verified_at_selection: false,
+        organizer_override: true,
+        override_reason: trimmedReason,
+        created_by: user.id,
+      }));
+      const { error } = await svc.from('tournament_player_club_representations').insert(rows);
+      if (error) return { error: 'Could not save the override.' };
+    }
+    await svc.from('audit_logs').insert({
+      actor_id: user.id,
+      actor_role: staff && !organizer ? 'admin' : 'organizer',
+      action: 'club_representation_override',
+      entity_type: 'tournament',
+      entity_id: tournamentId,
+      before_snapshot: { player_id: playerId, club_ids: priorIds },
+      after_snapshot: { player_id: playerId, club_ids: ids, reason: trimmedReason },
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Club representation override saved.' };
 }
 
 // ---------------------------------------------------------------------------

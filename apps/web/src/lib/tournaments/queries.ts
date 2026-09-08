@@ -16,7 +16,7 @@ import {
   type AnnouncementDTO,
   type TournamentDemandDTO,
 } from './dto';
-import { avatarUrl } from '@/lib/storage';
+import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { loadSettingNumber } from '@/lib/settings';
 
 export const TOURNAMENTS_LIST_TAG = 'tournaments:list';
@@ -410,6 +410,21 @@ export async function getTournamentBySlug(
 
     const isOwner = viewer.viewerId === row.owner_organizer_id;
     const isCo = orgRows.some((o) => o.user_id === viewer.viewerId);
+    const canManage = isOwner || isCo || viewer.isStaff;
+
+    // Organizer-only: never mint or expose a signed QR URL to a viewer who cannot manage this
+    // tournament (handover - payment QR is private, visible only in authenticated/authorized steps).
+    let paymentQrUrl: string | null = null;
+    if (canManage && row.payment_qr_path) {
+      // 5-minute TTL: long enough for an organizer to view/confirm the saved QR on this page
+      // without reloading, short enough to stay a private, non-persistent link (never public).
+      paymentQrUrl =
+        (
+          await createServiceClient()
+            .storage.from(PAYMENT_PROOFS_BUCKET)
+            .createSignedUrl(row.payment_qr_path, 300)
+        ).data?.signedUrl ?? null;
+    }
     const announcements: AnnouncementDTO[] = (
       (annRes.data ?? []) as Array<{
         id: string;
@@ -452,7 +467,9 @@ export async function getTournamentBySlug(
       myInterest,
       demand,
       isOwner,
-      canManage: isOwner || isCo || viewer.isStaff,
+      canManage,
+      paymentQrUrl,
+      clubLockAt: row.club_lock_at ?? null,
     };
   } catch {
     return null;

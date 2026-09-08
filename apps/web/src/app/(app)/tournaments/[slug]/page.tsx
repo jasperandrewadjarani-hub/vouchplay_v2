@@ -12,6 +12,7 @@ import { TournamentDemandSummary } from '@/components/tournaments/demand-summary
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { RegistrationPanel } from '@/components/tournaments/registration-panel';
+import { MyRegistrationsSummary } from '@/components/tournaments/my-registrations-summary';
 import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -156,6 +157,9 @@ export default async function TournamentPage({ params }: Params) {
           <TournamentDemandSummary demand={t.demand} />
         </div>
       </header>
+
+      {/* Default-collapsed summary of the player's own active entries, immediately after details. */}
+      {authed && regState && <MyRegistrationsSummary state={regState} divisions={t.divisions} />}
 
       {/* Existing registration leads the signed-in player journey; shared links still target this id. */}
       {authed && regState && (

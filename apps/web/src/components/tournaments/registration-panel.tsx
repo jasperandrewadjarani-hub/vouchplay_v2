@@ -61,11 +61,12 @@ export function RegistrationPanel({
   return (
     <section className="border-primary/30 bg-primary/5 rounded-2xl border p-4">
       <h2 className="text-foreground mb-1 text-base font-semibold">
-        {hasRegistration ? 'My registration' : 'Register'}
+        {hasRegistration ? 'Your entries and divisions' : 'Register'}
       </h2>
       {hasRegistration && (
         <p className="text-foreground-muted mb-3 text-xs">
-          Your active entry is first. Other divisions stay collapsed until you open them.
+          Your active entries are first. You can enter more than one division. Other divisions stay
+          collapsed until you open them.
         </p>
       )}
 

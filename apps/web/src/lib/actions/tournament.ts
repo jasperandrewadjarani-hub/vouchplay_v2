@@ -248,6 +248,7 @@ export async function updateTournament(
     termsText: formData.get('termsText') ?? '',
     paymentInstructions: formData.get('paymentInstructions') ?? '',
     paymentMethods: formData.get('paymentMethods') ?? '',
+    clubLockAt: formData.get('clubLockAt') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -271,6 +272,7 @@ export async function updateTournament(
       terms_text: v.termsText || null,
       payment_instructions: v.paymentInstructions || null,
       payment_methods: v.paymentMethods || null,
+      club_lock_at: toIso(formData.get('clubLockAt')),
     };
     let uploadedCoverPath: string | null = null;
     let uploadedPaymentQrPath: string | null = null;

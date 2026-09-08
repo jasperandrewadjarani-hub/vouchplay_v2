@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TournamentActionState } from '@/lib/actions/tournament';
 import { Field, Input, Select, FormError, FormMessage } from '@/components/ui/field';
@@ -23,6 +23,10 @@ export interface TournamentFormInitial {
   paymentInstructions?: string;
   paymentMethods?: string;
   coverUrl?: string;
+  /** Short-lived signed URL for the currently saved payment QR, if any (organizer-only read). */
+  paymentQrUrl?: string;
+  /** Single tournament-wide club representation lock, as a datetime-local string. */
+  clubLockAt?: string;
 }
 
 const textarea =
@@ -47,17 +51,40 @@ export function TournamentForm({
   const [state, formAction] = useActionState(action, empty);
   const [coverPreview, setCoverPreview] = useState<string | null>(initial.coverUrl ?? null);
   const [selectedCoverName, setSelectedCoverName] = useState<string | null>(null);
+  const [qrPreview, setQrPreview] = useState<string | null>(initial.paymentQrUrl ?? null);
+  const [selectedQrName, setSelectedQrName] = useState<string | null>(null);
+  const [qrJustSaved, setQrJustSaved] = useState(false);
+  const qrSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (state.ok) {
       setSelectedCoverName(null);
+      if (qrSubmittedRef.current) setQrJustSaved(true);
+      qrSubmittedRef.current = false;
+      setSelectedQrName(null);
       if (refreshOnSuccess) router.refresh();
     }
-  }, [state.ok, refreshOnSuccess, router]);
+  }, [state, refreshOnSuccess, router]);
 
   useEffect(() => {
     if (!selectedCoverName) setCoverPreview(initial.coverUrl ?? null);
   }, [initial.coverUrl, selectedCoverName]);
+
+  useEffect(() => {
+    if (!selectedQrName) setQrPreview(initial.paymentQrUrl ?? null);
+  }, [initial.paymentQrUrl, selectedQrName]);
+
+  useEffect(() => {
+    const timer = qrJustSaved ? setTimeout(() => setQrJustSaved(false), 6000) : undefined;
+    return () => clearTimeout(timer);
+  }, [qrJustSaved]);
+
+  useEffect(
+    () => () => {
+      if (qrPreview?.startsWith('blob:')) URL.revokeObjectURL(qrPreview);
+    },
+    [qrPreview],
+  );
 
   useEffect(
     () => () => {
@@ -67,7 +94,13 @@ export function TournamentForm({
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form
+      action={formAction}
+      onSubmit={() => {
+        qrSubmittedRef.current = Boolean(selectedQrName);
+      }}
+      className="space-y-4"
+    >
       <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
       <FormError>{state.error}</FormError>
 
@@ -135,6 +168,20 @@ export function TournamentForm({
         </div>
       )}
       {!minimal && (
+        <Field
+          label="Club selection lock"
+          htmlFor="clubLockAt"
+          hint="After this time players cannot change the clubs they represent. Leave empty to allow changes until the tournament runs."
+        >
+          <Input
+            id="clubLockAt"
+            name="clubLockAt"
+            type="datetime-local"
+            defaultValue={initial.clubLockAt ?? ''}
+          />
+        </Field>
+      )}
+      {!minimal && (
         <>
           <Field label="Description" htmlFor="description">
             <textarea
@@ -197,15 +244,44 @@ export function TournamentForm({
           <Field
             label="Payment QR"
             htmlFor="paymentQr"
-            hint="Private QR image shown only during payment. PNG, JPG, or WebP up to 5 MB."
+            hint="Private QR image shown only to a registrant during payment. PNG, JPG, or WebP up to 5 MB."
           >
-            <input
-              id="paymentQr"
-              name="paymentQr"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
-            />
+            <div className="space-y-3">
+              {qrPreview && (
+                <div className="border-border bg-surface-muted h-40 w-40 overflow-hidden rounded-xl border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrPreview}
+                    alt={
+                      selectedQrName ? 'Selected payment QR preview' : 'Current saved payment QR'
+                    }
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              )}
+              <input
+                id="paymentQr"
+                name="paymentQr"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  qrSubmittedRef.current = false;
+                  setSelectedQrName(file?.name ?? null);
+                  setQrPreview(file ? URL.createObjectURL(file) : (initial.paymentQrUrl ?? null));
+                }}
+                className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
+              />
+              <p className="text-foreground-muted text-xs" aria-live="polite">
+                {qrJustSaved
+                  ? 'Payment QR saved. It is private and visible only to a registrant during payment.'
+                  : selectedQrName
+                    ? `Ready to upload: ${selectedQrName}`
+                    : qrPreview
+                      ? 'Saved and private. Choose a new image only to replace it.'
+                      : 'No payment QR saved yet.'}
+              </p>
+            </div>
           </Field>
           <Field
             label="Cover photo (optional)"

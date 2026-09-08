@@ -97,7 +97,7 @@ export default async function HomePage() {
                 Community leaderboards
               </h2>
               <p className="text-foreground-muted mt-1 max-w-2xl text-sm">
-                Participation and genuine support-not raw STS, ratings, or volume.
+                Ranked by participation and genuine support, not raw STS, ratings, or volume.
               </p>
             </div>
             <ButtonLink href="/leaderboards" variant="secondary">

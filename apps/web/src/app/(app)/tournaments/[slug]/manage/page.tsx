@@ -117,6 +117,8 @@ export default async function ManageTournamentPage({ params }: Params) {
             paymentInstructions: t.paymentInstructions ?? '',
             paymentMethods: t.paymentMethods ?? '',
             coverUrl: t.coverUrl ?? '',
+            paymentQrUrl: t.paymentQrUrl ?? '',
+            clubLockAt: toLocalInput(t.clubLockAt),
           }}
         />
       </section>

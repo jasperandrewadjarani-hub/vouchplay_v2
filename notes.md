@@ -1244,7 +1244,56 @@ Getting the first deploy up hit two issues:
     migration is required. Phase 14 handover is unchanged because this is a cross-cutting
     pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
 
+- **2026-09-08** - **Phase 13.5 implemented locally (Tournament reliability + registration
+  flexibility). NOT pushed - awaiting Jasper's go-ahead.** No new migration required: live schema
+  audit (`scripts/phase13-5-audit.mjs`) confirmed `tournaments.payment_qr_path`, `club_lock_at`,
+  `max_divisions_per_player`, `divisions.max_entries_per_player`, `organizer_override` +
+  `override_reason` columns, the private `payment-proofs` bucket, and settings all already live.
+  Migration 0020 is effectively already applied (payment_qr_path present AND populated with a real
+  saved QR object).
+  - **Payment QR:** root cause was organizer-side, not upload. The upload/replace path was already
+    transactional; the failure was that the saved QR had no reload confirmation (file input clears on
+    reload) and the detail column set never selected `payment_qr_path`, so the manage form couldn't
+    prove persistence. Added `payment_qr_path`/`club_lock_at` to `TOURNAMENT_DETAIL_COLUMNS`, a
+    canManage-gated 5-minute signed `paymentQrUrl` in the detail DTO (path never leaves the server;
+    never minted for non-managers), and a persistent private-QR preview + "saved" confirmation in the
+    tournament form. Player payment path already minted a 60s signed QR URL correctly.
+  - **Long-idle browser:** `PageResumeRefresh` already existed and is mounted. Added the missing
+    route-aware `(app)/error.tsx` (retry + auth-stale sign-in/resume link) and root `global-error.tsx`,
+    a privacy-safe `/api/client-error` telemetry sink (allowlisted fields only: route, digest, error
+    name, visibility, persistedRestore, authStale, deployVersion, scope - never message/tokens/PII),
+    and a build-time `NEXT_PUBLIC_DEPLOY_VERSION`. Pure `error-telemetry.ts` + 4 unit tests.
+  - **Club representation:** `setClubRepresentations` already enforced the single tournament-wide
+    `club_lock_at` and was independent of payment/confirmation state (edit allowed after payment). Added
+    an immutable `audit_logs` record on every player edit, a new organizer/Admin `overrideClubRepresentations`
+    action (requires a reason, writes `organizer_override=true`/`override_reason`, appends audit, never
+    touches team/division/fee/payment/eligibility), and an organizer club-lock date/time control in the
+    manage form (single all-divisions lock, no per-division exception).
+  - **Multiple entries:** already fully supported - no one-per-tournament guard exists anywhere;
+    `register_team`/`registerSolo` are per-division and the same-player/same-division prohibition is
+    enforced procedurally (doubles `partner_conflict`, singles team-reuse + `already_registered`). No
+    schema change needed.
+  - **My registrations (N):** new default-collapsed `MyRegistrationsSummary` (native details/summary,
+    icon+text status never colour-alone, keyboard/SR accessible) placed immediately after tournament
+    details; the registration panel below was de-duplicated to "Your entries and divisions" with
+    plural-safe copy.
+  - **Home copy:** no em dashes anywhere in app source (verified). Fixed the one awkward
+    "support-not" hyphen-as-dash on Home to a clean sentence.
+  - **Gates green:** typecheck, lint, tests (web 30 incl. +4 error-telemetry, config 19, core 95),
+    format, Next 15.5.25 build (42 pages, up from 40 with the client-error route + error boundaries).
+    Direct anon/abuse checks `scripts/phase13-5-abuse.mjs` pass 7/7 (private QR object + signed-URL
+    denied, club reps + audit_logs RLS-blocked, privileged RPCs permission-denied, registration insert
+    RLS-denied). Signed-out browser smoke of Home + a public tournament page: clean console, correct
+    render, summary correctly absent for anon.
+  - **Remaining before "live":** Jasper's go-ahead to commit/push `main`; wait for Vercel Ready;
+    both-domain HTTP + browser verification; controlled authenticated organizer/player browser tests
+    (QR upload/save/hard-reload/replace, player proof screen, idle/BFCache/expired-auth, two-division
+    registration + same-division rejection, club edit before/after lock + reasoned override, My
+    registrations expansion). No SQL for Jasper to apply this slice.
+
 ## Next up
+- **Phase 13.5 (this slice):** code complete + local gates green; awaiting Jasper's push go-ahead and
+  controlled authenticated browser verification. No migration to apply.
 - **Migration 0021 applied and verified:** Jasper ran `scripts/apply-0021.sql` against
   `itrosesiywpbaxtmucbb` and returned `registration_change_settings=2`,
   `registration_change_functions=4`, and `card_engagement_function=1`. Tournament-card engagement
@@ -1252,9 +1301,10 @@ Getting the first deploy up hit two issues:
   `docs/PHASE_13_5_TOURNAMENT_RELIABILITY_AND_REGISTRATION_FLEXIBILITY_HANDOVER.md`; do not treat
   the planned QR, long-idle, multiple-entry, club-lock, registration-summary, or Home-copy changes as
   implemented yet.
-- **Apply migration 0020 before payment QR use:** Jasper runs `scripts/apply-0020.sql` against
-  `itrosesiywpbaxtmucbb` and returns `payment_qr_column=1`. The QR is private and signed during the
-  existing manual proof-and-review payment step. It is not a gateway or payment confirmation.
+- ~~**Apply migration 0020 before payment QR use**~~ - DONE. Live audit 2026-09-08 confirmed
+  `payment_qr_path` exists AND is populated (a real saved QR object), so 0020 is already applied
+  (`payment_qr_column=1`). The QR is private and signed during the existing manual proof-and-review
+  payment step. It is not a gateway or payment confirmation.
 - **Apply migration 0019 before demand launch:** Jasper runs `scripts/apply-0019.sql` against
   `itrosesiywpbaxtmucbb` and returns `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and
   `demand_direct_policies=0`. Run direct anon/auth RLS denial checks afterwards; only then is
