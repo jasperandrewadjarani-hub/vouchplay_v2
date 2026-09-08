@@ -98,7 +98,7 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   leaderboard_component_cap: 100,
   leaderboard_club_movement_notify_places: 3,
   leaderboard_min_age: 18,
-  leaderboard_exclude_unknown_dob: true,
+  leaderboard_exclude_unknown_dob: false,
   leaderboard_month_days: 30,
   leaderboard_season_start: '01-01',
   leaderboard_city_region_map: '{}',

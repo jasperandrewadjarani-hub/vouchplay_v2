@@ -233,7 +233,7 @@ export async function getLeaderboardSettings(): Promise<LeaderboardSettings> {
     componentCap: num(m, 'leaderboard_component_cap'),
     clubMovementNotifyPlaces: num(m, 'leaderboard_club_movement_notify_places'),
     minAge: num(m, 'leaderboard_min_age'),
-    excludeUnknownDob: bool('leaderboard_exclude_unknown_dob', true),
+    excludeUnknownDob: bool('leaderboard_exclude_unknown_dob', false),
     monthDays: num(m, 'leaderboard_month_days'),
     seasonStart:
       typeof m.leaderboard_season_start === 'string' ? m.leaderboard_season_start : '01-01',

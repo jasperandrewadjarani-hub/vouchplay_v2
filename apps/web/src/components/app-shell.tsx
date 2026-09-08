@@ -3,6 +3,7 @@ import { Wrench, Megaphone } from 'lucide-react';
 import { Header } from './header';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
+import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 
@@ -24,6 +25,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh">
+      <PageResumeRefresh />
       {showBanner && (
         <div className="vp-gradient text-white">
           <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-sm font-medium">

@@ -21,13 +21,48 @@ import {
  * Concise player card (handover §8.1). Renders only fields that are present ("Do not render empty
  * fields"). Community Skill is shown when available; otherwise the clearly-labeled Self-Rated band.
  */
-export function PlayerCard({ player, authed }: { player: PlayerCardDTO; authed: boolean }) {
+export function PlayerCard({
+  player,
+  authed,
+  compact = false,
+}: {
+  player: PlayerCardDTO;
+  authed: boolean;
+  compact?: boolean;
+}) {
   const profileHref = `/players/${player.slug}`;
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
     : player.selfRatedSkill
       ? { band: player.selfRatedSkill, source: 'self' as const }
       : null;
+
+  if (compact) {
+    return (
+      <Link
+        href={profileHref}
+        aria-label={`View ${player.displayName}'s profile`}
+        className="border-border bg-surface hover:border-primary/40 hover:bg-surface-muted focus-visible:outline-primary flex min-h-14 items-center gap-3 rounded-xl border p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+      >
+        <PlayerAvatar
+          url={player.avatarUrl}
+          initials={player.initials}
+          name={player.displayName}
+          size="sm"
+          className="ring-primary/15 shrink-0 ring-2 ring-offset-0"
+        />
+        <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
+          {player.displayName}
+        </span>
+        {(skill || player.sts != null) && (
+          <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+            <StsChip sts={player.sts} />
+          </span>
+        )}
+      </Link>
+    );
+  }
 
   return (
     <div className="border-border bg-surface vp-card flex flex-col gap-2.5 rounded-2xl border p-3.5">

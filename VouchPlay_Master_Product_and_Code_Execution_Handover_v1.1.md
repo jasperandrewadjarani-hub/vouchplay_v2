@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.10
+# VouchPlay Master Product & Code Execution Handover v1.11
 
-_(File retains its `…v1.1.md` name; content is v1.10 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.11 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -321,6 +321,13 @@ were deactivated, the evidence object was removed, and the clean build now has s
 with zero synthetic public entries. Production fixes include existing-factor MFA step-up, popup-safe
 evidence access, and public scope derivation from publicly eligible subjects only. `CRON_SECRET` is
 configured; repository gates and both-domain deployment verification are recorded in `notes.md`.
+
+**Leaderboard eligibility refinement (2026-09-08):** Date of birth is **not required** for a public
+leaderboard row. An otherwise eligible player whose DOB is unknown may rank; a supplied DOB below the
+configured minimum public age still excludes that player. This rule is controlled by the Admin setting
+`leaderboard_exclude_unknown_dob`, which now defaults to false and can be restored to conservative
+unknown-age exclusion if required. Migration 0018 applies the existing production setting change and
+an Admin rebuild publishes the revised snapshots.
 
 **Next:** confirm the next phase with JT - §16 Recruitment/Sponsorship + §16A Gamified Bidding; organizer
 dashboard depth (§26.6/§26.8/§26.9 + export ZIP); §13 Identity Verification; or notifications depth
@@ -919,8 +926,11 @@ Data, scoring, and trust guardrails:
   STS, vouch weight, private evidence, anonymous voucher identity, internal fraud scores, or exact
   anti-abuse thresholds.
 - A player can opt out of public leaderboards in Privacy while retaining a private momentum card.
-  Exclude minors by default, private/directory-hidden profiles, restricted/suspended/banned/deactivated
-  accounts, unresolved high-risk fraud entries, and ineligible/unverified clubs. Admin can pause a
+  Date of birth is optional for public ranking: exclude supplied minors by default, but do not exclude
+  an otherwise eligible player merely because DOB is unknown (`leaderboard_exclude_unknown_dob` defaults
+  false and remains an Admin override). Also exclude private/directory-hidden profiles,
+  restricted/suspended/banned/deactivated accounts, unresolved high-risk fraud entries, and
+  ineligible/unverified clubs. Admin can pause a
   category, exclude an entity with a reason, rebuild a snapshot, or roll back the active scoring version;
   each action is audited.
 - Rate-limit and flag reciprocal rings, synthetic tournaments, repeated low-diversity vouching, and
@@ -1021,6 +1031,16 @@ Default contents:
 - Vouch button.
 
 Do not render empty fields.
+
+### Compact directory view (2026-09-08)
+
+The Players directory offers a URL-preserved **Detailed cards / Compact list** selector. Detailed is
+the default and retains the complete §8.1 card. Compact list is a dense, tappable profile row for
+high-scan mobile use: small avatar, player name, labelled colour-coded Community or Self-Rated skill,
+and STS confidence when present. It deliberately omits city, club stacks, long badge rows, and inline
+vouch controls; the row opens the full profile, where the complete context and vouch action remain.
+The view choice preserves active filters and pagination, provides immediate pending feedback, and never
+changes directory ranking, DTO fields, privacy filtering, or public exposure.
 
 ## 8.2 Status Badges
 
@@ -3640,6 +3660,12 @@ Defaults:
 - suspend background refetch when browser tab is hidden,
 - use exponential backoff for transient failures,
 - stop retrying non-retryable 4xx errors.
+
+For App Router surfaces, register one shared resume listener in the shell. When a page returns from a
+hidden/suspended mobile state after a meaningful idle threshold (60 seconds) or from a persisted browser
+restore, trigger at most one deduplicated `router.refresh()` transition. Do not poll while hidden or
+refresh on every focus event. This recovers expired session/network/RSC state without turning ordinary
+directory and snapshot reads into realtime traffic.
 
 Avoid rendering the same profile card component with each card independently fetching clubs/vouch counts. List endpoint must return the card DTO in one bulk request.
 
@@ -6506,6 +6532,15 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.11 (2026-09-08)
+- **Optional leaderboard DOB:** unknown DOB no longer excludes an otherwise eligible public player;
+  supplied minors remain excluded. The existing Admin setting defaults false under migration 0018 and
+  remains the operational override.
+- **Mobile resume resilience:** defined a single deduplicated App Router refresh only after meaningful
+  hidden-tab suspension or persisted restore; no background polling or per-card refetching.
+- **Players compact view:** defined a shareable, accessible compact directory row with player identity,
+  labelled skill colour/source, and STS confidence, alongside the existing detailed cards.
 
 ## v1.10 (2026-09-08)
 - **Phase 13C production release:** completed the controlled Coach lifecycle through private evidence,

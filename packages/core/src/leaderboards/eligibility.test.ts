@@ -15,7 +15,7 @@ const base: PlayerLeaderboardEligibilityInput = {
   profilePrivate: false,
   leaderboardOptOut: false,
   dateOfBirth: '1990-05-10',
-  excludeUnknownDateOfBirth: true,
+  excludeUnknownDateOfBirth: false,
   minimumPublicAge: 18,
   hasPublicSlug: true,
   evaluatedAt: new Date('2026-05-09T12:00:00Z'),
@@ -34,11 +34,32 @@ describe('leaderboard privacy and eligibility', () => {
     ['directory hidden', { directoryHidden: true }, 'profile_private'],
     ['profile private', { profilePrivate: true }, 'profile_private'],
     ['public opt-out', { leaderboardOptOut: true }, 'opted_out'],
-    ['unknown DOB', { dateOfBirth: null }, 'age_unknown'],
     ['minor', { dateOfBirth: '2010-01-01' }, 'minor'],
   ] as const)('keeps %s private but eligible for private momentum', (_label, patch, code) => {
     expect(evaluatePlayerLeaderboardEligibility({ ...base, ...patch })).toEqual({
       exclusionCode: code,
+      privateEligible: true,
+      publicEligible: false,
+    });
+  });
+
+  it('keeps DOB optional for an otherwise eligible public player', () => {
+    expect(evaluatePlayerLeaderboardEligibility({ ...base, dateOfBirth: null })).toEqual({
+      exclusionCode: null,
+      privateEligible: true,
+      publicEligible: true,
+    });
+  });
+
+  it('allows an Admin to restore conservative unknown-DOB exclusion', () => {
+    expect(
+      evaluatePlayerLeaderboardEligibility({
+        ...base,
+        dateOfBirth: null,
+        excludeUnknownDateOfBirth: true,
+      }),
+    ).toEqual({
+      exclusionCode: 'age_unknown',
       privateEligible: true,
       publicEligible: false,
     });

@@ -1207,7 +1207,30 @@ Getting the first deploy up hit two issues:
     LEADER_V1 empty state, working CTA, accessible controls, 390 px dark/light rendering, no horizontal
     overflow, and no console warnings/errors. Project domains attached automatically.
 
+- **2026-09-08** - **Leaderboard eligibility + mobile resume + compact Players v1.11 staged.**
+  - **DOB is no longer a ranking prerequisite:** unknown DOB now defaults to eligible for an otherwise
+    public `LEADER_V1` player; a supplied minor DOB remains excluded. Added migration 0018 plus the
+    exact `scripts/apply-0018.sql` copy. Jasper must apply it and return
+    `unknown_dob_optional=1`, `leaderboard_setting_row=1`, then run an Admin rebuild or wait for the
+    scheduled snapshot before the changed production setting is claimed live.
+  - **Long-idle mobile behavior diagnosed and fixed:** mobile web apps normally suspend/restore unused
+    tabs, while the app previously had no `visibilitychange`/BFCache recovery. The shell now performs
+    one deduplicated App Router refresh only on a persisted restore or after 60 seconds hidden—no
+    background polling, focus thrash, or per-card fetches.
+  - **Players compact view:** `/players?view=compact` is an accessible URL-preserved list of avatar,
+    name, labelled colour-coded Community/Self-Rated skill, and STS. Detailed cards remain the default;
+    filters and pagination persist and compact rows link to the full profile for vouching/context.
+  - Updated locked master handover to content v1.11, root `master_plan.md`, and
+    `docs/PHASE_14_RECRUITMENT_SPONSORSHIP_AND_BIDDING_HANDOVER.md`. Local gates green: typecheck,
+    lint, tests (web 20, config 19, core 93), format, and Next 15.5.25 build (40 routes).
+
 ## Next up
+- **Apply migration 0018:** Jasper runs `scripts/apply-0018.sql` against
+  `itrosesiywpbaxtmucbb`, returns `unknown_dob_optional=1` and `leaderboard_setting_row=1`, then
+  triggers a leaderboard rebuild. Until then, the existing production setting retains conservative
+  unknown-DOB exclusion.
+- **Phase 14 decision:** use `docs/PHASE_14_RECRUITMENT_SPONSORSHIP_AND_BIDDING_HANDOVER.md` to choose
+  Recruitment/Sponsorship, full §16A Bidding, or remaining pilot hardening.
 - **Phase 13C + 13A + 13D:** ✅ COMPLETE and production-verified.
 - **PILOT PREP carry-over:** verify a real opted-in critical email; clear Supabase over-quota; run the
   full live dress rehearsal + native-Excel export gate; grant the Hermosa Cup organizer and enroll JT

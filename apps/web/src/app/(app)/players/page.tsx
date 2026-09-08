@@ -4,6 +4,7 @@ import { getViewerContext } from '@/lib/auth';
 import { listPlayers, type PlayerFilters } from '@/lib/players/queries';
 import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters, type ActiveFilters } from '@/components/players/search-filters';
+import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 
 export const metadata: Metadata = {
   title: 'Players',
@@ -40,7 +41,7 @@ function parseFilters(sp: SP): PlayerFilters {
   };
 }
 
-function toQueryString(f: PlayerFilters, page: number): string {
+function toQueryString(f: PlayerFilters, page: number, compact: boolean): string {
   const p = new URLSearchParams();
   if (f.q) p.set('q', f.q);
   if (f.city) p.set('city', f.city);
@@ -50,6 +51,7 @@ function toQueryString(f: PlayerFilters, page: number): string {
   if (f.coach) p.set('coach', '1');
   if (f.lookingForPartner) p.set('lookingForPartner', '1');
   if (f.openForSponsorship) p.set('openForSponsorship', '1');
+  if (compact) p.set('view', 'compact');
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
   return qs ? `?${qs}` : '';
@@ -58,6 +60,7 @@ function toQueryString(f: PlayerFilters, page: number): string {
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
+  const compact = one(sp.view) === 'compact';
   const viewer = await getViewerContext();
   const { players, total, page, pageCount } = await listPlayers(filters, viewer);
   const authed = viewer.viewerId !== null;
@@ -86,16 +89,21 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
 
       <SearchFilters current={active} />
 
-      <p className="text-foreground-muted text-sm" aria-live="polite">
-        {total === 0
-          ? 'No players match your search yet.'
-          : `${total} player${total === 1 ? '' : 's'}`}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-foreground-muted text-sm" aria-live="polite">
+          {total === 0
+            ? 'No players match your search yet.'
+            : `${total} player${total === 1 ? '' : 's'}`}
+        </p>
+        <PlayerViewToggle compact={compact} />
+      </div>
 
       {players.length > 0 ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div
+          className={compact ? 'space-y-2' : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'}
+        >
           {players.map((player) => (
-            <PlayerCard key={player.slug} player={player} authed={authed} />
+            <PlayerCard key={player.slug} player={player} authed={authed} compact={compact} />
           ))}
         </div>
       ) : (
@@ -108,7 +116,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
           {page > 1 ? (
             <Link
-              href={`/players${toQueryString(filters, page - 1)}`}
+              href={`/players${toQueryString(filters, page - 1, compact)}`}
               className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Previous
@@ -121,7 +129,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           </span>
           {page < pageCount ? (
             <Link
-              href={`/players${toQueryString(filters, page + 1)}`}
+              href={`/players${toQueryString(filters, page + 1, compact)}`}
               className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Next

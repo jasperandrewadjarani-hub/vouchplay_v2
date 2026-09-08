@@ -629,9 +629,10 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
   },
   {
     key: 'leaderboard_exclude_unknown_dob',
-    label: 'Exclude unknown date of birth',
+    label: 'Exclude players with unknown date of birth',
     group: 'leaderboards',
     kind: 'bool',
+    help: 'Off by default: date of birth is optional. Supplied minors remain excluded.',
   },
   {
     key: 'leaderboard_month_days',
