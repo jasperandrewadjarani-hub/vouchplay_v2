@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { registerSolo, registerTeam, withdrawRegistration } from '@/lib/actions/registration';
+import {
+  moveRegistrationDivision,
+  registerSolo,
+  registerTeam,
+  withdrawRegistration,
+} from '@/lib/actions/registration';
 
 const btn =
   'inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50';
@@ -13,13 +18,21 @@ export function RegisterActions({
   divisionId,
   teamId,
   format,
+  teamSize,
   registration,
+  divisions = [],
+  registrationOpen,
+  playerChangesConfigured,
 }: {
   tournamentId: string;
   divisionId: string;
   teamId?: string;
   format: 'singles' | 'doubles';
+  teamSize: number;
   registration?: { id: string; status: string } | null;
+  divisions?: Array<{ id: string; name: string; format: string; teamSize: number; status: string }>;
+  registrationOpen: boolean;
+  playerChangesConfigured: boolean;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
@@ -35,9 +48,22 @@ export function RegisterActions({
   }
 
   if (registration) {
-    const canWithdraw = !['withdrawn', 'cancelled', 'rejected'].includes(registration.status);
+    const canWithdraw =
+      registrationOpen && ['payment_pending', 'waitlisted'].includes(registration.status);
+    const moveOptions = divisions.filter(
+      (division) =>
+        division.id !== divisionId &&
+        division.status === 'open' &&
+        division.format === format &&
+        division.teamSize === teamSize,
+    );
+    const canMove =
+      playerChangesConfigured &&
+      registrationOpen &&
+      registration.status === 'payment_pending' &&
+      moveOptions.length > 0;
     return (
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <span className="text-foreground-muted text-xs">
           Your status:{' '}
           <span className="text-foreground font-medium">
@@ -49,13 +75,48 @@ export function RegisterActions({
             type="button"
             disabled={pending}
             onClick={() => {
-              if (confirm('Withdraw this registration?'))
+              if (confirm('Cancel this registration? This can release your slot.'))
                 run(() => withdrawRegistration(registration.id, tournamentId));
             }}
             className={`${btn} text-danger border-border w-fit border`}
           >
-            Withdraw
+            Cancel registration
           </button>
+        )}
+        {canMove && (
+          <label className="text-foreground-muted flex max-w-sm flex-col gap-1 text-xs">
+            Change division
+            <select
+              defaultValue=""
+              disabled={pending}
+              onChange={(event) => {
+                const targetDivisionId = event.target.value;
+                if (!targetDivisionId) return;
+                if (
+                  confirm('Move your complete team? The current payment deadline stays the same.')
+                ) {
+                  run(() =>
+                    moveRegistrationDivision(registration.id, targetDivisionId, tournamentId),
+                  );
+                }
+                event.currentTarget.value = '';
+              }}
+              className="border-border bg-surface text-foreground rounded-lg border px-2.5 py-1.5 text-sm"
+            >
+              <option value="">Choose another division</option>
+              {moveOptions.map((division) => (
+                <option key={division.id} value={division.id}>
+                  {division.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!canWithdraw && !canMove && (
+          <p className="text-foreground-muted text-xs">
+            Player changes are closed after payment activity, confirmation, the change lock, or
+            while the update is being enabled.
+          </p>
         )}
         {msg && <span className="text-foreground-muted text-xs">{msg}</span>}
       </div>
@@ -67,11 +128,11 @@ export function RegisterActions({
       <div className="flex flex-col gap-1">
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !registrationOpen}
           onClick={() => run(() => registerSolo(tournamentId, divisionId))}
           className={`${btn} vp-gradient w-fit text-white`}
         >
-          {pending ? 'Registering…' : 'Register'}
+          {pending ? 'Registering…' : registrationOpen ? 'Register' : 'Registration closed'}
         </button>
         {msg && <span className="text-foreground-muted text-xs">{msg}</span>}
       </div>
@@ -84,11 +145,11 @@ export function RegisterActions({
       <div className="flex flex-col gap-1">
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !registrationOpen}
           onClick={() => run(() => registerTeam(teamId, tournamentId))}
           className={`${btn} vp-gradient w-fit text-white`}
         >
-          {pending ? 'Registering…' : 'Register team'}
+          {pending ? 'Registering…' : registrationOpen ? 'Register team' : 'Registration closed'}
         </button>
         {msg && <span className="text-foreground-muted text-xs">{msg}</span>}
       </div>

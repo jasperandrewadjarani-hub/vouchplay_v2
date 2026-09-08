@@ -75,6 +75,12 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} accepted your partner invite`,
     (p) => `Your team is formed for ${tour(p)}.`,
   ),
+  partner_team_left: t(
+    'partners',
+    false,
+    (p) => `${who(p)} left your team`,
+    (p) => `Form a new team for ${tour(p)} if you still want to join.`,
+  ),
 
   // --- Registrations (§27.1 / §27.3) ---
   registration_submitted: t(

@@ -99,6 +99,50 @@ export interface TournamentListPage {
   pageCount: number;
 }
 
+interface TournamentCardEngagement {
+  interestedCount: number;
+  joiningCount: number;
+  viewerInterested: boolean;
+  viewerJoining: boolean;
+  engagementAvailable: boolean;
+}
+
+/** One bounded aggregate RPC for a visible card page; no per-card count queries or identities. */
+export async function withTournamentCardEngagement(
+  cards: TournamentCardDTO[],
+  viewerId: string | null,
+): Promise<TournamentCardDTO[]> {
+  if (cards.length === 0) return cards;
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc.rpc('get_tournament_card_engagement', {
+      p_tournament_ids: cards.map((card) => card.id).filter(Boolean),
+      p_viewer_id: viewerId,
+    });
+    if (error) throw error;
+    const byId = new Map<string, TournamentCardEngagement>();
+    for (const raw of (data ?? []) as Array<{
+      tournament_id: string;
+      interested_count: number;
+      joining_count: number;
+      viewer_interested: boolean;
+      viewer_joining: boolean;
+    }>) {
+      byId.set(raw.tournament_id, {
+        interestedCount: Number(raw.interested_count) || 0,
+        joiningCount: Number(raw.joining_count) || 0,
+        viewerInterested: raw.viewer_interested === true,
+        viewerJoining: raw.viewer_joining === true,
+        engagementAvailable: true,
+      });
+    }
+    return cards.map((card) => ({ ...card, ...(byId.get(card.id) ?? {}) }));
+  } catch {
+    // Migration 0021 has not landed yet, so card discovery stays available without the aggregates.
+    return cards;
+  }
+}
+
 async function fetchTournamentList(
   f: TournamentFilters,
   excludedSlugs: string[],
@@ -153,7 +197,7 @@ export async function listTournaments(
   const { rows, total } = await cached();
   const page = Math.max(1, filters.page ?? 1);
   return {
-    tournaments: rows.map(toTournamentCardDTO),
+    tournaments: rows.map((row) => toTournamentCardDTO(row)),
     total,
     page,
     pageSize: PAGE_SIZE,
@@ -205,7 +249,7 @@ export async function listManagedTournaments(
     if (hidden.length > 0) query = query.not('status', 'in', `(${hidden.join(',')})`);
 
     const { data } = await query.order('created_at', { ascending: false });
-    return ((data as TournamentRow[] | null) ?? []).map(toTournamentCardDTO);
+    return ((data as TournamentRow[] | null) ?? []).map((row) => toTournamentCardDTO(row));
   } catch {
     return [];
   }

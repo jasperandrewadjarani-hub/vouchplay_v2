@@ -41,6 +41,9 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // Slot & payment timing (handover §23.1, §24).
   slot_hold_minutes: 30,
   submitted_payment_review_grace_hours: 24,
+  // Player-controlled registration changes (§1D). The database RPC is authoritative.
+  player_registration_self_service_enabled: true,
+  player_registration_change_lock_hours_before_start: 24,
 
   // Privacy (handover §13.3).
   identity_file_retention_days_after_decision: 30,

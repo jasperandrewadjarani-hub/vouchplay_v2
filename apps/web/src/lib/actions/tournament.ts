@@ -896,14 +896,15 @@ export async function addCoOrganizer(
     const targetUserId = (target as { id: string } | null)?.id;
     if (!targetUserId) return { error: 'No player found with that handle.' };
     if (targetUserId === user.id) return { error: 'You already own this tournament.' };
-    const { data: isOrg } = await svc
+    const { data: eligibleRoles } = await svc
       .from('user_roles')
       .select('id')
       .eq('user_id', targetUserId)
       .eq('status', 'active')
       .in('role', ['organizer', 'admin', 'super_admin'])
-      .maybeSingle();
-    if (!isOrg) return { error: 'A co-organizer must have an approved Organizer role.' };
+      .limit(1);
+    if (!eligibleRoles || eligibleRoles.length === 0)
+      return { error: 'A co-organizer must have an approved Organizer role.' };
 
     const permissions: Record<string, boolean> = {};
     for (const key of PERM_KEYS) permissions[key] = bool(formData, `perm_${key}`);

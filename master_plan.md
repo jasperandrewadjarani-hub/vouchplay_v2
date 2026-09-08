@@ -61,6 +61,31 @@
   URL is shown only in the authenticated payment-proof step. It is not a gateway, does not confirm
   payment, and does not replace the existing proof upload and organizer review.
 
+## 1D. Player registration-first tournament management
+
+- A signed-in player with an active registration sees **My registration** immediately after the
+  tournament header, before the division browser. It shows division, team, status, payment action,
+  and concise safe management controls. It never exposes another player’s payment or private facts.
+- Tournament cards show separate aggregate **interested** and **joining** counts below place/date.
+  A signed-in viewer’s own interested or active-registration state is labelled with an icon and text;
+  neither state is inferred from colour alone.
+- The public division browser is collapsed by default. Expanding a division reveals its capacity bar,
+  per-player fee, eligibility guidance, partner search for doubles, and the appropriate registration
+  action. Registered players do not need to scan every division to find their own entry.
+- Player cancellation is available only while tournament registration is open and is auditable. A
+  division move is permitted only while the feature is enabled, registration is open, the entry is
+  still payment-pending with no submitted proof, the team fits the target division, and the target
+  has a real immediately available slot. The atomic operation retains the original hold deadline,
+  recalculates eligibility, and records old/new division facts. It never silently waitlists or
+  charges a player.
+- A partner cannot be unilaterally replaced after registration. Before payment proof is submitted,
+  the player may cancel the registration and form a new team; after proof, confirmation, lock, or
+  close, only the organizer may resolve a change. This prevents a teammate or payment record being
+  displaced without their knowledge. These limits are live Admin settings, not hardcoded.
+- The organizer picker accepts only active approved Organizer, Admin, or Super Admin accounts. The
+  server uses an existence check rather than a single-row assumption, so an account holding more
+  than one qualifying role is not falsely rejected.
+
 ## 1. Prompt Contract
 
 ### In scope
@@ -236,4 +261,3 @@ parse-validated, retained as PDFs, and never converted to images.
   the resume component, compact UI, and media pipeline are isolated, reversible source changes. Revert
   the release commit if a client lifecycle regression appears. Existing media remains intact; do not
   bulk-delete or rewrite it as part of rollback.
-

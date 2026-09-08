@@ -82,6 +82,23 @@ export async function loadSettingText(key: SystemSettingsKey, fallback = ''): Pr
   return typeof v === 'string' ? v : fallback;
 }
 
+/** Whether migration 0021 has installed the player-change policy rows. */
+export async function hasPlayerRegistrationChangePolicy(): Promise<boolean> {
+  try {
+    const supabase = createPublicClient();
+    const { data } = await supabase
+      .from('system_settings')
+      .select('key')
+      .in('key', [
+        'player_registration_self_service_enabled',
+        'player_registration_change_lock_hours_before_start',
+      ]);
+    return (data ?? []).length === 2;
+  } catch {
+    return false;
+  }
+}
+
 export interface SafetySettings {
   reportsPer24h: number;
   skillReviewsPer24h: number;

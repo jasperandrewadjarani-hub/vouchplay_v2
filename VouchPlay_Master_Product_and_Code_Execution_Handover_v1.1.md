@@ -95,6 +95,13 @@ for organizers; private managed records are opt-in and default-hide draft, cance
 Payment QR is a private signed image for the existing manual proof-and-review workflow, not a gateway
 or payment confirmation.
 
+**Registration-first refinement: staged (migration 0021 pending Jasper SQL Editor application).**
+Signed-in players see an existing entry immediately after tournament details. Tournament cards show
+separate interest and joining counts plus a text-and-icon viewer cue. Divisions stay collapsed until
+opened. Player cancellation and division changes are bounded, auditable, and payment-safe; a partner
+is never replaced unilaterally after registration. Co-organizer eligibility uses an existence check,
+so multiple qualifying roles do not trigger a false rejection.
+
 **Phase 3 - Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
 STS components, Skill-Verified, effective weights) - pure/deterministic, 11 unit tests incl.
 hand-computed cases. Migration 0004 applied (vouches, revisions, comments, requests,
@@ -6134,6 +6141,12 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.15 (2026-09-08)
+- **Registration-first tournament management:** active entries lead the signed-in player flow;
+  discovery cards expose aggregate interest/joining and personal state; divisions collapse by
+  default; cancellation, move, and partner boundaries are explicitly safe; and the co-organizer
+  role lookup accepts accounts with one or more qualifying active roles.
+
 ## v1.14 (2026-09-08)
 - **Writing and tournament UX:** locked no-em-dash copy, concise helper text, simple interest
   confirmation, demand/registration meters, per-player doubles fee display, integrated collapsible
@@ -6316,4 +6329,3 @@ Maintain a changelog at the bottom.
 - Defined UI/UX system.
 - Defined test, deployment, beta, and native rollout plan.
 - Marked document LOCKED FOR EXECUTION.
-

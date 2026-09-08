@@ -10,6 +10,10 @@ The pre-Phase-14 tournament refinement adds migration 0020 for private payment Q
 not change the Phase 14 decision. Payment QR supports the existing manual proof-and-review flow only;
 it is not a payment gateway or an automated confirmation mechanism.
 
+The subsequent registration-first refinement adds migration 0021 for an atomic player division move
+with payment, capacity, team-fit, and audit safeguards. It does not change Phase 14 scope. Broader
+partner matching and any payment gateway remain deferred.
+
 ## What is already live
 
 - Coach applications, AAL2 review, private evidence, active-role badge, Coach vouch, and audited
@@ -80,4 +84,3 @@ Choose one:
   `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and `demand_direct_policies=0`. Then run
   the direct anon/auth/service RLS abuse check for `tournament_demand_interests` before enabling a
   public launch tournament.
-

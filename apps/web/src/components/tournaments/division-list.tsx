@@ -13,7 +13,7 @@ function moneyPerPlayer(division: DivisionDTO): string {
 /** Public division facts and capacity, progressively disclosed to keep a long tournament readable. */
 export function DivisionList({ divisions }: { divisions: DivisionDTO[] }) {
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
-  const [open, setOpen] = useState<string | null>(visible[0]?.id ?? null);
+  const [open, setOpen] = useState<string | null>(null);
   if (visible.length === 0)
     return <p className="text-foreground-muted text-sm">No divisions published yet.</p>;
   return (

@@ -6,7 +6,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
-import { tournamentTag } from '@/lib/tournaments/queries';
+import { TOURNAMENTS_LIST_TAG, tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import {
@@ -40,6 +40,17 @@ const RPC_ERRORS: Record<string, string> = {
   partner_conflict: 'One of you is already on a team in this division.',
   invalid_release_status: 'Invalid action.',
   registration_not_found: 'That registration could not be found.',
+  player_changes_locked: 'Player registration changes are closed. Contact the organizer for help.',
+  player_cancellation_not_allowed: 'This registration can no longer be cancelled by a player.',
+  player_division_change_not_allowed: 'Only an unpaid pending registration can change division.',
+  payment_already_started:
+    'This entry already has payment activity. Contact the organizer for help.',
+  target_division_not_found: 'That division is unavailable.',
+  target_division_closed: 'That division is not open.',
+  target_division_team_mismatch: 'Your team does not fit that division.',
+  target_division_full: 'That division no longer has an available slot.',
+  same_division: 'Choose a different division.',
+  team_has_active_registration: 'Cancel the active registration before changing partner.',
 };
 function friendly(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
@@ -113,6 +124,7 @@ async function revalTournament(tournamentId: string) {
     .maybeSingle();
   const slug = (data as { slug: string } | null)?.slug;
   if (slug) revalidateTag(tournamentTag(slug));
+  revalidateTag(TOURNAMENTS_LIST_TAG);
 }
 
 // ---------------------------------------------------------------------------
@@ -417,27 +429,48 @@ export async function withdrawRegistration(
   if (!user) return { error: 'Please sign in.' };
   const svc = createServiceClient();
   try {
-    // Authz: caller must be a member of the registration's team.
-    const { data: reg } = await svc
-      .from('registrations')
-      .select('team_id')
-      .eq('id', registrationId)
-      .maybeSingle();
-    const teamId = (reg as { team_id: string } | null)?.team_id;
-    if (!teamId) return { error: 'Registration not found.' };
-    const { data: member } = await svc
-      .from('team_members')
-      .select('id')
-      .eq('team_id', teamId)
-      .eq('player_id', user.id)
-      .maybeSingle();
-    if (!member) return { error: 'You are not on this team.' };
-
-    const { data, error } = await svc.rpc('release_slot', {
-      p_registration_id: registrationId,
-      p_actor: user.id,
-      p_new_status: 'withdrawn',
-    });
+    const { data: policyRows } = await svc
+      .from('system_settings')
+      .select('key')
+      .in('key', [
+        'player_registration_self_service_enabled',
+        'player_registration_change_lock_hours_before_start',
+      ]);
+    const policyReady = (policyRows ?? []).length === 2;
+    let data: unknown;
+    let error: { message: string } | null;
+    if (policyReady) {
+      const result = await svc.rpc('player_cancel_registration', {
+        p_registration_id: registrationId,
+        p_actor: user.id,
+      });
+      data = result.data;
+      error = result.error;
+    } else {
+      // Pre-0021 compatibility: retain the existing server-authorized cancellation path while the
+      // new policy RPC is deliberately unavailable.
+      const { data: reg } = await svc
+        .from('registrations')
+        .select('team_id')
+        .eq('id', registrationId)
+        .maybeSingle();
+      const teamId = (reg as { team_id: string } | null)?.team_id;
+      if (!teamId) return { error: 'Registration not found.' };
+      const { data: member } = await svc
+        .from('team_members')
+        .select('id')
+        .eq('team_id', teamId)
+        .eq('player_id', user.id)
+        .maybeSingle();
+      if (!member) return { error: 'You are not on this team.' };
+      const result = await svc.rpc('release_slot', {
+        p_registration_id: registrationId,
+        p_actor: user.id,
+        p_new_status: 'withdrawn',
+      });
+      data = result.data;
+      error = result.error;
+    }
     if (error) return { error: friendly(error.message) };
     // Notify organizers of the withdrawal, and any promoted team (§27.1, §27.3).
     const [organizers, tm] = await Promise.all([
@@ -458,6 +491,68 @@ export async function withdrawRegistration(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Registration withdrawn.' };
+}
+
+/** Move an unpaid pending team into an immediately available compatible division (§1D). */
+export async function moveRegistrationDivision(
+  registrationId: string,
+  targetDivisionId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const statusErr = await checkActorCanInteract(user.id);
+  if (statusErr) return { error: statusErr };
+  const svc = createServiceClient();
+  try {
+    const { data, error } = await svc.rpc('move_player_registration', {
+      p_registration_id: registrationId,
+      p_target_division_id: targetDivisionId,
+      p_actor: user.id,
+    });
+    if (error) return { error: friendly(error.message) };
+    const movedId = (data as { registration_id?: string } | null)?.registration_id;
+    if (movedId) await computeRegistrationEligibility(movedId);
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'Division changes are temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Division changed. Your team and payment deadline were kept.' };
+}
+
+/** Leave a cancelled team before inviting a different partner. Active registered teams cannot change. */
+export async function leaveTeamAfterCancellation(
+  teamId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data, error } = await svc.rpc('leave_team_after_cancel', {
+      p_team_id: teamId,
+      p_actor: user.id,
+    });
+    if (error) return { error: friendly(error.message) };
+    const remaining = (
+      (data as { remaining_player_ids?: string[] } | null)?.remaining_player_ids ?? []
+    ).filter((id): id is string => typeof id === 'string');
+    if (remaining.length > 0) {
+      const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
+      await notifyMany(remaining, {
+        type: 'partner_team_left',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'Partner changes are temporarily unavailable.' };
+  }
+  return { ok: true, message: 'You left the cancelled team. You can invite a new partner now.' };
 }
 
 // ---------------------------------------------------------------------------

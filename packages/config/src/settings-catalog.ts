@@ -320,6 +320,23 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     min: 1,
     max: 720,
   },
+  {
+    key: 'player_registration_self_service_enabled',
+    label: 'Player registration changes',
+    group: 'timing',
+    kind: 'bool',
+    help: 'Allows eligible player cancellation and division moves before the change lock.',
+    sensitive: true,
+  },
+  {
+    key: 'player_registration_change_lock_hours_before_start',
+    label: 'Player change lock before start (hours)',
+    group: 'timing',
+    kind: 'int',
+    min: 0,
+    max: 720,
+    help: 'Player changes close this many hours before tournament start.',
+  },
 
   // Privacy
   {

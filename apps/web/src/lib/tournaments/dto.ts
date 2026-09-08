@@ -18,6 +18,7 @@ export interface TournamentViewer {
 export const ANON_TOURNAMENT_VIEWER: TournamentViewer = { viewerId: null, isStaff: false };
 
 export interface TournamentCardDTO {
+  id: string;
   slug: string;
   name: string;
   city: string | null;
@@ -26,6 +27,11 @@ export interface TournamentCardDTO {
   visibility: TournamentVisibility;
   startAt: string | null;
   endAt: string | null;
+  interestedCount: number;
+  joiningCount: number;
+  viewerInterested: boolean;
+  viewerJoining: boolean;
+  engagementAvailable: boolean;
 }
 
 export interface DivisionDTO {
@@ -168,8 +174,21 @@ export function toDivisionDTO(row: DivisionRow, registeredTeams = 0): DivisionDT
   };
 }
 
-export function toTournamentCardDTO(row: TournamentRow): TournamentCardDTO {
+export function toTournamentCardDTO(
+  row: TournamentRow,
+  engagement?: Partial<
+    Pick<
+      TournamentCardDTO,
+      | 'interestedCount'
+      | 'joiningCount'
+      | 'viewerInterested'
+      | 'viewerJoining'
+      | 'engagementAvailable'
+    >
+  >,
+): TournamentCardDTO {
   return {
+    id: row.id,
     slug: row.slug,
     name: row.name,
     city: row.city,
@@ -178,6 +197,11 @@ export function toTournamentCardDTO(row: TournamentRow): TournamentCardDTO {
     visibility: row.visibility,
     startAt: row.start_at,
     endAt: row.end_at,
+    interestedCount: engagement?.interestedCount ?? 0,
+    joiningCount: engagement?.joiningCount ?? 0,
+    viewerInterested: engagement?.viewerInterested ?? false,
+    viewerJoining: engagement?.viewerJoining ?? false,
+    engagementAvailable: engagement?.engagementAvailable ?? false,
   };
 }
 

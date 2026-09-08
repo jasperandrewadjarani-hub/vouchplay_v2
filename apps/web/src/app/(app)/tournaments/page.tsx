@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 import {
   listManagedTournaments,
   listTournaments,
+  withTournamentCardEngagement,
   type TournamentFilters,
 } from '@/lib/tournaments/queries';
 import { getOptionalUser } from '@/lib/auth';
@@ -85,7 +86,8 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
     user ? listManagedTournaments(user.id, filters, hiddenStatuses) : Promise.resolve([]),
     user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
   ]);
-  const { tournaments, total, page, pageCount } = await listTournaments(filters);
+  const { tournaments: baseTournaments, total, page, pageCount } = await listTournaments(filters);
+  const tournaments = await withTournamentCardEngagement(baseTournaments, user?.id ?? null);
 
   return (
     <div className="flex flex-col gap-5">

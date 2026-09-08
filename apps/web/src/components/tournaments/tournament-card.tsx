@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Trophy, MapPin, CalendarDays } from 'lucide-react';
+import { Trophy, MapPin, CalendarDays, Heart, TicketCheck, CheckCircle2 } from 'lucide-react';
 import type { TournamentCardDTO } from '@/lib/tournaments/dto';
 import { TournamentStatusPill } from './status-pill';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -64,6 +64,24 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
             </span>
           )}
         </div>
+        {tournament.engagementAvailable && (
+          <div className="text-foreground-muted mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="inline-flex items-center gap-1">
+              <Heart size={12} aria-hidden />
+              {tournament.interestedCount} interested
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <TicketCheck size={12} aria-hidden />
+              {tournament.joiningCount} joining
+            </span>
+            {(tournament.viewerInterested || tournament.viewerJoining) && (
+              <span className="text-primary inline-flex items-center gap-1 font-semibold">
+                <CheckCircle2 size={12} aria-hidden />
+                {tournament.viewerJoining ? "You're joining" : "You're interested"}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
