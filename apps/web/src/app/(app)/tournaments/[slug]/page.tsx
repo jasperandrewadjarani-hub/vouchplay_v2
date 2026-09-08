@@ -17,6 +17,7 @@ import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/r
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
+import { demandOptions } from '@/lib/tournaments/demand-options';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -75,6 +76,7 @@ export default async function TournamentPage({ params }: Params) {
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
+  const interestOptions = demandOptions(t.divisions);
   const start = fmt(t.startAt);
   const regOpen = fmt(t.registrationOpenAt);
   const regClose = fmt(t.registrationCloseAt);
@@ -131,6 +133,7 @@ export default async function TournamentPage({ params }: Params) {
                 slug={slug}
                 authed={authed}
                 interested={t.myInterest}
+                options={interestOptions}
               />
             )}
             <ShareButton
@@ -149,7 +152,7 @@ export default async function TournamentPage({ params }: Params) {
               </Link>
             )}
           </div>
-          <TournamentDemandSummary demand={t.demand} />
+          <TournamentDemandSummary demand={t.demand} options={interestOptions} />
         </div>
       </header>
 

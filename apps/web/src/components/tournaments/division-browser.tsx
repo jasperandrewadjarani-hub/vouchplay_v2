@@ -1,16 +1,7 @@
 import Link from 'next/link';
 import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
-import { skillByOrdinal } from '@vouchplay/config';
 import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
-
-/** Skill-band colour for a real division's meter (band divisions only; else the brand primary). */
-function divisionColor(d: DivisionDTO): string {
-  if (d.skillPolicy === 'band' && d.minimumSkill != null) {
-    return skillByOrdinal(d.minimumSkill)?.color ?? 'var(--primary)';
-  }
-  return 'var(--primary)';
-}
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { InfoDisclosure } from '@/components/ui/info-disclosure';
 import { RegisterActions } from './register-actions';
@@ -110,8 +101,7 @@ export function DivisionBrowser({
         <ul className="border-border divide-border divide-y border-t">
           {visible.map((d) => {
             const capacity = Math.max(0, d.capacityTeams);
-            const percent =
-              capacity > 0 ? Math.min(100, Math.round((d.registeredTeams / capacity) * 100)) : 0;
+            const isFull = capacity > 0 && d.registeredTeams >= capacity;
             const registered = registeredIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
             const floor = evaluateSkillFloor({
@@ -132,29 +122,22 @@ export function DivisionBrowser({
                     </span>
                   </summary>
                   <div className="space-y-2 px-4 pb-4">
+                    {/* Remaining slots are deliberately NOT public: an exact count either deflates
+                        interest early or removes urgency later. Organizers still see capacity on
+                        Manage. A full division is still disclosed, because registering there joins a
+                        waitlist rather than taking a slot, and a player must know that up front. */}
                     <div className="text-foreground-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      {capacity > 0 && (
-                        <span className="inline-flex items-center gap-1">
-                          <Users size={12} aria-hidden />
-                          {d.registeredTeams} / {capacity} teams
-                        </span>
-                      )}
                       <span className="inline-flex items-center gap-1">
                         <Coins size={12} aria-hidden />
                         {moneyPerPlayer(d)}
                       </span>
+                      {isFull && (
+                        <span className="text-warning inline-flex items-center gap-1 font-medium">
+                          <Users size={12} aria-hidden />
+                          Full - joining adds you to the waitlist
+                        </span>
+                      )}
                     </div>
-                    {capacity > 0 && (
-                      <div
-                        aria-label={`${d.registeredTeams} of ${capacity} teams registered`}
-                        className="bg-surface-muted h-1.5 overflow-hidden rounded-full"
-                      >
-                        <div
-                          className="h-full rounded-full"
-                          style={{ width: `${percent}%`, backgroundColor: divisionColor(d) }}
-                        />
-                      </div>
-                    )}
                     {!registered && floor.above && (
                       <p
                         role="note"

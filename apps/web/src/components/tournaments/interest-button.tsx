@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Star } from 'lucide-react';
-import { TOURNAMENT_DEMAND_DIVISIONS } from '@vouchplay/core';
 import { submitTournamentDemandInterest } from '@/lib/actions/tournament';
 import { Modal } from '@/components/ui/modal';
+import type { DemandOption } from '@/lib/tournaments/demand-options';
 
 const btn =
   'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2';
@@ -17,11 +17,14 @@ export function InterestButton({
   slug,
   authed,
   interested,
+  options,
 }: {
   tournamentId: string;
   slug: string;
   authed: boolean;
   interested: boolean;
+  /** The organizer's own divisions when configured, else the fixed planning taxonomy. */
+  options: DemandOption[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -122,7 +125,7 @@ export function InterestButton({
                   className="border-border bg-surface text-foreground mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm"
                 >
                   <option value="">Select a division</option>
-                  {TOURNAMENT_DEMAND_DIVISIONS.map((option) => (
+                  {options.map((option) => (
                     <option key={option.key} value={option.key}>
                       {option.label}
                     </option>

@@ -2,22 +2,31 @@
 
 import { useState } from 'react';
 import { Users } from 'lucide-react';
-import { TOURNAMENT_DEMAND_DIVISIONS } from '@vouchplay/core';
-import { SKILL_BANDS } from '@vouchplay/config';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { nameInitials } from '@/lib/storage';
 import { Modal } from '@/components/ui/modal';
 import type { TournamentDemandDTO } from '@/lib/tournaments/dto';
+import { demandLabel, type DemandOption } from '@/lib/tournaments/demand-options';
 
-/** Skill-band colour for a demand division key (e.g. "low_intermediate_mixed"). */
-function demandColor(key: string): string {
-  const prefix = key.replace(/_(men|women|mixed)$/, '');
-  return SKILL_BANDS.find((b) => b.key === prefix)?.color ?? 'var(--primary)';
-}
-
-export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDTO }) {
+export function TournamentDemandSummary({
+  demand,
+  options,
+}: {
+  demand: TournamentDemandDTO;
+  /** Same option list the interest picker uses, so the breakdown can never drift from it. */
+  options: DemandOption[];
+}) {
   const [open, setOpen] = useState(false);
   const peak = Math.max(1, ...Object.values(demand.divisions));
+  // Show every option, plus any stored key whose division has since been removed, so no recorded
+  // interest silently disappears from the breakdown.
+  const extraKeys = Object.keys(demand.divisions).filter(
+    (k) => k !== 'legacy_unspecified' && !options.some((o) => o.key === k),
+  );
+  const rows = [
+    ...options,
+    ...extraKeys.map((key) => ({ key, label: demandLabel(key, options), color: null })),
+  ];
   return (
     <>
       <button
@@ -56,7 +65,7 @@ export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDT
           onClose={() => setOpen(false)}
         >
           <div className="space-y-2">
-            {TOURNAMENT_DEMAND_DIVISIONS.map((division) => (
+            {rows.map((division) => (
               <div key={division.key} className="border-border rounded-lg border px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-foreground">{division.label}</span>
@@ -69,7 +78,7 @@ export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDT
                     className="h-full rounded-full"
                     style={{
                       width: `${Math.round(((demand.divisions[division.key] ?? 0) / peak) * 100)}%`,
-                      backgroundColor: demandColor(division.key),
+                      backgroundColor: division.color ?? 'var(--primary)',
                     }}
                   />
                 </div>

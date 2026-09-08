@@ -14,6 +14,8 @@ import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
 import {
   buildDefaultDivisionPreset,
   isTournamentDemandDivision,
+  isDivisionDemandKey,
+  demandKeyMatchesDivision,
   isManageableTournamentStatus,
   tournamentArchiveNameMatches,
 } from '@vouchplay/core';
@@ -732,13 +734,29 @@ export async function submitTournamentDemandInterest(
   slug: string,
   divisionKey: string,
 ): Promise<TournamentActionState> {
-  if (!isTournamentDemandDivision(divisionKey))
+  // Interest follows the organizer's own divisions once they exist, and falls back to the fixed
+  // planning taxonomy when none are configured. A division key is only accepted when it resolves to a
+  // real, non-draft division OF THIS TOURNAMENT, so a key cannot be borrowed from another event.
+  if (!isTournamentDemandDivision(divisionKey) && !isDivisionDemandKey(divisionKey))
     return { error: 'Choose one of the listed divisions.' };
   if (!(await loadSettingFlag('tournament_demand_interest_enabled', false))) {
     return { error: 'Tournament interest is not available right now.' };
   }
   try {
     const svc = createServiceClient();
+    if (isDivisionDemandKey(divisionKey)) {
+      const { data: divisionRows } = await svc
+        .from('divisions')
+        .select('id, status')
+        .eq('tournament_id', tournamentId);
+      const belongs = ((divisionRows ?? []) as { id: string; status: string }[]).some(
+        (d) =>
+          d.status !== 'draft' &&
+          d.status !== 'cancelled' &&
+          demandKeyMatchesDivision(divisionKey, d.id),
+      );
+      if (!belongs) return { error: 'Choose one of the listed divisions.' };
+    }
     const { data: tournament } = await svc
       .from('tournaments')
       .select('id, status, visibility')

@@ -1427,6 +1427,20 @@ Getting the first deploy up hit two issues:
   14 px root font size, so rem-based Tailwind sizes are 0.875x - `min-h-11` is 38.5 px, not 44. Use
   `min-h-[44px]` when a true touch minimum matters.** See `master_plan.md` §1I.
 
+- **2026-09-08** - **Slot counts hidden from the public + interest options synced to real divisions.**
+  (1) The player-facing division browser no longer shows `X / Y teams` or the capacity meter, to avoid
+  deflating interest early and to preserve scarcity later. This deliberately reverses the §1C public
+  registration-bar decision. Organizers still see capacity on Manage. A **full** division is still
+  disclosed without numbers, because registering there joins a waitlist rather than taking a slot.
+  (2) Interest options now come from the organizer's own visible divisions, falling back to the fixed
+  planning taxonomy only when none are configured; the picker and the breakdown share one
+  `demandOptions()` helper. **No migration** - `division_key` is free-form text (`^[a-z0-9_]{3,64}$`)
+  and a division key is `div_` + uuid without hyphens; the server only accepts a key that resolves to
+  a non-draft division of that same tournament. Interest already stored under old taxonomy keys still
+  renders with its correct label, so nothing is lost. Verified against live data: 16 visible divisions,
+  all generated keys valid for the DB pattern, and the public page shows 0 slot counts with fees
+  intact. Gates green (web 30, config 19, core 117). See `master_plan.md` §1J.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.20
+# VouchPlay Master Product & Code Execution Handover v1.21
 
-_(File retains its `…v1.1.md` name; content is v1.20 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.21 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,23 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.21 (2026-09-08)
+- **Remaining slots are not public.** The player-facing division browser no longer shows a
+  per-division registration count or capacity meter, so an exact remaining-slot figure cannot deflate
+  interest early or remove urgency later. **This reverses the earlier decision to show a public
+  per-division registration bar** and must not be reinstated without a product decision. Organizers
+  keep full capacity visibility on Manage. **A full division is still disclosed, without numbers**,
+  because registering there joins a waitlist instead of taking a slot - scarcity may be withheld, but
+  never a fact that changes what the action does.
+- **Tournament interest follows the organizer's own divisions.** Options come from the tournament's
+  visible divisions and fall back to the fixed planning taxonomy only when none are configured, so the
+  demand an organizer reads maps onto the event they are running. The picker and the aggregate
+  breakdown derive from one helper and cannot drift apart. No migration: `division_key` is free-form
+  text constrained to `^[a-z0-9_]{3,64}$`, and a division key is `div_` plus the division uuid with
+  hyphens stripped. The server accepts such a key **only when it resolves to a non-draft division of
+  that same tournament**. Interest recorded under earlier taxonomy keys still renders with its correct
+  label, so historical signal is never dropped when divisions are added later.
 
 ## v1.20 (2026-09-08)
 - **STS explains itself where players meet it.** Live signups asked "what is STS?" immediately, so the

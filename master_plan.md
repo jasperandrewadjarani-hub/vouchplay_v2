@@ -249,6 +249,38 @@ crowding each other.
   size**, so every rem-based Tailwind size is scaled to 0.875x - `min-h-11` renders 38.5 px, not 44.
   Use an explicit pixel value (`min-h-[44px]`) when a real touch-target minimum is required.
 
+## 1J. Slot privacy and organizer-synced interest options (2026-09-08, post-launch)
+
+Two live corrections requested by Jasper.
+
+### Remaining slots are no longer public
+
+- The public division browser previously showed `X / Y teams` plus a capacity meter. That is now
+  hidden: an exact remaining-slot count deflates interest while a division looks empty early, and
+  removes urgency once it is known to be far from full.
+- **This reverses the §1C decision to show a per-division registration bar publicly.** Recorded
+  deliberately so it is not "restored" later as a regression.
+- Organizers still see capacity and registration counts on Manage (overview and registrations); only
+  the player-facing browser hides them.
+- **A full division is still disclosed**, without numbers: registering there joins a waitlist rather
+  than taking a slot, so the player must know that before acting. Withholding scarcity data must never
+  extend to withholding a fact that changes what the action does.
+
+### Interest options follow the organizer's divisions
+
+- Interest was always collected against the fixed planning taxonomy, so once an organizer configured
+  real divisions the demand they read did not map onto the event they were running.
+- Options now come from the tournament's own visible divisions, falling back to the fixed taxonomy
+  only when none are configured. The picker and the aggregate breakdown derive from one
+  `demandOptions()` helper so they cannot drift apart.
+- **No migration.** `tournament_demand_interests.division_key` is free-form text constrained only by
+  `^[a-z0-9_]{3,64}$`; the taxonomy restriction lived in the app layer. A division key is `div_` plus
+  the division uuid with hyphens stripped, which satisfies that pattern and is reversible.
+- The server accepts a division key only when it resolves to a real, non-draft division **of that
+  tournament**, so a key cannot be borrowed from another event.
+- Interest already recorded under old taxonomy keys still appears in the breakdown with its correct
+  label, so no historical signal is lost when an organizer adds divisions later.
+
 ## 1. Prompt Contract
 
 ### In scope

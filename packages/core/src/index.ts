@@ -19,6 +19,7 @@ export * from './leaderboards/leader';
 export * from './leaderboards/eligibility';
 export * from './tournaments/default-divisions';
 export * from './tournaments/demand-interest';
+export * from './tournaments/demand-division-key';
 export * from './tournaments/cover';
 export * from './tournaments/lifecycle';
 export * from './tournaments/retention';
