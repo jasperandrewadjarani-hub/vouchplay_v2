@@ -395,6 +395,20 @@ to jump. One shared `components/ui/pagination.tsx` now serves Players and Clubs:
 - Semantics: `<nav aria-label>` + `<ul>`, `aria-current="page"` on the current page, `rel="prev"` /
   `rel="next"`, and `sr-only` names for the icon-only controls at phone widths.
 
+## 1N. Loading feedback on a player row (2026-09-09, post-launch)
+
+- Tapping a compact player row gave no feedback at all until the profile finished rendering, so on a
+  slow connection the tap looked ignored and people tapped again.
+- The compact row's trailing STS slot now doubles as the pending indicator: the chip is replaced by a
+  spinner while that row's navigation is in flight (`useLinkStatus` inside the `<Link>`).
+- **The cue deliberately reuses the existing 66px STS column instead of adding one.** The first
+  attempt added a trailing chevron column, which took ~28px from the name and pill column and made the
+  longer pills ("High Intermediate · Community") wrap onto a second line, leaving the list ragged -
+  the same failure mode as the truncated names in §1H. Reusing the fixed column costs no width, so
+  nothing to its left can reflow.
+- The detailed card's player name also shows a spinner now, matching the "View profile" link below it,
+  since the name is the other thing people tap on that card.
+
 ## 1. Prompt Contract
 
 ### In scope

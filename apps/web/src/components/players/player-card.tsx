@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { CompactRowTrailing } from './compact-row-trailing';
 import { PlayerAvatar } from './player-avatar';
 import { ClubStack } from './club-stack';
 import { VouchButton } from './vouch-button';
@@ -64,9 +65,9 @@ export function PlayerCard({
             </span>
           )}
         </span>
-        <span className="flex w-[66px] shrink-0 justify-end">
-          <StsChip sts={player.sts} interactive={false} />
-        </span>
+        {/* The STS slot doubles as the row's pending indicator, so tapping a row gives immediate
+            feedback without taking any width from the name and skill pill. */}
+        <CompactRowTrailing sts={player.sts} />
       </Link>
     );
   }
@@ -84,8 +85,14 @@ export function PlayerCard({
           />
         </Link>
         <div className="min-w-0 flex-1">
-          <Link href={profileHref} className="hover:text-primary block truncate font-semibold">
-            {player.displayName}
+          {/* The name is the other thing people tap on a detailed card, so it gets the same pending
+              feedback as "View profile" below. The spinner sits after the truncating name. */}
+          <Link
+            href={profileHref}
+            className="hover:text-primary flex min-w-0 items-center gap-1.5 font-semibold"
+          >
+            <span className="truncate">{player.displayName}</span>
+            <LinkSpinner />
           </Link>
           {player.nickname && (
             <p className="text-foreground-muted truncate text-sm">

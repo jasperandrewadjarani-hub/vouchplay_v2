@@ -1519,6 +1519,16 @@ Getting the first deploy up hit two issues:
   AAL2 admin session) to publish a snapshot including the 24 current contributors. That fixes the
   visible symptom today, independent of the cron investigation.
 
+- **2026-09-09** - **Loading cue when tapping a compact player row.** Previously there was none, so on
+  a slow connection the tap looked ignored. New `components/players/compact-row-trailing.tsx` swaps the
+  STS chip for a spinner while that row's navigation is pending. **Recorded because I got it wrong
+  first:** my initial version added a trailing chevron column, which took ~28px from the name/pill
+  column and made "High Intermediate · Community" pills wrap onto a second line - caught in the 375px
+  emulator before shipping. Reusing the existing fixed 66px STS column costs no horizontal space, so
+  nothing to its left can reflow. **Standing rule for this list: any new element in a compact row must
+  reuse an existing fixed-width column, never add one** (see also §1H truncated names). The detailed
+  card's name link also gained a spinner, matching "View profile".
+
 - **2026-09-09** - **Numbered pagination (shared component).** Jasper's screenshot showed the old
   control: two heavy bordered buttons pinned to opposite edges with "Page 2 of 3" marooned between
   them. New `apps/web/src/components/ui/pagination.tsx` (+ `page-link-label.tsx` for the in-place

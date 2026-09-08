@@ -6224,6 +6224,14 @@ Everything below is live and verified on both production domains._
   rules, said plainly, plus one line stating it is a measure of helping the community and **not a
   skill score** - preserving §3.3's separation of concepts at the point where a player actually reads
   a number.
+- **A tapped player row says it is loading.** Tapping a compact player row gave no feedback until the
+  profile rendered, so on a slow connection the tap looked ignored. The row's trailing STS slot now
+  doubles as the pending indicator - the chip is replaced by a spinner while that navigation is in
+  flight. **The cue reuses the existing 66px STS column rather than adding one, on purpose:** a first
+  attempt added a trailing chevron column, which took width from the name and pill column and made the
+  longer skill pills wrap onto a second line, leaving the list ragged - the same failure mode as the
+  truncated names in v1.19. Reusing a fixed column costs no width, so nothing to its left can reflow.
+  The detailed card's player name also shows a spinner now, matching "View profile" below it.
 - **Pagination is numbered, centred, and says it is working.** Players and Clubs previously showed two
   heavy bordered buttons pinned to opposite edges with "Page 2 of 3" marooned between them: no sense
   of how long the list was, no way to jump, and an empty `<span />` where Previous belonged on page 1,
