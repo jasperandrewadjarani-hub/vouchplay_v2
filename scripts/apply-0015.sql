@@ -1,5 +1,5 @@
 -- =============================================================================
--- APPLY: Migration 0015 — Free non-archived tournament lifecycle control (§17.2).
+-- APPLY: Migration 0015 - Free non-archived tournament lifecycle control (§17.2).
 -- Paste this whole block into the Supabase SQL editor (project itrosesiywpbaxtmucbb) and run it.
 -- Apply migration 0014 first if it is still pending. Idempotent.
 -- Expect: lifecycle_function = 1, lifecycle_authenticated_grant = 1.
@@ -71,4 +71,5 @@ select 'lifecycle_authenticated_grant', count(*)
     and grantee = 'authenticated'
     and privilege_type = 'EXECUTE';
 -- Expect: lifecycle_function = 1, lifecycle_authenticated_grant = 1
+
 

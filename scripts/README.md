@@ -6,7 +6,7 @@ One-off operational scripts. All read `apps/web/.env.local` for the Supabase URL
 ## seed-admin.mjs
 
 Grants a global role (default `super_admin`) to an existing account, by email. Idempotent. The target
-must have signed up first. Granting admin is a privilege escalation — run deliberately, only for JT
+must have signed up first. Granting admin is a privilege escalation - run deliberately, only for JT
 principals.
 
 ```bash
@@ -36,3 +36,4 @@ every embedded verification row:
 direct authorization checks, and removes both accounts. The 2026-09-08 release run passed 20/20 with
 zero failures or skips. `npm run verify:phase13-rls` remains the non-provisioning variant for supplied
 controlled tokens; a skipped controlled-account check is not a release pass.
+

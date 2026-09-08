@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0003: Avatars storage bucket + public player facts
+-- VouchPlay v2 - Migration 0003: Avatars storage bucket + public player facts
 -- Handover §38 (storage), §8.2 (public badges), §37 (RLS).
 --
 -- STATUS: the `avatars` bucket itself was created at runtime via the service-role Storage API
@@ -44,7 +44,7 @@ create policy avatars_owner_delete on storage.objects
   );
 
 -- =============================================================================
--- public_player_facts(ids) — RLS-clean exposure of PUBLIC badge facts only (§8.2).
+-- public_player_facts(ids) - RLS-clean exposure of PUBLIC badge facts only (§8.2).
 -- Returns booleans, never the sensitive columns of user_roles / identity_verifications. SECURITY
 -- DEFINER so it can read those tables past their owner-or-staff RLS, but the projection is safe.
 -- =============================================================================
@@ -79,3 +79,4 @@ as $$
 $$;
 
 grant execute on function public.public_player_facts(uuid[]) to anon, authenticated;
+

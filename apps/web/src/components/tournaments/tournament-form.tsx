@@ -195,6 +195,19 @@ export function TournamentForm({
             />
           </Field>
           <Field
+            label="Payment QR"
+            htmlFor="paymentQr"
+            hint="Private QR image shown only during payment. PNG, JPG, or WebP up to 5 MB."
+          >
+            <input
+              id="paymentQr"
+              name="paymentQr"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="text-foreground-muted file:border-border file:bg-surface file:text-foreground text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm"
+            />
+          </Field>
+          <Field
             label="Cover photo (optional)"
             htmlFor="cover"
             hint="PNG, JPG or WebP, up to 4 MB. Landscape images work best; VouchPlay optimizes the file automatically."

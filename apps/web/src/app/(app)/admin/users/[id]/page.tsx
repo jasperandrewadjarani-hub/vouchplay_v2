@@ -88,9 +88,9 @@ export default async function AdminUserDetailPage({ params }: Props) {
       <div className="border-border bg-surface grid grid-cols-3 gap-2 rounded-2xl border p-3 text-center">
         <Stat
           label="Community skill"
-          value={user.skill.csl != null ? String(user.skill.csl) : '—'}
+          value={user.skill.csl != null ? String(user.skill.csl) : '-'}
         />
-        <Stat label="STS / 5" value={user.skill.sts != null ? user.skill.sts.toFixed(1) : '—'} />
+        <Stat label="STS / 5" value={user.skill.sts != null ? user.skill.sts.toFixed(1) : '-'} />
         <Stat
           label="Skill-Verified"
           value={

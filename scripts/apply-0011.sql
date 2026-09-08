@@ -1,10 +1,10 @@
 -- =============================================================================
--- APPLY: Migration 0011 — Eligibility / Anti-Sandbagging settings (Phase 9, §25).
+-- APPLY: Migration 0011 - Eligibility / Anti-Sandbagging settings (Phase 9, §25).
 -- Paste this whole block into the Supabase SQL editor (project itrosesiywpbaxtmucbb) and run it.
 -- It seeds three admin-tunable eligibility thresholds (idempotent) and returns a verify count.
 -- Expect the final row: eligibility_settings = 3.
 -- The eligibility columns (registrations.eligibility_status + eligibility_snapshot) already exist
--- from migration 0008 — no schema change is needed here.
+-- from migration 0008 - no schema change is needed here.
 -- =============================================================================
 
 insert into system_settings (key, value, description) values
@@ -21,3 +21,4 @@ select 'eligibility_settings' as check, count(*) as n
   from system_settings
   where key in ('eligibility_min_unique_vouchers','eligibility_review_below_sts','eligibility_enforce_hard_rules');
 -- Expect: eligibility_settings = 3
+

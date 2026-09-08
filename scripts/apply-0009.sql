@@ -1,12 +1,12 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0009: Payments (Phase 8)
+-- VouchPlay v2 - Migration 0009: Payments (Phase 8)
 -- Handover §24 (Payment Model), §36.28 payments, §38 (private storage), §37 (RLS).
 --
 -- V1 uses an abstract payment layer with MANUAL PROOF submission (§24.1). Proof files live in a
 -- PRIVATE bucket and are only ever reachable through server-issued signed URLs after an authz check
--- (§38) — never public. Fee-per-division + currency come from `divisions` (0007); tournament-level
+-- (§38) - never public. Fee-per-division + currency come from `divisions` (0007); tournament-level
 -- payment_instructions exist (0007); this migration adds an optional accepted-methods label and the
--- `payments` table + state machine. All payment changes are auditable (§24.4) — the server actions
+-- `payments` table + state machine. All payment changes are auditable (§24.4) - the server actions
 -- write audit_logs / registration_events rows.
 -- Apply via the Supabase SQL editor (same method as 0001–0008).
 -- =============================================================================
@@ -21,7 +21,7 @@ exception when duplicate_object then null; end $$;
 alter table tournaments add column if not exists payment_methods text;
 
 -- =============================================================================
--- payments (§36.28) — one payment per registration in V1.
+-- payments (§36.28) - one payment per registration in V1.
 -- =============================================================================
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
@@ -50,7 +50,7 @@ create trigger trg_payments_updated_at before update on payments
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- Private storage bucket for payment proof (§38). No public policies — access is exclusively via
+-- Private storage bucket for payment proof (§38). No public policies - access is exclusively via
 -- server-issued signed URLs (service role), gated by app-level authz before issuing.
 -- =============================================================================
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -93,3 +93,4 @@ union all
 select 'proofs_bucket_private', count(*) from storage.buckets
   where id = 'payment-proofs' and public = false;
 -- Expect: payments_table = 1, payment_methods_col = 1, payments_rls_policy = 1, proofs_bucket_private = 1
+

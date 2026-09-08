@@ -3,7 +3,7 @@
 > A community-powered sports identity and tournament platform where your playing profile is built
 > by the people you actually play with.
 
-**By JT Consulting & Analytics Inc.** — Jasper Adjarani, Tane Valdez.
+**By JT Consulting & Analytics Inc.** - Jasper Adjarani, Tane Valdez.
 
 VouchPlay's core loop: create a player profile → receive credible community vouches → build a
 trusted skill profile → join clubs and tournaments → give organizers better eligibility
@@ -57,8 +57,8 @@ placeholders work without any secrets. Supabase-backed features come online once
 
 ## Scripts (root)
 
-- `npm run dev` — run the web app
-- `npm run build` — production build
+- `npm run dev` - run the web app
+- `npm run build` - production build
 - `npm run lint` / `npm run typecheck` / `npm run test`
 - `npm run format` / `npm run format:check`
 
@@ -67,3 +67,4 @@ placeholders work without any secrets. Supabase-backed features come online once
 `../vouchplay/` is a live predecessor. VouchPlay v2 is a ground-up rebuild on new infrastructure
 with the corrected trust model from the v1.1 handover (Community Skill, Skill Trust Score, Identity
 Verified and Skill Verified are four separate concepts). v1 is a reference, not a base.
+

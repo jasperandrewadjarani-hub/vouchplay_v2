@@ -15,20 +15,20 @@ When done, paste the values into `apps/web/.env.local` (copy from `apps/web/.env
    (it is `https://itrosesiywpbaxtmucbb.supabase.co`).
 4. Copy the **public key**:
    - New projects show a **Publishable key** (`sb_publishable_…`). Use it → `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-   - Older projects show an **anon / public** JWT instead — that also works.
+   - Older projects show an **anon / public** JWT instead - that also works.
 5. Copy the **secret key** (server-only, bypasses RLS):
    - New projects: **Secret keys** → reveal `sb_secret_…`.
    - Older projects: **service_role** JWT.
    - Use it → `SUPABASE_SERVICE_ROLE_KEY`. **Never** put this in a `NEXT_PUBLIC_…` var or client code.
 6. Left sidebar → **Authentication** → **URL Configuration**:
    - **Site URL:** `http://localhost:3000` (change to the Vercel URL at launch).
-   - **Redirect URLs** — add both:
+   - **Redirect URLs** - add both:
      - `http://localhost:3000/auth/callback`
      - `https://<your-vercel-domain>/auth/callback` (add once Vercel is set up)
 
 ---
 
-## 2) Google OAuth (login only — no Gmail scopes)
+## 2) Google OAuth (login only - no Gmail scopes)
 
 You can reuse the existing **"VouchPlay"** Google Cloud project from v1 or make a new one; either way
 the new Supabase callback URL must be added.
@@ -60,7 +60,7 @@ Gmail SMTP requires an **App Password**, which requires **2-Step Verification** 
    - App name: `VouchPlay SMTP` → **Create** → copy the **16-character** password (no spaces).
 4. In Supabase → **Project Settings** → **Authentication** → **SMTP Settings** → enable **Custom SMTP**:
    - **Host:** `smtp.gmail.com`
-   - **Port:** `465` (SSL) — or `587` (TLS)
+   - **Port:** `465` (SSL) - or `587` (TLS)
    - **Username:** `vouchplay@gmail.com`
    - **Password:** the 16-char App Password
    - **Sender email:** `vouchplay@gmail.com` · **Sender name:** `VouchPlay`
@@ -70,7 +70,7 @@ Gmail SMTP requires an **App Password**, which requires **2-Step Verification** 
    configuration in the Supabase dashboard.
 
 > Pilot only: Gmail caps ~500 sends/day and has no bounce webhooks. Switch to a dedicated provider
-> (Resend/Postmark/SendGrid) before public launch — the code is already behind an interface for it.
+> (Resend/Postmark/SendGrid) before public launch - the code is already behind an interface for it.
 
 ---
 
@@ -80,7 +80,7 @@ Gmail SMTP requires an **App Password**, which requires **2-Step Verification** 
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://itrosesiywpbaxtmucbb.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx        # or the anon JWT
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx                 # or the service_role JWT — server only
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx                 # or the service_role JWT - server only
 NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
@@ -88,6 +88,7 @@ SMTP_USER=vouchplay@gmail.com
 SMTP_PASS=xxxxxxxxxxxxxxxx
 ```
 
-Never commit `.env.local` (it's gitignored). Tell me when these are in place — I'll then
+Never commit `.env.local` (it's gitignored). Tell me when these are in place - I'll then
 `supabase link` + `db push` (apply 0001/0002), generate DB types, and wire up auth.
 ```
+

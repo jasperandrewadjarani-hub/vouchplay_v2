@@ -45,6 +45,15 @@ export function PartnerInviteForm({
     };
   }, [q]);
 
+  function updateQuery(value: string) {
+    setQ(value);
+    if (value.trim().length < 2) {
+      if (timer.current) clearTimeout(timer.current);
+      setSearching(false);
+      setResults([]);
+    }
+  }
+
   function invite(slug: string, name: string) {
     setMsg(null);
     const fd = new FormData();
@@ -67,7 +76,7 @@ export function PartnerInviteForm({
     <div className="space-y-2">
       <Input
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => updateQuery(e.target.value)}
         placeholder="Search players by name"
         aria-label="Search players to invite"
       />

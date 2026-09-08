@@ -1,14 +1,14 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0008: Partner, Team & Registration (Phase 7)
+-- VouchPlay v2 - Migration 0008: Partner, Team & Registration (Phase 7)
 -- Handover §20 (Partner Finder), §21 (Registration state machine), §22 (Club Representation),
 -- §23 (Slot Reservation & Concurrency), §36.23–36.27, §36.25A, §36.29, §37.
 --
--- LOCKED non-negotiable (§23.2, §35.3): slot reservation is TRANSACTIONAL — confirmed + valid active
+-- LOCKED non-negotiable (§23.2, §35.3): slot reservation is TRANSACTIONAL - confirmed + valid active
 -- holds must never exceed division capacity. The capacity decision lives in the SECURITY DEFINER
 -- function `register_team`, which locks the division row (SELECT … FOR UPDATE) so concurrent
 -- registrations serialize; frontend counts are never trusted. Reciprocal partner cross-invites
 -- (§20.4) merge atomically in `accept_partner_invitation`. Waitlist promotion on slot release runs
--- in `release_slot`. Payments (§24) are Phase 8 — registrations here reach CONFIRMED via organizer
+-- in `release_slot`. Payments (§24) are Phase 8 - registrations here reach CONFIRMED via organizer
 -- action (the payment-proof/verify layer is added in Phase 8).
 -- Apply via the Supabase SQL editor (same method as 0001–0007).
 -- =============================================================================
@@ -62,7 +62,7 @@ create trigger trg_partner_invitations_updated_at before update on partner_invit
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- teams (§36.24) — division-specific.
+-- teams (§36.24) - division-specific.
 -- =============================================================================
 create table if not exists teams (
   id uuid primary key default gen_random_uuid(),
@@ -79,7 +79,7 @@ create trigger trg_teams_updated_at before update on teams
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- team_members (§36.25). A player cannot be on two active teams in the same division — enforced in
+-- team_members (§36.25). A player cannot be on two active teams in the same division - enforced in
 -- the RPCs (cross-table rule). UNIQUE(team_id, player_id) prevents dup within a team.
 -- =============================================================================
 create table if not exists team_members (
@@ -95,7 +95,7 @@ create index if not exists idx_team_members_player on team_members (player_id);
 create index if not exists idx_team_members_team on team_members (team_id);
 
 -- =============================================================================
--- tournament_player_club_representations (§36.25A) — source of truth for multi-club representation.
+-- tournament_player_club_representations (§36.25A) - source of truth for multi-club representation.
 -- =============================================================================
 create table if not exists tournament_player_club_representations (
   id uuid primary key default gen_random_uuid(),
@@ -120,7 +120,7 @@ create trigger trg_tpcr_updated_at before update on tournament_player_club_repre
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- registrations (§36.26) — one per (team, division).
+-- registrations (§36.26) - one per (team, division).
 -- =============================================================================
 create table if not exists registrations (
   id uuid primary key default gen_random_uuid(),
@@ -148,7 +148,7 @@ create trigger trg_registrations_updated_at before update on registrations
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- registration_events (§36.27) — immutable state history.
+-- registration_events (§36.27) - immutable state history.
 -- =============================================================================
 create table if not exists registration_events (
   id uuid primary key default gen_random_uuid(),
@@ -436,3 +436,4 @@ create policy waitlist_read on waitlist_entries
              or public.is_staff(auth.uid()))
     )
   );
+

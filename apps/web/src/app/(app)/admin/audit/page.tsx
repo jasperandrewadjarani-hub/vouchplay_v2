@@ -176,7 +176,7 @@ function Snapshot({ label, data }: { label: string; data: unknown }) {
     <div className="border-border bg-background overflow-x-auto rounded-lg border p-2">
       <div className="text-foreground-muted mb-1 text-[11px] font-medium">{label}</div>
       <pre className="text-foreground text-[11px] whitespace-pre-wrap">
-        {data == null ? '—' : JSON.stringify(data, null, 2)}
+        {data == null ? '-' : JSON.stringify(data, null, 2)}
       </pre>
     </div>
   );

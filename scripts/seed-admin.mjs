@@ -1,12 +1,12 @@
 // Seed a JT admin: grant a global role (default `super_admin`) in `user_roles` to the account with
-// the given email. Uses the service role (DML via PostgREST + Auth admin API — NO DDL). Idempotent.
+// the given email. Uses the service role (DML via PostgREST + Auth admin API - NO DDL). Idempotent.
 //
 // Run from the repo root (reads apps/web/.env.local for the Supabase URL + service-role key):
 //   node scripts/seed-admin.mjs jasper.andrew.adjarani@gmail.com
 //   node scripts/seed-admin.mjs tane@example.com super_admin
 //
 // The target account must have signed up first (it looks the user up in auth.users by email).
-// Granting admin is a privilege escalation — run this deliberately, only for JT principals.
+// Granting admin is a privilege escalation - run this deliberately, only for JT principals.
 import { readFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 
@@ -64,3 +64,4 @@ if (error) {
   process.exit(1);
 }
 console.log(`Granted ${role} to ${email} (user ${userId}, role id ${data.id}).`);
+

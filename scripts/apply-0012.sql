@@ -1,5 +1,5 @@
 -- =============================================================================
--- APPLY: Migration 0012 — Notifications (Phase 11, §27).
+-- APPLY: Migration 0012 - Notifications (Phase 11, §27).
 -- Paste this whole block into the Supabase SQL editor (project itrosesiywpbaxtmucbb) and run it.
 -- Creates the notifications + notification_preferences tables with RLS (recipients read their own;
 -- writes go through the service role). Idempotent. Expect the final rows:
@@ -55,3 +55,4 @@ union all
 select 'notif_rls_policies', count(*) from pg_policies
   where schemaname = 'public' and tablename in ('notifications','notification_preferences');
 -- Expect: notif_tables = 2, notif_rls_policies = 2
+

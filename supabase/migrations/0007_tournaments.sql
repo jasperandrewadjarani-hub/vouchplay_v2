@@ -1,14 +1,14 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0007: Tournament Setup (Phase 6)
+-- VouchPlay v2 - Migration 0007: Tournament Setup (Phase 6)
 -- Handover §17 (Tournament Core), §18 (Division Model), §19 (Discovery), §36.19–36.22, §36.30, §37.
 --
--- Scope: Tournament SETUP only — organizer role gating, tournament CRUD + lifecycle, divisions,
+-- Scope: Tournament SETUP only - organizer role gating, tournament CRUD + lifecycle, divisions,
 -- co-organizers, interests, announcements, discovery. Registration/partner/teams/club-representation
 -- (Phase 7), payments (Phase 8), eligibility (Phase 9) are NOT built here.
 --
 -- Locked (§17.1): only approved organizer/admin/super_admin may create tournaments (enforced in the
 -- server action via user_roles + RLS insert check). Lifecycle (§17.2) is a server-enforced state
--- machine. Divisions are attribute-assembled (§18) — no hardcoded division names. Writes happen via
+-- machine. Divisions are attribute-assembled (§18) - no hardcoded division names. Writes happen via
 -- the service role in authored actions; RLS below governs reads.
 -- Apply via the Supabase SQL editor (same method as 0001–0006).
 -- =============================================================================
@@ -92,7 +92,7 @@ create trigger trg_tournaments_updated_at before update on tournaments
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- tournament_organizers (§36.20) — co-organizers with granular permissions (jsonb).
+-- tournament_organizers (§36.20) - co-organizers with granular permissions (jsonb).
 -- =============================================================================
 create table if not exists tournament_organizers (
   id uuid primary key default gen_random_uuid(),
@@ -108,7 +108,7 @@ create unique index if not exists uq_tournament_organizers_active
 create index if not exists idx_tournament_organizers_user on tournament_organizers (user_id, status);
 
 -- =============================================================================
--- divisions (§36.21, §18) — attribute-assembled. team_size 1 (singles) / 2 (doubles) in V1.
+-- divisions (§36.21, §18) - attribute-assembled. team_size 1 (singles) / 2 (doubles) in V1.
 -- =============================================================================
 create table if not exists divisions (
   id uuid primary key default gen_random_uuid(),
@@ -142,7 +142,7 @@ create trigger trg_divisions_updated_at before update on divisions
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- tournament_interests (§36.22) — a player marks interest in a tournament (or a specific division).
+-- tournament_interests (§36.22) - a player marks interest in a tournament (or a specific division).
 -- =============================================================================
 create table if not exists tournament_interests (
   id uuid primary key default gen_random_uuid(),
@@ -159,7 +159,7 @@ create unique index if not exists uq_tournament_interests_tournament
 create index if not exists idx_tournament_interests_tournament on tournament_interests (tournament_id);
 
 -- =============================================================================
--- tournament_announcements (§36.30) — organizer posts shown on the tournament page.
+-- tournament_announcements (§36.30) - organizer posts shown on the tournament page.
 -- =============================================================================
 create table if not exists tournament_announcements (
   id uuid primary key default gen_random_uuid(),
@@ -255,3 +255,4 @@ create policy tournament_announcements_read on tournament_announcements
         and (t.status <> 'draft' or public.is_tournament_organizer(auth.uid(), t.id) or public.is_staff(auth.uid()))
     )
   );
+

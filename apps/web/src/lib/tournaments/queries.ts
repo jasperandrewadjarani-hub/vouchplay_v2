@@ -278,7 +278,7 @@ export async function getTournamentBySlug(
       if (!archivedCoOrganizer) return null;
     }
 
-    const [divRes, orgRes, annRes] = await Promise.all([
+    const [divRes, orgRes, annRes, registrationRes] = await Promise.all([
       supabase
         .from('divisions')
         .select(DIVISION_COLUMNS)
@@ -295,7 +295,25 @@ export async function getTournamentBySlug(
         .eq('tournament_id', row.id)
         .order('published_at', { ascending: false })
         .limit(50),
+      createServiceClient()
+        .from('registrations')
+        .select('division_id, status')
+        .eq('tournament_id', row.id)
+        .limit(1000),
     ]);
+
+    const registeredByDivision = new Map<string, number>();
+    for (const registration of (registrationRes.data ?? []) as Array<{
+      division_id: string;
+      status: string;
+    }>) {
+      if (!['withdrawn', 'cancelled', 'rejected'].includes(registration.status)) {
+        registeredByDivision.set(
+          registration.division_id,
+          (registeredByDivision.get(registration.division_id) ?? 0) + 1,
+        );
+      }
+    }
 
     const demand = await getDemandSummary(row.id);
 
@@ -381,7 +399,9 @@ export async function getTournamentBySlug(
       ownerName: owner?.name ?? null,
       ownerSlug: owner?.slug ?? null,
       maxClubsPerPlayer: row.max_clubs_per_player ?? 3,
-      divisions: ((divRes.data ?? []) as unknown as DivisionRow[]).map(toDivisionDTO),
+      divisions: ((divRes.data ?? []) as unknown as DivisionRow[]).map((division) =>
+        toDivisionDTO(division, registeredByDivision.get(division.id) ?? 0),
+      ),
       organizers,
       announcements,
       interestedCount: demand.total,

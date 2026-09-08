@@ -65,7 +65,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* What you can do — lead with action, then show proof and momentum. */}
+      {/* What you can do - lead with action, then show proof and momentum. */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <FeatureCard
           icon={<Users size={20} aria-hidden />}
@@ -97,7 +97,7 @@ export default async function HomePage() {
                 Community leaderboards
               </h2>
               <p className="text-foreground-muted mt-1 max-w-2xl text-sm">
-                Participation and genuine support—not raw STS, ratings, or volume.
+                Participation and genuine support-not raw STS, ratings, or volume.
               </p>
             </div>
             <ButtonLink href="/leaderboards" variant="secondary">

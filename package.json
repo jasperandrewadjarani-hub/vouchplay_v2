@@ -2,7 +2,7 @@
   "name": "vouchplay",
   "version": "0.1.0",
   "private": true,
-  "description": "VouchPlay — community-powered sports identity & tournament platform. By JT Consulting & Analytics Inc.",
+  "description": "VouchPlay - community-powered sports identity & tournament platform. By JT Consulting & Analytics Inc.",
   "workspaces": [
     "apps/*",
     "packages/*"

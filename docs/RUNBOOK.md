@@ -2,9 +2,9 @@
 
 ## Environments (handover §56)
 
-- **Development** — local Supabase or isolated dev project; fake email; seed users.
-- **Staging** — production-like, separate DB/storage.
-- **Production** — locked secrets, admin MFA, backups, monitoring. Never share a DB with staging.
+- **Development** - local Supabase or isolated dev project; fake email; seed users.
+- **Staging** - production-like, separate DB/storage.
+- **Production** - locked secrets, admin MFA, backups, monitoring. Never share a DB with staging.
 
 ## Deploy
 
@@ -24,4 +24,5 @@
 ## Secrets needed before Phase 1
 
 Supabase URL + anon + service_role keys; Google OAuth client id/secret; transactional email provider
-key (Resend/Postmark/SendGrid — not Gmail).
+key (Resend/Postmark/SendGrid - not Gmail).
+

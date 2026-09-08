@@ -1,10 +1,14 @@
-# VouchPlay Phase 14 Handover — Recruitment, Sponsorship, and Gamified Bidding
+# VouchPlay Phase 14 Handover - Recruitment, Sponsorship, and Gamified Bidding
 
 **Status:** Ready for scoped planning; do not implement until Jasper confirms the selected slice.  
 **Predecessor:** Phase 13C Coach Flow, 13A Community Contribution, and 13D Home Leaderboards are
 production-verified. Maintenance refinements 0018 and 0019 are committed but require Jasper to apply
 their exact SQL Editor scripts and return verification counts before optional-DOB leaderboard rows or
 the privacy-safe tournament demand flow can be considered live.
+
+The pre-Phase-14 tournament refinement adds migration 0020 for private payment QR delivery and does
+not change the Phase 14 decision. Payment QR supports the existing manual proof-and-review flow only;
+it is not a payment gateway or an automated confirmation mechanism.
 
 ## What is already live
 
@@ -22,16 +26,16 @@ the privacy-safe tournament demand flow can be considered live.
 
 Build **Recruitment and Sponsorship foundation first**, then decide whether to activate the separate
 Gamified Bidding experience. This preserves the locked boundary: Most Bidded remains empty and hidden
-until the complete §16A system—not merely a table—exists.
+until the complete §16A system-not merely a table-exists.
 
 ## Decision required from JT before implementation
 
 Choose one:
 
-1. **14A — Recruitment/Sponsorship only (recommended):** verified clubs publish controlled offers;
+1. **14A - Recruitment/Sponsorship only (recommended):** verified clubs publish controlled offers;
    players opt in/out, browse relevant opportunities, and contact/respond through auditable,
    rate-limited flows. No bidding, no leaderboards based on offers.
-2. **14A + 14B — Full Gamified Bidding:** adds explicit non-monetary bid points, bidding lifecycle,
+2. **14A + 14B - Full Gamified Bidding:** adds explicit non-monetary bid points, bidding lifecycle,
    anti-wash-bidding controls, player/club notifications, and then the `Most Bidded` snapshot adapter.
 3. **Pilot hardening instead:** defer §16/§16A and complete the remaining live-pilot gates: real
    critical-email inbox confirmation, Supabase quota remediation, full dress rehearsal, native Excel
@@ -76,3 +80,4 @@ Choose one:
   `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and `demand_direct_policies=0`. Then run
   the direct anon/auth/service RLS abuse check for `tournament_demand_interests` before enabling a
   public launch tournament.
+

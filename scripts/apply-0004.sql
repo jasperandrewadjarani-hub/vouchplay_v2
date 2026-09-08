@@ -1,11 +1,11 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0004: Vouch Engine (Phase 3)
+-- VouchPlay v2 - Migration 0004: Vouch Engine (Phase 3)
 -- Handover §10–§12, §36.5–36.10, §36.34–36.35, §37.
 --
 -- Privacy model (LOCKED): anonymous voucher identity is NEVER exposed publicly. The raw `vouches`
--- table is therefore NOT publicly readable — a voucher reads only their own rows; staff read all.
+-- table is therefore NOT publicly readable - a voucher reads only their own rows; staff read all.
 -- Public skill data is served from the safe aggregate `player_skill_profiles` (counts/CSL/STS/
--- distribution — no voucher identity) and from `vouch_comments` (always attributed). Recompute runs
+-- distribution - no voucher identity) and from `vouch_comments` (always attributed). Recompute runs
 -- server-side (service role) and writes player_skill_profiles; the STS_V1 algorithm lives in
 -- @vouchplay/core (unit-tested), not in SQL.
 -- Apply via the Supabase SQL editor (same method as 0001–0003).
@@ -23,7 +23,7 @@ do $$ begin create type fraud_subject_type as enum ('user', 'vouch', 'cluster', 
 do $$ begin create type fraud_status as enum ('open', 'reviewing', 'cleared', 'action_taken'); exception when duplicate_object then null; end $$;
 
 -- =============================================================================
--- vouches (§36.5) — one ACTIVE vouch per (voucher, target). skill_level is a band ordinal 0..6.
+-- vouches (§36.5) - one ACTIVE vouch per (voucher, target). skill_level is a band ordinal 0..6.
 -- effective_weight + weight_rule_version are copied on as an audit snapshot (§10.5).
 -- =============================================================================
 create table if not exists vouches (
@@ -53,7 +53,7 @@ create trigger trg_vouches_updated_at before update on vouches
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- vouch_revisions (§36.6) — immutable history. One row per create/update/withdraw/invalidate.
+-- vouch_revisions (§36.6) - immutable history. One row per create/update/withdraw/invalidate.
 -- =============================================================================
 create table if not exists vouch_revisions (
   id uuid primary key default gen_random_uuid(),
@@ -71,7 +71,7 @@ create table if not exists vouch_revisions (
 create index if not exists idx_vouch_revisions_vouch on vouch_revisions (vouch_id, created_at);
 
 -- =============================================================================
--- vouch_comments (§36.7) — ALWAYS attributed to author (never anonymous, §10.1).
+-- vouch_comments (§36.7) - ALWAYS attributed to author (never anonymous, §10.1).
 -- =============================================================================
 create table if not exists vouch_comments (
   id uuid primary key default gen_random_uuid(),
@@ -90,7 +90,7 @@ create trigger trg_vouch_comments_updated_at before update on vouch_comments
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- vouch_requests (§36.8, §12) — at most one PENDING request per (requester, recipient).
+-- vouch_requests (§36.8, §12) - at most one PENDING request per (requester, recipient).
 -- =============================================================================
 create table if not exists vouch_requests (
   id uuid primary key default gen_random_uuid(),
@@ -107,7 +107,7 @@ create unique index if not exists uq_vouch_requests_pending
 create index if not exists idx_vouch_requests_recipient on vouch_requests (recipient_id, status);
 
 -- =============================================================================
--- player_skill_profiles (§36.9) — cached calc snapshot, recomputed on WRITE. PUBLIC-safe aggregate.
+-- player_skill_profiles (§36.9) - cached calc snapshot, recomputed on WRITE. PUBLIC-safe aggregate.
 -- `distribution` (jsonb, band ordinal -> count) is stored here for cheap public reads (§10.6.6).
 -- =============================================================================
 create table if not exists player_skill_profiles (
@@ -128,7 +128,7 @@ create table if not exists player_skill_profiles (
 );
 
 -- =============================================================================
--- blocks (§36.34) — blocked users cannot initiate interactions with each other (§10.2).
+-- blocks (§36.34) - blocked users cannot initiate interactions with each other (§10.2).
 -- =============================================================================
 create table if not exists blocks (
   blocker_id uuid not null references profiles (id) on delete cascade,
@@ -140,7 +140,7 @@ create table if not exists blocks (
 create index if not exists idx_blocks_blocked on blocks (blocked_id);
 
 -- =============================================================================
--- fraud_flags (§36.35) — internal risk flags; staff-only. Never auto-punish (§11.2).
+-- fraud_flags (§36.35) - internal risk flags; staff-only. Never auto-punish (§11.2).
 -- =============================================================================
 create table if not exists fraud_flags (
   id uuid primary key default gen_random_uuid(),
@@ -220,7 +220,7 @@ drop policy if exists vouch_requests_update_party on vouch_requests;
 create policy vouch_requests_update_party on vouch_requests
   for update using (auth.uid() = requester_id or auth.uid() = recipient_id);
 
--- player_skill_profiles: PUBLIC read (safe aggregate — no voucher identity). Writes service-role only.
+-- player_skill_profiles: PUBLIC read (safe aggregate - no voucher identity). Writes service-role only.
 drop policy if exists player_skill_profiles_public_read on player_skill_profiles;
 create policy player_skill_profiles_public_read on player_skill_profiles
   for select using (true);
@@ -247,3 +247,4 @@ union all
 select 'player_skill_profiles_public_read', count(*) from pg_policies
   where tablename = 'player_skill_profiles' and policyname = 'player_skill_profiles_public_read';
 -- Expect: vouch_tables = 7, player_skill_profiles_public_read = 1
+

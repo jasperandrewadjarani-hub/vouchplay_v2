@@ -153,10 +153,12 @@ export default async function TournamentPage({ params }: Params) {
         </div>
       </header>
 
-      <section className="border-border bg-surface rounded-2xl border p-4">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
-        <DivisionList divisions={t.divisions} />
-      </section>
+      {!(isOpen && authed && regState) && (
+        <section className="border-border bg-surface rounded-2xl border p-4">
+          <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
+          <DivisionList divisions={t.divisions} />
+        </section>
+      )}
 
       {/* Registration - the shared ?register=1 link scrolls here (handover §19.2, §19.3, §28.1). */}
       <div id="register" className="scroll-mt-24">

@@ -204,7 +204,7 @@ App design UI, UX should be intuitive, user friendly, but adaptive of the theme 
 
 
 Worked for 1m 59s
-Yes. VouchPlay already has a solid product concept, but I would not start full development from the current specification yet. The missing pieces are mostly not additional screens—they are the underlying rules, states, permissions, privacy controls, and anti-abuse logic that will prevent major rework later.
+Yes. VouchPlay already has a solid product concept, but I would not start full development from the current specification yet. The missing pieces are mostly not additional screens-they are the underlying rules, states, permissions, privacy controls, and anti-abuse logic that will prevent major rework later.
 
 The biggest issue is the Vouch/STS architecture. Once that is locked, the rest of the app becomes much easier to build.
 
@@ -226,12 +226,12 @@ I recommend separating four concepts:
 Metric	Meaning	Example
 Self-Rated Skill	What the player claims	Novice
 Community Skill Rating	What other players think the player's level is	Low Intermediate
-STS — Skill Trust Score	How much credible evidence exists behind that community rating	3.7 / 5
+STS - Skill Trust Score	How much credible evidence exists behind that community rating	3.7 / 5
 Identity Verification	Whether VouchPlay has verified that this is a real person	✓ Identity Verified
 Then have two distinct badges:
 
-✓ Skill Verified — community evidence is strong enough, e.g. STS ≥ 3.0
-✓ Identity Verified — identity has been separately verified by JT/VouchPlay.
+✓ Skill Verified - community evidence is strong enough, e.g. STS ≥ 3.0
+✓ Identity Verified - identity has been separately verified by JT/VouchPlay.
 
 Recommended vouch logic
 A vouch should contain:
@@ -348,8 +348,8 @@ It doesn't need to become a Facebook-style feed in MVP.
 Header
 I would use:
 
-VouchPlay logo — left
-Notification bell — right
+VouchPlay logo - left
+Notification bell - right
 
 Profile is already under Me, so you don't need another profile icon cluttering the header.
 
@@ -463,8 +463,8 @@ I would also add registration terms acknowledgement before final submission.
 
 Define:
 
-Who pays — player/team
-Payment methods — gateway, GCash/Maya/bank transfer/manual proof
+Who pays - player/team
+Payment methods - gateway, GCash/Maya/bank transfer/manual proof
 Payment reference number
 Proof upload
 Pending/Verified/Rejected/Refunded states
@@ -494,7 +494,7 @@ For MVP, I'd make Sponsorship simply an offer/relationship status.
 
 Don't build contracts or money transfers between sponsors and players yet.
 
-11. Notifications — several important ones are missing
+11. Notifications - several important ones are missing
 I would use the following notification matrix:
 
 Recipient	Important notifications
@@ -623,10 +623,10 @@ Community Rating: Low Intermediate
 STS 4.2 / 5
 ↑ Improving
 
-Beginner — 3
-Novice — 8
-Low Intermediate — 21
-High Intermediate — 5
+Beginner - 3
+Novice - 8
+Low Intermediate - 21
+High Intermediate - 5
 
 This is much more useful than only displaying one calculated number.
 
@@ -644,14 +644,14 @@ This is important because the current specification is already becoming a fairly
 VouchPlay MVP
 I would build in this order:
 
-Foundation — authentication, profiles, permissions, admin, privacy/security.
-Players — player directory, search/filter, profiles, skill system.
-Vouch Engine — vouches, STS, Skill Verified, comments, request-vouch, anti-abuse.
-Safety — report/block/moderation before opening public UGC.
-Clubs — create, verify, join, leave, ownership/admin.
-Tournaments — create, divisions, interest, partner invitations, registration.
-Organizer Dashboard — approvals, payments, waitlist, eligibility, exports.
-Notifications — in-app/email/push and preferences.
+Foundation - authentication, profiles, permissions, admin, privacy/security.
+Players - player directory, search/filter, profiles, skill system.
+Vouch Engine - vouches, STS, Skill Verified, comments, request-vouch, anti-abuse.
+Safety - report/block/moderation before opening public UGC.
+Clubs - create, verify, join, leave, ownership/admin.
+Tournaments - create, divisions, interest, partner invitations, registration.
+Organizer Dashboard - approvals, payments, waitlist, eligibility, exports.
+Notifications - in-app/email/push and preferences.
 Beta + analytics + audit/security hardening.
 Native Android/iOS packaging and store submission.
 I would deliberately push Achievements, achievement vouching, sponsorship marketplace, social feed, direct messaging/chat, sophisticated STS decay, integrated tournament brackets/scoring and advanced gamification to Phase 2.
@@ -665,28 +665,28 @@ Everything else supports that loop.
 19. The final master specification should be split into 8 documents
 Before coding, I would turn what you've written into:
 
-01 — Product Requirements Document (PRD)
+01 - Product Requirements Document (PRD)
 What VouchPlay is, MVP scope, features, business rules.
 
-02 — VouchPlay Rules Engine
+02 - VouchPlay Rules Engine
 STS formula, skill levels, verification, vouching, anti-abuse, disputes.
 
-03 — User Flows
+03 - User Flows
 Signup → profile → vouch → club → partner → tournament → payment → confirmation.
 
-04 — Roles & Permissions Matrix
+04 - Roles & Permissions Matrix
 Player/Coach/Organizer/Club Owner/Admin/Super Admin.
 
-05 — UI/UX Design System
+05 - UI/UX Design System
 Dark/light theme, components, cards, badges, typography, spacing, icons, states.
 
-06 — Data Model & Technical Architecture
+06 - Data Model & Technical Architecture
 Users, profiles, roles, vouches, clubs, memberships, tournaments, divisions, teams, registrations, payments, notifications, reports and audit logs.
 
-07 — Admin & Moderation Specification
+07 - Admin & Moderation Specification
 Verification, reports, fraud detection, overrides and audit.
 
-08 — Security / Privacy / Release Checklist
+08 - Security / Privacy / Release Checklist
 DPA/NPC, account deletion, UGC moderation, Google/Apple requirements, PWA, App Store and Play Store.
 
 Once those eight are defined, VouchPlay goes from an app idea/specification to a genuinely executable software blueprint.
@@ -778,7 +778,7 @@ How trustworthy is that assessment?
 
 Example:
 
-STS 4.3 / 5 — HIGH CONFIDENCE
+STS 4.3 / 5 - HIGH CONFIDENCE
 
 These are fundamentally different things.
 
@@ -877,15 +877,15 @@ Especially once tournament eligibility depends on it.
 
 VouchPlay needs to detect things like:
 
-Vouch rings — A, B, C, D constantly vouch for each other.
+Vouch rings - A, B, C, D constantly vouch for each other.
 
-Vouch bombing — 20 people suddenly rate somebody downward before a tournament.
+Vouch bombing - 20 people suddenly rate somebody downward before a tournament.
 
-Sockpuppet accounts — one person creates five accounts.
+Sockpuppet accounts - one person creates five accounts.
 
-Coach abuse — coach sells/gives favorable ratings.
+Coach abuse - coach sells/gives favorable ratings.
 
-Club manipulation — club members coordinate ratings.
+Club manipulation - club members coordinate ratings.
 
 Revenge vouching.
 
@@ -1036,10 +1036,10 @@ Community-endorsed.
 
 For example:
 
-⚡ Fast Hands — 31
-🛡️ Strong Defense — 26
-🎯 Accurate Serve — 19
-🧠 High Court IQ — 18
+⚡ Fast Hands - 31
+🛡️ Strong Defense - 26
+🎯 Accurate Serve - 19
+🧠 High Court IQ - 18
 
 That could make profiles extremely engaging.
 
@@ -1052,7 +1052,7 @@ Looking for Partner ✓
 
 Tournament page could show:
 
-Looking for Partner — Novice Mixed
+Looking for Partner - Novice Mixed
 Player cards:
 
 Anna Cruz
@@ -1527,7 +1527,7 @@ Then invite players in waves.
 
 For example:
 
-VouchPlay Founding Players — Zamboanga
+VouchPlay Founding Players - Zamboanga
 
 Get perhaps the first 100–300 local players onboarded and vouching before broader promotion.
 
@@ -1538,15 +1538,15 @@ Eventually an organizer could open a player's profile and see:
 
 ORGANIZER VIEW
 Community Skill: Low Intermediate
-STS: 4.5 — High Confidence
+STS: 4.5 - High Confidence
 Identity: Verified
 Tournament History: 7
 Verified Matches: 38
 
 Division History
 
-Novice — 3 tournaments
-Low Intermediate — 4 tournaments
+Novice - 3 tournaments
+Low Intermediate - 4 tournaments
 
 Podiums
 
@@ -1560,7 +1560,7 @@ That becomes far harder to manipulate than a simple self-declared rating.
 And that, rather than just vouching, could ultimately become VouchPlay's strongest anti-sandbagging advantage.
 
 So: are we complete now?
-Not yet—but now we can see the whole product much more clearly.
+Not yet-but now we can see the whole product much more clearly.
 
 Your original document describes what users should be able to do.
 
@@ -1580,7 +1580,7 @@ JT administration, monetization, moderation, privacy, support, testing, launch a
 
 I would stop adding random features at this point and turn everything into a proper VouchPlay Master Product & Execution Blueprint v1.0.
 
-That blueprint should be much more detailed than a normal PRD—probably 40–60 pages worth of specification—with the complete feature inventory, MVP vs Phase 2/3 scope, every user flow, roles/permissions matrix, tournament state machines, STS algorithm, anti-sandbagging engine, database entities/relationships, admin system, notification matrix, privacy/security requirements, UI information architecture, acceptance criteria, technical architecture, development phases and launch checklist.
+That blueprint should be much more detailed than a normal PRD-probably 40–60 pages worth of specification-with the complete feature inventory, MVP vs Phase 2/3 scope, every user flow, roles/permissions matrix, tournament state machines, STS algorithm, anti-sandbagging engine, database entities/relationships, admin system, notification matrix, privacy/security requirements, UI information architecture, acceptance criteria, technical architecture, development phases and launch checklist.
 
 Once that is locked, you and Tane can build against it systematically instead of discovering fundamental rules halfway through development.
 

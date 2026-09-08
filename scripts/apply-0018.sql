@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0018: Optional DOB for public leaderboards
+-- VouchPlay v2 - Migration 0018: Optional DOB for public leaderboards
 -- Handover §6.1. An unknown DOB is not a public-ranking exclusion; supplied minors remain excluded.
 -- =============================================================================
 
@@ -19,3 +19,4 @@ union all
 select 'leaderboard_setting_row', count(*)
 from system_settings
 where key = 'leaderboard_exclude_unknown_dob';
+

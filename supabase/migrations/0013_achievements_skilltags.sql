@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0013: Achievements, Skill Tags & History (Phase 12)
+-- VouchPlay v2 - Migration 0013: Achievements, Skill Tags & History (Phase 12)
 -- Handover §9.4 (Achievements), §9.5 (Skill Tags), §36.11–36.15, §49 (Tournament History),
 -- §50 (Historical Skill Mismatch Advisory).
 --
@@ -138,3 +138,4 @@ select 'ach_rls_policies', count(*) from pg_policies
   where schemaname = 'public'
     and tablename in ('skill_tags','player_skill_tag_votes','achievements','player_achievements','achievement_endorsements');
 -- Expect: ach_tables = 5, skill_tags_seeded = 10, ach_rls_policies = 5
+

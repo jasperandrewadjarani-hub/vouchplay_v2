@@ -1,7 +1,7 @@
 -- ============================================================================
 -- ONE-PASTE APPLY: migration 0003 + JT admin grant
 -- Paste this whole file into the Supabase SQL editor (project itrosesiywpbaxtmucbb)
--- and click Run. Idempotent — safe to run more than once.
+-- and click Run. Idempotent - safe to run more than once.
 -- (Claude's automated dashboard writes are blocked by the auto-mode classifier, so
 --  this needs a human paste. Everything is also in migration 0003 + scripts/seed-admin.mjs.)
 -- ============================================================================
@@ -76,3 +76,4 @@ union all
 select 'public_player_facts_exists', count(*) from pg_proc where proname = 'public_player_facts'
 union all
 select 'avatars_bucket_public', count(*) from storage.buckets where id = 'avatars' and public;
+

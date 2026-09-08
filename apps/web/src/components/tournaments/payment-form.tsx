@@ -21,6 +21,7 @@ export function PaymentForm({
   methods,
   paymentStatus,
   rejectionReason,
+  paymentQrUrl,
 }: {
   registrationId: string;
   tournamentId: string;
@@ -30,6 +31,7 @@ export function PaymentForm({
   methods: string | null;
   paymentStatus: string | null;
   rejectionReason: string | null;
+  paymentQrUrl: string | null;
 }) {
   const router = useRouter();
   const action = submitPayment.bind(null, registrationId, tournamentId);
@@ -57,6 +59,18 @@ export function PaymentForm({
         <p className="text-foreground-muted mt-1 text-xs whitespace-pre-wrap">{instructions}</p>
       )}
       {methods && <p className="text-foreground-muted mt-1 text-xs">Accepted: {methods}</p>}
+      {paymentQrUrl && (
+        <div className="mt-2">
+          <p className="text-foreground-muted mb-1 text-xs">Scan to pay</p>
+          {/* A signed Storage URL is required for this private organizer-uploaded QR. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={paymentQrUrl}
+            alt="Payment QR code"
+            className="h-40 w-40 rounded-lg bg-white p-2"
+          />
+        </div>
+      )}
       {paymentStatus === 'rejected' && rejectionReason && (
         <p className="text-danger mt-1 text-xs">
           Previous proof rejected: {rejectionReason}. Please resubmit.

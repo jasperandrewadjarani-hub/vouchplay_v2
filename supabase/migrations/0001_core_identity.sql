@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0001: Core Identity, Roles, Settings, Audit
+-- VouchPlay v2 - Migration 0001: Core Identity, Roles, Settings, Audit
 -- Handover §36.1–36.4, §36.39–36.40, §4 (roles), §13 (identity), §37 (RLS).
 -- Phase 1 foundation. Idempotent-ish (guards where practical); intended to run once via
 -- `supabase db push`. All timestamps UTC. UUID PKs. RLS enabled on user-facing tables.
@@ -50,9 +50,9 @@ end;
 $$;
 
 -- =============================================================================
--- profiles (handover §36.1) — one row per auth user. `id` == auth.users.id.
+-- profiles (handover §36.1) - one row per auth user. `id` == auth.users.id.
 -- Note: self_rated_skill is a skill-band ordinal 0..6 (canonical order is LOCKED, §3.1).
--- Community Skill and STS are NOT stored here — they live in player_skill_profiles (Phase 3),
+-- Community Skill and STS are NOT stored here - they live in player_skill_profiles (Phase 3),
 -- kept separate so identity/skill/trust never conflate (§3.3, §72).
 -- =============================================================================
 create table if not exists profiles (
@@ -93,7 +93,7 @@ create trigger trg_profiles_updated_at before update on profiles
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- user_roles (handover §36.2) — additive global-role grants. No account "types".
+-- user_roles (handover §36.2) - additive global-role grants. No account "types".
 -- =============================================================================
 create table if not exists user_roles (
   id uuid primary key default gen_random_uuid(),
@@ -114,7 +114,7 @@ create unique index if not exists uq_user_roles_active
 create index if not exists idx_user_roles_user on user_roles (user_id);
 
 -- =============================================================================
--- role_applications (handover §36.3) — apply to be Coach/Organizer; Admin decides.
+-- role_applications (handover §36.3) - apply to be Coach/Organizer; Admin decides.
 -- =============================================================================
 create table if not exists role_applications (
   id uuid primary key default gen_random_uuid(),
@@ -140,7 +140,7 @@ create trigger trg_role_applications_updated_at before update on role_applicatio
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- identity_verifications (handover §36.4, §13) — private. Document files live in a private
+-- identity_verifications (handover §36.4, §13) - private. Document files live in a private
 -- bucket; only the storage PATH is stored here. Public profile shows STATUS ONLY, never details.
 -- document_delete_after enforces retention (default 30 days after decision, §13.3).
 -- =============================================================================
@@ -168,7 +168,7 @@ create trigger trg_identity_verifications_updated_at before update on identity_v
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- system_settings (handover §36.39, §30.7) — Admin-configurable operational values.
+-- system_settings (handover §36.39, §30.7) - Admin-configurable operational values.
 -- Domain logic reads these at runtime; nothing hardcodes business numbers.
 -- =============================================================================
 create table if not exists system_settings (
@@ -184,7 +184,7 @@ create trigger trg_system_settings_updated_at before update on system_settings
   for each row execute function set_updated_at();
 
 -- =============================================================================
--- audit_logs (handover §36.40, §30.8) — APPEND-ONLY. No update/delete for any role.
+-- audit_logs (handover §36.40, §30.8) - APPEND-ONLY. No update/delete for any role.
 -- =============================================================================
 create table if not exists audit_logs (
   id uuid primary key default gen_random_uuid(),
@@ -312,3 +312,4 @@ create policy system_settings_public_read on system_settings
 drop policy if exists audit_logs_staff_read on audit_logs;
 create policy audit_logs_staff_read on audit_logs
   for select using (public.is_staff(auth.uid()));
+

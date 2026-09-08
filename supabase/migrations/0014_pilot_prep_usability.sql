@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0014: Pilot-prep usability and retention
+-- VouchPlay v2 - Migration 0014: Pilot-prep usability and retention
 -- §17.2 owner-only Archive/Restore, §18.6 audited unused-division removal, and the
 -- system_settings-backed starter capacity. Safe to re-run.
 -- =============================================================================
@@ -164,4 +164,5 @@ $$;
 
 revoke all on function public.remove_unused_division(uuid) from public;
 grant execute on function public.remove_unused_division(uuid) to authenticated;
+
 

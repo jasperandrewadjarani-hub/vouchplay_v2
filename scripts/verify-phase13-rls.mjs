@@ -25,11 +25,11 @@ let pass = 0;
 let fail = 0;
 let skip = 0;
 function check(name, ok, detail = '') {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` - ${detail}` : ''}`);
   ok ? pass++ : fail++;
 }
 function skipped(name) {
-  console.log(`SKIP  ${name} — controlled token not supplied`);
+  console.log(`SKIP  ${name} - controlled token not supplied`);
   skip++;
 }
 async function count(client, table, configure = (query) => query) {
@@ -207,3 +207,4 @@ console.log(
 );
 console.log(`\n${pass} passed, ${fail} failed, ${skip} skipped`);
 if (fail || skip) process.exitCode = 1;
+

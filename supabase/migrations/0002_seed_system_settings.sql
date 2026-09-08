@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0002: Seed system_settings
+-- VouchPlay v2 - Migration 0002: Seed system_settings
 -- Mirrors DEFAULT_SYSTEM_SETTINGS in @vouchplay/config (handover §30.7). Safe to re-run:
 -- existing keys are left untouched so Admin edits are never overwritten by a redeploy.
 -- =============================================================================
@@ -26,3 +26,4 @@ insert into system_settings (key, value, description) values
   ('role_applications_enabled', 'true'::jsonb, 'Whether coach/organizer applications are open (§61)'),
   ('club_creation_enabled', 'true'::jsonb, 'Whether players may create clubs (§61)')
 on conflict (key) do nothing;
+

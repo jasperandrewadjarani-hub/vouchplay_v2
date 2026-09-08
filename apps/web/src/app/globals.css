@@ -5,7 +5,7 @@
 
 /*
  * Locked theme tokens (handover §33.2). Light is the base :root palette; .dark overrides.
- * Semantic meaning takes priority over decorative neon — cyberpunk accents are used sparingly.
+ * Semantic meaning takes priority over decorative neon - cyberpunk accents are used sparingly.
  */
 :root {
   --background: #f6f8fc;
@@ -75,7 +75,7 @@
 
 html {
   color-scheme: light dark;
-  /* Global scale: Tailwind sizes/spacing are rem-based, so a smaller root shrinks the whole UI —
+  /* Global scale: Tailwind sizes/spacing are rem-based, so a smaller root shrinks the whole UI -
      denser cards, more per screen on mobile (§33 mobile-first). */
   font-size: 14px;
 }
@@ -109,7 +109,7 @@ body {
    Bold-sporty design utilities (§33). Theme-aware via the tokens above.
    ========================================================================== */
 
-/* Brand gradient — used on primary actions, active nav, accent strokes. */
+/* Brand gradient - used on primary actions, active nav, accent strokes. */
 .vp-gradient {
   background-image: linear-gradient(135deg, var(--primary-from), var(--primary-to));
 }
@@ -122,7 +122,7 @@ body {
   color: transparent;
 }
 
-/* Primary glow — a soft colored shadow that reads as energetic without being loud. */
+/* Primary glow - a soft colored shadow that reads as energetic without being loud. */
 .vp-glow {
   box-shadow: 0 10px 30px -10px var(--glow-primary);
 }

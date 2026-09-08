@@ -1,5 +1,5 @@
 -- =============================================================================
--- APPLY: Migration 0014 — Pilot-prep usability and retention.
+-- APPLY: Migration 0014 - Pilot-prep usability and retention.
 -- Paste this whole block into the Supabase SQL editor (project itrosesiywpbaxtmucbb) and run it.
 -- Idempotent. Expect: pilot_prep_functions = 2, default_capacity_setting = 1,
 -- archive_read_policies = 3.
@@ -156,4 +156,5 @@ select 'archive_read_policies', count(*) from pg_policies
   where schemaname = 'public'
     and policyname in ('tournaments_read', 'divisions_read', 'tournament_announcements_read');
 -- Expect: pilot_prep_functions = 2, default_capacity_setting = 1, archive_read_policies = 3
+
 

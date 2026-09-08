@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0006: Clubs (Phase 5)
+-- VouchPlay v2 - Migration 0006: Clubs (Phase 5)
 -- Handover §15 (Clubs), §36.16 clubs, §36.17 club_memberships, §37 (RLS), §4.3 (club roles).
 --
 -- Scope: Clubs CORE only. Recruitment/Sponsorship (§16 club_offers) and Bidding (§16A player_bids)
@@ -7,7 +7,7 @@
 --
 -- Model (LOCKED §15.1): verification_status and activity_status are separate. Any active player can
 -- create a club (§15.2), which immediately creates an owner membership; verification goes to Admin.
--- Privacy (§15.6) is PUBLIC (anyone joins) or APPROVAL_REQUIRED (owner/admin approves) — it gates
+-- Privacy (§15.6) is PUBLIC (anyone joins) or APPROVAL_REQUIRED (owner/admin approves) - it gates
 -- JOINING, not visibility; fully-hidden clubs are out of V1. Writes happen via the service role in
 -- audited server actions (mirrors vouches/moderation); RLS below governs reads.
 -- Apply via the Supabase SQL editor (same method as 0001–0005).
@@ -166,3 +166,4 @@ union all
 select 'club_rls_policies', count(*) from pg_policies
   where tablename in ('clubs','club_memberships');
 -- Expect: club_tables = 2, club_helpers = 3, club_rls_policies = 3
+

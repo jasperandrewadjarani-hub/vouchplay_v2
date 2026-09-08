@@ -1,6 +1,9 @@
-# VouchPlay Master Product & Code Execution Handover v1.13
+Warning: truncated output (original token count: 52712)
+Total output lines: 6749
 
-_(File retains its `…v1.1.md` name; content is v1.13 - see Changelog.)_
+# VouchPlay Master Product & Code Execution Handover v1.14
+
+_(File retains its `…v1.1.md` name; content is v1.14 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -77,11 +80,20 @@ Editor application).** Interest is a planning signal only: a user chooses a stan
 before one signed-in-player or privacy-minimized anonymous-browser interest is recorded. Anonymous
 interest uses a random first-party HTTP-only cookie represented in storage only by an HMAC; it is not
 device fingerprinting and cookie resets can raise the estimate. Public detail shows aggregate counts,
-public opted-in signed-in avatar stack only, and an aggregate per-division dialog—never anonymous or
+public opted-in signed-in avatar stack only, and an aggregate per-division dialog-never anonymous or
 per-division identity. It never creates registration, a reservation, eligibility, a real tournament
 division, or marketing consent. `/admin/clubs` adds a discoverable AAL2 Admin management surface while
 keeping existing Staff actions/audit controls. Home now leads with concise action cards before rankings;
 dark is the OS-independent default (while an explicit user choice remains respected).
+
+**Tournament experience refinement: staged (migration 0020 pending Jasper SQL Editor application).**
+Copy never uses em dashes and helper text stays concise. Interest confirmation is plain and never
+overclaims. Demand and registration meters are separate, accessible, and capacity-based where a real
+division capacity exists. Player division cards progressively disclose evidence guidance and unify
+division facts, partner selection, and registration controls. Public tournament discovery stays first
+for organizers; private managed records are opt-in and default-hide draft, cancelled, and archived.
+Payment QR is a private signed image for the existing manual proof-and-review workflow, not a gateway
+or payment confirmation.
 
 **Phase 3 - Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
 STS components, Skill-Verified, effective weights) - pure/deterministic, 11 unit tests incl.
@@ -2634,440 +2646,7 @@ The export must support, at minimum:
 - Community Skill,
 - STS,
 - Skill Verified,
-- Identity Verified where organizer is authorized,
-- timestamps needed by the tournament backend.
-
-### 26.11.1 Canonical Tournament-System XLSX Compatibility
-
-The existing JT tournament-system workbook is the **canonical compatibility contract** for the Tournament System XLSX export.
-
-Execution-time reference supplied by JT:
-
-```text
-D:\claude\_\P006b_PlayerProfiling\vouchplay_v2\sample_data\_\tournament_googlesheets_sample.xlsx
-```
-
-This master-plan environment cannot access that Windows-local file. Therefore, the code-execution agent must inspect the workbook **before implementing the compatibility adapter**.
-
-Required implementation workflow:
-
-1. Locate the sample workbook at the supplied path or its repository-relative equivalent.
-2. Read workbook structure programmatically.
-3. Record:
-   - exact sheet names,
-   - exact sheet order if downstream code depends on it,
-   - header rows,
-   - column names,
-   - column order,
-   - required blank/placeholder columns,
-   - data types,
-   - date/time formats,
-   - boolean/status encodings,
-   - formulas if any,
-   - named ranges/tables if any,
-   - required IDs/keys,
-   - allowed status values.
-4. Add the sample workbook to automated-test fixtures if licensing/privacy permits; otherwise create a schema-only sanitized fixture with identical structure.
-5. Implement a dedicated adapter:
-   `TournamentSystemXlsxExporter`.
-6. Add a structural compatibility test that fails if:
-   - required sheet is missing,
-   - header changes,
-   - required column order changes,
-   - status encoding changes,
-   - required data type changes.
-7. Never silently change the canonical export schema because VouchPlay's internal database changes.
-
-### 26.11.2 Export Architecture
-
-Do not couple database tables directly to worksheet columns.
-
-Use:
-
-```text
-Domain Entities
-    ↓
-TournamentExportSnapshot
-    ↓
-Export Mapping / Adapter
-    ├── TournamentSystemXlsxExporter
-    ├── NormalizedXlsxExporter
-    └── CsvExporter
-```
-
-`TournamentExportSnapshot` is an immutable point-in-time DTO generated inside a consistent database transaction/read snapshot.
-
-This prevents the export from mixing records from different moments while registrations are changing.
-
-### 26.11.3 Current-State Semantics
-
-"Current tournament" export means the export reflects the system state at `exported_at`.
-
-Include export metadata:
-- tournament ID,
-- tournament name,
-- export ID,
-- exported_at UTC,
-- event timezone,
-- exported_by,
-- schema version,
-- VouchPlay version,
-- tournament-system adapter version.
-
-If the canonical workbook has no metadata sheet/columns, metadata may be stored in a dedicated compatibility-safe location or in a companion normalized export without breaking the downstream tournament importer.
-
-### 26.11.4 Multi-Club Export
-
-Because a player can represent multiple clubs, the exporter must preserve **all** selected clubs.
-
-Internal normalized representation:
-
-```text
-player_id
-club_id
-club_name
-display_order
-```
-
-For a flat sheet, map according to the canonical workbook after inspection.
-
-Preferred fallback if the sample supports ordinary columns:
-
-```text
-Club 1
-Club 2
-Club 3
-...
-Club N
-```
-
-where `N = tournament.max_clubs_per_player`.
-
-Do not concatenate clubs into a single field if the downstream tournament system expects separate fields.
-
-### 26.11.5 Minimum Normalized XLSX Sheets
-
-If the organizer selects the human-readable Normalized XLSX, use:
-
-- `Tournament`
-- `Divisions`
-- `Players`
-- `Teams`
-- `Team Members`
-- `Player Clubs`
-- `Registrations`
-- `Payments`
-- `Waitlist`
-- `Eligibility`
-
-The canonical Tournament System XLSX may use a different structure and must follow the sample exactly.
-
-### 26.11.6 Export Performance
-
-Exports may become large and must not repeatedly query the database per row.
-
-Requirements:
-- fetch in bounded bulk queries,
-- no N+1 queries,
-- generate one export snapshot,
-- select only required columns,
-- stream or buffer within platform memory limits,
-- for large exports, generate asynchronously through the job/export queue and store the completed file in a private short-retention bucket,
-- return a signed download link,
-- do not regenerate an identical export repeatedly within a short window unless underlying data changed.
-
-Default export-cache rule:
-- hash `(tournament_id + tournament_data_version + export_type + schema_version)`,
-- if an identical completed export already exists and is less than 5 minutes old, reuse it,
-- organizer may force refresh.
-
-### 26.11.7 Privacy
-
-Exports must respect organizer authorization and privacy rules.
-
-Do not include:
-- identity documents,
-- payment-proof images,
-- moderation evidence,
-- hidden profile data unrelated to tournament operation.
-
-Contact email may be included only where organizer access is lawful/required.
-
-## 26.12 Audit Log
-Organizer-visible audit for tournament actions.
-
----
-
-# 27. Notifications
-
-Every notification record should include:
-- recipient,
-- type,
-- title,
-- body,
-- deep-link route,
-- actor if applicable,
-- related entity,
-- read status,
-- created_at.
-
-## 27.1 Player Notifications
-
-- vouch received,
-- vouch comment received,
-- vouch request,
-- partner invite,
-- partner accepted,
-- partner declined,
-- reciprocal team formed,
-- registration created,
-- payment due,
-- payment proof submitted,
-- payment verified,
-- payment rejected,
-- waitlisted,
-- promoted from waitlist,
-- registration confirmed,
-- registration rejected,
-- organizer reclassification,
-- tournament changed,
-- tournament cancelled,
-- tournament announcement,
-- club join accepted/rejected,
-- club invitation,
-- recruitment offer,
-- sponsorship offer,
-- Coach application result,
-- Organizer application result,
-- skill review resolution if appropriate,
-- moderation/account action,
-- account/security event.
-
-## 27.2 Club Owner/Admin Notifications
-
-- join request,
-- member accepted invite,
-- member leaves,
-- recruit accepted/declined,
-- sponsorship accepted/declined,
-- club verification result,
-- club moderation action,
-- club assigned to tournament,
-- ownership/admin change.
-
-## 27.3 Organizer Notifications
-
-- registration submitted,
-- payment submitted,
-- team withdrawal,
-- division capacity threshold,
-- waitlist created,
-- eligibility review required,
-- skill review tied to tournament,
-- co-organizer invitation response,
-- critical partner/team issue.
-
-Do not notify organizer for every "Interested" click by default.
-
-## 27.4 Admin Notifications
-
-- role application,
-- club verification request,
-- identity verification request,
-- report,
-- skill review,
-- fraud flag,
-- account appeal,
-- deletion/privacy request,
-- critical moderation backlog.
-
-## 27.5 Channels
-
-V1:
-- in-app.
-- email for critical events.
-
-Architecture:
-- push notification adapter.
-
-Later:
-- web push.
-- native push.
-
-Users can configure non-critical preferences.
-
-Critical security/account messages cannot be fully disabled.
-
----
-
-# 28. Public Pages, Sharing & SEO
-
-Public routes:
-
-- `/players/[slug]`
-- `/clubs/[slug]`
-- `/tournaments/[slug]`
-
-Requirements:
-- server-rendered metadata,
-- canonical URL,
-- Open Graph image,
-- social preview,
-- clean title/description,
-- no private data leakage.
-
-Share actions:
-- copy link,
-- native share API where supported.
-
-## 28.1 Registration Deep Link
-
-For a tournament, the share action can produce a **registration deep link** (`/tournaments/{slug}?register=1`)
-that lands the recipient directly on the registration options (§19.3), while the canonical/OG/indexing
-URL stays the clean `/tournaments/{slug}`. A signed-out recipient lands on the §19.2 Join call-to-action
-(create account → resume back to registration); a signed-in recipient lands on the live registration
-panel. The deep link is behaviour-only - it never bypasses auth, eligibility (§25), slot reservation
-(§23), or visibility rules.
-
-Future share-card types:
-- My VouchPlay Profile.
-- Looking for Partner.
-- Team Registered.
-- Tournament Registration Open.
-- Achievement.
-
----
-
-# 29. FAQ & About
-
-## 29.1 FAQ Must Cover
-
-- What is VouchPlay?
-- What is a vouch?
-- Is a vouch anonymous?
-- Are comments anonymous?
-- What is Community Skill?
-- What is STS?
-- What does Skill Verified mean?
-- What does Identity Verified mean?
-- Can I change my vouch?
-- What happens if someone rates me incorrectly?
-- How do I request a skill review?
-- How do I become a Coach?
-- How do I become an Organizer?
-- How do tournament eligibility checks work?
-- Can organizers override a mismatch?
-- How do I create/join a club?
-- How do I find a partner?
-- What is sponsorship?
-- How is my information used?
-- How do I delete my account?
-- What is club bidding, and how do I accept a bid? (see §16A)
-- Are bids real money? (No - reputation points only in V1.)
-- How are the Home leaderboards ranked? (engagement/medals/bidding - not raw STS; see §6.1)
-- Can I hide from leaderboards / turn off bids?
-
-## 29.2 Skill Explanation
-
-Present canonical hierarchy and plain-language descriptions.
-
-Do not reference DUPR.
-
-## 29.3 About
-
-Include:
-- VouchPlay mission.
-- Developed by JT Consulting & Analytics Inc.
-- founders/product leads.
-- JT logo.
-- JT link.
-
----
-
-# 30. Admin Control Center
-
-## 30.1 Users
-- search,
-- inspect profile,
-- verify identity,
-- manual skill verification,
-- restrict,
-- suspend,
-- ban,
-- restore,
-- merge duplicate accounts,
-- revoke sessions,
-- view role history.
-
-## 30.2 Roles
-- Coach applications.
-- Organizer applications.
-- Approve.
-- Reject with reason.
-- Revoke.
-- Expire if future policy requires.
-
-## 30.3 Clubs
-- verification.
-- suspend.
-- reinstate.
-- ownership transfer.
-- delete/restore.
-
-## 30.4 Tournaments
-Admin has organizer-equivalent access plus:
-- override ownership if necessary,
-- suspend/cancel tournament,
-- resolve severe disputes.
-
-## 30.5 Vouches
-- inspect anonymous source identity,
-- review revisions,
-- invalidate,
-- reinstate,
-- inspect calculation contribution,
-- trigger recalculation.
-
-## 30.6 Moderation
-- reports,
-- skill reviews,
-- fraud flags,
-- content actions,
-- appeals,
-- internal notes.
-
-## 30.7 System Settings
-
-At minimum:
-
-| Setting | Default |
-|---|---:|
-| Player vouches / rolling 24h | 5 |
-| Coach vouches / rolling 24h | 20 |
-| Vouch request / rolling 24h | 10 |
-| Vouch update cooldown days | 30 |
-| Normal vouch weight | 1.00 |
-| Identity Verified weight | 1.25 |
-| Coach weight | 2.00 |
-| Identity Verified Coach weight | 2.50 |
-| Skill Verified minimum STS | 3.0 |
-| Skill Verified minimum unique vouchers | 2 |
-| Default max divisions/player | 3 |
-| Default max clubs/player/tournament | 3 |
-| Default division capacity (teams) | 20 |
-| Club representation required | false |
-| Verified clubs only | false |
-| Slot hold minutes | 30 |
-| Submitted-payment review grace | 24h |
-| Identity file retention after decision | 30 days |
-
-Also:
-- maintenance mode,
-- signup enabled,
-- role applications enabled,
-- club creation enabled,
-- feature flags,
-- announcement banner.
+- Identity Verified where organizer i…2712 tokens truncated…nouncement banner.
 
 ## 30.8 Audit
 
@@ -6555,6 +6134,12 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.14 (2026-09-08)
+- **Writing and tournament UX:** locked no-em-dash copy, concise helper text, simple interest
+  confirmation, demand/registration meters, per-player doubles fee display, integrated collapsible
+  player division cards, progressive skill guidance, partner discovery, public-first organizer
+  discovery, co-organizer account search, and private payment QR delivery.
+
 ## v1.13 (2026-09-08)
 - **Tournament demand signal:** locked one-interest-per-player/browser, pre-count standard demand
   division selection, privacy-minimized anonymous token design, aggregate-only public breakdown,
@@ -6731,3 +6316,4 @@ Maintain a changelog at the bottom.
 - Defined UI/UX system.
 - Defined test, deployment, beta, and native rollout plan.
 - Marked document LOCKED FOR EXECUTION.
+

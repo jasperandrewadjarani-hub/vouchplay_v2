@@ -1215,7 +1215,7 @@ Getting the first deploy up hit two issues:
     scheduled snapshot before the changed production setting is claimed live.
   - **Long-idle mobile behavior diagnosed and fixed:** mobile web apps normally suspend/restore unused
     tabs, while the app previously had no `visibilitychange`/BFCache recovery. The shell now performs
-    one deduplicated App Router refresh only on a persisted restore or after 60 seconds hidden—no
+    one deduplicated App Router refresh only on a persisted restore or after 60 seconds hidden-no
     background polling, focus thrash, or per-card fetches.
   - **Players compact view:** `/players?view=compact` is an accessible URL-preserved list of avatar,
     name, labelled colour-coded Community/Self-Rated skill, and STS. Detailed cards remain the default;
@@ -1245,6 +1245,9 @@ Getting the first deploy up hit two issues:
     pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
 
 ## Next up
+- **Apply migration 0020 before payment QR use:** Jasper runs `scripts/apply-0020.sql` against
+  `itrosesiywpbaxtmucbb` and returns `payment_qr_column=1`. The QR is private and signed during the
+  existing manual proof-and-review payment step. It is not a gateway or payment confirmation.
 - **Apply migration 0019 before demand launch:** Jasper runs `scripts/apply-0019.sql` against
   `itrosesiywpbaxtmucbb` and returns `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and
   `demand_direct_policies=0`. Run direct anon/auth RLS denial checks afterwards; only then is

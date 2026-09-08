@@ -1,6 +1,6 @@
 import 'server-only';
 import { createServiceClient } from '@/lib/supabase/service';
-import { avatarUrl } from '@/lib/storage';
+import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { divisionName } from './dto';
 
 /**
@@ -83,6 +83,7 @@ export interface ViewerRegistrationSkillProfile {
   sts: number;
   uniqueVoucherCount: number;
   skillVerified: boolean;
+  selfRatedSkillLevel: number | null;
 }
 
 export interface ViewerRegistrationState {
@@ -92,6 +93,7 @@ export interface ViewerRegistrationState {
   clubReps: ClubRep[];
   eligibleClubs: EligibleClub[];
   viewerSkill: ViewerRegistrationSkillProfile;
+  paymentQrUrl: string | null;
 }
 
 export async function getViewerRegistrationState(
@@ -103,14 +105,17 @@ export async function getViewerRegistrationState(
   // Tight, viewer-scoped projection for the §19.4 pre-registration prompt. The aggregate contains
   // no voucher identities; a missing row means the player has no community vouches yet.
   const [{ data: viewerProfileRow }, { data: viewerSkillRow }] = await Promise.all([
-    svc.from('profiles').select('slug').eq('id', userId).maybeSingle(),
+    svc.from('profiles').select('slug, self_rated_skill').eq('id', userId).maybeSingle(),
     svc
       .from('player_skill_profiles')
       .select('community_skill_level, sts, unique_voucher_count, skill_verified')
       .eq('player_id', userId)
       .maybeSingle(),
   ]);
-  const viewerProfile = viewerProfileRow as { slug: string | null } | null;
+  const viewerProfile = viewerProfileRow as {
+    slug: string | null;
+    self_rated_skill: number | null;
+  } | null;
   const skill = viewerSkillRow as {
     community_skill_level: number | null;
     sts: number | string;
@@ -124,6 +129,7 @@ export async function getViewerRegistrationState(
     sts: Number(skill?.sts ?? 0),
     uniqueVoucherCount: skill?.unique_voucher_count ?? 0,
     skillVerified: skill?.skill_verified ?? false,
+    selfRatedSkillLevel: viewerProfile?.self_rated_skill ?? null,
   };
 
   // Teams I'm on in this tournament.
@@ -224,6 +230,28 @@ export async function getViewerRegistrationState(
     }
   }
 
+  const paymentEligible = Object.values(registrationsByDivision).some(
+    (registration) =>
+      registration.paymentStatus === 'pending' || registration.paymentStatus === 'rejected',
+  );
+  let paymentQrUrl: string | null = null;
+  if (paymentEligible) {
+    // This optional column is read only when a player is at the private payment step. If migration
+    // 0020 is not applied yet, the query safely degrades to no QR rather than breaking registration.
+    const { data: tournamentRow } = await svc
+      .from('tournaments')
+      .select('payment_qr_path')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    const paymentQrPath = (tournamentRow as { payment_qr_path: string | null } | null)
+      ?.payment_qr_path;
+    if (paymentQrPath) {
+      paymentQrUrl =
+        (await svc.storage.from(PAYMENT_PROOFS_BUCKET).createSignedUrl(paymentQrPath, 60)).data
+          ?.signedUrl ?? null;
+    }
+  }
+
   // Pending invitations for this tournament (incoming + outgoing).
   const { data: invRows } = await svc
     .from('partner_invitations')
@@ -297,6 +325,7 @@ export async function getViewerRegistrationState(
     clubReps,
     eligibleClubs,
     viewerSkill,
+    paymentQrUrl,
   };
 }
 

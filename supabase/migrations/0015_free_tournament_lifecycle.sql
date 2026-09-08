@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0015: Free non-archived tournament lifecycle control (§17.2)
+-- VouchPlay v2 - Migration 0015: Free non-archived tournament lifecycle control (§17.2)
 -- Any tournament owner or active co-organizer with `edit` permission may move freely between
 -- normal statuses. Archive/Restore remains a separate owner-only retention flow (migration 0014).
 -- The status update and immutable audit entry commit in one transaction. Safe to re-run.
@@ -72,4 +72,5 @@ $$;
 
 revoke all on function public.set_tournament_status(uuid, tournament_status) from public;
 grant execute on function public.set_tournament_status(uuid, tournament_status) to authenticated;
+
 

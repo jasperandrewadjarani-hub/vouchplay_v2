@@ -88,7 +88,7 @@ export function ContributionProgress({
       {!progress ? (
         <EmptyNote>
           No contribution progress yet. This grows by helping distinct players you genuinely
-          know—not by favorable ratings or repeated vouches.
+          know-not by favorable ratings or repeated vouches.
         </EmptyNote>
       ) : (
         <div className="space-y-3">

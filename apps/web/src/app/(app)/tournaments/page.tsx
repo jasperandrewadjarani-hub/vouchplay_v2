@@ -40,9 +40,10 @@ const HIDE_PARAM: Record<ManagedVisibilityStatus, string> = {
 };
 
 function parseHiddenStatuses(sp: SP): ManagedVisibilityStatus[] {
-  return (Object.entries(HIDE_PARAM) as Array<[ManagedVisibilityStatus, string]>)
+  const explicit = (Object.entries(HIDE_PARAM) as Array<[ManagedVisibilityStatus, string]>)
     .filter(([, param]) => one(sp[param]) === '1')
     .map(([status]) => status);
+  return explicit.length > 0 ? explicit : ['draft', 'cancelled', 'archived'];
 }
 
 function preservedManagedParams(hidden: ManagedVisibilityStatus[]): Record<string, string> {
@@ -84,13 +85,10 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
     user ? listManagedTournaments(user.id, filters, hiddenStatuses) : Promise.resolve([]),
     user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
   ]);
-  const { tournaments, total, page, pageCount } = await listTournaments(
-    filters,
-    managedTournaments.map((t) => t.slug),
-  );
+  const { tournaments, total, page, pageCount } = await listTournaments(filters);
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       <div className="vp-in flex items-end justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
@@ -117,42 +115,48 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
       />
 
       {(canCreate || managedTournaments.length > 0) && (
-        <section className="space-y-3" aria-labelledby="managed-tournaments-heading">
-          <div>
-            <h2
+        <section className="order-3 space-y-3" aria-labelledby="managed-tournaments-heading">
+          <details className="group border-border bg-surface rounded-2xl border p-4">
+            <summary
               id="managed-tournaments-heading"
-              className="text-foreground text-lg font-semibold tracking-tight"
+              className="text-foreground cursor-pointer list-none text-lg font-semibold tracking-tight"
             >
               Your tournaments
-            </h2>
-            <p className="text-foreground-muted text-xs">
-              Events you own or co-organize, including drafts and unlisted tournaments.
-            </p>
-          </div>
-          <ManagedTournamentFilters
-            hiddenStatuses={hiddenStatuses}
-            queryString={new URLSearchParams({
-              ...(filters.q ? { q: filters.q } : {}),
-              ...(filters.city ? { city: filters.city } : {}),
-              ...(filters.page && filters.page > 1 ? { page: String(filters.page) } : {}),
-              ...managedParams,
-            }).toString()}
-          />
-          {managedTournaments.length > 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {managedTournaments.map((t) => (
-                <TournamentCard key={`managed-${t.slug}`} tournament={t} />
-              ))}
+              <span className="text-foreground-muted ml-2 text-xs font-normal">
+                View managed events and filters
+              </span>
+            </summary>
+            <div className="mt-4 space-y-3">
+              <p className="text-foreground-muted text-xs">
+                Events you own or co-organize. Draft, cancelled, and archived events stay hidden by
+                default.
+              </p>
+              <ManagedTournamentFilters
+                hiddenStatuses={hiddenStatuses}
+                queryString={new URLSearchParams({
+                  ...(filters.q ? { q: filters.q } : {}),
+                  ...(filters.city ? { city: filters.city } : {}),
+                  ...(filters.page && filters.page > 1 ? { page: String(filters.page) } : {}),
+                  ...managedParams,
+                }).toString()}
+              />
+              {managedTournaments.length > 0 ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {managedTournaments.map((t) => (
+                    <TournamentCard key={`managed-${t.slug}`} tournament={t} />
+                  ))}
+                </div>
+              ) : (
+                <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-6 text-center text-sm">
+                  No managed tournaments match the current search and display choices.
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="border-border bg-surface text-foreground-muted rounded-2xl border p-6 text-center text-sm">
-              No managed tournaments match the current search and display choices.
-            </div>
-          )}
+          </details>
         </section>
       )}
 
-      <section className="space-y-3" aria-labelledby="discover-tournaments-heading">
+      <section className="order-2 space-y-3" aria-labelledby="discover-tournaments-heading">
         <h2
           id="discover-tournaments-heading"
           className="text-foreground text-lg font-semibold tracking-tight"

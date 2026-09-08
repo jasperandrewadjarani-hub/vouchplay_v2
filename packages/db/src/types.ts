@@ -362,6 +362,7 @@ export interface TournamentRow {
   contact: string | null;
   payment_instructions: string | null;
   payment_methods: string | null;
+  payment_qr_path: string | null;
   social_links: Record<string, unknown>;
   max_divisions_per_player: number;
   max_clubs_per_player: number;

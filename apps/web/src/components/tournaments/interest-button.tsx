@@ -54,7 +54,11 @@ export function InterestButton({
       {open && (
         <Modal
           title={complete ? 'Interest recorded' : 'Tell us what you would play'}
-          subtitle="A planning signal only—not registration, eligibility, or a reserved tournament slot."
+          subtitle={
+            complete
+              ? 'Your interest has been counted. This is not registration or a reserved slot.'
+              : undefined
+          }
           onClose={() => setOpen(false)}
         >
           {complete ? (
@@ -66,7 +70,7 @@ export function InterestButton({
                     Be ready when registration opens
                   </p>
                   <p className="text-foreground-muted text-xs">
-                    Create a profile or club now. This does not hold a slot.
+                    Create a profile now to register when it opens.
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <Link
@@ -81,8 +85,22 @@ export function InterestButton({
                     >
                       Create a club
                     </Link>
+                    <Link
+                      href="/players?lookingForPartner=1"
+                      className="border-border text-foreground rounded-lg border px-3 py-2 text-xs font-semibold"
+                    >
+                      Find a partner
+                    </Link>
                   </div>
                 </div>
+              )}
+              {authed && (
+                <Link
+                  href="/players?lookingForPartner=1"
+                  className="border-border text-foreground block w-full rounded-xl border px-4 py-2.5 text-center text-sm font-semibold"
+                >
+                  Find a partner
+                </Link>
               )}
               <button
                 type="button"
@@ -113,8 +131,7 @@ export function InterestButton({
                 </select>
               </label>
               <p className="text-foreground-muted text-xs">
-                No account is needed. We use a privacy-preserving browser token to limit duplicate
-                interest; clearing browser data may create another estimate.
+                No account needed. Choose the division you would most like to play.
               </p>
               {message && (
                 <p role="alert" className="text-danger text-sm">

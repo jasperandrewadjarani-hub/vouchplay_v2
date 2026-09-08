@@ -24,7 +24,7 @@ const svc = createClient(url, env.SUPABASE_SERVICE_ROLE_KEY, {
 let pass = 0;
 let fail = 0;
 const check = (name, ok, detail = '') => {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  - ' + detail : ''}`);
   ok ? pass++ : fail++;
 };
 
@@ -40,7 +40,7 @@ check('anon can read system_settings (public)', ss.count > 0 && !ss.error, `coun
 const prof = await count(anon, 'profiles');
 check('anon can read profiles (public read policy)', !prof.error, `count=${prof.count}`);
 
-// user_roles / identity_verifications / audit_logs are PRIVATE to owner/staff — anon must see 0,
+// user_roles / identity_verifications / audit_logs are PRIVATE to owner/staff - anon must see 0,
 // while the service role sees the true count. A divergence proves RLS is filtering.
 for (const table of ['user_roles', 'identity_verifications', 'audit_logs']) {
   const a = await count(anon, table);
@@ -82,3 +82,4 @@ if (process.env.VERIFY_WRITES === '1') {
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
+

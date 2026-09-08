@@ -20,7 +20,7 @@ import {
 import { getOptionalUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { AVATARS_BUCKET } from '@/lib/storage';
+import { AVATARS_BUCKET, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { authorizeOrganizer, hasOrganizerRole, type OrganizerPerm } from '@/lib/tournaments/authz';
 import {
   TOURNAMENTS_LIST_TAG,
@@ -32,6 +32,10 @@ import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentParticipantIds } from '@/lib/notifications/recipients';
 import { loadSettingFlag, loadSettingNumber } from '@/lib/settings';
 import { prepareTournamentCover } from '@/lib/tournaments/cover-image';
+import {
+  normalizeUploadedImage,
+  PAYMENT_PROOF_IMAGE_PROFILE,
+} from '@/lib/images/normalize-upload-image';
 
 export interface TournamentActionState {
   ok?: boolean;
@@ -82,6 +86,29 @@ async function deleteGeneratedCover(path: string | null | undefined): Promise<vo
   if (!path?.startsWith('tournament-covers/')) return;
   try {
     await createServiceClient().storage.from(AVATARS_BUCKET).remove([path]);
+  } catch {
+    // Best-effort orphan cleanup; never undo a successful tournament save because cleanup failed.
+  }
+}
+
+async function uploadPaymentQr(
+  tournamentId: string,
+  file: File,
+): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  const prepared = await normalizeUploadedImage(file, PAYMENT_PROOF_IMAGE_PROFILE);
+  if (!prepared.ok)
+    return { ok: false, error: 'Payment QR must be a valid PNG, JPG, or WebP image up to 5 MB.' };
+  const path = `payment-qrs/${tournamentId}/qr-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.webp`;
+  const { error } = await createServiceClient()
+    .storage.from(PAYMENT_PROOFS_BUCKET)
+    .upload(path, prepared.bytes, { contentType: 'image/webp', upsert: false });
+  return error ? { ok: false, error: 'Could not upload the payment QR.' } : { ok: true, path };
+}
+
+async function deletePaymentQr(path: string | null | undefined): Promise<void> {
+  if (!path?.startsWith('payment-qrs/')) return;
+  try {
+    await createServiceClient().storage.from(PAYMENT_PROOFS_BUCKET).remove([path]);
   } catch {
     // Best-effort orphan cleanup; never undo a successful tournament save because cleanup failed.
   }
@@ -226,6 +253,7 @@ export async function updateTournament(
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   const v = parsed.data;
   const submittedCover = formData.get('cover');
+  const submittedPaymentQr = formData.get('paymentQr');
   const coverSelected = submittedCover instanceof File && submittedCover.size > 0;
   try {
     const svc = createServiceClient();
@@ -245,7 +273,9 @@ export async function updateTournament(
       payment_methods: v.paymentMethods || null,
     };
     let uploadedCoverPath: string | null = null;
+    let uploadedPaymentQrPath: string | null = null;
     let previousCoverPath: string | null = null;
+    let previousPaymentQrPath: string | null = null;
     if (coverSelected) {
       const prepared = await prepareTournamentCover(submittedCover);
       if (!prepared.ok) return { error: prepared.error };
@@ -264,14 +294,32 @@ export async function updateTournament(
       uploadedCoverPath = uploaded.path;
       patch.cover_path = uploaded.path;
     }
+    if (submittedPaymentQr instanceof File && submittedPaymentQr.size > 0) {
+      if (previousPaymentQrPath === null) {
+        const { data: current } = await svc
+          .from('tournaments')
+          .select('payment_qr_path')
+          .eq('id', tournamentId)
+          .maybeSingle();
+        previousPaymentQrPath =
+          (current as { payment_qr_path: string | null } | null)?.payment_qr_path ?? null;
+      }
+      const uploaded = await uploadPaymentQr(tournamentId, submittedPaymentQr);
+      if (!uploaded.ok) return { error: uploaded.error };
+      uploadedPaymentQrPath = uploaded.path;
+      patch.payment_qr_path = uploaded.path;
+    }
     const { error } = await svc.from('tournaments').update(patch).eq('id', tournamentId);
     if (error) {
       await deleteGeneratedCover(uploadedCoverPath);
+      await deletePaymentQr(uploadedPaymentQrPath);
       return { error: 'Could not save changes. Your current cover was kept.' };
     }
     if (uploadedCoverPath && previousCoverPath !== uploadedCoverPath) {
       await deleteGeneratedCover(previousCoverPath);
     }
+    if (uploadedPaymentQrPath && previousPaymentQrPath !== uploadedPaymentQrPath)
+      await deletePaymentQr(previousPaymentQrPath);
     invalidate(slug, tournamentId);
   } catch {
     return { error: 'Editing is temporarily unavailable.' };
@@ -872,6 +920,61 @@ export async function addCoOrganizer(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Co-organizer added.' };
+}
+
+export interface OrganizerSearchResult {
+  slug: string;
+  name: string;
+  city: string | null;
+}
+
+/** Narrow account picker for owners; final add still verifies the active Organizer role server-side. */
+export async function searchEligibleOrganizers(q: string): Promise<OrganizerSearchResult[]> {
+  const actor = await getOptionalUser();
+  const term = q.trim();
+  if (!actor || term.length < 2) return [];
+  const safe = term.replace(/[%,()]/g, ' ');
+  const svc = createServiceClient();
+  const { data: profiles } = await svc
+    .from('profiles')
+    .select('id, slug, first_name, last_name, nickname, city')
+    .eq('account_status', 'active')
+    .not('onboarded_at', 'is', null)
+    .neq('id', actor.id)
+    .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,nickname.ilike.%${safe}%`)
+    .limit(20);
+  const rows = (profiles ?? []) as Array<{
+    id: string;
+    slug: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    nickname: string | null;
+    city: string | null;
+  }>;
+  if (rows.length === 0) return [];
+  const { data: roles } = await svc
+    .from('user_roles')
+    .select('user_id')
+    .in(
+      'user_id',
+      rows.map((row) => row.id),
+    )
+    .eq('status', 'active')
+    .in('role', ['organizer', 'admin', 'super_admin']);
+  const eligible = new Set(
+    ((roles ?? []) as Array<{ user_id: string }>).map((role) => role.user_id),
+  );
+  return rows
+    .filter((row) => row.slug && eligible.has(row.id))
+    .slice(0, 8)
+    .map((row) => ({
+      slug: row.slug as string,
+      name:
+        [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||
+        row.nickname ||
+        'VouchPlay player',
+      city: row.city,
+    }));
 }
 
 export async function removeCoOrganizer(

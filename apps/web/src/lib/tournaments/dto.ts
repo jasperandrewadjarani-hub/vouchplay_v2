@@ -41,6 +41,7 @@ export interface DivisionDTO {
   maximumAge: number | null;
   teamSize: number;
   capacityTeams: number;
+  registeredTeams: number;
   feeAmount: number;
   currency: string;
   skillVerifiedRequired: boolean;
@@ -143,7 +144,7 @@ export function divisionName(d: {
   return parts.filter(Boolean).join(' ');
 }
 
-export function toDivisionDTO(row: DivisionRow): DivisionDTO {
+export function toDivisionDTO(row: DivisionRow, registeredTeams = 0): DivisionDTO {
   return {
     id: row.id,
     name: divisionName(row),
@@ -157,6 +158,7 @@ export function toDivisionDTO(row: DivisionRow): DivisionDTO {
     maximumAge: row.maximum_age,
     teamSize: row.team_size,
     capacityTeams: row.capacity_teams,
+    registeredTeams,
     feeAmount: Number(row.fee_amount),
     currency: row.currency,
     skillVerifiedRequired: row.skill_verified_required,

@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0019: privacy-safe tournament demand interest
+-- VouchPlay v2 - Migration 0019: privacy-safe tournament demand interest
 -- Planning interest is not registration, a reservation, eligibility, a tournament division, or PII.
 -- =============================================================================
 
@@ -102,3 +102,4 @@ union all select 'demand_table', count(*) from information_schema.tables where t
 union all select 'demand_rpcs', count(*) from information_schema.routines where routine_schema='public' and routine_name in ('submit_tournament_demand_interest','get_tournament_demand_summary')
 union all select 'demand_direct_policies', count(*) from pg_policies where schemaname='public' and tablename='tournament_demand_interests';
 -- Expect demand_settings=3, demand_table=1, demand_rpcs=2, demand_direct_policies=0.
+

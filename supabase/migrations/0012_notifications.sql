@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 — Migration 0012: Notifications (Phase 11)
+-- VouchPlay v2 - Migration 0012: Notifications (Phase 11)
 -- Handover §27. In-app notifications (V1 primary channel) + per-user preferences. Email-for-critical
 -- is a ready-but-inert channel (sends only once SMTP creds are in the app env + the user opts in);
 -- push is a later adapter. Every notification carries recipient/type/title/body/deep-link/actor/
@@ -64,3 +64,4 @@ union all
 select 'notif_rls_policies', count(*) from pg_policies
   where schemaname = 'public' and tablename in ('notifications','notification_preferences');
 -- Expect: notif_tables = 2, notif_rls_policies = 2
+

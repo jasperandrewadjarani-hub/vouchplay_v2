@@ -1,6 +1,6 @@
-# VouchPlay v2 — Leaderboard, Resilience, Directory, and Media-Normalization Plan
+# VouchPlay v2 - Leaderboard, Resilience, Directory, and Media-Normalization Plan
 
-> **Addendum v1.13 — Tournament demand signal, Club Administration, and dark-first Home.** This
+> **Addendum v1.13 - Tournament demand signal, Club Administration, and dark-first Home.** This
 > addendum is an approved extension of the active hardening plan. It deliberately does **not** turn
 > interest into registration, a reserved slot, eligibility, or a marketing-consent list.
 
@@ -34,6 +34,32 @@
   copy is shortened.
 - Dark is the first-render default independent of OS preference. The existing explicit Light/Dark
   choice remains available; a prior user choice is respected.
+
+## 1C. Tournament navigation and registration refinement
+
+- **Copy rule:** Do not use em dashes anywhere in product copy, placeholders, help text, plans, or
+  handovers. Helper text must be a single concise sentence unless a legal or safety obligation needs
+  more. Prefer a clear label, an info control, progressive disclosure, and task-specific feedback.
+- Interest confirmation says only: “Your interest has been counted. This is not registration or a
+  reserved slot.” Anonymous users then see a short account/profile invitation. A Looking for partner
+  control reveals compatible public profiles without exposing private data.
+- Each demand division displays a proportional interest bar. Each real tournament division displays a
+  separate registration bar using active team registrations against configured capacity. Doubles fees
+  are shown as the configured team fee divided by two, labelled “per player”; payment collection and
+  review continue to use the configured team amount.
+- The player-facing division card is collapsible and is the single place for public division facts,
+  fee, meter, skill guidance, partner search, and registration. Existing transactional registration,
+  invitation, payment, and eligibility logic remains the authority.
+- Skill messaging is progressive: a compact warning identifies a possible division mismatch using
+  Community Skill Verified, then unverified Community Skill, then self-rating only when community
+  evidence is absent. The detailed evidence explanation is behind an accessible info control.
+- Organizer discovery starts with the same public published list as a player, including events the
+  organizer owns/co-organizes. A “My tournaments” control expands the private list and defaults to
+  hiding draft, cancelled, and archived entries. Co-organizer search uses a debounced account picker,
+  then retains the existing active-Organizer-role authorization on submit.
+- Payment QR is a private, normalized organizer upload tied to the tournament. A short-lived signed
+  URL is shown only in the authenticated payment-proof step. It is not a gateway, does not confirm
+  payment, and does not replace the existing proof upload and organizer review.
 
 ## 1. Prompt Contract
 
@@ -112,7 +138,7 @@ prevents overlapping refreshes. It performs no work while hidden and does not ke
 
 `view=compact` is a sanitized URL parameter. A small two-option control pushes the current player URL
 with the parameter added or removed, retaining filters and pagination. `PlayerCard` gains a compact
-variant that uses the existing safe `PlayerCardDTO`—there are no new queries, fields, or client fetches.
+variant that uses the existing safe `PlayerCardDTO`-there are no new queries, fields, or client fetches.
 
 ### Media-normalization flow
 
@@ -210,3 +236,4 @@ parse-validated, retained as PDFs, and never converted to images.
   the resume component, compact UI, and media pipeline are isolated, reversible source changes. Revert
   the release commit if a client lifecycle regression appears. Existing media remains intact; do not
   bulk-delete or rewrite it as part of rollback.
+

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Info } from 'lucide-react';
 import { evaluateRegistrationSkillPrompt, type EligibilityThresholds } from '@vouchplay/core';
 import { skillByOrdinal } from '@vouchplay/config';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
@@ -60,6 +60,27 @@ export function RegistrationPanel({
               state.viewerSkill.communitySkillLevel == null
                 ? null
                 : skillByOrdinal(state.viewerSkill.communitySkillLevel);
+            const displayedSkill =
+              communitySkill ??
+              (state.viewerSkill.selfRatedSkillLevel == null
+                ? null
+                : skillByOrdinal(state.viewerSkill.selfRatedSkillLevel));
+            const skillSource = communitySkill
+              ? state.viewerSkill.skillVerified
+                ? 'Community Skill Verified'
+                : 'Community Skill'
+              : displayedSkill
+                ? 'Self-rated skill'
+                : 'No skill rating';
+            const skillMismatch =
+              displayedSkill != null &&
+              ((d.minimumSkill != null && displayedSkill.ordinal < d.minimumSkill) ||
+                (d.maximumSkill != null && displayedSkill.ordinal > d.maximumSkill));
+            const registrationPercent =
+              d.capacityTeams > 0
+                ? Math.min(100, Math.round((d.registeredTeams / d.capacityTeams) * 100))
+                : 0;
+            const perPlayerFee = d.feeAmount / Math.max(1, d.teamSize);
             const profileUrl = state.viewerSkill.profileSlug
               ? `${publicEnv.siteUrl}/players/${state.viewerSkill.profileSlug}`
               : null;
@@ -69,66 +90,78 @@ export function RegistrationPanel({
                   <span className="text-foreground text-sm font-semibold">{d.name}</span>
                   <span className="text-foreground-muted text-xs capitalize">{d.format}</span>
                 </div>
+                <div className="text-foreground-muted mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  <span>
+                    {d.feeAmount > 0
+                      ? `${d.currency} ${perPlayerFee.toLocaleString(undefined, { maximumFractionDigits: 2 })} / player`
+                      : 'Free'}
+                  </span>
+                  {d.capacityTeams > 0 && (
+                    <span>
+                      {d.registeredTeams} / {d.capacityTeams} teams
+                    </span>
+                  )}
+                  <span>
+                    {skillSource}
+                    {displayedSkill ? `: ${displayedSkill.label}` : ''}
+                  </span>
+                </div>
+                {d.capacityTeams > 0 && (
+                  <div
+                    className="bg-surface-muted mt-2 h-1.5 overflow-hidden rounded-full"
+                    aria-label={`${d.registeredTeams} of ${d.capacityTeams} teams registered`}
+                  >
+                    <div
+                      className="bg-primary h-full rounded-full"
+                      style={{ width: `${registrationPercent}%` }}
+                    />
+                  </div>
+                )}
+                {skillMismatch && (
+                  <p role="note" className="text-warning mt-2 flex items-center gap-1 text-xs">
+                    <AlertCircle size={14} aria-hidden />
+                    Your {skillSource.toLowerCase()} may not align with this division. The organizer
+                    will review eligibility.
+                  </p>
+                )}
                 {team && (
                   <p className="text-foreground-muted mt-1 text-xs">
                     Team: {team.members.map((m) => m.name).join(' & ')}
                   </p>
                 )}
                 {!reg && skillPrompt.showPrompt && (
-                  <div
-                    role="note"
-                    className="border-warning/40 bg-warning/10 mt-3 rounded-xl border p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <AlertCircle size={17} className="text-warning mt-0.5 shrink-0" aria-hidden />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-foreground text-sm font-semibold">
-                          Build your skill evidence before approval
-                        </p>
-                        <p className="text-foreground-muted mt-1 text-xs leading-relaxed">
-                          You can still register, but your skill profile does not yet have enough
-                          community evidence for this division. The organizer may not approve your
-                          entry.
-                        </p>
-                        <div className="text-foreground-muted mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                          <span>Community skill: {communitySkill?.label ?? 'Not yet rated'}</span>
-                          <span>STS: {state.viewerSkill.sts.toFixed(1)} / 5</span>
-                          <span>
-                            Unique vouchers: {state.viewerSkill.uniqueVoucherCount} /{' '}
-                            {eligibilityThresholds.minEvidenceVouchers} minimum
-                          </span>
-                          {d.minimumSts != null && (
-                            <span>Division STS: {d.minimumSts} minimum</span>
-                          )}
-                          {d.skillVerifiedRequired && <span>Skill Verified required</span>}
-                        </div>
-                        <p className="text-foreground-muted mt-2 text-xs leading-relaxed">
-                          Ask teammates, opponents, or coaches who genuinely know your game. Share
-                          your profile, or open a player&apos;s profile and tap Request a vouch.
-                          Genuine playing-history vouches make the rating more trustworthy;
-                          suspicious or reciprocal-only activity is reviewed.
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {profileUrl && (
-                            <ShareButton
-                              url={profileUrl}
-                              title="My VouchPlay profile"
-                              text="Please vouch for my pickleball skill on VouchPlay if you know my game."
-                              size="sm"
-                              label="Share my profile"
-                            />
-                          )}
-                          <ButtonLink
-                            href="/players"
-                            variant="secondary"
-                            className="rounded-xl px-3 py-1.5 text-xs"
-                          >
-                            Request a vouch
-                          </ButtonLink>
-                        </div>
+                  <details className="border-warning/40 bg-warning/10 mt-3 rounded-xl border p-2.5">
+                    <summary className="text-foreground flex cursor-pointer items-center gap-1.5 text-xs font-semibold">
+                      <Info size={15} className="text-warning" aria-hidden />
+                      Skill evidence guidance
+                    </summary>
+                    <div className="text-foreground-muted mt-2 space-y-2 text-xs">
+                      <p>You can register, but the organizer may review your entry.</p>
+                      <p>
+                        STS {state.viewerSkill.sts.toFixed(1)} / 5 ·{' '}
+                        {state.viewerSkill.uniqueVoucherCount} vouchers
+                        {d.minimumSts != null ? ` · Division STS ${d.minimumSts}` : ''}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {profileUrl && (
+                          <ShareButton
+                            url={profileUrl}
+                            title="My VouchPlay profile"
+                            text="Please vouch for my pickleball skill on VouchPlay if you know my game."
+                            size="sm"
+                            label="Share profile"
+                          />
+                        )}
+                        <ButtonLink
+                          href="/players"
+                          variant="secondary"
+                          className="rounded-xl px-3 py-1.5 text-xs"
+                        >
+                          Request a vouch
+                        </ButtonLink>
                       </div>
                     </div>
-                  </div>
+                  </details>
                 )}
                 <div className="mt-2">
                   <RegisterActions
@@ -149,6 +182,7 @@ export function RegistrationPanel({
                       currency={d.currency}
                       instructions={paymentInstructions}
                       methods={paymentMethods}
+                      paymentQrUrl={state.paymentQrUrl}
                       paymentStatus={reg.paymentStatus}
                       rejectionReason={reg.paymentRejectionReason}
                     />

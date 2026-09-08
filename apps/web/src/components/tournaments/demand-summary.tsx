@@ -10,6 +10,7 @@ import type { TournamentDemandDTO } from '@/lib/tournaments/dto';
 
 export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDTO }) {
   const [open, setOpen] = useState(false);
+  const peak = Math.max(1, ...Object.values(demand.divisions));
   return (
     <>
       <button
@@ -38,27 +39,32 @@ export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDT
           <span className="text-foreground block text-sm font-semibold">
             {demand.total} interested
           </span>
-          <span className="text-foreground-muted block text-xs">
-            View planning demand by division
-          </span>
+          <span className="text-foreground-muted block text-xs">View interest by division</span>
         </span>
       </button>
       {open && (
         <Modal
           title="Tournament interest"
-          subtitle="Planning demand only. These counts are not registrations or reserved slots."
+          subtitle="Interest by division. Counts are not registrations or reserved slots."
           onClose={() => setOpen(false)}
         >
           <div className="space-y-2">
             {TOURNAMENT_DEMAND_DIVISIONS.map((division) => (
-              <div
-                key={division.key}
-                className="border-border flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
-              >
-                <span className="text-foreground">{division.label}</span>
-                <span className="text-foreground font-semibold tabular-nums">
-                  {demand.divisions[division.key] ?? 0}
-                </span>
+              <div key={division.key} className="border-border rounded-lg border px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-foreground">{division.label}</span>
+                  <span className="text-foreground font-semibold tabular-nums">
+                    {demand.divisions[division.key] ?? 0}
+                  </span>
+                </div>
+                <div className="bg-surface-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
+                  <div
+                    className="bg-primary h-full rounded-full"
+                    style={{
+                      width: `${Math.round(((demand.divisions[division.key] ?? 0) / peak) * 100)}%`,
+                    }}
+                  />
+                </div>
               </div>
             ))}
             {(demand.divisions.legacy_unspecified ?? 0) > 0 && (

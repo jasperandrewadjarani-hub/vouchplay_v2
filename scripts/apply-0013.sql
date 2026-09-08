@@ -1,5 +1,5 @@
 -- =============================================================================
--- APPLY: Migration 0013 — Achievements, Skill Tags & History (Phase 12, §9.4/§9.5/§49/§50).
+-- APPLY: Migration 0013 - Achievements, Skill Tags & History (Phase 12, §9.4/§9.5/§49/§50).
 -- Paste this whole block into the Supabase SQL editor (project itrosesiywpbaxtmucbb) and run it.
 -- Idempotent. Expect the final rows: ach_tables = 5, skill_tags_seeded = 10, ach_rls_policies = 5.
 -- =============================================================================
@@ -130,3 +130,4 @@ select 'ach_rls_policies', count(*) from pg_policies
   where schemaname = 'public'
     and tablename in ('skill_tags','player_skill_tag_votes','achievements','player_achievements','achievement_endorsements');
 -- Expect: ach_tables = 5, skill_tags_seeded = 10, ach_rls_policies = 5
+
