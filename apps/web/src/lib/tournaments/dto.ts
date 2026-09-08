@@ -114,6 +114,10 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   paymentQrUrl: string | null;
   /** Single tournament-wide club representation lock, or null when unset (handover Phase 13.5). */
   clubLockAt: string | null;
+  /** Organizer global rules (migration 0022). Floor defaults on for new tournaments; others off. */
+  enforceSkillFloor: boolean;
+  requireSkillVerified: boolean;
+  requireOrganizerApproval: boolean;
 }
 
 const SEX_LABEL: Record<string, string> = {

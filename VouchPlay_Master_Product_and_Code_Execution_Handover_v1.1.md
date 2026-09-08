@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.16
+# VouchPlay Master Product & Code Execution Handover v1.17
 
-_(File retains its `…v1.1.md` name; content is v1.16 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.17 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,30 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.17 (2026-09-08)
+- **Organizer global division rules (implemented; needs migration 0022 to activate).** Three
+  tournament-wide toggles replace two per-division flags and add one new rule:
+  - **Skill floor (default ON):** a player cannot register in a division whose skill ceiling is below
+    their own skill; playing at their level or higher is always allowed. Registering above their level
+    is allowed but warned. This is an ORGANIZER-CONFIGURED hard gate, implemented as a separate pure
+    module and enforced in the registration action. It deliberately does NOT alter the version-locked,
+    never-blocking ELIG_V1 decision-support engine or its neutrality (§25) - the organizer opts in, the
+    same way age/sex hard rules already gate. Effective skill is community skill if known, else
+    self-rating (verified or not); a player with no known skill is never blocked; open divisions never
+    block or warn.
+  - **Require Skill Verified (default OFF)** and **Require organizer approval (default OFF)** move from
+    per-division to one global toggle each. Skill Verified feeds ELIG_V1 for every division; organizer
+    approval downgrades an otherwise-eligible entry to review so the organizer must confirm.
+  - Migration 0022 adds `enforce_skill_floor`, `require_skill_verified`, `require_organizer_approval`
+    to `tournaments` and rolls existing per-division intent up to the new global flags. Apply
+    `scripts/apply-0022.sql`; expect `tournament_rule_columns=3`.
+- **UI/UX + reliability fixes shipped this day (no migration):** payment QR now shows for a fresh
+  payment-pending entry; cancelling a registration dissolves the team, notifies the partner, and frees
+  both to re-register in one step; My registrations and the division browser are unified and collapsed;
+  progressive help via info controls; top bar stays dark in light mode; skill-band-coloured interest
+  and capacity meters; club-representation override control on the manage page; de-cluttered Home and
+  leaderboard copy; no em dashes.
 
 ## v1.16 (2026-09-08)
 - **Next-phase reliability and flexibility contract:** plans controlled diagnosis of private Payment

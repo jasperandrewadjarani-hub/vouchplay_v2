@@ -2,8 +2,10 @@
 
 import { revalidateTag } from 'next/cache';
 import { partnerInviteSchema } from '@vouchplay/validation';
+import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
+import { getTournamentRules } from '@/lib/tournaments/queries';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
@@ -322,6 +324,66 @@ export async function cancelInvitation(invitationId: string): Promise<Registrati
 
 // ---------------------------------------------------------------------------
 // Registration (§21, §23) - transactional via RPCs
+/**
+ * Organizer skill-floor gate (migration 0022). When the tournament enforces the floor, no team member
+ * may register into a division whose skill ceiling is below their own skill. Returns a user-facing
+ * error string when blocked, or null when the entry is allowed. Playing at level or higher is fine;
+ * a player with no known skill is never blocked. This is a hard gate outside ELIG_V1.
+ */
+async function skillFloorError(
+  svc: ReturnType<typeof createServiceClient>,
+  tournamentId: string,
+  divisionId: string,
+  playerIds: string[],
+): Promise<string | null> {
+  const rules = await getTournamentRules(tournamentId);
+  if (!rules.enforceSkillFloor || playerIds.length === 0) return null;
+  const { data: divRow } = await svc
+    .from('divisions')
+    .select('skill_policy, minimum_skill, maximum_skill')
+    .eq('id', divisionId)
+    .maybeSingle();
+  const div = divRow as {
+    skill_policy: string;
+    minimum_skill: number | null;
+    maximum_skill: number | null;
+  } | null;
+  if (!div || div.skill_policy === 'open' || div.maximum_skill == null) return null;
+
+  const [{ data: skillRows }, { data: profileRows }] = await Promise.all([
+    svc
+      .from('player_skill_profiles')
+      .select('player_id, community_skill_level')
+      .in('player_id', playerIds),
+    svc.from('profiles').select('id, self_rated_skill').in('id', playerIds),
+  ]);
+  const communityById = new Map(
+    ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
+      (r) => [r.player_id, r.community_skill_level],
+    ),
+  );
+  const selfById = new Map(
+    ((profileRows ?? []) as { id: string; self_rated_skill: number | null }[]).map((r) => [
+      r.id,
+      r.self_rated_skill,
+    ]),
+  );
+  for (const id of playerIds) {
+    const effective = effectivePlayerSkill(communityById.get(id) ?? null, selfById.get(id) ?? null);
+    const { blocked } = evaluateSkillFloor({
+      effectiveSkill: effective,
+      skillPolicy: div.skill_policy as 'band' | 'open' | 'custom',
+      divisionMinimumSkill: div.minimum_skill,
+      divisionMaximumSkill: div.maximum_skill,
+      enforce: true,
+    });
+    if (blocked) {
+      return 'You cannot join this division because it is below your skill level. Choose a division at your level or higher.';
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 export async function registerTeam(
   teamId: string,
@@ -333,6 +395,21 @@ export async function registerTeam(
   if (statusErr) return { error: statusErr };
   const svc = createServiceClient();
   try {
+    const { data: teamRow } = await svc
+      .from('teams')
+      .select('division_id')
+      .eq('id', teamId)
+      .maybeSingle();
+    const divisionId = (teamRow as { division_id: string } | null)?.division_id;
+    if (divisionId) {
+      const { data: memberRows } = await svc
+        .from('team_members')
+        .select('player_id')
+        .eq('team_id', teamId);
+      const memberIds = ((memberRows ?? []) as { player_id: string }[]).map((m) => m.player_id);
+      const floorError = await skillFloorError(svc, tournamentId, divisionId, memberIds);
+      if (floorError) return { error: floorError };
+    }
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
     const regId = (data as { registration_id?: string } | null)?.registration_id;
@@ -372,6 +449,9 @@ export async function registerSolo(
     if (!div) return { error: 'Division not found.' };
     if (div.format !== 'singles')
       return { error: 'This is a doubles division - form a team first.' };
+
+    const floorError = await skillFloorError(svc, tournamentId, divisionId, [user.id]);
+    if (floorError) return { error: floorError };
 
     // Reuse an existing active team for this player in this division, else create a solo team.
     const { data: myTeamRows } = await svc

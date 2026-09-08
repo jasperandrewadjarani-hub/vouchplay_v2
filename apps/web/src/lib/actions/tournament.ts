@@ -322,6 +322,21 @@ export async function updateTournament(
     }
     if (uploadedPaymentQrPath && previousPaymentQrPath !== uploadedPaymentQrPath)
       await deletePaymentQr(previousPaymentQrPath);
+
+    // Organizer global rules (migration 0022). Persisted best-effort so a pre-migration deploy still
+    // saves the rest of the form; once 0022 is applied these toggles take effect.
+    try {
+      await svc
+        .from('tournaments')
+        .update({
+          enforce_skill_floor: bool(formData, 'enforceSkillFloor'),
+          require_skill_verified: bool(formData, 'requireSkillVerified'),
+          require_organizer_approval: bool(formData, 'requireOrganizerApproval'),
+        })
+        .eq('id', tournamentId);
+    } catch {
+      // Columns not present yet (migration 0022 pending). The rest of the save already succeeded.
+    }
     invalidate(slug, tournamentId);
   } catch {
     return { error: 'Editing is temporarily unavailable.' };

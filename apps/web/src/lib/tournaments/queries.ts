@@ -25,6 +25,45 @@ export const tournamentDivisionsTag = (id: string) => `tournament-divisions:${id
 export const tournamentAnnouncementsTag = (id: string) => `tournament-announcements:${id}`;
 export const PAGE_SIZE = 24;
 
+export interface TournamentRules {
+  enforceSkillFloor: boolean;
+  requireSkillVerified: boolean;
+  requireOrganizerApproval: boolean;
+}
+
+/**
+ * Organizer global division rules (migration 0022). Read defensively so the app keeps working before
+ * the migration lands: if the columns are absent the feature is dormant (floor off, no global
+ * verified/approval requirement). Once 0022 is applied the real per-tournament values take effect,
+ * with the DB default enabling the skill floor for new tournaments.
+ */
+export async function getTournamentRules(tournamentId: string): Promise<TournamentRules> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('enforce_skill_floor, require_skill_verified, require_organizer_approval')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    const r = data as {
+      enforce_skill_floor?: boolean;
+      require_skill_verified?: boolean;
+      require_organizer_approval?: boolean;
+    } | null;
+    return {
+      enforceSkillFloor: r?.enforce_skill_floor ?? false,
+      requireSkillVerified: r?.require_skill_verified ?? false,
+      requireOrganizerApproval: r?.require_organizer_approval ?? false,
+    };
+  } catch {
+    return {
+      enforceSkillFloor: false,
+      requireSkillVerified: false,
+      requireOrganizerApproval: false,
+    };
+  }
+}
+
 async function getDemandSummary(tournamentId: string): Promise<TournamentDemandDTO> {
   const fallback: TournamentDemandDTO = { total: 0, divisions: {}, avatars: [] };
   try {
@@ -359,7 +398,10 @@ export async function getTournamentBySlug(
       }
     }
 
-    const demand = await getDemandSummary(row.id);
+    const [demand, rules] = await Promise.all([
+      getDemandSummary(row.id),
+      getTournamentRules(row.id),
+    ]);
 
     let myInterest = false;
     if (viewer.viewerId) {
@@ -470,6 +512,9 @@ export async function getTournamentBySlug(
       canManage,
       paymentQrUrl,
       clubLockAt: row.club_lock_at ?? null,
+      enforceSkillFloor: rules.enforceSkillFloor,
+      requireSkillVerified: rules.requireSkillVerified,
+      requireOrganizerApproval: rules.requireOrganizerApproval,
     };
   } catch {
     return null;

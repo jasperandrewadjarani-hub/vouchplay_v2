@@ -175,6 +175,8 @@ export default async function TournamentPage({ params }: Params) {
           registrationOpen={isOpen}
           authed={authed}
           signInHref={loginToRegister}
+          enforceSkillFloor={t.enforceSkillFloor}
+          requireSkillVerified={t.requireSkillVerified}
         />
       </div>
 

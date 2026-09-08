@@ -368,6 +368,9 @@ export interface TournamentRow {
   max_clubs_per_player: number;
   club_representation_required: boolean;
   verified_clubs_only: boolean;
+  enforce_skill_floor: boolean;
+  require_skill_verified: boolean;
+  require_organizer_approval: boolean;
   created_at: string;
   updated_at: string;
 }

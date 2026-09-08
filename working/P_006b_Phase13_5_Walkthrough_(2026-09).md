@@ -158,6 +158,41 @@ Second round of Jasper feedback. No migration.
 
 None of these are deferred to a later phase.
 
+## Organizer global division rules (2026-09-08) - REQUIRES migration 0022
+
+New organizer-configurable rules that apply to every division at once. Needs migration 0022; the code
+is deployed dormant and safe until Jasper applies it (defensive reads default the feature off).
+
+1. **Skill floor (default ON for new tournaments).** A player cannot register in a division whose
+   skill ceiling is below their own skill; playing at their level or higher is always allowed. This is
+   a hard gate implemented as a SEPARATE pure module (`@vouchplay/core` `evaluateSkillFloor`) and in
+   the register actions - it deliberately does NOT modify the version-locked, never-blocking ELIG_V1
+   engine. Effective skill = community skill if known, else self-rating (verified or not). A player
+   with no known skill is never blocked; open-skill divisions never block or warn.
+   - Register below skill: division browser shows a red "You cannot join this division because it is
+     below your skill level" and no register action; the server also refuses it.
+   - Register above skill: a warning "Is this the right division for me?" appears; registration is
+     still allowed.
+2. **Require Skill Verified (default OFF), global.** Moved from per-division to one tournament toggle;
+   fed into ELIG_V1 as the skill-verified rule for every division. The division browser shows a single
+   "requires Skill Verified players" note when on.
+3. **Require organizer approval (default OFF), global.** Moved from per-division to one tournament
+   toggle. When on, no entry is auto-eligible: the eligibility result is downgraded to review (outside
+   ELIG_V1, as a top-level snapshot note) so the organizer must confirm.
+   The two per-division checkboxes were removed from the division builder; existing per-division intent
+   is rolled up into the new global flags by migration 0022.
+
+Files: `packages/core/src/tournaments/skill-floor.ts` (+ test), migration
+`supabase/migrations/0022_tournament_global_rules.sql` + `scripts/apply-0022.sql`,
+`packages/db/src/types.ts`, `apps/web/src/lib/tournaments/queries.ts` (`getTournamentRules`),
+`apps/web/src/lib/actions/registration.ts` (skill-floor gate), `apps/web/src/lib/eligibility/compute.ts`
+(global verified + approval), `apps/web/src/lib/actions/tournament.ts` + `tournament-form.tsx`
+(3 toggles), `division-fields.tsx` (removed 2 fields), `division-browser.tsx` (warning/block + note),
+tournament detail + manage pages.
+
+**Migration gate:** Jasper applies `scripts/apply-0022.sql`, returns `tournament_rule_columns=3`. Only
+then are the rules live. Not deferred to a later phase - this is the requested organizer-control slice.
+
 ## Key files
 
 - `apps/web/src/lib/tournaments/dto.ts`, `queries.ts` - detail columns + gated `paymentQrUrl`,

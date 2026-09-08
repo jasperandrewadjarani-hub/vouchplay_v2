@@ -8,7 +8,7 @@ import {
 } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getEligibilitySettings } from '@/lib/settings';
-import { tournamentTag } from '@/lib/tournaments/queries';
+import { tournamentTag, getTournamentRules } from '@/lib/tournaments/queries';
 import { hasHistoricalSkillMismatch } from '@/lib/players/profile-extras';
 
 /**
@@ -100,7 +100,10 @@ export async function recomputeEligibilityForPlayer(playerId: string): Promise<v
 type Svc = ReturnType<typeof createServiceClient>;
 
 async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
-  const settings = await getEligibilitySettings();
+  const [settings, rules] = await Promise.all([
+    getEligibilitySettings(),
+    getTournamentRules(reg.tournament_id),
+  ]);
 
   const [{ data: divData }, { data: tournData }, { data: memberData }] = await Promise.all([
     svc
@@ -179,7 +182,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
       .map((f) => f.subject_id),
   );
 
-  const rules: DivisionEligibilityRules = {
+  const eligibilityRules: DivisionEligibilityRules = {
     skillPolicy: (div.skill_policy as DivisionEligibilityRules['skillPolicy']) ?? 'band',
     minimumSkill: div.minimum_skill,
     maximumSkill: div.maximum_skill,
@@ -188,7 +191,8 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     minimumAge: div.minimum_age,
     maximumAge: div.maximum_age,
     teamSize: div.team_size,
-    skillVerifiedRequired: div.skill_verified_required,
+    // Skill Verified is now a single tournament-wide rule (migration 0022), not per division.
+    skillVerifiedRequired: rules.requireSkillVerified || div.skill_verified_required,
     minimumSts: div.minimum_sts != null ? Number(div.minimum_sts) : null,
   };
 
@@ -197,7 +201,10 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     await Promise.all(
       members.map(
         async (m) =>
-          [m.player_id, await hasHistoricalSkillMismatch(m.player_id, rules.maximumSkill)] as const,
+          [
+            m.player_id,
+            await hasHistoricalSkillMismatch(m.player_id, eligibilityRules.maximumSkill),
+          ] as const,
       ),
     ),
   );
@@ -220,11 +227,23 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     };
   });
 
-  const outcome = evaluateTeamEligibility({ players, rules, thresholds: settings.thresholds });
+  const outcome = evaluateTeamEligibility({
+    players,
+    rules: eligibilityRules,
+    thresholds: settings.thresholds,
+  });
+
+  // Organizer-approval-required (migration 0022): no entry is auto-eligible; the organizer must
+  // confirm. This gate lives outside ELIG_V1, so it only downgrades an otherwise-eligible result to
+  // review and records a top-level note; it never alters the version-locked per-player codes.
+  const requiresApproval = rules.requireOrganizerApproval;
+  const storedResult =
+    requiresApproval && outcome.result === 'ELIGIBLE' ? 'REVIEW' : outcome.result;
 
   const snapshot = {
     algorithmVersion: outcome.algorithmVersion,
     evaluatedAt: new Date().toISOString(),
+    requiresOrganizerApproval: requiresApproval,
     result: outcome.result,
     hardRuleCodes: outcome.hardRuleCodes,
     reasonCodes: outcome.reasonCodes,
@@ -246,7 +265,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
   await svc
     .from('registrations')
     .update({
-      eligibility_status: RESULT_TO_ENUM[outcome.result],
+      eligibility_status: RESULT_TO_ENUM[storedResult],
       eligibility_snapshot: snapshot,
     })
     .eq('id', reg.id);

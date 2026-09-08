@@ -22,3 +22,4 @@ export * from './tournaments/demand-interest';
 export * from './tournaments/cover';
 export * from './tournaments/lifecycle';
 export * from './tournaments/retention';
+export * from './tournaments/skill-floor';

@@ -126,6 +126,9 @@ export default async function ManageTournamentPage({ params }: Params) {
             coverUrl: t.coverUrl ?? '',
             paymentQrUrl: t.paymentQrUrl ?? '',
             clubLockAt: toLocalInput(t.clubLockAt),
+            enforceSkillFloor: t.enforceSkillFloor,
+            requireSkillVerified: t.requireSkillVerified,
+            requireOrganizerApproval: t.requireOrganizerApproval,
           }}
         />
       </section>

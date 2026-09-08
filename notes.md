@@ -1329,10 +1329,20 @@ Getting the first deploy up hit two issues:
   dark in light mode (`.vp-topbar`); Register button expands the Divisions browser; interest and
   capacity meters are skill-band coloured; several copy trims. Gates green (web 30, config 19, core
   95; build 42 pages). See `working/P_006b_Phase13_5_Walkthrough_(2026-09).md`.
-- **Requested next (needs migration 0022 + Jasper):** organizer global division rules - a default-ON
-  "cannot register below your skill level" floor (equal/higher allowed), plus moving "require Skill
-  Verified" and "organizer approval required" from per-division to one global tournament toggle each
-  (both default OFF). Not yet implemented as of this entry.
+- **2026-09-08** - **Organizer global division rules IMPLEMENTED (needs migration 0022 to activate).**
+  Three tournament-wide toggles: (1) skill floor, default ON - a player cannot register in a division
+  below their skill level (equal/higher allowed), enforced server-side and shown as a red block in the
+  division browser; registering above shows a warning but is allowed. Implemented as a SEPARATE pure
+  gate (`@vouchplay/core evaluateSkillFloor`), NOT by touching the version-locked ELIG_V1 engine.
+  (2) Require Skill Verified, default OFF, moved from per-division to one global toggle (fed into
+  ELIG_V1). (3) Require organizer approval, default OFF, global - downgrades an otherwise-eligible
+  entry to review so the organizer must confirm. The two per-division checkboxes were removed from the
+  division builder; migration 0022 rolls existing per-division intent up to the new global flags. Code
+  is deployed dormant and safe until 0022 (defensive reads default the feature off). Effective skill =
+  community if known, else self-rating. Gates green (web 30, config 19, core 104; build 42 pages). See
+  `working/P_006b_Phase13_5_Walkthrough_(2026-09).md`.
+- **Apply migration 0022 to activate organizer rules:** Jasper runs `scripts/apply-0022.sql` against
+  `itrosesiywpbaxtmucbb` and returns `tournament_rule_columns=3`. Until then the rules are dormant.
 
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No

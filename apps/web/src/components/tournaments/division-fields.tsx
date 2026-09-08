@@ -141,24 +141,10 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
           />
         </Field>
       </div>
-      <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-        <input
-          type="checkbox"
-          name="skillVerifiedRequired"
-          defaultChecked={initial?.skillVerifiedRequired ?? false}
-          className="mt-0.5"
-        />
-        <span className="text-foreground">Require Skill-Verified players</span>
-      </label>
-      <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-        <input
-          type="checkbox"
-          name="organizerApprovalRequired"
-          defaultChecked={initial?.organizerApprovalRequired ?? false}
-          className="mt-0.5"
-        />
-        <span className="text-foreground">Organizer approval required to register</span>
-      </label>
+      <p className="text-foreground-muted text-xs">
+        Skill Verified and organizer approval are now set once for the whole tournament under
+        Registration rules.
+      </p>
       <input type="hidden" name="teamSize" value={2} />
     </div>
   );

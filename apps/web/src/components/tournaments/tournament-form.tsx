@@ -27,6 +27,10 @@ export interface TournamentFormInitial {
   paymentQrUrl?: string;
   /** Single tournament-wide club representation lock, as a datetime-local string. */
   clubLockAt?: string;
+  /** Organizer global rules (migration 0022). */
+  enforceSkillFloor?: boolean;
+  requireSkillVerified?: boolean;
+  requireOrganizerApproval?: boolean;
 }
 
 const textarea =
@@ -166,6 +170,59 @@ export function TournamentForm({
             />
           </Field>
         </div>
+      )}
+      {!minimal && (
+        <fieldset className="border-border space-y-3 rounded-xl border p-4">
+          <legend className="text-foreground px-1 text-sm font-semibold">Registration rules</legend>
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="enforceSkillFloor"
+              defaultChecked={initial.enforceSkillFloor ?? true}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">
+                Only allow players at each division&apos;s level or higher
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                Players cannot join a division below their skill level. Recommended.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="requireSkillVerified"
+              defaultChecked={initial.requireSkillVerified ?? false}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">
+                Require Skill Verified players
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                Applies to every division in this tournament.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="requireOrganizerApproval"
+              defaultChecked={initial.requireOrganizerApproval ?? false}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">
+                Require organizer approval to register
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                You review every entry before it is confirmed.
+              </span>
+            </span>
+          </label>
+        </fieldset>
       )}
       {!minimal && (
         <Field

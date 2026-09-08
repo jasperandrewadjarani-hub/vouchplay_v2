@@ -1,6 +1,7 @@
 import Link from 'next/link';
-import { ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
+import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
 import { skillByOrdinal } from '@vouchplay/config';
+import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 
 /** Skill-band colour for a real division's meter (band divisions only; else the brand primary). */
@@ -37,6 +38,8 @@ export function DivisionBrowser({
   registrationOpen,
   authed,
   signInHref,
+  enforceSkillFloor,
+  requireSkillVerified,
 }: {
   tournamentId: string;
   divisions: DivisionDTO[];
@@ -44,10 +47,18 @@ export function DivisionBrowser({
   registrationOpen: boolean;
   authed: boolean;
   signInHref: string;
+  enforceSkillFloor: boolean;
+  requireSkillVerified: boolean;
 }) {
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
   const registeredIds = new Set(state ? Object.keys(state.registrationsByDivision) : []);
   const invitations = state?.invitations ?? [];
+  const effectiveSkill = state
+    ? effectivePlayerSkill(
+        state.viewerSkill.communitySkillLevel,
+        state.viewerSkill.selfRatedSkillLevel,
+      )
+    : null;
 
   return (
     <details className="border-border bg-surface rounded-2xl border">
@@ -57,6 +68,13 @@ export function DivisionBrowser({
           {registrationOpen && authed ? 'Register' : 'Show'}
         </span>
       </summary>
+
+      {requireSkillVerified && (
+        <p className="text-foreground-muted border-border flex items-center gap-1.5 border-t px-4 py-3 text-xs">
+          <ShieldCheck size={14} aria-hidden />
+          This tournament requires Skill Verified players in every division.
+        </p>
+      )}
 
       {invitations.length > 0 && (
         <div className="border-border border-t px-4 py-3">
@@ -96,16 +114,13 @@ export function DivisionBrowser({
               capacity > 0 ? Math.min(100, Math.round((d.registeredTeams / capacity) * 100)) : 0;
             const registered = registeredIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
-            const displayed =
-              state?.viewerSkill.communitySkillLevel != null
-                ? skillByOrdinal(state.viewerSkill.communitySkillLevel)
-                : state?.viewerSkill.selfRatedSkillLevel != null
-                  ? skillByOrdinal(state.viewerSkill.selfRatedSkillLevel)
-                  : null;
-            const mismatch =
-              displayed != null &&
-              ((d.minimumSkill != null && displayed.ordinal < d.minimumSkill) ||
-                (d.maximumSkill != null && displayed.ordinal > d.maximumSkill));
+            const floor = evaluateSkillFloor({
+              effectiveSkill,
+              skillPolicy: d.skillPolicy as 'band' | 'open' | 'custom',
+              divisionMinimumSkill: d.minimumSkill,
+              divisionMaximumSkill: d.maximumSkill,
+              enforce: enforceSkillFloor,
+            });
             return (
               <li key={d.id}>
                 <details>
@@ -128,12 +143,6 @@ export function DivisionBrowser({
                         <Coins size={12} aria-hidden />
                         {moneyPerPlayer(d)}
                       </span>
-                      {d.skillVerifiedRequired && (
-                        <span className="inline-flex items-center gap-1">
-                          <ShieldCheck size={12} aria-hidden />
-                          Skill Verified only
-                        </span>
-                      )}
                     </div>
                     {capacity > 0 && (
                       <div
@@ -146,16 +155,28 @@ export function DivisionBrowser({
                         />
                       </div>
                     )}
-                    {!registered && mismatch && (
-                      <InfoDisclosure label="Is this the right division for me?">
-                        Your skill level may sit outside this division&apos;s range. You can still
-                        register, and the organizer reviews eligibility.
-                      </InfoDisclosure>
+                    {!registered && floor.above && (
+                      <p
+                        role="note"
+                        className="text-warning flex items-center gap-1.5 text-xs font-medium"
+                      >
+                        <AlertCircle size={14} aria-hidden />
+                        Is this the right division for me? It targets a higher skill level than
+                        yours. You can still register.
+                      </p>
                     )}
 
                     {registered ? (
                       <p className="text-foreground-muted text-xs">
                         You have an entry here. Manage it in My registrations above.
+                      </p>
+                    ) : floor.blocked ? (
+                      <p
+                        role="note"
+                        className="text-danger flex items-center gap-1.5 text-xs font-medium"
+                      >
+                        <AlertCircle size={14} aria-hidden />
+                        You cannot join this division because it is below your skill level.
                       </p>
                     ) : !authed ? (
                       <Link
