@@ -1587,10 +1587,9 @@ Open items, highest value first:
    which is the pre-fix artefact, not an intended time. The PH-time fix (§1K) means editing it in the
    organizer form now stores correctly - it just needs Jasper's intended close time. **Blocked on
    Jasper.**
-3. **~37MB of marketing assets are untracked in git** (`deliverables/`, `fb_posting_assets/`, and
-   `working/P_006b_VouchPlay_Carousel_About_FAQ_Source_(2026-09).md`). Nothing in `.gitignore`
-   excludes them, so this looks accidental rather than deliberate. **Blocked on Jasper:** commit them
-   or ignore them.
+3. **~~Marketing assets untracked in git~~ - RESOLVED.** Jasper chose to ignore them, so
+   `/deliverables/`, `/fb_posting_assets/` and the carousel source doc are now in `.gitignore`.
+   They are large binaries the app never imports; they stay in the project folder for the client.
 4. **Controlled authenticated browser walkthrough** of
    `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md` - the only Phase 13.5 gate never
    evidenced. Worth doing against live now that real registrations exist.

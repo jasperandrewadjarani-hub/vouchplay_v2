@@ -47,3 +47,10 @@ Thumbs.db
 /tmp-exports/
 
 .vercel
+
+# Marketing and campaign artwork (~37MB of PNG/WebP masters). Deliberately not versioned:
+# these are large binaries that change often, are never imported by the app, and live in the
+# project folder for the client. Decision by Jasper, 2026-09-09.
+/deliverables/
+/fb_posting_assets/
+/working/P_006b_VouchPlay_Carousel_About_FAQ_Source_(2026-09).md
