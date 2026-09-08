@@ -32,9 +32,6 @@ export function DivisionList({ divisions }: { divisions: DivisionDTO[] }) {
             >
               <span>
                 <span className="text-foreground block text-sm font-semibold">{d.name}</span>
-                <span className="text-foreground-muted block text-xs capitalize">
-                  {d.format} · {moneyPerPlayer(d)}
-                </span>
               </span>
               <ChevronDown
                 size={18}

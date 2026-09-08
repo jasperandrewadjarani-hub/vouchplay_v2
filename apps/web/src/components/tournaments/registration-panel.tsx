@@ -118,9 +118,11 @@ export function RegistrationPanel({
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-3">
                     <span>
                       <span className="text-foreground block text-sm font-semibold">{d.name}</span>
-                      <span className="text-foreground-muted block text-xs capitalize">
-                        {reg ? `Your ${reg.status.replace(/_/g, ' ')}` : d.format}
-                      </span>
+                      {reg && (
+                        <span className="text-foreground-muted block text-xs capitalize">
+                          Your {reg.status.replace(/_/g, ' ')}
+                        </span>
+                      )}
                     </span>
                     <span className="text-foreground-muted text-xs">Details</span>
                   </summary>
