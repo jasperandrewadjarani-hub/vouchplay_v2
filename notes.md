@@ -1441,6 +1441,65 @@ Getting the first deploy up hit two issues:
   all generated keys valid for the DB pattern, and the public page shows 0 slot counts with fees
   intact. Gates green (web 30, config 19, core 117). See `master_plan.md` §1J.
 
+- **2026-09-09** - **All app times are now Philippine time (UTC+8).** Root cause of the live
+  "registration opens 1:26 AM" bug: `datetime-local` values were parsed with `new Date(value)`, which
+  resolves in the *runtime's* timezone (UTC on Vercel), so an organizer typing 5:00 PM stored `17:00Z`;
+  the same value was then displayed through a `UTC` formatter. Added a pure `@vouchplay/core`
+  `time/ph-time.ts` (`phInputToIso`, `phDateInputToIso`, `isoToPhInput`, `isoToPhDateInput`) with 8
+  unit tests including one asserting the exact live defect, repointed `lib/format-date.ts` to
+  `Asia/Manila`, and routed the tournament create/manage forms and detail page through both. Storage
+  stays UTC (§35.5); only entry and display are anchored. PH has had no DST since 1978, so a fixed +8
+  offset is exact. Corrected the live B-Steel value from `2026-09-09T17:26:00+00:00` to
+  `2026-09-09T09:00:00Z` = **Sep 9, 2026, 5:00 PM Manila**; verified on production. Commit `cd083ab`.
+  **Standing rule: no bare `new Date(x)` parsing of form input, no bare `toLocale*`, no `timeZone:
+  'UTC'` in app code** - that combination causes both silent day-shifts and React #418.
+
+- **2026-09-09** - **Vouch option "I have watched them play" + peer-nominated achievements
+  (needs migration 0024 to activate).**
+  (1) `vouch_interaction` gains `observed` for someone who genuinely saw a player but never partnered
+  with or played against them - previously the form forced a play relationship that never happened.
+  **No weighting change**: interaction type has never been an input to `effectiveWeight` (§10.5); only
+  the coach toggle and the voucher's identity verification move weight, and 1.00/1.25/2.00/2.50 stays
+  locked. Copy centralised in `apps/web/src/lib/vouches/interaction.ts` so the form and the moderation
+  view cannot drift.
+  (2) `achievement_issuer_type` gains `peer`, so another player can add an achievement FOR you. It is
+  **invisible to everyone but you until you confirm it**; state rides on
+  `achievements.verification_status` (`pending_subject` → `community`), which is free-form text with
+  no check constraint, so no column was added. Declining deletes the row and the nominator is not
+  notified. Guards: no self-nomination via this path, blocked pairs excluded, target must be active and
+  onboarded, 1 undecided nomination per nominator per subject, 20 per subject, pending claims cannot be
+  endorsed, and the subject can always remove a confirmed claim. New notification types
+  `achievement_nominated` / `achievement_nomination_confirmed` (notification `type` is text, no enum,
+  so no migration). Community claims still never affect CSL, STS, Skill Verified, vouch weight,
+  contribution, eligibility, or any ranking.
+  Code is safe to deploy before 0024: nothing reads the new values until someone picks them, and the
+  DB would reject an unknown enum value with a handled error.
+- **Apply migration 0024:** Jasper runs `scripts/apply-0024.sql` against `itrosesiywpbaxtmucbb` and
+  returns `vouch_interaction_observed=1` and `achievement_issuer_peer=1`. It is a two-line additive
+  `alter type ... add value if not exists`, safe to run while the app is live and a no-op on re-run.
+  The verification is deliberately ONE query because the Supabase SQL Editor only shows the last
+  select's result.
+
+- **2026-09-09** - **The vouches-given leaderboard already existed; it needed a rebuild, not a build.**
+  "Community Champions" (`category = 'community'`) has ranked contribution - vouches given - since
+  Phase 13C. Live check: its **active snapshot is dated 2026-09-07T22:10:41Z and holds 0 entries**,
+  while `player_contributions` now has 24 scored players and there are 93 active vouches. So no new
+  board was written. What was missing was plain language: every board now states what it ranks, the
+  category picker reads "Community Champions - vouches given", and an empty board explains that no
+  snapshot has ranked anyone yet rather than dead-ending on "No rankings yet."
+- **`CRON_SECRET` is not set in Vercel (blocking):** `/api/cron/leaderboards` returns 503
+  `CRON_NOT_CONFIGURED` without it, so the nightly `17 1 * * *` (01:17 UTC = 09:17 Manila) rebuild in
+  `vercel.json` has never run - which is why the snapshot is two days stale. **Jasper: add `CRON_SECRET`
+  to the Vercel project env, then trigger Admin → Leaderboards → rebuild once** (needs a stepped-up
+  AAL2 admin session) to publish a snapshot that includes the 24 current contributors.
+
+- **2026-09-09** - **Contribution copy + pagination feedback.** The contribution card named the
+  internal algorithm and its dampening terms (`CONTRIB_V1`, diminishing returns, time decay), which
+  meant nothing to a player; it now says the same rules plainly and states outright that it measures
+  helping the community and is **not a skill score**. Players and Clubs Previous/Next now show an
+  inline `useLinkStatus()` spinner while the next page loads, at 44 px tap targets, so a tap on a slow
+  connection no longer looks ignored.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

@@ -105,9 +105,10 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
           {page > 1 ? (
             <Link
               href={`/clubs${qs(filters, page - 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Previous
+              <LinkSpinner />
             </Link>
           ) : (
             <span />
@@ -118,9 +119,10 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
           {page < pageCount ? (
             <Link
               href={`/clubs${qs(filters, page + 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Next
+              <LinkSpinner />
             </Link>
           ) : (
             <span />

@@ -5,6 +5,7 @@ import { listPlayers, type PlayerFilters } from '@/lib/players/queries';
 import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters, type ActiveFilters } from '@/components/players/search-filters';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
+import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = {
   title: 'Players',
@@ -117,9 +118,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           {page > 1 ? (
             <Link
               href={`/players${toQueryString(filters, page - 1, compact)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Previous
+              <LinkSpinner />
             </Link>
           ) : (
             <span />
@@ -130,9 +132,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           {page < pageCount ? (
             <Link
               href={`/players${toQueryString(filters, page + 1, compact)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted rounded-xl border px-4 py-2 text-sm font-medium"
+              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
             >
               Next
+              <LinkSpinner />
             </Link>
           ) : (
             <span />

@@ -8,6 +8,12 @@ import { LinkSpinner } from '@/components/ui/link-spinner';
 import { formatDate } from '@/lib/format-date';
 
 const TITLES = { players: 'Players', community: 'Community Champions', clubs: 'Clubs' } as const;
+/** A board title alone does not say what it ranks. One plain line each, for every reader. */
+const SUBTITLES = {
+  players: 'Ranked on verified tournament play and official placements.',
+  community: 'Ranked on vouches given - the players who help build other profiles.',
+  clubs: 'Ranked on verified club representation across tournaments.',
+} as const;
 const BOARD_CTA = {
   players: { href: '/tournaments', label: 'Find a tournament' },
   community: { href: '/players', label: 'Find someone you genuinely know' },
@@ -49,7 +55,10 @@ export function LeaderboardPanel({
         <h2 id={emptyId} className="text-foreground font-semibold">
           {title}
         </h2>
-        <p className="text-foreground-muted mt-2 text-sm">No rankings yet.</p>
+        <p className="text-foreground-muted mt-1 text-sm">{SUBTITLES[category ?? 'players']}</p>
+        <p className="text-foreground-muted mt-2 text-sm">
+          No rankings published yet. This board appears after the next snapshot.
+        </p>
       </section>
     );
   }
@@ -68,6 +77,7 @@ export function LeaderboardPanel({
           <h2 id={`board-${board.category}`} className="text-foreground text-xl font-bold">
             {title}
           </h2>
+          <p className="text-foreground-muted mt-1 text-sm">{SUBTITLES[board.category]}</p>
           <p className="text-foreground-muted mt-1 text-xs capitalize">
             {board.period.replace('_', ' ')}
           </p>
@@ -93,7 +103,11 @@ export function LeaderboardPanel({
       </header>
       {board.entries.length === 0 ? (
         <div className="p-5">
-          <p className="text-foreground-muted text-sm">No rankings yet.</p>
+          <p className="text-foreground-muted text-sm">
+            {board.category === 'community'
+              ? 'Nobody is ranked in this snapshot yet. Vouch for players you have genuinely played with, and you will appear here after the next snapshot.'
+              : 'Nobody is ranked in this snapshot yet. Check back after the next snapshot.'}
+          </p>
         </div>
       ) : (
         <>

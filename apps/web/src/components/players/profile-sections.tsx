@@ -87,17 +87,20 @@ export function ContributionProgress({
     <SectionCard title="Community contribution">
       {!progress ? (
         <EmptyNote>
-          No contribution progress yet. This grows by helping distinct players you genuinely
-          know-not by favorable ratings or repeated vouches.
+          Nothing here yet. This grows when you vouch for players you have genuinely played with.
         </EmptyNote>
       ) : (
         <div className="space-y-3">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
             <strong className="text-foreground text-2xl">Level {progress.level}</strong>
             <span className="text-foreground-muted text-sm">
-              {progress.score.toFixed(1)} contribution points
+              {progress.score.toFixed(1)} points
             </span>
           </div>
+          <p className="text-foreground-muted text-sm">
+            This is how much you have helped the community by vouching for others. It is not a skill
+            score.
+          </p>
           <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
             <div>
               <dt className="text-foreground-muted text-xs">Players helped</dt>
@@ -124,9 +127,11 @@ export function ContributionProgress({
               ))}
             </ul>
           )}
-          <p className="text-foreground-muted text-xs">
-            Distinct-pair credit, newcomer support, decay, and anti-gaming dampening use CONTRIB_V1.
-            Anonymous voucher identity is never shown here.
+          {/* The old line named the internal algorithm (CONTRIB_V1) and its dampening terms, which
+              meant nothing to a player. Same rules, said plainly. */}
+          <p className="text-foreground-muted text-xs leading-relaxed">
+            Helping someone new counts for more, vouching for the same person again adds little, and
+            older activity slowly fades. Anonymous vouchers are never shown here.
           </p>
         </div>
       )}

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.21
+# VouchPlay Master Product & Code Execution Handover v1.22
 
-_(File retains its `…v1.1.md` name; content is v1.21 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.22 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,62 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.22 (2026-09-09)
+
+- **Every time in the app is Philippine time (UTC+8), for every viewer, everywhere.** §35.5 already
+  named `Asia/Manila` as the launch timezone, but the code did not honour it in two places, and both
+  were wrong in production. `datetime-local` inputs were parsed with `new Date(value)`, which resolves
+  in the *runtime's* timezone - UTC on Vercel - so an organizer typing 5:00 PM stored `17:00Z`, and
+  the same value was read back through a `UTC` formatter and displayed as 1:00 AM the next day. Both
+  ends now go through one pure module, `@vouchplay/core` `time/ph-time.ts`
+  (`phInputToIso`, `phDateInputToIso`, `isoToPhInput`, `isoToPhDateInput`), and every display goes
+  through `lib/format-date.ts` pinned to `en-US` + `Asia/Manila`. **Storage is unchanged: instants are
+  still UTC in the database** (§35.5); only entry and display are anchored. The Philippines has had no
+  DST since 1978, so the fixed +8 offset is exact rather than an approximation. A unit test asserts the
+  exact live defect. **Rule: never format or parse a date with a bare `new Date(...)`, `toLocale*`, or
+  a `UTC` timezone in app code** - hydration mismatch (React #418) and silent day-shifts both come from
+  that. B-Steel Hermosa registration was corrected to open **Sep 9, 2026, 5:00 PM Manila**.
+- **A vouch can now say "I have watched them play".** Live vouching produced people who had genuinely
+  seen a player but never partnered with or played against them, and the form forced them to claim a
+  play relationship that never happened. `vouch_interaction` gains `observed` (migration 0024).
+  **This changes no weighting.** Interaction type has never been an input to `effectiveWeight` (§10.5):
+  only the approved-Coach toggle and the *voucher's* identity verification move weight, and the
+  1.00/1.25/2.00/2.50 ladder is untouched. `observed` is a context label, and the form says so, so an
+  honest answer never costs the voucher anything. Copy lives in one module
+  (`lib/vouches/interaction.ts`) so the form and the moderation view cannot drift.
+- **Anyone can add an achievement for you; only you can publish it.** Previously a community claim
+  could only be self-added, which reads as bragging and misses the people best placed to vouch for a
+  result - the ones who were there. A peer now nominates a claim on another player's profile
+  (`achievement_issuer_type` gains `peer`, migration 0024). **A nomination is invisible to everyone
+  except its subject until the subject confirms it**, so nobody can write on another player's profile.
+  State is carried in `achievements.verification_status` (`pending_subject` → `community`), which is
+  free-form text with no check constraint, so no column was added. Declining deletes the row and the
+  nominator is **not** notified, so a decline can never become a source of friction. A confirmed claim
+  stays attributed to whoever added it. Guards: no self-nomination through this path, blocked pairs
+  excluded, target must be active and onboarded, one undecided nomination per nominator per subject,
+  20 undecided nominations per subject, pending claims cannot be endorsed, and the subject can always
+  remove a confirmed claim from their own profile. Community claims remain explicitly labelled and
+  **never** affect CSL, STS, Skill Verified, vouch weight, contribution, eligibility, or any ranking.
+- **The vouches-given leaderboard already existed.** "Community Champions" (`category = 'community'`)
+  has ranked contribution - vouches given - since Phase 13C; it was invisible because its **active
+  snapshot dates from 2026-09-07 and contains 0 entries**, published before the community had any
+  contribution rows (there are now 24 scored players and 93 active vouches). No new board was built.
+  What was actually missing was plain language and an honest empty state: each board now states what
+  it ranks ("Ranked on vouches given"), the category picker names it "Community Champions - vouches
+  given", and an empty board explains that a snapshot has not ranked anyone yet instead of
+  dead-ending on "No rankings yet." **Operational dependency: the nightly rebuild
+  (`/api/cron/leaderboards`, 01:17 UTC = 09:17 Manila) returns 503 `CRON_NOT_CONFIGURED` unless
+  `CRON_SECRET` is set in the Vercel environment.** Until it is, every board goes stale between manual
+  Admin rebuilds.
+- **Contribution copy says what it means.** The card named the internal algorithm and its dampening
+  terms (`CONTRIB_V1`, "diminishing returns", "time decay"), which meant nothing to a player. Same
+  rules, said plainly, plus one line stating it is a measure of helping the community and **not a
+  skill score** - preserving §3.3's separation of concepts at the point where a player actually reads
+  a number.
+- **Pagination says it is working.** Players and Clubs Previous/Next are server-navigated links, so on
+  a slow connection a tap looked ignored. Both now show an inline spinner via `useLinkStatus()` while
+  the next page loads, with 44px touch targets.
 
 ## v1.21 (2026-09-08)
 - **Remaining slots are not public.** The player-facing division browser no longer shows a

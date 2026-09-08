@@ -44,8 +44,8 @@ export function LeaderboardFilters({
             setValues({ ...values, category: event.target.value as LeaderboardCategory })
           }
         >
-          <option value="players">Players</option>
-          <option value="community">Community Champions</option>
+          <option value="players">Players - tournament play</option>
+          <option value="community">Community Champions - vouches given</option>
           <option value="clubs">Clubs</option>
         </select>
       </label>
