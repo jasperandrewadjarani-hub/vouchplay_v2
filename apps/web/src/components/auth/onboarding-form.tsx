@@ -106,8 +106,8 @@ export function OnboardingForm({
         htmlFor="avatar"
         hint={
           mode === 'edit'
-            ? 'Optional. Leave blank to keep your current photo. PNG, JPG or WebP, up to 2 MB.'
-            : 'Optional. PNG, JPG or WebP, up to 2 MB.'
+            ? 'Optional. Leave blank to keep your current photo. PNG, JPG or WebP, up to 2 MB. Photos are optimized for fast loading.'
+            : 'Optional. PNG, JPG or WebP, up to 2 MB. Photos are optimized for fast loading.'
         }
       >
         <input

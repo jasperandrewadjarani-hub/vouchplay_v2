@@ -1224,6 +1224,23 @@ Getting the first deploy up hit two issues:
     `docs/PHASE_14_RECRUITMENT_SPONSORSHIP_AND_BIDDING_HANDOVER.md`. Local gates green: typecheck,
     lint, tests (web 20, config 19, core 93), format, and Next 15.5.25 build (40 routes).
 
+- **2026-09-08** - **Media normalization v1.12 staged for scale.**
+  - **All new avatar, club-logo, and image payment-proof uploads are server-normalized:** decoded
+    bytes must match declared PNG/JPEG/WebP MIME; output is auto-oriented, metadata-free, bounded
+    WebP. Profiles are Avatar (512 px / 250 KB), Club logo (768 px / 384 KB), and private payment
+    proof (2048 px / 1.5 MB). Payment PDFs remain private, signature- and parse-validated documents.
+  - **Storage hygiene:** avatar and club-logo replacement writes upload a generated replacement first,
+    retain the active path until the database write succeeds, then best-effort delete only the
+    superseded generated object. A newly uploaded object is removed if its database write fails.
+    Existing media and payment-proof replacement retention are deliberately not changed or rewritten.
+  - **UX and verification:** each relevant form now explains optimization without hiding its file
+    limit or private-proof status. New tests cover decode/MIME mismatch, unreadable bytes, EXIF removal,
+    no enlargement, output bounds, and PDFs. A controlled live Storage smoke test uploaded/read back
+    temporary public/private WebP objects (512×354 / 420 B and 2048×1418 / 5,272 B) and removed them.
+    Local gates are green: typecheck, lint, tests (web 26, config 19, core 93), format, and Next 15.5.25
+    build. No migration is required. Phase 14 handover is unchanged because this is a cross-cutting
+    pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
+
 ## Next up
 - **Apply migration 0018:** Jasper runs `scripts/apply-0018.sql` against
   `itrosesiywpbaxtmucbb`, returns `unknown_dob_optional=1` and `leaderboard_setting_row=1`, then

@@ -12,6 +12,7 @@ import { tournamentTag } from '@/lib/tournaments/queries';
 import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentOrganizerIds } from '@/lib/notifications/recipients';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
+import { preparePaymentProof } from '@/lib/payments/proof-file';
 
 export interface PaymentActionState {
   ok?: boolean;
@@ -19,13 +20,22 @@ export interface PaymentActionState {
   message?: string;
 }
 
-const PROOF_MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'application/pdf': 'pdf',
-};
-const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+function paymentProofError(
+  error: 'empty' | 'too_large' | 'unsupported_type' | 'invalid_image' | 'invalid_pdf',
+): string {
+  switch (error) {
+    case 'empty':
+      return 'Attach a proof file.';
+    case 'too_large':
+      return 'Proof file must be 5 MB or smaller.';
+    case 'unsupported_type':
+      return 'Proof must be a PNG, JPG, WebP, or PDF.';
+    case 'invalid_pdf':
+      return 'Proof PDF could not be read. Upload a valid PDF.';
+    default:
+      return 'Proof image could not be read. Use a valid PNG, JPG, or WebP image.';
+  }
+}
 
 async function revalTournament(tournamentId: string) {
   const svc = createServiceClient();
@@ -92,15 +102,13 @@ export async function submitPayment(
 
     // Upload proof (required).
     const file = formData.get('proof');
-    if (!(file instanceof File) || file.size === 0) return { error: 'Attach a proof file.' };
-    const ext = PROOF_MIME_EXT[file.type];
-    if (!ext) return { error: 'Proof must be a PNG, JPG, WebP, or PDF.' };
-    if (file.size > MAX_PROOF_BYTES) return { error: 'Proof file must be 5 MB or smaller.' };
-    const path = `${registrationId}/proof-${Date.now()}.${ext}`;
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (!(file instanceof File)) return { error: 'Attach a proof file.' };
+    const preparedProof = await preparePaymentProof(file);
+    if (!preparedProof.ok) return { error: paymentProofError(preparedProof.error) };
+    const path = `${registrationId}/proof-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${preparedProof.extension}`;
     const { error: upErr } = await svc.storage
       .from(PAYMENT_PROOFS_BUCKET)
-      .upload(path, bytes, { contentType: file.type, upsert: true });
+      .upload(path, preparedProof.bytes, { contentType: preparedProof.mimeType, upsert: false });
     if (upErr) return { error: 'Could not upload the proof. Please try again.' };
 
     const { error: payErr } = await svc.from('payments').upsert(
@@ -119,7 +127,10 @@ export async function submitPayment(
       },
       { onConflict: 'registration_id' },
     );
-    if (payErr) return { error: 'Could not record your payment. Please try again.' };
+    if (payErr) {
+      await svc.storage.from(PAYMENT_PROOFS_BUCKET).remove([path]);
+      return { error: 'Could not record your payment. Please try again.' };
+    }
 
     const graceHours = await loadSettingNumber('submitted_payment_review_grace_hours', 24);
     await svc

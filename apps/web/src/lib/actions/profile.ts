@@ -8,34 +8,50 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { safeNext } from '@/lib/auth';
 import { AVATARS_BUCKET } from '@/lib/storage';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
+import { AVATAR_IMAGE_PROFILE, normalizeUploadedImage } from '@/lib/images/normalize-upload-image';
 
-const AVATAR_MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-};
-const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+type AvatarUploadResult = { path?: string; error?: string };
+
+function isGeneratedAvatarPath(userId: string, path: string | null | undefined): path is string {
+  return !!path && path.startsWith(`${userId}/avatar-`) && path.endsWith('.webp');
+}
+
+async function cleanupGeneratedAvatar(userId: string, path: string | null | undefined) {
+  if (!isGeneratedAvatarPath(userId, path)) return;
+  try {
+    await createServiceClient().storage.from(AVATARS_BUCKET).remove([path]);
+  } catch {
+    // Best effort only: cleanup never overturns a successful profile save.
+  }
+}
 
 /**
  * Upload an avatar for `userId` to the public `avatars` bucket via the service client. The path is
  * keyed to the user's own id (authorization: the caller already verified this is that user), so a
- * user can only ever write their own avatar. Returns the stored path, or null on any problem
- * (avatar is optional - a failure must never block onboarding).
+ * user can only ever write their own avatar. Stored media is always bounded, metadata-free WebP.
  */
-async function uploadAvatar(userId: string, file: File): Promise<string | null> {
-  const ext = AVATAR_MIME_EXT[file.type];
-  if (!ext || file.size === 0 || file.size > MAX_AVATAR_BYTES) return null;
+async function uploadAvatar(userId: string, file: File): Promise<AvatarUploadResult> {
+  const prepared = await normalizeUploadedImage(file, AVATAR_IMAGE_PROFILE);
+  if (!prepared.ok) {
+    return {
+      error:
+        prepared.error === 'source_too_large'
+          ? 'Profile photo must be 2 MB or smaller.'
+          : 'Profile photo could not be read. Use a valid PNG, JPG, or WebP image.',
+    };
+  }
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const path = `${userId}/avatar-${Date.now()}.${ext}`;
+    const path = `${userId}/avatar-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.webp`;
     const svc = createServiceClient();
-    const { error } = await svc.storage
-      .from(AVATARS_BUCKET)
-      .upload(path, bytes, { contentType: file.type, upsert: true });
-    if (error) return null;
-    return path;
+    const { error } = await svc.storage.from(AVATARS_BUCKET).upload(path, prepared.bytes, {
+      contentType: prepared.mimeType,
+      cacheControl: '31536000',
+      upsert: false,
+    });
+    if (error) return { error: 'Profile photo could not be uploaded. Please try again.' };
+    return { path };
   } catch {
-    return null;
+    return { error: 'Profile photo could not be uploaded. Please try again.' };
   }
 }
 
@@ -87,10 +103,12 @@ export async function completeOnboarding(
     const slug = `${base}-${crypto.randomUUID().slice(0, 6)}`;
 
     const avatarFile = formData.get('avatar');
-    const avatarPath =
+    const avatarUpload =
       avatarFile instanceof File && avatarFile.size > 0
         ? await uploadAvatar(user!.id, avatarFile)
-        : null;
+        : {};
+    if (avatarUpload.error) return { error: avatarUpload.error };
+    const avatarPath = avatarUpload.path;
 
     const { error } = await supabase
       .from('profiles')
@@ -109,7 +127,10 @@ export async function completeOnboarding(
       })
       .eq('id', user!.id);
 
-    if (error) return { error: 'Could not save your profile. Please try again.' };
+    if (error) {
+      await cleanupGeneratedAvatar(user!.id, avatarPath);
+      return { error: 'Could not save your profile. Please try again.' };
+    }
     savedSlug = slug;
   } catch {
     return { error: 'Profile setup is not available yet. Please try again shortly.' };
@@ -151,7 +172,7 @@ export async function updateProfile(
 
     const { data: current } = await supabase
       .from('profiles')
-      .select('slug, onboarded_at')
+      .select('slug, onboarded_at, avatar_path')
       .eq('id', user.id)
       .maybeSingle();
     if (!(current as { onboarded_at: string | null } | null)?.onboarded_at) {
@@ -159,10 +180,12 @@ export async function updateProfile(
     }
 
     const avatarFile = formData.get('avatar');
-    const avatarPath =
+    const avatarUpload =
       avatarFile instanceof File && avatarFile.size > 0
         ? await uploadAvatar(user.id, avatarFile)
-        : null;
+        : {};
+    if (avatarUpload.error) return { error: avatarUpload.error };
+    const avatarPath = avatarUpload.path;
     const v = parsed.data;
     const { error } = await supabase
       .from('profiles')
@@ -178,8 +201,13 @@ export async function updateProfile(
         ...(avatarPath ? { avatar_path: avatarPath } : {}),
       })
       .eq('id', user.id);
-    if (error) return { error: 'Could not save your profile. Please try again.' };
-    savedSlug = (current as { slug: string | null }).slug;
+    if (error) {
+      await cleanupGeneratedAvatar(user.id, avatarPath);
+      return { error: 'Could not save your profile. Please try again.' };
+    }
+    const currentRow = current as { slug: string | null; avatar_path: string | null };
+    if (avatarPath) await cleanupGeneratedAvatar(user.id, currentRow.avatar_path);
+    savedSlug = currentRow.slug;
   } catch {
     return { error: 'Profile editing is temporarily unavailable. Please try again shortly.' };
   }

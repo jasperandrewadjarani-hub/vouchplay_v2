@@ -86,7 +86,7 @@ export function PaymentForm({
           label="Proof of payment"
           htmlFor="proof"
           required
-          hint="PNG, JPG, WebP, or PDF, up to 5 MB."
+          hint="PNG, JPG, WebP, or PDF, up to 5 MB. Images are optimized privately; PDFs remain private documents."
         >
           <input
             id="proof"

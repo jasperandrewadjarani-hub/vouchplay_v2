@@ -61,7 +61,11 @@ export function ClubSettingsForm({ clubId, slug, initial }: Props) {
       <Field label="Contact" htmlFor="contact">
         <Input id="contact" name="contact" maxLength={200} defaultValue={initial.contact ?? ''} />
       </Field>
-      <Field label="Replace logo (optional)" htmlFor="logo" hint="PNG, JPG or WebP, up to 2 MB.">
+      <Field
+        label="Replace logo (optional)"
+        htmlFor="logo"
+        hint="PNG, JPG or WebP, up to 2 MB. Logos are optimized for fast loading."
+      >
         <input
           id="logo"
           name="logo"

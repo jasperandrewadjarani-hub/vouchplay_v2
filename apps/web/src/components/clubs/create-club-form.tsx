@@ -60,7 +60,11 @@ export function CreateClubForm() {
         />
       </Field>
 
-      <Field label="Logo (optional)" htmlFor="logo" hint="PNG, JPG or WebP, up to 2 MB.">
+      <Field
+        label="Logo (optional)"
+        htmlFor="logo"
+        hint="PNG, JPG or WebP, up to 2 MB. Logos are optimized for fast loading."
+      >
         <input
           id="logo"
           name="logo"

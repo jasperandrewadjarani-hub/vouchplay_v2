@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.11
+# VouchPlay Master Product & Code Execution Handover v1.12
 
-_(File retains its `…v1.1.md` name; content is v1.11 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.12 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -3701,18 +3701,29 @@ Rules:
 - strip unnecessary metadata from public images,
 - never deliver original multi-megabyte uploads to a 48px avatar.
 
-Application upload limits should be tighter than provider limits:
+All newly uploaded public-display images and private **image** payment proofs must be normalized
+server-side before storage: decode and compare content against the declared MIME; auto-orient; remove
+EXIF/other metadata; never enlarge; adapt dimensions/quality until the bounded WebP output profile is
+met. Do not trust an extension or browser-provided MIME alone. This is not a client-only optimization.
+The original browser image is not stored. A payment-proof PDF remains a private, signature- and
+parse-validated PDF; never rasterize it or make it public.
 
-| File | V1 App Limit |
+Application source limits and generated-output profiles are intentionally tighter than provider limits:
+
+| File | Accepted source | Stored output |
 |---|---:|
-| Avatar | 5 MB upload |
-| Club logo | 5 MB |
-| Tournament cover | 10 MB |
-| Payment proof | 10 MB |
-| ID verification | 10 MB |
-| Report evidence image | 10 MB |
+| Avatar | PNG/JPEG/WebP, 2 MB | WebP, max 512px, 250 KB |
+| Club logo | PNG/JPEG/WebP, 2 MB | WebP, max 768px, 384 KB |
+| Tournament cover | PNG/JPEG/WebP, 4 MB | landscape WebP, 1.9 MB |
+| Payment-proof image | PNG/JPEG/WebP, 5 MB | private WebP, max 2048px, 1.5 MB |
+| Payment-proof PDF | PDF, 5 MB | same private validated PDF |
+| ID verification / report evidence | feature-specific private limit | governed by that private-evidence flow |
 
-Compress/resize public media after upload.
+Use generated object names. For replacement public media, upload the new generated object first, update
+the database next, then best-effort delete the superseded generated object. Delete a new object if its
+database write fails. Do not rewrite or delete existing media retroactively without a separately
+approved retention/backfill plan. Private payment-proof replacement retention remains governed by the
+payments retention/audit policy, not this media optimization.
 
 Do not create unbounded arbitrary image widths. Define a small allowed set of display sizes to reduce Vercel/Supabase image transformation churn.
 
@@ -6532,6 +6543,12 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.12 (2026-09-08)
+- **Storage normalization:** locked server-side decoding, MIME-content matching, orientation, metadata
+  stripping, bounded adaptive WebP output, and generated-object cleanup for player avatars, club logos,
+  tournament covers, and private image payment proofs. Payment-proof PDFs remain private validated
+  documents. Existing stored media is deliberately non-retroactive.
 
 ## v1.11 (2026-09-08)
 - **Optional leaderboard DOB:** unknown DOB no longer excludes an otherwise eligible public player;

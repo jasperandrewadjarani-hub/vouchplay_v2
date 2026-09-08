@@ -11,6 +11,10 @@ import { loadSettingFlag } from '@/lib/settings';
 import { CLUBS_LIST_TAG, clubTag, clubMembersTag, userClubsTag } from '@/lib/clubs/queries';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import { getActorMini, getClubManagerIds } from '@/lib/notifications/recipients';
+import {
+  CLUB_LOGO_IMAGE_PROFILE,
+  normalizeUploadedImage,
+} from '@/lib/images/normalize-upload-image';
 
 /** Notify one user about the outcome of their club join request (§27.1). Best-effort. */
 async function notifyClubJoinResult(
@@ -42,13 +46,6 @@ export interface ClubActionState {
   message?: string;
 }
 
-const LOGO_MIME_EXT: Record<string, string> = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-};
-const MAX_LOGO_BYTES = 2 * 1024 * 1024;
-
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -60,16 +57,33 @@ function slugify(input: string): string {
     .slice(0, 40);
 }
 
-async function uploadClubLogo(clubId: string, file: File): Promise<string | null> {
-  const ext = LOGO_MIME_EXT[file.type];
-  if (!ext || file.size === 0 || file.size > MAX_LOGO_BYTES) return null;
+function logoPreparationError(error: string): string {
+  return error === 'source_too_large'
+    ? 'Club logo must be 2 MB or smaller.'
+    : 'Club logo could not be read. Use a valid PNG, JPG, or WebP image.';
+}
+
+function isGeneratedClubLogoPath(clubId: string, path: string | null | undefined): path is string {
+  return !!path && path.startsWith(`club-logos/${clubId}/logo-`) && path.endsWith('.webp');
+}
+
+async function cleanupGeneratedClubLogo(clubId: string, path: string | null | undefined) {
+  if (!isGeneratedClubLogoPath(clubId, path)) return;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const path = `club-logos/${clubId}/logo-${Date.now()}.${ext}`;
-    const svc = createServiceClient();
-    const { error } = await svc.storage
-      .from(AVATARS_BUCKET)
-      .upload(path, bytes, { contentType: file.type, upsert: true });
+    await createServiceClient().storage.from(AVATARS_BUCKET).remove([path]);
+  } catch {
+    // Best effort only: cleanup never overturns a successful club save.
+  }
+}
+
+async function uploadClubLogo(clubId: string, bytes: Uint8Array): Promise<string | null> {
+  try {
+    const path = `club-logos/${clubId}/logo-${Date.now()}-${crypto.randomUUID().slice(0, 8)}.webp`;
+    const { error } = await createServiceClient().storage.from(AVATARS_BUCKET).upload(path, bytes, {
+      contentType: 'image/webp',
+      cacheControl: '31536000',
+      upsert: false,
+    });
     return error ? null : path;
   } catch {
     return null;
@@ -133,9 +147,19 @@ export async function createClub(
     }
 
     const slug = `${slugify(v.name) || 'club'}-${crypto.randomUUID().slice(0, 6)}`;
+    const clubId = crypto.randomUUID();
+    const logo = formData.get('logo');
+    let uploadedLogoPath: string | null = null;
+    if (logo instanceof File && logo.size > 0) {
+      const preparedLogo = await normalizeUploadedImage(logo, CLUB_LOGO_IMAGE_PROFILE);
+      if (!preparedLogo.ok) return { error: logoPreparationError(preparedLogo.error) };
+      uploadedLogoPath = await uploadClubLogo(clubId, preparedLogo.bytes);
+      if (!uploadedLogoPath) return { error: 'Club logo could not be uploaded. Please try again.' };
+    }
     const { data: created, error } = await svc
       .from('clubs')
       .insert({
+        id: clubId,
         name: v.name,
         slug,
         description: v.description || null,
@@ -143,10 +167,14 @@ export async function createClub(
         contact: v.contact || null,
         privacy: v.privacy,
         created_by: user.id,
+        ...(uploadedLogoPath ? { logo_path: uploadedLogoPath } : {}),
       })
       .select('id, slug')
       .single();
-    if (error || !created) return { error: 'Could not create the club. Please try again.' };
+    if (error || !created) {
+      await cleanupGeneratedClubLogo(clubId, uploadedLogoPath);
+      return { error: 'Could not create the club. Please try again.' };
+    }
     const club = created as { id: string; slug: string };
     newSlug = club.slug;
 
@@ -158,12 +186,6 @@ export async function createClub(
       status: 'active',
       approved_at: new Date().toISOString(),
     });
-
-    const logo = formData.get('logo');
-    if (logo instanceof File && logo.size > 0) {
-      const path = await uploadClubLogo(club.id, logo);
-      if (path) await svc.from('clubs').update({ logo_path: path }).eq('id', club.id);
-    }
 
     revalidateTag(CLUBS_LIST_TAG);
     revalidateTag(userClubsTag(user.id));
@@ -208,12 +230,27 @@ export async function updateClub(
       contact: v.contact || null,
     };
     const logo = formData.get('logo');
+    let uploadedLogoPath: string | null = null;
+    let previousLogoPath: string | null = null;
     if (logo instanceof File && logo.size > 0) {
-      const path = await uploadClubLogo(clubId, logo);
-      if (path) patch.logo_path = path;
+      const preparedLogo = await normalizeUploadedImage(logo, CLUB_LOGO_IMAGE_PROFILE);
+      if (!preparedLogo.ok) return { error: logoPreparationError(preparedLogo.error) };
+      const { data: current } = await svc
+        .from('clubs')
+        .select('logo_path')
+        .eq('id', clubId)
+        .maybeSingle();
+      previousLogoPath = (current as { logo_path: string | null } | null)?.logo_path ?? null;
+      uploadedLogoPath = await uploadClubLogo(clubId, preparedLogo.bytes);
+      if (!uploadedLogoPath) return { error: 'Club logo could not be uploaded. Please try again.' };
+      patch.logo_path = uploadedLogoPath;
     }
     const { error } = await svc.from('clubs').update(patch).eq('id', clubId);
-    if (error) return { error: 'Could not save changes. Please try again.' };
+    if (error) {
+      await cleanupGeneratedClubLogo(clubId, uploadedLogoPath);
+      return { error: 'Could not save changes. Please try again.' };
+    }
+    if (uploadedLogoPath) await cleanupGeneratedClubLogo(clubId, previousLogoPath);
     invalidateClub(slug, clubId);
   } catch {
     return { error: 'Club editing is temporarily unavailable.' };
