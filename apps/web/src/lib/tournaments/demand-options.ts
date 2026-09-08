@@ -1,4 +1,10 @@
-import { TOURNAMENT_DEMAND_DIVISIONS, demandKeyForDivision } from '@vouchplay/core';
+import {
+  TOURNAMENT_DEMAND_DIVISIONS,
+  demandKeyForDivision,
+  legacyDemandAliases,
+  mergeDemandCounts,
+  type DemandDivisionShape,
+} from '@vouchplay/core';
 import { skillByOrdinal } from '@vouchplay/config';
 import type { DivisionDTO } from './dto';
 
@@ -50,6 +56,37 @@ export function demandOptions(divisions: DivisionDTO[]): DemandOption[] {
     label: d.label,
     color: taxonomyColor(d.key),
   }));
+}
+
+/**
+ * Fold interest recorded under the old planning taxonomy into the organizer's real divisions, so the
+ * breakdown shows one row per division instead of "Novice Men's 6" beside "Men's Doubles Novice 0".
+ *
+ * The matching itself is pure and unit-tested in `@vouchplay/core`; this only supplies the shapes,
+ * because skill-band keys live in `@vouchplay/config`. A legacy key with no single obvious division
+ * keeps its own row rather than being guessed into one.
+ */
+export function mergeLegacyDemand(
+  counts: Readonly<Record<string, number>>,
+  divisions: DivisionDTO[],
+): Record<string, number> {
+  const shapes: DemandDivisionShape[] = divisions.filter(PUBLIC_DIVISION_STATUSES).flatMap((d) => {
+    const key = demandKeyForDivision(d.id);
+    if (!key) return [];
+    // Only a single-band division can stand in for a single-band taxonomy entry.
+    const singleBand =
+      d.skillPolicy === 'band' && d.minimumSkill != null && d.maximumSkill === d.minimumSkill;
+    return [
+      {
+        key,
+        skillBandKey: singleBand ? (skillByOrdinal(d.minimumSkill as number)?.key ?? null) : null,
+        sex: d.sexClassification,
+        hasAgeFloor: d.minimumAge != null,
+      },
+    ];
+  });
+  if (shapes.length === 0) return { ...counts };
+  return mergeDemandCounts(counts, legacyDemandAliases(Object.keys(counts), shapes));
 }
 
 /** Label for a stored key, including keys from divisions that have since been removed. */

@@ -1455,7 +1455,7 @@ Getting the first deploy up hit two issues:
   'UTC'` in app code** - that combination causes both silent day-shifts and React #418.
 
 - **2026-09-09** - **Vouch option "I have watched them play" + peer-nominated achievements
-  (needs migration 0024 to activate).**
+  (migration 0024 ✅ APPLIED, live in production).**
   (1) `vouch_interaction` gains `observed` for someone who genuinely saw a player but never partnered
   with or played against them - previously the form forced a play relationship that never happened.
   **No weighting change**: interaction type has never been an input to `effectiveWeight` (§10.5); only
@@ -1472,13 +1472,33 @@ Getting the first deploy up hit two issues:
   `achievement_nominated` / `achievement_nomination_confirmed` (notification `type` is text, no enum,
   so no migration). Community claims still never affect CSL, STS, Skill Verified, vouch weight,
   contribution, eligibility, or any ranking.
-  Code is safe to deploy before 0024: nothing reads the new values until someone picks them, and the
-  DB would reject an unknown enum value with a handled error.
+  Release order: this code was **held out of production until 0024 was confirmed**, then pushed. See
+  the migration note below for why that differed from 0022/0023.
 - **Apply migration 0024:** Jasper runs `scripts/apply-0024.sql` against `itrosesiywpbaxtmucbb` and
   returns `vouch_interaction_observed=1` and `achievement_issuer_peer=1`. It is a two-line additive
   `alter type ... add value if not exists`, safe to run while the app is live and a no-op on re-run.
   The verification is deliberately ONE query because the Supabase SQL Editor only shows the last
   select's result.
+  ✅ **APPLIED 2026-09-09** - Jasper returned `vouch_interaction_observed=1` and
+  `achievement_issuer_peer=1`. Both surfaces are live in production (commit `adde7d3`), both domains
+  verified. **Deliberate release sequencing, worth repeating:** unlike 0022/0023 this code was held
+  back rather than deployed dormant, because these are *visible controls* a live registration-weekend
+  user could tap - a dormant table returns empty, but a dormant enum value returns an error to a real
+  person mid-action. Rule of thumb: deploy-before-migrate is fine when the gap is silent, not when it
+  is a button.
+
+- **2026-09-09** - **Interest breakdown merges old taxonomy rows into the real divisions.** Jasper's
+  screenshot showed "Novice Men's 6" sitting directly above "Men's Doubles Novice 0" - two rows for
+  one thing. Cause: interest collected before the organizer configured divisions is stored under
+  planning-taxonomy keys, interest collected after under `div_<uuid>` keys; §1J fixed the labels but
+  not the split. Legacy keys now fold onto the matching division (same single skill band + sex; for
+  the age bracket, same age floor + sex). **Only an exactly-one match aliases** - ambiguous or absent
+  matches keep their own row, and the merge is sum-preserving, so nothing is silently reassigned or
+  dropped. The age bracket matches on having an age floor, not the exact age, since the taxonomy
+  offers 50+ while Hermosa runs 45+. Matching is pure + unit-tested in `@vouchplay/core`
+  `tournaments/demand-alias.ts` (9 new tests); the app layer supplies shapes because band keys live in
+  `@vouchplay/config`. Replayed against live Hermosa data: **8/8 legacy keys resolved, 0 legacy rows
+  left over, total held at 21 before and after.**
 
 - **2026-09-09** - **The vouches-given leaderboard already existed; it needed a rebuild, not a build.**
   "Community Champions" (`category = 'community'`) has ranked contribution - vouches given - since
@@ -1507,6 +1527,39 @@ Getting the first deploy up hit two issues:
   connection no longer looks ignored.
 
 ## Next up
+
+### START HERE (state as of 2026-09-09, end of the live-launch support conversation)
+
+The app is **live and in use** for B-Steel Hermosa 2026 (Oct 17-18, Zamboanga City). Registration
+opened **Sep 9, 2026, 5:00 PM Manila**. Treat production as hot: every change lands in front of real
+registrants, so prefer small reversible slices and read the release-order rule in handover v1.22
+before shipping anything that needs a migration.
+
+**All migrations through 0024 are applied.** Nothing is pending in Supabase.
+
+Open items, highest value first:
+
+1. **Leaderboard snapshot is stale and the nightly cron is not landing.** Active snapshot is dated
+   2026-09-07 with **0 entries** on the community board, while there are now 24 scored contributors
+   and 93 active vouches. `CRON_SECRET` **is** configured (unauthenticated `GET
+   /api/cron/leaderboards` returns 401, not 503), cadence is 24h, `leaderboards_enabled=true`, and no
+   category is paused - so the cause is still unknown. **Check the Vercel cron invocation log first.**
+   An **Admin → Leaderboards → rebuild** (stepped-up AAL2 session) publishes a current snapshot on
+   demand and is independent of that investigation.
+2. **Registration CLOSE time still holds the old UTC value.** It renders `Sep 17, 2026, 1:00 AM`,
+   which is the pre-fix artefact, not an intended time. The PH-time fix (§1K) means editing it in the
+   organizer form now stores correctly - it just needs Jasper's intended close time.
+3. **Controlled authenticated browser walkthrough** of
+   `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md` - the only Phase 13.5 gate never
+   evidenced. Worth doing against live now that real registrations exist.
+4. **New surfaces from 2026-09-09 have not been exercised by a real user yet:** the `observed` vouch
+   option and the peer-nominated achievement confirm/decline loop. Both are server-guarded and
+   unit-covered, but neither has live usage.
+5. Carry-over: Supabase org over-quota before 21 Sep 2026; Gmail SMTP → dedicated provider before
+   public scale; `supabase gen types` → `packages/db` once the CLI/token is wired.
+
+### Earlier entries
+
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the
   six flows above before the phase is fully evidenced as done.

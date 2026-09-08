@@ -300,6 +300,15 @@ Two live corrections requested by Jasper.
 
 ## 1L. Vouch context, peer achievements, and leaderboard clarity (2026-09-09, post-launch)
 
+**Status: shipped.** Migration 0024 applied 2026-09-09 (`vouch_interaction_observed=1`,
+`achievement_issuer_peer=1`); both surfaces live and verified on both production domains.
+
+**Release-order rule learned here.** Unlike 0022/0023, this code was **held out of production until
+the migration was confirmed**, rather than deployed dormant. A dormant *table* reads back empty and
+nobody notices; a dormant *enum value* returns an error to a real person who just tapped a visible
+control. Deploy-before-migrate is fine when the gap is silent, not when it is a button - and never
+during a live registration window.
+
 ### "I have watched them play"
 
 - Live vouching surfaced people who had genuinely seen a player but never partnered with or played
@@ -329,6 +338,26 @@ Two live corrections requested by Jasper.
   subject can always remove a confirmed claim from their own profile.
 - Community claims remain explicitly labelled and **never** affect CSL, STS, Skill Verified, vouch
   weight, contribution, eligibility, or any ranking.
+
+### Old and new interest rows are merged
+
+- The interest breakdown listed the planning taxonomy and the organizer's real divisions as separate
+  rows for the same thing - "Novice Men's 6" sitting directly above "Men's Doubles Novice 0" - because
+  interest collected before divisions existed is stored under taxonomy keys and interest collected
+  after is stored under `div_<uuid>` keys. §1J made the *labels* correct but left the *rows* split.
+- Legacy keys are now folded onto the division that means the same thing: same single skill band and
+  same sex classification, or (for the age bracket) same age floor and sex. Matching is pure and
+  unit-tested in `@vouchplay/core` `tournaments/demand-alias.ts`; the app layer only supplies the
+  shapes, because skill-band keys live in `@vouchplay/config`.
+- **An alias is produced only when exactly one division matches.** An ambiguous or absent match leaves
+  the legacy key on its own row, so a recorded interest is never silently moved into a division the
+  organizer did not clearly mean, and no count is ever dropped - merging is sum-preserving.
+- The age bracket matches on *having* an age floor rather than the exact age: the taxonomy offers a
+  fixed 50+ option while an organizer picks their own bracket (45+ for B-Steel Hermosa). The signal
+  being merged is "these people want the men's age division", which is what a planner needs.
+- Verified against live B-Steel Hermosa data: all 8 legacy keys resolved, 0 legacy rows left over, and
+  the total held at 21 interests before and after.
+- Demand remains a planning signal only. It still touches no eligibility, registration, or scoring.
 
 ### The vouches-given leaderboard already existed
 

@@ -6155,6 +6155,9 @@ Maintain a changelog at the bottom.
 
 ## v1.22 (2026-09-09)
 
+_Migration 0024 applied 2026-09-09 (`vouch_interaction_observed=1`, `achievement_issuer_peer=1`).
+Everything below is live and verified on both production domains._
+
 - **Every time in the app is Philippine time (UTC+8), for every viewer, everywhere.** §35.5 already
   named `Asia/Manila` as the launch timezone, but the code did not honour it in two places, and both
   were wrong in production. `datetime-local` inputs were parsed with `new Date(value)`, which resolves
@@ -6189,6 +6192,20 @@ Maintain a changelog at the bottom.
   20 undecided nominations per subject, pending claims cannot be endorsed, and the subject can always
   remove a confirmed claim from their own profile. Community claims remain explicitly labelled and
   **never** affect CSL, STS, Skill Verified, vouch weight, contribution, eligibility, or any ranking.
+- **Old and new interest rows are merged into one row per division.** v1.21 made interest *labels*
+  follow the organizer's divisions but left the *rows* split: interest collected before divisions
+  existed is stored under planning-taxonomy keys, interest collected after under `div_<uuid>` keys, so
+  the breakdown showed "Novice Men's 6" directly above "Men's Doubles Novice 0" - two rows for one
+  thing. Legacy keys now fold onto the division that means the same thing (same single skill band and
+  sex classification; for the age bracket, same age floor and sex). **An alias is produced only when
+  exactly one division matches**, so an ambiguous or absent match leaves the legacy key on its own row
+  rather than being guessed into a division the organizer did not clearly mean, and the merge is
+  sum-preserving - no recorded interest is ever dropped. The age bracket matches on *having* an age
+  floor rather than the exact age, because the taxonomy offers a fixed 50+ option while an organizer
+  picks their own (45+ here); the signal merged is "these people want the men's age division". Matching
+  is pure and unit-tested in `@vouchplay/core` `tournaments/demand-alias.ts`. Verified against live
+  B-Steel Hermosa data: 8 of 8 legacy keys resolved, 0 legacy rows left over, total held at 21.
+  Demand stays a planning signal and still touches no eligibility, registration, or scoring.
 - **The vouches-given leaderboard already existed.** "Community Champions" (`category = 'community'`)
   has ranked contribution - vouches given - since Phase 13C; it was invisible because its **active
   snapshot dates from 2026-09-07 and contains 0 entries**, published before the community had any
@@ -6210,6 +6227,13 @@ Maintain a changelog at the bottom.
 - **Pagination says it is working.** Players and Clubs Previous/Next are server-navigated links, so on
   a slow connection a tap looked ignored. Both now show an inline spinner via `useLinkStatus()` while
   the next page loads, with 44px touch targets.
+- **Standing release-order rule (new).** Migrations 0022 and 0023 were deployed *dormant* - the code
+  shipped first and read back empty until the migration landed. That is safe only when the gap is
+  **silent**. Migration 0024 was handled the opposite way: the code was held out of production until
+  the migration was confirmed, because a missing enum value does not read back empty - it throws an
+  error at a real person who just tapped a visible control. **Deploy-before-migrate when the gap is a
+  silent read; migrate-before-deploy when the gap is a button** - and never take the risk at all
+  during a live registration window.
 
 ## v1.21 (2026-09-08)
 - **Remaining slots are not public.** The player-facing division browser no longer shows a

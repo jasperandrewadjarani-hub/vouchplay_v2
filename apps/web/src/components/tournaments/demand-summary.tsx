@@ -11,16 +11,22 @@ import { demandLabel, type DemandOption } from '@/lib/tournaments/demand-options
 export function TournamentDemandSummary({
   demand,
   options,
+  divisionCounts,
 }: {
   demand: TournamentDemandDTO;
   /** Same option list the interest picker uses, so the breakdown can never drift from it. */
   options: DemandOption[];
+  /**
+   * Counts with old planning-taxonomy interest already folded into the matching division, so the
+   * breakdown shows one row per division instead of an old and a new row for the same thing.
+   */
+  divisionCounts: Record<string, number>;
 }) {
   const [open, setOpen] = useState(false);
-  const peak = Math.max(1, ...Object.values(demand.divisions));
+  const peak = Math.max(1, ...Object.values(divisionCounts));
   // Show every option, plus any stored key whose division has since been removed, so no recorded
   // interest silently disappears from the breakdown.
-  const extraKeys = Object.keys(demand.divisions).filter(
+  const extraKeys = Object.keys(divisionCounts).filter(
     (k) => k !== 'legacy_unspecified' && !options.some((o) => o.key === k),
   );
   const rows = [
@@ -70,24 +76,24 @@ export function TournamentDemandSummary({
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-foreground">{division.label}</span>
                   <span className="text-foreground font-semibold tabular-nums">
-                    {demand.divisions[division.key] ?? 0}
+                    {divisionCounts[division.key] ?? 0}
                   </span>
                 </div>
                 <div className="bg-surface-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
                   <div
                     className="h-full rounded-full"
                     style={{
-                      width: `${Math.round(((demand.divisions[division.key] ?? 0) / peak) * 100)}%`,
+                      width: `${Math.round(((divisionCounts[division.key] ?? 0) / peak) * 100)}%`,
                       backgroundColor: division.color ?? 'var(--primary)',
                     }}
                   />
                 </div>
               </div>
             ))}
-            {(demand.divisions.legacy_unspecified ?? 0) > 0 && (
+            {(divisionCounts.legacy_unspecified ?? 0) > 0 && (
               <p className="text-foreground-muted pt-1 text-xs">
-                {demand.divisions.legacy_unspecified} earlier interest record
-                {demand.divisions.legacy_unspecified === 1 ? '' : 's'} had no division selection.
+                {divisionCounts.legacy_unspecified} earlier interest record
+                {divisionCounts.legacy_unspecified === 1 ? '' : 's'} had no division selection.
               </p>
             )}
           </div>

@@ -17,7 +17,7 @@ import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/r
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
-import { demandOptions } from '@/lib/tournaments/demand-options';
+import { demandOptions, mergeLegacyDemand } from '@/lib/tournaments/demand-options';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 
 interface Params {
@@ -79,6 +79,9 @@ export default async function TournamentPage({ params }: Params) {
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
   const interestOptions = demandOptions(t.divisions);
+  // Interest recorded under the old planning taxonomy is folded into the matching division, so the
+  // breakdown shows one row per division rather than an old and a new row for the same thing.
+  const interestCounts = mergeLegacyDemand(t.demand.divisions, t.divisions);
   const start = fmtDay(t.startAt);
   const regOpen = fmt(t.registrationOpenAt);
   const regClose = fmt(t.registrationCloseAt);
@@ -154,7 +157,11 @@ export default async function TournamentPage({ params }: Params) {
               </Link>
             )}
           </div>
-          <TournamentDemandSummary demand={t.demand} options={interestOptions} />
+          <TournamentDemandSummary
+            demand={t.demand}
+            options={interestOptions}
+            divisionCounts={interestCounts}
+          />
         </div>
       </header>
 
