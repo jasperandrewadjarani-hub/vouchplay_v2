@@ -6174,6 +6174,12 @@ Maintain a changelog at the bottom.
 - **Never nest an interactive control inside a row that is itself a link.** The STS chip briefly became
   a `<button>` inside the compact row's anchor - invalid HTML, and one tap would both open the dialog
   and navigate. Interactive chips take an `interactive={false}` static form in those placements.
+- **Page headers stack on mobile.** A title plus action buttons share one row only from `sm:` up;
+  below that the actions take their own full-width row at equal size, so the heading and subtitle are
+  never squeezed into half the screen.
+- **Touch targets need explicit pixels.** The app sets a **14 px root font size**, so rem-based
+  Tailwind sizing renders at 0.875x - `min-h-11` is 38.5 px, not 44 px. Use `min-h-[44px]` (or an
+  equivalent pixel value) wherever a real touch-target minimum is required.
 
 ## v1.19 (2026-09-08)
 - **Launch welcome pop-up (Admin-controlled campaign dialog).** A near-full-screen, one-tap-dismissible

@@ -45,17 +45,20 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-5">
-      <div className="vp-in flex items-end justify-between gap-3">
+      {/* Heading and actions share a row only when there is room for both. On a phone the actions drop
+          to their own full-width row, so the title and subtitle are never squeezed into half the
+          screen and the two buttons stay the same size instead of stacking raggedly. */}
+      <div className="vp-in flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
             <span className="vp-gradient-text">Clubs</span>
           </h1>
           <p className="text-foreground-muted text-sm">Find your community and represent it.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Link
             href="/opportunities"
-            className="border-border text-foreground hover:bg-surface-muted inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
+            className="border-border text-foreground hover:bg-surface-muted inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold sm:flex-none"
           >
             <Megaphone size={16} aria-hidden />
             Opportunities
@@ -63,7 +66,7 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
           </Link>
           <Link
             href={user ? '/clubs/new' : '/signup?next=/clubs/new'}
-            className="vp-gradient vp-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+            className="vp-gradient vp-glow inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white sm:flex-none"
           >
             <Plus size={16} aria-hidden />
             Create club

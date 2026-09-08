@@ -234,6 +234,21 @@ not line up down the list.
   links it renders a plain chip, and the explainer remains available on the profile and detailed card.
   **Rule: never place an interactive control inside a row that is itself a link.**
 
+## 1I. Clubs header layout (2026-09-08, post-launch)
+
+Reported from a live phone: the Clubs heading and its two actions (Opportunities, Create club) were
+crowding each other.
+
+- **Cause:** the header forced the title block and the action group onto one row at every width. On a
+  phone that left the title and subtitle about half the screen (the subtitle wrapped to two lines)
+  while the two buttons stacked raggedly at different widths.
+- **Fix:** the row is shared only when there is room (`sm:` and up). On a phone the actions drop to
+  their own full-width row with both buttons flexing to equal size, so the heading keeps the full
+  width and the subtitle fits on one line. Desktop is unchanged: title left, auto-width actions right.
+- **Tap targets raised to a true 44 px.** Note for future work: this app sets a **14 px root font
+  size**, so every rem-based Tailwind size is scaled to 0.875x - `min-h-11` renders 38.5 px, not 44.
+  Use an explicit pixel value (`min-h-[44px]`) when a real touch-target minimum is required.
+
 ## 1. Prompt Contract
 
 ### In scope

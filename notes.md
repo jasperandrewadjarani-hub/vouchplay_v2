@@ -1419,6 +1419,14 @@ Getting the first deploy up hit two issues:
   `StsChip` gained an `interactive` flag; inside links it renders a plain chip. See `master_plan.md`
   §1H.
 
+- **2026-09-08** - **Clubs header fixed on mobile.** The heading and the two actions (Opportunities,
+  Create club) were forced onto one row at every width, so on a phone the title/subtitle got half the
+  screen (subtitle wrapped to two lines) and the buttons stacked raggedly. Now the row is shared only
+  from `sm:` up; on a phone the actions take their own full-width row with both buttons at equal size.
+  Desktop unchanged. Also raised both to a real 44 px tap target. **Gotcha recorded: the app sets a
+  14 px root font size, so rem-based Tailwind sizes are 0.875x - `min-h-11` is 38.5 px, not 44. Use
+  `min-h-[44px]` when a true touch minimum matters.** See `master_plan.md` §1I.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the
