@@ -1362,6 +1362,20 @@ Getting the first deploy up hit two issues:
   `itrosesiywpbaxtmucbb` and returns `club_offer_tables=2`, `club_offer_rls_policies=2`,
   `recruitment_settings=4`. Then run `node scripts/phase14a-abuse.mjs` (expect all pass) before
   claiming the surface live.
+  ✅ APPLIED 2026-09-08. The Supabase SQL Editor only shows the LAST select's result, so Jasper saw
+  only `recruitment_settings=4`; a direct live check confirmed both tables + RLS exist, and
+  `phase14a-abuse.mjs` passed 5/5. 14A is live in production; both domains verified.
+
+- **2026-09-08** - **Fixed an app-wide React hydration error (#418).** Bare
+  `toLocaleDateString()`/`toLocaleString()` format in the runtime's own locale/timezone, so the Vercel
+  server (UTC/en-US) and the browser produced different date strings and tripped hydration. It surfaced
+  app-wide via the Home leaderboard footer once empty snapshots existed. Added `lib/format-date`
+  (pinned en-US + UTC) and routed the leaderboard footer + coach panels through it; also fixed
+  `InfoDisclosure` to use block wrappers so a `<div>` child is not nested in a `<span>`. Commit
+  `2445c9f`; verified clean console on Home/Clubs/Opportunities in a fresh production tab. Remaining
+  bare-locale date calls on admin/staff-only pages (`admin/audit`, `admin/leaderboards`,
+  `admin/users/[id]`, `admin/settings-form`, `staff/role-applications/coaches`) are low-priority
+  internal-tool cleanup, not user-facing.
 
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
@@ -1403,3 +1417,13 @@ Getting the first deploy up hit two issues:
 - **Ops (carry-over):** clear the Supabase org over-quota before 21 Sep 2026; switch Gmail SMTP →
   a dedicated provider before public scale; `supabase gen types` → `packages/db` once the CLI/token
   is wired (types are hand-synced for now).
+
+- **2026-09-08** - Added Facebook carousel image 06, **Problems We Solve**, to `deliverables/facebook-carousel/`.
+  The square 1254 x 1254 creative presents the founding pain points (sandbagging and smurfing,
+  fake or inflated profiles, and organizer skill-division guesswork) and closes with VouchPlay's
+  vision for fairer play and better-organized events. No mobile screens are used.
+
+- **2026-09-08** - Added a clean-background revision of Facebook carousel image 05, **Final CTA**, as
+  `P_006b_VouchPlay_Facebook_Carousel_05_Final_CTA_Clean_(2026-09).png`. The foreground logo,
+  wording, CTA hierarchy, URL, and JT credit remain intact; stadium spotlights, arena seating, beams,
+  and the reflective realistic court were replaced by a restrained app-inspired graphic backdrop.
