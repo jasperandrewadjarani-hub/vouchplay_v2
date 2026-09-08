@@ -56,17 +56,20 @@ export function WelcomeModal({ copy, authed }: { copy: WelcomeModalCopy; authed:
       <div className="space-y-5">
         {copy.imageUrl && (
           <div className="border-border bg-surface-muted overflow-hidden rounded-2xl border">
-            {/* Admin-supplied campaign artwork; may be a local path or an external URL. */}
+            {/* Admin-supplied campaign artwork. Rendered at its natural aspect ratio: a poster often
+                carries essential text at its very top and bottom edges, so it must never be cropped
+                to fit a fixed box. The event name is the alt text, so a screen reader still gets it
+                even though the visible duplicate below is hidden when artwork is present. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={copy.imageUrl}
-              alt={copy.eventName || 'Event artwork'}
-              className="aspect-[3/2] w-full object-cover sm:aspect-[16/9]"
+              alt={copy.eventName || 'Event announcement'}
+              className="block h-auto w-full"
             />
           </div>
         )}
 
-        {copy.eventName && (
+        {copy.eventName && !copy.imageUrl && (
           <div className="border-primary/30 bg-primary/5 rounded-2xl border p-4 text-center">
             {copy.eventLabel && <p className="vp-label text-primary">{copy.eventLabel}</p>}
             <p className="text-foreground mt-1.5 text-lg leading-snug font-bold sm:text-xl">
