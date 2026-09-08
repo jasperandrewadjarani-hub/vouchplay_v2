@@ -214,8 +214,11 @@ export default async function PlayerProfilePage({ params }: Params) {
       <AchievementsPanel
         authed={authed}
         isOwnProfile={player.isOwnProfile}
+        playerId={player.id}
+        playerFirstName={player.displayName.split(' ')[0] || player.displayName}
         official={achievements.official}
         community={achievements.community}
+        pending={achievements.pending}
       />
       <SkillTagsPanel
         playerId={player.id}

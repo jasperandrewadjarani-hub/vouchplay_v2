@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { loadActiveVouchesForTarget, invalidateVouch } from '@/lib/actions/moderation';
+import { interactionLabel } from '@/lib/vouches/interaction';
 
 interface Vouch {
   id: string;
@@ -99,7 +100,7 @@ export function VouchModerationPanel({
                   )}
                 </p>
                 <p className="text-foreground-muted text-xs">
-                  Rated {bandLabel(v.skillLevel)} · played {v.interactionType} ·{' '}
+                  Rated {bandLabel(v.skillLevel)} · {interactionLabel(v.interactionType)} ·{' '}
                   {new Date(v.createdAt).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'short',

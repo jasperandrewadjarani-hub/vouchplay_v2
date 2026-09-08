@@ -8,7 +8,12 @@ import { z } from 'zod';
 export const vouchSchema = z.object({
   targetId: z.string().uuid('Invalid target'),
   skillLevel: z.coerce.number().int().min(0, 'Select a skill level').max(6, 'Invalid skill level'),
-  interactionType: z.enum(['with', 'against', 'both'], { message: 'Select how you played' }),
+  // 'observed' (migration 0024): watched them play, never partnered with or against them. It is a
+  // CONTEXT label only - interaction type has never been an input to effective_weight (§10.5), so
+  // vouch weighting is untouched.
+  interactionType: z.enum(['with', 'against', 'both', 'observed'], {
+    message: 'Select how you know their game',
+  }),
   asCoach: z.boolean().default(false),
   anonymous: z.boolean().default(true),
   comment: z.string().trim().max(1000, 'Comment is too long').optional().or(z.literal('')),

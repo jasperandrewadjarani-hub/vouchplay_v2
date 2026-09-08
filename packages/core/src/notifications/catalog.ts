@@ -210,6 +210,21 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
       `You earned ${p.extra ?? 'an achievement'}${p.tournamentName ? ` at ${p.tournamentName}` : ''}`,
     () => 'It now shows on your profile.',
   ),
+  achievement_nominated: t(
+    'tournaments',
+    false,
+    (p) => `${who(p)} added an achievement for you`,
+    (p) =>
+      p.extra
+        ? `"${p.extra}". Confirm it to show it on your profile.`
+        : 'Confirm it to show it on your profile.',
+  ),
+  achievement_nomination_confirmed: t(
+    'tournaments',
+    false,
+    (p) => `${who(p)} confirmed the achievement you added`,
+    () => 'It now shows on their profile.',
+  ),
 
   // --- Roles (§27.1) ---
   organizer_application_result: t(

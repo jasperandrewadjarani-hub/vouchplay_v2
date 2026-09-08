@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { submitVouch, type VouchActionState } from '@/lib/actions/vouch';
+import { VOUCH_INTERACTION_OPTIONS } from '@/lib/vouches/interaction';
 import { Field, Select, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
 
@@ -87,11 +88,21 @@ export function VouchForm({
             </Select>
           </Field>
 
-          <Field label="How did you play with them?" htmlFor="interactionType" required>
+          {/* "Watched them play" lets an honest voucher say what they actually saw instead of
+              picking a play relationship that never happened. It is a context label only - it does
+              not change vouch weight (§10.5, LOCKED). */}
+          <Field
+            label="How do you know their game?"
+            htmlFor="interactionType"
+            required
+            hint="Answer honestly. This is shown as context, and it does not change how much your vouch counts."
+          >
             <Select id="interactionType" name="interactionType" defaultValue="with" required>
-              <option value="with">Played with (partner)</option>
-              <option value="against">Played against (opponent)</option>
-              <option value="both">Both (partner and opponent)</option>
+              {VOUCH_INTERACTION_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </Select>
           </Field>
 

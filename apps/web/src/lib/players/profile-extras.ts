@@ -54,6 +54,9 @@ export async function getPlayerSkillTags(
 // ---------------------------------------------------------------------------
 // Achievements (§9.4)
 // ---------------------------------------------------------------------------
+/** Claim added by another player and still waiting on the subject's decision (§9.4). */
+export const PENDING_SUBJECT = 'pending_subject';
+
 export interface AchievementView {
   id: string;
   type: 'official' | 'community_claim';
@@ -62,6 +65,9 @@ export interface AchievementView {
   placement: string | null;
   issuerType: string;
   verificationStatus: string;
+  /** Who added it, when a peer added it for this player. Null for self-claims and official ones. */
+  nominatorName: string | null;
+  nominatorSlug: string | null;
   tournamentName: string | null;
   tournamentSlug: string | null;
   divisionName: string | null;
@@ -70,10 +76,22 @@ export interface AchievementView {
   endorsedByViewer: boolean;
 }
 
+export interface PlayerAchievements {
+  official: AchievementView[];
+  /** Public community claims: the player's own, plus peer claims they confirmed. */
+  community: AchievementView[];
+  /**
+   * Peer claims awaiting this player's confirmation. Populated ONLY when the viewer is the subject,
+   * so an unconfirmed claim never appears on a public profile.
+   */
+  pending: AchievementView[];
+}
+
 export async function getPlayerAchievements(
   playerId: string,
   viewerId: string | null,
-): Promise<{ official: AchievementView[]; community: AchievementView[] }> {
+): Promise<PlayerAchievements> {
+  const none: PlayerAchievements = { official: [], community: [], pending: [] };
   try {
     const svc = createServiceClient();
     const { data: links } = await svc
@@ -81,7 +99,7 @@ export async function getPlayerAchievements(
       .select('achievement_id, placement')
       .eq('player_id', playerId);
     const linkRows = (links ?? []) as { achievement_id: string; placement: string | null }[];
-    if (linkRows.length === 0) return { official: [], community: [] };
+    if (linkRows.length === 0) return none;
     const achievementIds = linkRows.map((l) => l.achievement_id);
     const placementById = new Map(linkRows.map((l) => [l.achievement_id, l.placement]));
 
@@ -89,7 +107,7 @@ export async function getPlayerAchievements(
       svc
         .from('achievements')
         .select(
-          'id, type, title, description, issuer_type, verification_status, tournament_id, division_id, issued_at',
+          'id, type, title, description, issuer_type, issuer_id, verification_status, tournament_id, division_id, issued_at',
         )
         .in('id', achievementIds),
       svc
@@ -111,11 +129,48 @@ export async function getPlayerAchievements(
       title: string;
       description: string | null;
       issuer_type: string;
+      issuer_id: string | null;
       verification_status: string;
       tournament_id: string | null;
       division_id: string | null;
       issued_at: string;
     }[];
+
+    // Peer nominations are attributed - the subject needs to see who added a claim before deciding,
+    // and a confirmed one stays credited. Self-claims and official awards are not credited here.
+    const nominatorIds = Array.from(
+      new Set(
+        achRows
+          .filter((a) => a.issuer_type === 'peer')
+          .map((a) => a.issuer_id)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const { data: nomRows } = nominatorIds.length
+      ? await svc
+          .from('profiles')
+          .select('id, first_name, last_name, nickname, slug')
+          .in('id', nominatorIds)
+      : { data: [] };
+    type NomRow = {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      nickname: string | null;
+      slug: string | null;
+    };
+    const nominatorById = new Map(
+      ((nomRows ?? []) as NomRow[]).map((p) => [
+        p.id,
+        {
+          name:
+            [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
+            p.nickname ||
+            'A VouchPlay player',
+          slug: p.slug,
+        },
+      ]),
+    );
 
     // Resolve tournament + division names for official achievements.
     const tournamentIds = Array.from(
@@ -145,6 +200,7 @@ export async function getPlayerAchievements(
 
     const views: AchievementView[] = achRows.map((a) => {
       const t = a.tournament_id ? tById.get(a.tournament_id) : null;
+      const nom = a.issuer_type === 'peer' && a.issuer_id ? nominatorById.get(a.issuer_id) : null;
       return {
         id: a.id,
         type: a.type,
@@ -153,6 +209,8 @@ export async function getPlayerAchievements(
         placement: placementById.get(a.id) ?? null,
         issuerType: a.issuer_type,
         verificationStatus: a.verification_status,
+        nominatorName: nom?.name ?? null,
+        nominatorSlug: nom?.slug ?? null,
         tournamentName: t?.name ?? null,
         tournamentSlug: t?.slug ?? null,
         divisionName: a.division_id ? (dNameById.get(a.division_id) ?? null) : null,
@@ -162,12 +220,16 @@ export async function getPlayerAchievements(
       };
     });
     views.sort((a, b) => (a.issuedAt < b.issuedAt ? 1 : -1));
+    const claims = views.filter((v) => v.type === 'community_claim');
+    const isPending = (v: AchievementView) => v.verificationStatus === PENDING_SUBJECT;
     return {
       official: views.filter((v) => v.type === 'official'),
-      community: views.filter((v) => v.type === 'community_claim'),
+      community: claims.filter((v) => !isPending(v)),
+      // Only the subject ever sees claims awaiting their decision.
+      pending: viewerId === playerId ? claims.filter(isPending) : [],
     };
   } catch {
-    return { official: [], community: [] };
+    return none;
   }
 }
 
