@@ -4,11 +4,15 @@ import { getOptionalUser } from '@/lib/auth';
 import { getLeaderboardSettings } from '@/lib/settings';
 import { getLeaderboard, getMyMomentum } from '@/lib/leaderboards/queries';
 import type { LeaderboardPeriod, LeaderboardScope } from '@/lib/leaderboards/types';
+import { boardMeta } from '@/lib/leaderboards/board-meta';
+import { nextPublishingRunAfter } from '@/lib/leaderboards/cron-schedule';
 import {
   LeaderboardPanel,
   MomentumCard,
   RankingsExplanation,
 } from '@/components/leaderboards/leaderboard-panel';
+import { BoardTabs } from '@/components/leaderboards/board-tabs';
+import { BoardStats } from '@/components/leaderboards/board-stats';
 import { LeaderboardFilters } from '@/components/leaderboards/filters';
 import { emitAnalyticsEvent } from '@/lib/analytics';
 
@@ -54,25 +58,54 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
     period,
     hasSnapshot: Boolean(board),
   });
+
+  const meta = boardMeta(category);
+  // The viewer's own position on this board's category. Clubs have no per-player momentum row, so
+  // the tile falls back to the invitation rather than showing a rank that does not exist.
+  const myRank =
+    momentum.find((row) => row.category === (category === 'clubs' ? 'players' : category))
+      ?.privateRank ?? null;
+  // Same pure prediction the Admin nightly-rebuild panel uses, so the public promise and the
+  // operator view cannot disagree (§1O).
+  const nextPublishAt = nextPublishingRunAfter({
+    now: new Date(),
+    lastPublishedAt: board?.publishedAt ? new Date(board.publishedAt) : null,
+    cadenceHours: settings.cadenceHours,
+    enabled: settings.enabled,
+    allCategoriesPaused: Object.values(settings.paused).every(Boolean),
+  });
+
   return (
     <div className="space-y-5">
-      <header>
-        <p className="vp-label text-primary">LEADER_V1</p>
+      <header className="vp-in space-y-1">
         <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
-          VouchPlay leaderboards
+          <span className="vp-gradient-text">Leaderboards</span>
         </h1>
-        <p className="text-foreground-muted mt-2 max-w-2xl text-sm">
-          Choose a category, scope, and supported period. Publication applies privacy, age, account,
-          fraud, and club-eligibility exclusions before ranking.
+        <p className="text-foreground-muted text-sm">
+          Who is leading VouchPlay right now. Rankings publish once a day.
         </p>
       </header>
+
+      <BoardStats
+        myRank={category === 'clubs' ? null : myRank}
+        signedIn={Boolean(user)}
+        rankedCount={board?.entries.length ?? 0}
+        unit={meta.unit}
+        nextPublishAt={nextPublishAt ? nextPublishAt.toISOString() : null}
+        hook={meta.hook}
+      />
+
+      <BoardTabs active={category} />
+
       <LeaderboardFilters
         category={category}
         scope={scope}
         scopeValue={scopeValue}
         period={period}
       />
+
       {user && <MomentumCard rows={momentum} />}
+
       {!settings.enabled ? (
         <p
           className="border-border bg-surface text-foreground-muted rounded-2xl border p-5 text-sm"
@@ -85,7 +118,12 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
           Enter a city or region to load that scope.
         </p>
       ) : (
-        <LeaderboardPanel board={board} category={category} paused={settings.paused[category]} />
+        <LeaderboardPanel
+          board={board}
+          category={category}
+          paused={settings.paused[category]}
+          viewerId={user?.id ?? null}
+        />
       )}
       <RankingsExplanation />
     </div>

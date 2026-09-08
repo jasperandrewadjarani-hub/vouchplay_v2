@@ -1698,3 +1698,19 @@ Open items, highest value first:
   expected, the first one lands on the next scheduled run), the newest active published snapshot is
   2026-09-08 17:42:56 UTC, and the panel will therefore read "the 9:17 AM run will skip, the rankings
   will only be 8 hours old by then" with fresh rankings landing **2026-09-10, 9:17 AM Manila**.
+
+- **2026-09-09** - **Community leaderboards, one tap from Players.** Jasper asked for a "View
+  Community Leaderboards" button on Players leading to clickable board tabs. **The boards already
+  existed** - Phase 13D shipped all three categories, three scopes and three periods at
+  `/leaderboards` with a podium, momentum card and explainer - so nothing new was built on the data
+  side: no board, no query, no snapshot, no migration. What was missing was a way in (the page was
+  linked only from Home, and primary nav is locked to five tabs per §5.1) and a way to choose (three
+  dropdowns plus an Apply button, with the default board already on screen so the control read as
+  inert). Shipped: a full-width entry card on Players that names the current number one and shows the
+  top three avatars; a three-link tab strip (Top Players / Top Contributors / Top Clubs) replacing the
+  category dropdown, with scope and period demoted to a collapsed disclosure; an elevated crowned
+  podium with gold/silver/bronze carried by size, medal, icon and numeral rather than colour alone;
+  a tinted "You" row for a signed-in viewer who is ranked; and three headline tiles giving your
+  position, how many are ranked, and when the next rankings land. The next-update time reuses the
+  pure `nextPublishingRunAfter` helper from §1O so the public promise and the Admin panel cannot
+  disagree. See master_plan §1P, handover v1.24.

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.23
+# VouchPlay Master Product & Code Execution Handover v1.24
 
-_(File retains its `…v1.1.md` name; content is v1.23 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.24 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,49 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.24 (2026-09-09)
+
+_No migration. Read-only presentation over the existing published snapshots._
+
+- **The community leaderboards are now one tap from the Players tab, and they are built to be worth
+  looking at.** The boards themselves were not missing: Phase 13D already served all three categories
+  (Players, Community Champions, Clubs) across three scopes and three periods at `/leaderboards`,
+  with a podium, a private momentum card and a rankings explainer. **No new board, query, snapshot or
+  migration was added.** What was missing was a way in and a way to choose. `/leaderboards` was
+  linked only from Home, and primary navigation is locked to five tabs (§5.1), so a player browsing
+  the directory had no reason to believe rankings existed; and picking a board meant three dropdowns
+  plus an Apply button, four decisions and a submit, with the default board already on screen so the
+  control read as inert. Two changes fix both. **A single full-width entry card** sits under the
+  Players heading above the search filters, tappable across its whole area because a text link is the
+  wrong affordance for a section jump; it **names the current number one and shows the top three
+  avatars** rather than describing the concept, since a real name with a crown is a reason to tap and
+  "community leaderboards" is not. Per v1.19's rule the CTA inside it is a styled `span`, not a
+  button, because the card is already a link. **Category selection became a tab strip of three
+  links** - Top Players, Top Contributors, Top Clubs - rather than a JavaScript tablist, so each
+  board keeps a shareable, bookmarkable URL, the page works before hydration, Back behaves, and Next
+  prefetch plus `useLinkStatus` supply the same pending feedback used elsewhere. Scope and period
+  moved into a collapsed "Change scope or period" disclosure: global all-time is what almost everyone
+  wants, and nobody needs to understand either concept to use the page. **Tab labels and board titles
+  differ on purpose** - the tab says "Top Contributors" because that is what a newcomer scanning
+  three tabs understands, while the board keeps its product name "Community Champions" with the
+  locked "Ranked on vouches given" line beneath; the tab is wayfinding, the heading is identity, and
+  both come from one module so they cannot drift. **Engagement choices, each with a reason:** a real
+  podium with first place elevated and crowned and gold/silver/bronze treatment, where rank is
+  carried by size, medal, icon and numeral and never by colour alone, stacking first-second-third
+  below `sm` because three across at 375px crushes the names; **a signed-in viewer who appears on the
+  board gets a tinted, ringed row and a "You" chip**, because seeing yourself in a ranking is the
+  strongest reason to return and it costs one comparison; three headline tiles above the tabs giving
+  your position, how many are ranked, and **when the next rankings land**, with signed-out visitors
+  shown "Join to be ranked" so the boards become an acquisition surface rather than a dead end. The
+  next-update time comes from the same pure `nextPublishingRunAfter` helper the Admin nightly-rebuild
+  panel uses (v1.23), so the public promise and the operator view cannot disagree - a daily cadence
+  is only motivating if people know when the drop is. Movement and glow reuse the existing §33
+  `.vp-card` / `.vp-glow` / `.vp-gradient` utilities, already disabled under
+  `prefers-reduced-motion`. **Locked rules untouched:** VouchPlay still never ranks players by STS,
+  §3.3's four separate concepts stand, privacy/age/fraud/eligibility exclusions still run at
+  publication rather than at render, and the private momentum card stays private - nothing public
+  exposes a rank, score or exclusion reason for anyone but the viewer.
 
 ## v1.23 (2026-09-09)
 

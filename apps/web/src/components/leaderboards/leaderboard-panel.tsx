@@ -1,24 +1,20 @@
 import Link from 'next/link';
-import { Medal, Trophy, Users } from 'lucide-react';
+import { Crown, Medal, Users } from 'lucide-react';
 import type { LeaderboardDTO, MomentumDTO } from '@/lib/leaderboards/types';
 import { avatarUrl, clubLogoUrl, nameInitials } from '@/lib/storage';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ButtonLink } from '@/components/ui/button';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { formatDate } from '@/lib/format-date';
+import { boardMeta, podiumStyle } from '@/lib/leaderboards/board-meta';
 
-const TITLES = { players: 'Players', community: 'Community Champions', clubs: 'Clubs' } as const;
-/** A board title alone does not say what it ranks. One plain line each, for every reader. */
-const SUBTITLES = {
-  players: 'Ranked on verified tournament play and official placements.',
-  community: 'Ranked on vouches given - the players who help build other profiles.',
-  clubs: 'Ranked on verified club representation across tournaments.',
-} as const;
-const BOARD_CTA = {
-  players: { href: '/tournaments', label: 'Find a tournament' },
-  community: { href: '/players', label: 'Find someone you genuinely know' },
-  clubs: { href: '/clubs', label: 'Find a club' },
-} as const;
+function subjectHref(entry: LeaderboardDTO['entries'][number]): string {
+  return `/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`;
+}
+
+function subjectImage(entry: LeaderboardDTO['entries'][number]): string | null {
+  return entry.subjectType === 'club' ? clubLogoUrl(entry.imagePath) : avatarUrl(entry.imagePath);
+}
 
 export function LeaderboardPanel({
   board,
@@ -26,18 +22,21 @@ export function LeaderboardPanel({
   category,
   error = false,
   paused = false,
+  viewerId = null,
 }: {
   board: LeaderboardDTO | null;
   compact?: boolean;
   category?: LeaderboardDTO['category'];
   error?: boolean;
   paused?: boolean;
+  /** The signed-in viewer, so their own row can be highlighted. Never used to reveal anyone else. */
+  viewerId?: string | null;
 }) {
-  const title = TITLES[board?.category ?? category ?? 'players'];
+  const meta = boardMeta(board?.category ?? category ?? 'players');
   if (error) {
     return (
       <section className="border-danger/40 bg-danger/5 rounded-2xl border p-5" role="alert">
-        <h2 className="text-foreground font-semibold">{title}</h2>
+        <h2 className="text-foreground font-semibold">{meta.title}</h2>
         <p className="text-foreground-muted mt-2 text-sm">
           This ranking could not be loaded. No replacement snapshot was published; try again
           shortly.
@@ -53,9 +52,9 @@ export function LeaderboardPanel({
         aria-labelledby={emptyId}
       >
         <h2 id={emptyId} className="text-foreground font-semibold">
-          {title}
+          {meta.title}
         </h2>
-        <p className="text-foreground-muted mt-1 text-sm">{SUBTITLES[category ?? 'players']}</p>
+        <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>
         <p className="text-foreground-muted mt-2 text-sm">
           No rankings published yet. This board appears after the next snapshot.
         </p>
@@ -69,15 +68,15 @@ export function LeaderboardPanel({
       className="border-border bg-surface overflow-hidden rounded-2xl border"
       aria-labelledby={`board-${board.category}`}
     >
-      <header className="border-border flex flex-wrap items-start justify-between gap-3 border-b p-5">
+      <header className="border-border vp-hero flex flex-wrap items-start justify-between gap-3 border-b p-5">
         <div>
           <p className="vp-label text-primary">
             {board.scopeType === 'global' ? 'Global' : `${board.scopeType}: ${board.scopeValue}`}
           </p>
           <h2 id={`board-${board.category}`} className="text-foreground text-xl font-bold">
-            {title}
+            {meta.title}
           </h2>
-          <p className="text-foreground-muted mt-1 text-sm">{SUBTITLES[board.category]}</p>
+          <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>
           <p className="text-foreground-muted mt-1 text-xs capitalize">
             {board.period.replace('_', ' ')}
           </p>
@@ -111,57 +110,72 @@ export function LeaderboardPanel({
         </div>
       ) : (
         <>
+          {/* Classic podium silhouette from `sm` up: second, first, third, with first raised. The DOM
+              order stays 1, 2, 3, so reading and focus order still follow rank. Below `sm` the
+              visual order matches too, because three cards across at 375px crushes the names. */}
           <ol
-            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3"
-            aria-label={`${title} top three`}
+            className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 sm:items-end"
+            aria-label={`${meta.title} top three`}
           >
             {podium.map((entry) => (
-              <Podium key={entry.subjectId} entry={entry} category={board.category} />
+              <Podium
+                key={entry.subjectId}
+                entry={entry}
+                isViewer={viewerId != null && entry.subjectId === viewerId}
+              />
             ))}
           </ol>
           {rest.length > 0 && (
             <ol
               className="divide-border border-border divide-y border-t"
               start={4}
-              aria-label={`${title} ranks four onward`}
+              aria-label={`${meta.title} ranks four onward`}
             >
-              {rest.map((entry) => (
-                <li key={entry.subjectId}>
-                  <Link
-                    href={`/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`}
-                    className="hover:bg-surface-muted flex min-h-14 items-center gap-3 px-4 py-3"
-                  >
-                    <span
-                      className="text-foreground w-8 text-center text-sm font-extrabold"
-                      aria-label={`Rank ${entry.rank}`}
+              {rest.map((entry) => {
+                const isViewer = viewerId != null && entry.subjectId === viewerId;
+                return (
+                  <li key={entry.subjectId}>
+                    <Link
+                      href={subjectHref(entry)}
+                      className={`flex min-h-14 items-center gap-3 px-4 py-3 ${
+                        isViewer
+                          ? 'bg-primary/10 ring-primary/40 hover:bg-primary/15 ring-1 ring-inset'
+                          : 'hover:bg-surface-muted'
+                      }`}
                     >
-                      #{entry.rank}
-                    </span>
-                    <PlayerAvatar
-                      url={
-                        entry.subjectType === 'club'
-                          ? clubLogoUrl(entry.imagePath)
-                          : avatarUrl(entry.imagePath)
-                      }
-                      initials={nameInitials(entry.displayName)}
-                      name={entry.displayName}
-                      size="sm"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="text-foreground block truncate text-sm font-semibold">
-                        {entry.displayName}
+                      <span
+                        className="text-foreground w-8 text-center text-sm font-extrabold"
+                        aria-label={`Rank ${entry.rank}`}
+                      >
+                        #{entry.rank}
                       </span>
-                      <span className="text-foreground-muted block truncate text-xs">
-                        {entry.city ?? 'Location not shown'}
+                      <PlayerAvatar
+                        url={subjectImage(entry)}
+                        initials={nameInitials(entry.displayName)}
+                        name={entry.displayName}
+                        size="sm"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="text-foreground flex items-center gap-2 truncate text-sm font-semibold">
+                          {entry.displayName}
+                          {isViewer && (
+                            <span className="bg-primary shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+                              You
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-foreground-muted block truncate text-xs">
+                          {entry.city ?? 'Location not shown'}
+                        </span>
                       </span>
-                    </span>
-                    <span className="text-foreground-muted text-xs tabular-nums">
-                      {entry.score.toFixed(1)} pts
-                    </span>
-                    <LinkSpinner />
-                  </Link>
-                </li>
-              ))}
+                      <span className="text-foreground-muted text-xs tabular-nums">
+                        {entry.score.toFixed(1)} pts
+                      </span>
+                      <LinkSpinner />
+                    </Link>
+                  </li>
+                );
+              })}
             </ol>
           )}
         </>
@@ -170,10 +184,10 @@ export function LeaderboardPanel({
         <span className="text-foreground-muted">Published {formatDate(board.publishedAt)}</span>
         <span className="flex flex-wrap items-center gap-3">
           <Link
-            href={BOARD_CTA[board.category].href}
+            href={meta.cta.href}
             className="text-foreground inline-flex items-center gap-1 font-semibold"
           >
-            {BOARD_CTA[board.category].label}
+            {meta.cta.label}
             <LinkSpinner />
           </Link>
           {compact && (
@@ -192,43 +206,61 @@ export function LeaderboardPanel({
 
 function Podium({
   entry,
-  category,
+  isViewer,
 }: {
   entry: LeaderboardDTO['entries'][number];
-  category: LeaderboardDTO['category'];
+  isViewer: boolean;
 }) {
-  const Icon = entry.rank === 1 ? Trophy : Medal;
+  const style = podiumStyle(entry.rank);
+  const first = entry.rank === 1;
+  // Rank is carried by size, medal name, icon and numeral together, never by colour alone.
+  const order = first ? 'sm:order-2' : entry.rank === 2 ? 'sm:order-1' : 'sm:order-3';
   return (
     <li
-      className="border-border bg-surface-muted relative rounded-2xl border p-4 text-center"
-      aria-label={`Rank ${entry.rank}: ${entry.displayName}`}
+      className={`border-border bg-surface-muted relative rounded-2xl border text-center ${order} ${
+        first ? 'vp-glow border-amber-400/50 p-5 sm:pb-7' : 'p-4'
+      } ${isViewer ? 'ring-primary ring-2' : ''}`}
+      aria-label={`Rank ${entry.rank}${style ? `, ${style.medal}` : ''}: ${entry.displayName}`}
     >
       <span className="bg-foreground text-background absolute top-3 left-3 inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1 text-xs font-extrabold">
         {entry.rank}
       </span>
-      <Icon className="text-primary mx-auto mb-2" size={entry.rank === 1 ? 28 : 23} aria-hidden />
+      {isViewer && (
+        <span className="bg-primary absolute top-3 right-3 rounded-full px-2 py-0.5 text-[10px] font-bold text-white">
+          You
+        </span>
+      )}
+      {first ? (
+        <Crown className={`mx-auto mb-2 ${style?.text ?? ''}`} size={30} aria-hidden />
+      ) : (
+        <Medal className={`mx-auto mb-2 ${style?.text ?? ''}`} size={22} aria-hidden />
+      )}
       <div className="flex justify-center">
         <PlayerAvatar
-          url={
-            entry.subjectType === 'club' ? clubLogoUrl(entry.imagePath) : avatarUrl(entry.imagePath)
-          }
+          url={subjectImage(entry)}
           initials={nameInitials(entry.displayName)}
           name={entry.displayName}
-          size="md"
+          size={first ? 'lg' : 'md'}
+          className={style ? `ring-2 ring-offset-2 ring-offset-transparent ${style.ring}` : ''}
         />
       </div>
       <Link
-        href={`/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`}
-        className="text-foreground mt-2 inline-flex items-center gap-1 font-bold hover:underline"
+        href={subjectHref(entry)}
+        className={`text-foreground mt-2 inline-flex items-center gap-1 font-bold hover:underline ${
+          first ? 'text-lg' : ''
+        }`}
       >
         {entry.displayName}
         <LinkSpinner />
       </Link>
-      <p className="text-foreground-muted mt-1 text-xs">{entry.score.toFixed(1)} points</p>
-      <p className="text-foreground-muted mt-2 line-clamp-2 text-[11px]">{entry.explanation}</p>
-      <span className="sr-only">
-        {TITLES[category]} podium place {entry.rank}
-      </span>
+      <p className={`mt-1 text-xs font-semibold ${style?.text ?? 'text-foreground-muted'}`}>
+        {style?.medal} · {entry.score.toFixed(1)} points
+      </p>
+      {/* One line on a phone: the leading clause carries the person-specific fact, and three
+          full explanations stacked pushed rank four off the bottom of a 375px screen. */}
+      <p className="text-foreground-muted mt-2 line-clamp-1 text-[11px] sm:line-clamp-2">
+        {entry.explanation}
+      </p>
     </li>
   );
 }

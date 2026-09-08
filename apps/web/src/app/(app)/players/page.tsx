@@ -5,6 +5,9 @@ import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters, type ActiveFilters } from '@/components/players/search-filters';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { Pagination } from '@/components/ui/pagination';
+import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
+import { getLeaderboardSettings } from '@/lib/settings';
+import { getLeaderboard } from '@/lib/leaderboards/queries';
 
 export const metadata: Metadata = {
   title: 'Players',
@@ -63,6 +66,13 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   const compact = one(sp.view) === 'compact';
   const viewer = await getViewerContext();
   const { players, total, page, pageCount } = await listPlayers(filters, viewer);
+  // The entry card names the current leader, so it needs the board it points at. Cached read; a
+  // failure here must never take down the directory, so it degrades to the invitation variant.
+  const leaders = await getLeaderboardSettings()
+    .then((settings) =>
+      settings.enabled ? getLeaderboard('community', 'global', null, 'all_time', 3) : null,
+    )
+    .catch(() => null);
   const authed = viewer.viewerId !== null;
 
   const active: ActiveFilters = {
@@ -86,6 +96,8 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           Skill reputations built by the people you actually play with.
         </p>
       </div>
+
+      <LeaderboardsEntryCard board={leaders} />
 
       <SearchFilters current={active} />
 

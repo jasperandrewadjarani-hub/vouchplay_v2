@@ -114,6 +114,7 @@ export default async function HomePage() {
                 category="players"
                 paused={settings.paused.players}
                 compact
+                viewerId={user?.id ?? null}
               />
             </div>
             <div className="relative">
@@ -124,6 +125,7 @@ export default async function HomePage() {
                 category="community"
                 paused={settings.paused.community}
                 compact
+                viewerId={user?.id ?? null}
               />
             </div>
             <div className="relative">
@@ -134,6 +136,7 @@ export default async function HomePage() {
                 category="clubs"
                 paused={settings.paused.clubs}
                 compact
+                viewerId={user?.id ?? null}
               />
             </div>
           </div>

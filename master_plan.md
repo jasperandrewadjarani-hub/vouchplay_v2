@@ -487,6 +487,85 @@ publish lands, which was the only thing actually missing.
 the 2026-09-09 01:17 UTC run will skip (7h35m elapsed) and the 2026-09-10 01:17 UTC run will publish
 (31h35m elapsed). After that the panel answers the question without anyone reading a log.
 
+## 1P. Community leaderboards, one tap from Players (2026-09-09, post-launch)
+
+### What already existed, and what was actually missing
+
+The boards themselves were built in Phase 13D and are live. `/leaderboards` already served all three
+categories (Players, Community Champions, Clubs), three scopes and three periods, with a top-three
+podium, a private momentum card and a rankings explainer. **No new board, query, snapshot or
+migration was needed.** Two things were genuinely missing:
+
+- **No way in.** `/leaderboards` was reachable only from the Home page. Primary navigation is locked
+  to five tabs (§5.1), so a sixth tab was never an option, and a player browsing the directory had no
+  reason to believe rankings existed.
+- **The category chooser was a form.** Picking a board meant three dropdowns plus an Apply button:
+  four decisions and a submit before anything appeared, with the default board already on screen so
+  the control looked inert. For an audience that spans a wide range of ages and comfort with apps,
+  that is the difference between a feature that exists and a feature people use.
+
+### The way in: an entry card on Players, not a link
+
+- A single full-width card sits directly under the Players heading, above the search filters. It is
+  **one tap target for the whole card**, because a small text link is the wrong affordance for a
+  section-level jump and a card gives a thumb something to hit.
+- **It shows the current number one rather than describing the concept.** "Community leaderboards"
+  is an abstraction; a real name and face with a crown is a reason to tap. The top three avatars
+  appear as an overlapping stack with the leader named.
+- Following §1H, the CTA inside the card is a styled `span`, not a button: the card is already a
+  link, and nesting an interactive control inside a link means one tap does two things.
+- When no snapshot has ranked anyone yet the card still renders, with an invitation instead of a
+  leader. It never dead-ends and never shows an empty avatar stack.
+
+### Tabs, not dropdowns
+
+- Category selection is now a **tab strip of three links**: Top Players, Top Contributors, Top Clubs.
+  Links rather than a JavaScript tablist, deliberately: each board keeps its own URL, so it is
+  shareable and bookmarkable, it works before hydration, the browser Back button behaves, and Next's
+  prefetch plus `useLinkStatus` give the pending feedback the app already uses elsewhere (§1N).
+- **One tap now changes the board.** Scope and period moved into a collapsed "Change scope or period"
+  disclosure below the tabs. Global all-time is what almost everyone wants; nobody has to understand
+  scope or period to use the page.
+- Semantics: `<nav aria-label>` + `aria-current="page"` on the active tab, 44px targets written as
+  pixel values because the app's 14px root font makes rem-based Tailwind sizes 0.875x (§1I).
+- **Tab labels and board titles are allowed to differ, on purpose.** The tab reads "Top Contributors"
+  because that is what a newcomer scanning three tabs understands; the board keeps its product name
+  "Community Champions" with the locked "Ranked on vouches given" line underneath. The tab is
+  wayfinding, the heading is identity. Both come from one module
+  (`lib/leaderboards/board-meta.ts`) so they cannot drift.
+
+### Making it feel worth being on
+
+The brief was to make the boards visually engaging enough that people want to be in them. Each choice
+below is a hook with a reason, not decoration:
+
+- **A real podium.** First place is elevated and wider with a crown; second and third sit lower with
+  silver and bronze treatment. Rank is carried by size, medal colour, icon **and** the numeral, never
+  by colour alone. Below `sm` the podium stacks first, second, third, because three across at 375px
+  crushes the names.
+- **You are highlighted in the list.** A signed-in viewer who appears on the board gets a tinted row,
+  a ring, and a "You" chip. Seeing yourself in a ranking is the single strongest reason to come back,
+  and it costs one comparison against `subjectId`.
+- **Three headline tiles above the tabs**, in the style of a scoreboard: your position, how many are
+  ranked on this board, and when the next rankings land. Signed-out visitors see "Join to be ranked"
+  in the first tile, which turns the boards into an acquisition surface rather than a dead end.
+- **The next update is stated, not implied.** Rankings publish once a day (§1O), so the page says
+  when the next set lands. Anticipating a drop is the point of a daily cadence; leaving it invisible
+  wasted it. The time comes from the same pure `nextPublishingRunAfter` helper the Admin panel uses,
+  so the public promise and the operator view cannot disagree.
+- Movement, glow and lift reuse the existing `.vp-card`, `.vp-glow`, `.vp-gradient` utilities from
+  §33, which are already disabled under `prefers-reduced-motion`. No new animation primitives.
+
+### Boundaries kept
+
+- **Read-only. No migration, no new table, no new query, no scoring change.** Everything renders from
+  the existing published snapshots and the existing cached `getLeaderboard` / `getMyMomentum` reads.
+- The locked rules are untouched: VouchPlay still never ranks players by STS, the four concepts stay
+  separate (§3.3), and privacy, age, fraud and eligibility exclusions still run at publication, not
+  at render.
+- The private momentum card stays private. Nothing on the public boards exposes a rank, score or
+  exclusion reason for anybody but the viewer themselves.
+
 ## 1. Prompt Contract
 
 ### In scope
