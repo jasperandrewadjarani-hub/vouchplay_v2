@@ -42,6 +42,7 @@ Shipped in the last session and verified live on both production domains
 - Tournament interest merges old planning-taxonomy rows into the organizer's real divisions.
 - Leaderboards state what they rank; the category picker reads "Community Champions - vouches given".
 - Numbered, centred pagination on Players and Clubs.
+- Tapping a compact player row now shows a loading spinner in the STS slot.
 - Plain-language contribution copy.
 
 ## Open items, highest value first
