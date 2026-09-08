@@ -1519,6 +1519,28 @@ Getting the first deploy up hit two issues:
   AAL2 admin session) to publish a snapshot including the 24 current contributors. That fixes the
   visible symptom today, independent of the cron investigation.
 
+- **2026-09-09** - **Numbered pagination (shared component).** Jasper's screenshot showed the old
+  control: two heavy bordered buttons pinned to opposite edges with "Page 2 of 3" marooned between
+  them. New `apps/web/src/components/ui/pagination.tsx` (+ `page-link-label.tsx` for the in-place
+  pending spinner) serves Players and Clubs. Numbered pages in one centred group; disabled
+  Previous/Next stay in place dimmed instead of rendering an empty `<span />` (which made the row jump
+  on page 1); number swaps for a spinner inside a fixed-size button so pending never reflows; long
+  lists collapse to first / current±1 / last with ellipses, and outer jumps hide below `sm` **only when
+  the full set would not fit** (a 3-page list still shows 1 2 3 on a phone). 44px targets as pixel
+  values (14px root font, §1I). Verified in a 375x812 emulated viewport on pages 1 and 2, plus the
+  a11y tree (`nav[aria-label]`, `aria-current="page"`, `rel=prev/next`, sr-only icon labels).
+
+- **2026-09-09** - **Leaderboard cadence stays 24h.** Jasper asked whether a ~30s refresh was viable.
+  It is not: a rebuild is a *publish*, appending ~7 rows to the immutable `leaderboard_snapshot_runs`
+  audit trail each time (105 runs already exist from about a dozen rebuilds), so 30s would add ~20k
+  rows/day against an org already flagged over the Supabase quota; it would also fire rank-movement
+  milestone notifications on every wobble and tighten the vouch → rank feedback loop enough to invite
+  burst gaming, which the contribution dampening exists to prevent. Confirmed on **Vercel Pro**, so
+  sub-daily cron is available if wanted later - `leaderboard_publish_cadence_hours` is an admin
+  setting and `vercel.json` holds the schedule. **Jasper's decision: keep 24h.** Note the underlying
+  contribution score is already live (`recomputePlayerContribution` runs on every vouch); only the
+  ranked snapshot is periodic.
+
 - **2026-09-09** - **Contribution copy + pagination feedback.** The contribution card named the
   internal algorithm and its dampening terms (`CONTRIB_V1`, diminishing returns, time decay), which
   meant nothing to a player; it now says the same rules plainly and states outright that it measures

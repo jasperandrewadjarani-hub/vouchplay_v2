@@ -6,6 +6,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { ClubCard } from '@/components/clubs/club-card';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { InstantFilterForm } from '@/components/ui/instant-filter-form';
+import { Pagination } from '@/components/ui/pagination';
 
 export const metadata: Metadata = {
   title: 'Clubs',
@@ -100,35 +101,12 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {pageCount > 1 && (
-        <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
-          {page > 1 ? (
-            <Link
-              href={`/clubs${qs(filters, page - 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Previous
-              <LinkSpinner />
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-foreground-muted text-sm">
-            Page {page} of {pageCount}
-          </span>
-          {page < pageCount ? (
-            <Link
-              href={`/clubs${qs(filters, page + 1)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Next
-              <LinkSpinner />
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        hrefFor={(n) => `/clubs${qs(filters, n)}`}
+        label="Club pages"
+      />
     </div>
   );
 }

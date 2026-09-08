@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getViewerContext } from '@/lib/auth';
 import { listPlayers, type PlayerFilters } from '@/lib/players/queries';
 import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters, type ActiveFilters } from '@/components/players/search-filters';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
-import { LinkSpinner } from '@/components/ui/link-spinner';
+import { Pagination } from '@/components/ui/pagination';
 
 export const metadata: Metadata = {
   title: 'Players',
@@ -113,35 +112,12 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         </div>
       )}
 
-      {pageCount > 1 && (
-        <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
-          {page > 1 ? (
-            <Link
-              href={`/players${toQueryString(filters, page - 1, compact)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Previous
-              <LinkSpinner />
-            </Link>
-          ) : (
-            <span />
-          )}
-          <span className="text-foreground-muted text-sm">
-            Page {page} of {pageCount}
-          </span>
-          {page < pageCount ? (
-            <Link
-              href={`/players${toQueryString(filters, page + 1, compact)}`}
-              className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"
-            >
-              Next
-              <LinkSpinner />
-            </Link>
-          ) : (
-            <span />
-          )}
-        </nav>
-      )}
+      <Pagination
+        page={page}
+        pageCount={pageCount}
+        hrefFor={(n) => `/players${toQueryString(filters, n, compact)}`}
+        label="Player pages"
+      />
     </div>
   );
 }

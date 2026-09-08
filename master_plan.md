@@ -373,6 +373,28 @@ during a live registration window.
   so the Vercel cron invocation log is the next place to look. Meanwhile an Admin → Leaderboards
   rebuild publishes a current snapshot on demand.
 
+## 1M. Numbered pagination (2026-09-09, post-launch)
+
+The old control was two heavy bordered buttons pinned to opposite edges of the row with "Page 2 of 3"
+marooned between them. It read as clunky, gave no sense of how long the list was, and offered no way
+to jump. One shared `components/ui/pagination.tsx` now serves Players and Clubs:
+
+- **Numbered pages**, so a reader sees the extent of the list and can jump straight to a page.
+- **One centred group** rather than edge-pinned blocks, so there is a single target for the eye and
+  the thumb, with "Page N of M" kept below as a plain caption for anyone who wants the words.
+- **Unavailable Previous/Next stay in place, dimmed**, instead of disappearing. The old version
+  rendered an empty `<span />` on page 1, so the whole row shifted the moment you paginated - the
+  exact condition for mis-tapping under a thumb.
+- **The page number swaps in place for a spinner** while that navigation is pending, inside a
+  fixed-size button, so pending feedback never reflows the row.
+- **44px touch targets throughout**, written as pixel values because the app's 14px root font makes
+  rem-based Tailwind sizes 0.875x (see §1I).
+- **Long lists collapse** to first / current-1 / current / current+1 / last with ellipses. Below `sm`
+  the outer jump links and ellipses hide, but **only when the full set would not fit** - a 3-page list
+  still shows 1 2 3 on a phone.
+- Semantics: `<nav aria-label>` + `<ul>`, `aria-current="page"` on the current page, `rel="prev"` /
+  `rel="next"`, and `sr-only` names for the icon-only controls at phone widths.
+
 ## 1. Prompt Contract
 
 ### In scope

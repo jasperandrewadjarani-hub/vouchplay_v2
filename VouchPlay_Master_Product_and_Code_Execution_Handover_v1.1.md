@@ -6224,9 +6224,18 @@ Everything below is live and verified on both production domains._
   rules, said plainly, plus one line stating it is a measure of helping the community and **not a
   skill score** - preserving §3.3's separation of concepts at the point where a player actually reads
   a number.
-- **Pagination says it is working.** Players and Clubs Previous/Next are server-navigated links, so on
-  a slow connection a tap looked ignored. Both now show an inline spinner via `useLinkStatus()` while
-  the next page loads, with 44px touch targets.
+- **Pagination is numbered, centred, and says it is working.** Players and Clubs previously showed two
+  heavy bordered buttons pinned to opposite edges with "Page 2 of 3" marooned between them: no sense
+  of how long the list was, no way to jump, and an empty `<span />` where Previous belonged on page 1,
+  so the whole row shifted the moment you paginated. One shared `components/ui/pagination.tsx` now
+  renders numbered pages in a single centred group; unavailable Previous/Next stay in place dimmed
+  rather than vanishing; the page number swaps in place for a spinner (`useLinkStatus()`) inside a
+  fixed-size button, so pending feedback never reflows the row; long lists collapse to
+  first / current±1 / last with ellipses, and the outer jump links hide below `sm` **only when the full
+  set would not fit**, so a 3-page list still shows 1 2 3 on a phone. 44px touch targets throughout,
+  written as pixel values because the app's 14px root font makes rem-based Tailwind sizes 0.875x.
+  Semantics: `<nav aria-label>` + `<ul>`, `aria-current="page"`, `rel="prev"`/`rel="next"`, and
+  `sr-only` names for the icon-only controls at phone widths.
 - **Standing release-order rule (new).** Migrations 0022 and 0023 were deployed *dormant* - the code
   shipped first and read back empty until the migration landed. That is safe only when the gap is
   **silent**. Migration 0024 was handled the opposite way: the code was held out of production until
