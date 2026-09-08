@@ -16,6 +16,8 @@ import {
   isTournamentDemandDivision,
   isDivisionDemandKey,
   demandKeyMatchesDivision,
+  phInputToIso,
+  phDateInputToIso,
   isManageableTournamentStatus,
   tournamentArchiveNameMatches,
 } from '@vouchplay/core';
@@ -61,11 +63,15 @@ function bool(formData: FormData, name: string): boolean {
   return v === 'on' || v === 'true' || v === '1';
 }
 
+/**
+ * Organizers type dates as Philippine time. `new Date(value)` on a `datetime-local` string resolves
+ * in the *runtime's* timezone, so on Vercel (UTC) "5:00 PM" was stored as 17:00Z - 1:00 AM the next
+ * day in Manila. Both input shapes are converted explicitly from PH time instead.
+ */
 function toIso(v: FormDataEntryValue | null): string | null {
   const s = typeof v === 'string' ? v.trim() : '';
   if (!s) return null;
-  const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  return phInputToIso(s) ?? phDateInputToIso(s);
 }
 
 async function uploadCover(

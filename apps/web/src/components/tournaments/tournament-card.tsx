@@ -3,13 +3,14 @@ import { Trophy, MapPin, CalendarDays, Heart, TicketCheck, CheckCircle2 } from '
 import type { TournamentCardDTO } from '@/lib/tournaments/dto';
 import { TournamentStatusPill } from './status-pill';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { formatDate } from '@/lib/format-date';
 
+/** Dates are shown in Philippine time so a card never disagrees with the tournament page. */
 function dateRange(startAt: string | null, endAt: string | null): string | null {
   if (!startAt) return null;
-  const opts: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
-  const s = new Date(startAt).toLocaleDateString('en-US', opts);
+  const s = formatDate(startAt);
   if (!endAt) return s;
-  const e = new Date(endAt).toLocaleDateString('en-US', opts);
+  const e = formatDate(endAt);
   return s === e ? s : `${s} – ${e}`;
 }
 

@@ -1,15 +1,19 @@
+import { PH_TIME_ZONE } from '@vouchplay/core';
+
 /**
- * Deterministic date formatting for server-rendered UI. Bare `toLocaleDateString()` /
- * `toLocaleString()` format in the runtime's own locale and timezone, so the server (UTC/en-US) and
- * the client (the browser's locale) can produce different strings and trip a React hydration mismatch
- * (error #418). Pinning the locale and timezone keeps the server and client output identical.
+ * Deterministic date formatting for server-rendered UI, in Philippine time.
+ *
+ * Two reasons the locale and timezone are pinned rather than left to the runtime: bare `toLocale*`
+ * calls format in the host's own locale/timezone, so the server (UTC) and the browser can disagree
+ * and trip a React hydration mismatch (error #418); and the audience is in the Philippines, so every
+ * displayed time must be PH time regardless of where it is rendered or who is travelling.
  */
 
 const DATE_OPTS: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'short',
   day: 'numeric',
-  timeZone: 'UTC',
+  timeZone: PH_TIME_ZONE,
 };
 
 const DATETIME_OPTS: Intl.DateTimeFormatOptions = {

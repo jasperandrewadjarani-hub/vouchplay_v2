@@ -18,6 +18,7 @@ import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
 import { demandOptions } from '@/lib/tournaments/demand-options';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -45,15 +46,16 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   };
 }
 
+/**
+ * Tournament times are shown in Philippine time for everyone, wherever they are viewing from.
+ * Start/end come from date-only inputs, so they render without a clock time; registration open/close
+ * are real instants and keep theirs.
+ */
 function fmt(dt: string | null): string | null {
-  if (!dt) return null;
-  return new Date(dt).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return dt ? formatDateTime(dt) : null;
+}
+function fmtDay(dt: string | null): string | null {
+  return dt ? formatDate(dt) : null;
 }
 
 export default async function TournamentPage({ params }: Params) {
@@ -77,7 +79,7 @@ export default async function TournamentPage({ params }: Params) {
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
   const interestOptions = demandOptions(t.divisions);
-  const start = fmt(t.startAt);
+  const start = fmtDay(t.startAt);
   const regOpen = fmt(t.registrationOpenAt);
   const regClose = fmt(t.registrationCloseAt);
 

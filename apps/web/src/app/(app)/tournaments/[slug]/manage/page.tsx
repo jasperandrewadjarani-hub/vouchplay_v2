@@ -17,6 +17,7 @@ import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manage
 import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
+import { isoToPhInput, isoToPhDateInput } from '@vouchplay/core';
 import { computeOverview } from '@/lib/tournaments/overview';
 import { ArchiveControls } from '@/components/tournaments/archive-controls';
 
@@ -26,8 +27,10 @@ interface Params {
   params: Promise<{ slug: string }>;
 }
 
-const toLocalInput = (iso: string | null) => (iso ? iso.slice(0, 16) : '');
-const toDateInput = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
+// Stored instants are UTC; organizers read and type Philippine time, so the form is populated in PH
+// time (slicing the raw ISO string would have shown the UTC wall clock instead).
+const toLocalInput = (iso: string | null) => isoToPhInput(iso);
+const toDateInput = (iso: string | null) => isoToPhDateInput(iso);
 
 export default async function ManageTournamentPage({ params }: Params) {
   const { slug } = await params;
