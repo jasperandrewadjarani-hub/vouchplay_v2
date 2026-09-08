@@ -6196,10 +6196,12 @@ Maintain a changelog at the bottom.
   What was actually missing was plain language and an honest empty state: each board now states what
   it ranks ("Ranked on vouches given"), the category picker names it "Community Champions - vouches
   given", and an empty board explains that a snapshot has not ranked anyone yet instead of
-  dead-ending on "No rankings yet." **Operational dependency: the nightly rebuild
-  (`/api/cron/leaderboards`, 01:17 UTC = 09:17 Manila) returns 503 `CRON_NOT_CONFIGURED` unless
-  `CRON_SECRET` is set in the Vercel environment.** Until it is, every board goes stale between manual
-  Admin rebuilds.
+  dead-ending on "No rankings yet." **Open operational issue: the nightly rebuild
+  (`/api/cron/leaderboards`, 01:17 UTC = 09:17 Manila) is not landing, and the cause is not yet
+  known.** `CRON_SECRET` is configured - an unauthenticated call returns 401, not the 503
+  `CRON_NOT_CONFIGURED` a missing secret would produce - and cadence, enablement and pause settings
+  are all clear, so the next place to look is the Vercel cron invocation log. Until it is resolved,
+  boards go stale between manual Admin rebuilds.
 - **Contribution copy says what it means.** The card named the internal algorithm and its dampening
   terms (`CONTRIB_V1`, "diminishing returns", "time decay"), which meant nothing to a player. Same
   rules, said plainly, plus one line stating it is a measure of helping the community and **not a

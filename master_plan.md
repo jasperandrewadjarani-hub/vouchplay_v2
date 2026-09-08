@@ -338,9 +338,11 @@ Two live corrections requested by Jasper.
 - No new board was built. What was missing was plain language and an honest empty state: each board
   states what it ranks, the category picker reads "Community Champions - vouches given", and an empty
   board explains that no snapshot has ranked anyone yet.
-- **Operational dependency:** `/api/cron/leaderboards` returns 503 `CRON_NOT_CONFIGURED` unless
-  `CRON_SECRET` is set in the Vercel environment, so the nightly `17 1 * * *` (09:17 Manila) rebuild in
-  `vercel.json` has never run. Set it, then rebuild once from Admin → Leaderboards.
+- **Open operational issue:** the nightly `17 1 * * *` (09:17 Manila) rebuild in `vercel.json` is not
+  landing and the cause is unresolved. `CRON_SECRET` is configured (an unauthenticated call returns
+  401, not the 503 a missing secret would give), and cadence/enablement/pause settings are all clear,
+  so the Vercel cron invocation log is the next place to look. Meanwhile an Admin → Leaderboards
+  rebuild publishes a current snapshot on demand.
 
 ## 1. Prompt Contract
 

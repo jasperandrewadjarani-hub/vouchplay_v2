@@ -1487,11 +1487,17 @@ Getting the first deploy up hit two issues:
   board was written. What was missing was plain language: every board now states what it ranks, the
   category picker reads "Community Champions - vouches given", and an empty board explains that no
   snapshot has ranked anyone yet rather than dead-ending on "No rankings yet."
-- **`CRON_SECRET` is not set in Vercel (blocking):** `/api/cron/leaderboards` returns 503
-  `CRON_NOT_CONFIGURED` without it, so the nightly `17 1 * * *` (01:17 UTC = 09:17 Manila) rebuild in
-  `vercel.json` has never run - which is why the snapshot is two days stale. **Jasper: add `CRON_SECRET`
-  to the Vercel project env, then trigger Admin → Leaderboards → rebuild once** (needs a stepped-up
-  AAL2 admin session) to publish a snapshot that includes the 24 current contributors.
+- **The nightly rebuild is not landing - cause not yet identified.** `CRON_SECRET` **is** configured:
+  an unauthenticated `GET /api/cron/leaderboards` returns **401**, not the 503 `CRON_NOT_CONFIGURED`
+  it would return if the secret were missing (checked on both production domains 2026-09-09). So the
+  `17 1 * * *` (01:17 UTC = 09:17 Manila) cron in `vercel.json` is wired, yet no snapshot has been
+  published since 2026-09-07. Settings are not the blocker either: cadence is 24h,
+  `leaderboards_enabled=true`, and no category is paused. Remaining suspects, in order: the Vercel plan
+  not actually executing the cron, or a failing run. **Next step: check the Vercel dashboard cron
+  invocation log.** Do not repeat the earlier (wrong) claim that `CRON_SECRET` is missing.
+- **Immediate action for Jasper:** trigger **Admin → Leaderboards → rebuild** once (needs a stepped-up
+  AAL2 admin session) to publish a snapshot including the 24 current contributors. That fixes the
+  visible symptom today, independent of the cron investigation.
 
 - **2026-09-09** - **Contribution copy + pagination feedback.** The contribution card named the
   internal algorithm and its dampening terms (`CONTRIB_V1`, diminishing returns, time decay), which
