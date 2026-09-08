@@ -1399,6 +1399,15 @@ Getting the first deploy up hit two issues:
   the profile and both player-card variants pick it up unchanged. Gates green (web 30, config 19,
   core 110). See `master_plan.md` §1G.
 
+- **2026-09-08** - **STS explainer presentation fixed on a live device.** Jasper's phone screenshot
+  showed the dialog opening as the large bottom sheet: on a tall phone the heading was pushed under
+  the browser chrome and read as clipped, and the copy was too explanatory. Added an `align` prop to
+  `Modal` and switched the explainer to the compact centered variant (`max-h-[85dvh]`), then cut the
+  copy by about a third: one lead sentence with the 0-5 scale folded in, three short bullets, one
+  reassurance line, a primary "Get a vouch" and a plain-text FAQ link. Rule recorded: explanatory
+  dialogs are centered and compact; only image-led announcements use the full-width sheet. See
+  `master_plan.md` §1G and handover v1.20.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the
@@ -1459,3 +1468,8 @@ Getting the first deploy up hit two issues:
   Added a restrained `BY` plus the supplied B-STEEL SPORTS PICKLEBALL badge after the tournament
   subtitle, with no white plate. Saved master PNG and web-optimized WebP variants with `B-Steel` in
   the filename; also retained a verified transparent badge cutout in `deliverables/welcome-modal/`.
+
+- **2026-09-08** - Rebalanced the welcome-modal attribution after mobile-legibility feedback. Reduced
+  the central Rise of the Empires/Hermosa lockup, retained the centered tournament subtitle and date,
+  removed the small right-side badge, and added a larger centered `BY` + B-STEEL badge below the date.
+  Saved new `B-Steel_Centered` PNG and WebP variants; earlier versions remain available.

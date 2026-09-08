@@ -201,6 +201,13 @@ is met.
   This preserves the locked §3.3 rule that CSL, STS, Identity Verified and Skill Verified are four
   distinct concepts, and §6/§8.4 that VouchPlay never ranks players by STS.
 - It ends with the action that actually helps: get a vouch, or read the FAQ.
+- **Presentation corrected on the same night after seeing it on a real phone.** It first opened as the
+  large bottom-sheet variant, which on a tall phone pushed the heading up under the browser chrome and
+  read as clipped and wall-of-text. An explainer is not an announcement: it now uses the compact
+  centered variant (`Modal align="center"`, default `md` width, `max-h-[85dvh]`), and the copy was cut
+  by roughly a third - one lead sentence with the 0-5 scale folded in, three short bullets, one
+  reassurance line, a primary "Get a vouch" and a plain-text FAQ link. **Rule: explanatory dialogs are
+  centered and compact; only image-led announcements use the full-width sheet.**
 - Implemented as its own client component re-exported from `badges.tsx`, so all existing call sites
   (player profile and both player-card variants) pick it up unchanged and the remaining badges stay
   server-rendered.

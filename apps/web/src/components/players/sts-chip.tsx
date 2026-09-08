@@ -36,62 +36,48 @@ export function StsChip({ sts }: { sts: number | null }) {
           title="What is STS?"
           subtitle="Skill-Trust Score"
           onClose={() => setOpen(false)}
-          size="lg"
+          align="center"
         >
-          <div className="space-y-4">
-            <div className="border-primary/30 bg-primary/5 rounded-2xl border p-4">
-              <p className="text-foreground text-base leading-relaxed font-semibold">
-                It shows how confident we are about a player&rsquo;s skill level - not how good they
-                are.
-              </p>
-              <p className="text-foreground-muted mt-2 text-sm">
-                It runs from 0 to 5. Think of it as &ldquo;how much evidence backs up this
-                rating?&rdquo;
-              </p>
-            </div>
+          <div className="space-y-3.5">
+            <p className="text-foreground text-[15px] leading-relaxed font-semibold">
+              How confident we are about a player&rsquo;s skill level - not how good they are.
+              Scored 0 to 5.
+            </p>
 
             <div>
               <p className="text-foreground text-sm font-semibold">What raises it</p>
-              <ul className="mt-2 space-y-2">
-                <li className="text-foreground-muted flex items-start gap-2.5 text-sm">
-                  <Users size={16} className="text-primary mt-0.5 shrink-0" aria-hidden />
-                  More different people vouching for you
+              <ul className="mt-1.5 space-y-1.5">
+                <li className="text-foreground-muted flex items-start gap-2 text-sm">
+                  <Users size={15} className="text-primary mt-0.5 shrink-0" aria-hidden />
+                  More people vouching for you
                 </li>
-                <li className="text-foreground-muted flex items-start gap-2.5 text-sm">
-                  <ShieldCheck size={16} className="text-primary mt-0.5 shrink-0" aria-hidden />
+                <li className="text-foreground-muted flex items-start gap-2 text-sm">
+                  <ShieldCheck size={15} className="text-primary mt-0.5 shrink-0" aria-hidden />
                   Vouches from ID-verified players and coaches
                 </li>
-                <li className="text-foreground-muted flex items-start gap-2.5 text-sm">
-                  <Scale size={16} className="text-primary mt-0.5 shrink-0" aria-hidden />
-                  Those vouchers agreeing with each other
+                <li className="text-foreground-muted flex items-start gap-2 text-sm">
+                  <Scale size={15} className="text-primary mt-0.5 shrink-0" aria-hidden />
+                  Vouchers agreeing with each other
                 </li>
               </ul>
             </div>
 
-            <div className="border-border rounded-2xl border border-dashed p-3.5">
-              <p className="text-foreground-muted text-sm leading-relaxed">
-                A low STS does not mean a weak player. It usually just means not enough people have
-                vouched yet.
-              </p>
-              <p className="text-foreground-muted mt-2 text-sm leading-relaxed">
-                Your <span className="text-foreground font-medium">skill level</span> and your{' '}
-                <span className="text-foreground font-medium">STS</span> are separate. Skill is what
-                level you play at. STS is how sure we are. VouchPlay never ranks players by STS.
-              </p>
-            </div>
+            <p className="text-foreground-muted text-sm leading-relaxed">
+              A low STS does not mean a weak player - usually just fewer vouches so far.
+            </p>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 pt-0.5">
               <Link
                 href="/players"
                 onClick={() => setOpen(false)}
-                className="vp-gradient w-full rounded-xl px-4 py-3 text-center text-sm font-semibold text-white"
+                className="vp-gradient w-full rounded-xl px-4 py-2.5 text-center text-sm font-semibold text-white"
               >
-                Get a vouch from someone you play with
+                Get a vouch
               </Link>
               <Link
                 href="/faq"
                 onClick={() => setOpen(false)}
-                className="border-border text-foreground hover:bg-surface-muted w-full rounded-xl border px-4 py-2.5 text-center text-sm font-semibold"
+                className="text-foreground-muted hover:text-foreground text-center text-sm font-medium"
               >
                 Read the FAQ
               </Link>

@@ -13,6 +13,7 @@ export function Modal({
   onClose,
   children,
   size = 'md',
+  align = 'sheet',
 }: {
   title: string;
   subtitle?: string;
@@ -20,6 +21,12 @@ export function Modal({
   children: ReactNode;
   /** 'lg' is a near-full-screen announcement surface; 'md' is the default dialog. */
   size?: 'md' | 'lg';
+  /**
+   * 'sheet' rises from the bottom on mobile (good for long, image-led content). 'center' floats in the
+   * middle at every width - the right choice for a short explainer, which otherwise sits under the
+   * browser chrome and reads as clipped.
+   */
+  align?: 'sheet' | 'center';
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -31,16 +38,18 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+      className={`fixed inset-0 z-50 flex justify-center bg-black/50 ${
+        align === 'center' ? 'items-center p-4' : 'items-end p-0 sm:items-center sm:p-4'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
     >
       <div
-        className={`border-border bg-surface w-full overflow-y-auto rounded-t-2xl border p-5 sm:rounded-2xl ${
-          size === 'lg' ? 'max-h-[94dvh] max-w-2xl sm:p-6' : 'max-h-[90dvh] max-w-md'
-        }`}
+        className={`border-border bg-surface w-full overflow-y-auto border p-5 ${
+          align === 'center' ? 'rounded-2xl' : 'rounded-t-2xl sm:rounded-2xl'
+        } ${size === 'lg' ? 'max-h-[94dvh] max-w-2xl sm:p-6' : 'max-h-[85dvh] max-w-md'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-start justify-between gap-3">

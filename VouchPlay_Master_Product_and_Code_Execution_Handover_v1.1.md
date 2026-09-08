@@ -6163,6 +6163,11 @@ Maintain a changelog at the bottom.
   a weak player, and keeps skill level and STS separate - preserving §3.3 (CSL, STS, Identity Verified
   and Skill Verified are four distinct concepts) and §6/§8.4 (players are never ranked by STS). Any
   future surface that displays STS must offer the same explanation rather than a bare number.
+- **Dialog presentation rule (learned the same night on a real device):** explanatory dialogs are
+  **centered and compact**; only image-led announcements use the full-width bottom sheet. The STS
+  explainer first shipped as the large sheet, which on a tall phone pushed its heading under the
+  browser chrome and read as clipped. `Modal` gained an `align` prop for this. Keep explainer copy
+  short - a lead sentence, a few scannable bullets, one reassurance, one action.
 
 ## v1.19 (2026-09-08)
 - **Launch welcome pop-up (Admin-controlled campaign dialog).** A near-full-screen, one-tap-dismissible
