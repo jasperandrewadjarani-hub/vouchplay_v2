@@ -1688,3 +1688,14 @@ Open items, highest value first:
   viewer's timezone, which is the shape of React hydration error #418. Added three pinned variants
   (`formatMonthDay`, `formatMonthYear`, `formatShortMonthYear`) and a unit test that uses an instant
   falling on a different calendar day in UTC than in Manila, so a regression fails the suite.
+
+- **2026-09-09** - Both changes above shipped in commit `a7d5a25` and verified live on
+  `vouchplayph.vercel.app` and `vouchplay-v2.vercel.app`. The proof is in the SSR HTML, not a client
+  bundle: the JT Cup announcement "Registration Open" has `published_at = 2026-09-05T23:30:26Z`, and
+  its server-rendered `<time>` element now reads **Sep 6** on both domains. The previous code
+  (`toLocaleDateString('en-US', {month, day})`, no timezone, on Vercel's UTC runtime) rendered
+  **Sep 5**, so the PH-pinned formatter is demonstrably live. The Nightly rebuild panel's data path
+  was checked against production separately: `audit_logs` holds no `leaderboard.cron.run` row yet (as
+  expected, the first one lands on the next scheduled run), the newest active published snapshot is
+  2026-09-08 17:42:56 UTC, and the panel will therefore read "the 9:17 AM run will skip, the rankings
+  will only be 8 hours old by then" with fresh rankings landing **2026-09-10, 9:17 AM Manila**.

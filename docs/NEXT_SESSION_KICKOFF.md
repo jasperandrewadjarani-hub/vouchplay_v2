@@ -1,6 +1,6 @@
 # VouchPlay v2 - Next session kickoff prompt
 
-_Written 2026-09-09, at the end of the live-launch support conversation. Paste the block below into a
+_Written 2026-09-09, updated at the end of the leaderboard-cron session. Paste the block below into a
 fresh conversation. Rewrite this file at the end of each session so it always describes the state a
 new conversation actually starts from._
 
@@ -44,32 +44,31 @@ Shipped in the last session and verified live on both production domains
 - Numbered, centred pagination on Players and Clubs.
 - Tapping a compact player row now shows a loading spinner in the STS slot.
 - Plain-language contribution copy.
+- The nightly leaderboard rebuild records every run and explains itself on Admin → Leaderboards.
+- Every displayed date in the app comes from one Philippine-time formatter (handover v1.23).
 
 ## Open items, highest value first
 
-1. **The leaderboard snapshot is stale and the nightly cron is not landing.** The active snapshot is
-   dated 2026-09-07 with **0 entries** on the community board, while there are ~24 scored contributors
-   and ~93 active vouches. `CRON_SECRET` **is** configured (an unauthenticated
-   `GET /api/cron/leaderboards` returns 401, not the 503 a missing secret gives), cadence is 24h,
-   `leaderboards_enabled=true`, and no category is paused - so the cause is still unknown. The account
-   is on **Vercel Pro**, so plan limits are not the explanation either. **Check the Vercel cron
-   invocation log first.** An Admin rebuild at `/admin/leaderboards` (stepped-up AAL2 session)
-   publishes a current snapshot on demand and is independent of that investigation.
-   **Cadence stays at 24h - that is a decision, not an oversight.** A rebuild is a *publish* that
-   appends rows to the immutable `leaderboard_snapshot_runs` audit trail, fires rank-movement
-   notifications, and tightens the vouch-to-rank feedback loop; frequent rebuilds would work against
-   all three. Do not propose shortening it without a reason that outweighs those.
+1. **~~The leaderboard snapshot is stale and the nightly cron is not landing.~~ RESOLVED - the cron
+   was never broken.** Every `leaderboard_snapshot_runs` row falls into three batches, all accounted
+   for, and the schedule has had exactly one opportunity to fire since `crons` entered `vercel.json`
+   (2026-09-08 01:17 UTC). At that instant the last publish was three hours old, so the route's
+   cadence guard correctly returned `CADENCE_NOT_DUE`. The board looked empty because the Sep 7
+   rebuild predated any contribution rows. See master_plan §1O. The nightly run now writes an
+   `audit_logs` row per invocation and Admin → Leaderboards leads with a plain-language "Nightly
+   rebuild" panel. **Check the prediction:** the 2026-09-09 01:17 UTC run should skip and the
+   2026-09-10 01:17 UTC run should publish, and the panel should say so.
 2. **The registration CLOSE time still holds a pre-fix UTC artefact.** It renders
    `Sep 17, 2026, 1:00 AM`, which is not a time I chose. Ask me what it should be; editing it in the
    organizer form now stores correctly.
-3. **Run the controlled authenticated browser walkthrough** in
-   `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md`. It is the only Phase 13.5 gate never
-   evidenced, and it is worth doing against live now that real registrations exist.
-4. **Two new surfaces have no live usage yet** - the `observed` vouch option and the peer-nominated
-   achievement confirm/decline loop. Both are server-guarded and unit-tested, but nobody has used them.
-5. **~37MB of marketing assets are untracked in git** (`deliverables/`, `fb_posting_assets/`, and
+3. **~37MB of marketing assets are untracked in git** (`deliverables/`, `fb_posting_assets/`, and
    `working/P_006b_VouchPlay_Carousel_About_FAQ_Source_(2026-09).md`). Nothing in `.gitignore`
    excludes them, so this looks accidental. Ask me whether to commit them or ignore them.
+4. **Run the controlled authenticated browser walkthrough** in
+   `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md`. It is the only Phase 13.5 gate never
+   evidenced, and it is worth doing against live now that real registrations exist.
+5. **Two new surfaces have no live usage yet** - the `observed` vouch option and the peer-nominated
+   achievement confirm/decline loop. Both are server-guarded and unit-tested, but nobody has used them.
 6. Carry-over ops: clear the Supabase org over-quota before **21 Sep 2026**; move Gmail SMTP to a
    dedicated provider before public scale; wire `supabase gen types` into `packages/db` (types are
    hand-synced today).
