@@ -1714,3 +1714,28 @@ Open items, highest value first:
   position, how many are ranked, and when the next rankings land. The next-update time reuses the
   pure `nextPublishingRunAfter` helper from §1O so the public promise and the Admin panel cannot
   disagree. See master_plan §1P, handover v1.24.
+
+- **2026-09-09** - **Phase decision: Oct 17-18 draws and scoring run OUTSIDE VouchPlay.** Jasper
+  confirmed it. That settles the fork and sets the next phase. Two stale beliefs were corrected while
+  checking: **Phase 14A (Recruitment/Sponsorship) is already built and shipped** - migration 0023
+  (`club_offers`, `club_offer_responses`, three enums, RLS), the `/opportunities` route,
+  `components/offers/club-offers-manager.tsx`, `lib/actions/offer.ts` and a unit-tested pure
+  lifecycle in `packages/core/src/offers/` - so `docs/PHASE_14_...HANDOVER.md` is out of date where it
+  asks Jasper to choose 14A; and **`issueOfficialAchievement` exists with zero call sites**
+  (`lib/actions/achievements.ts:356`), a complete organizer-authorized action awarding Champion /
+  Runner-up / Bronze / MVP / Sportsmanship / Participant to a confirmed team, with templates in
+  `packages/config/src/achievements.ts`. There is no UI for it. Meanwhile the schema has no
+  `matches`, `brackets`, `draws`, `schedules` or `results` table and no check-in anywhere, and
+  `registration_status` ends at `confirmed`.
+
+  **Recommended Phase 15 - Run the event. Defer 14B (Gamified Bidding).** Three thin slices:
+  **15A** close the registration cycle cleanly (the Phase 13.5 authenticated walkthrough, which is
+  still the only gate never evidenced, payment-review hardening, and a roster export the organizer
+  will trust to build the draw from) - deadline-bound by the registration close date;
+  **15C** results in, achievements out: the organizer UI for the already-written
+  `issueOfficialAchievement`, on the tournament Manage page. This is the flywheel - results become
+  achievements, achievements drive vouches, vouches drive the leaderboards - and without it a
+  two-day tournament generates no data for the product. Cheapest slice, highest leverage, no
+  migration; **15B** day-of check-in: one organizer screen, one field, one-handed on a phone at a
+  venue with poor signal. Needed only on the day. Sequence 15A, then 15C, then 15B. Decide whether
+  draws and scoring belong in VouchPlay at all after Oct 18, with real observed pain.

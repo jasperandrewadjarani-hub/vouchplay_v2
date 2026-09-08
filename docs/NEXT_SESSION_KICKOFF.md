@@ -46,6 +46,8 @@ Shipped in the last session and verified live on both production domains
 - Plain-language contribution copy.
 - The nightly leaderboard rebuild records every run and explains itself on Admin → Leaderboards.
 - Every displayed date in the app comes from one Philippine-time formatter (handover v1.23).
+- Community leaderboards are one tap from the Players tab, with clickable board tabs, a crowned
+  podium, a "You" highlight, and a next-update countdown (handover v1.24).
 
 ## Open items, highest value first
 
