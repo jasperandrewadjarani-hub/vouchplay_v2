@@ -49,6 +49,21 @@
   --hero-tint: rgba(66, 232, 255, 0.08);
 }
 
+/* Top bar stays on the dark palette in both themes (handover Phase 13.5 UI): re-pin the tokens its
+   children read so the logo, bell, and profile area never lighten under the light theme. */
+.vp-topbar {
+  --surface: #101827;
+  --surface-muted: #162033;
+  --foreground: #f4f7fb;
+  --foreground-muted: #9aa8bc;
+  --border: #1e2a40;
+  --primary: #2d7cff;
+  --hero-tint: rgba(66, 232, 255, 0.08);
+  color-scheme: dark;
+  /* Inherited color passes a computed value, not the var, so pin it too for un-classed header text. */
+  color: var(--foreground);
+}
+
 /* Map tokens into Tailwind's theme so bg-background / text-foreground / border-border work. */
 @theme inline {
   --color-background: var(--background);

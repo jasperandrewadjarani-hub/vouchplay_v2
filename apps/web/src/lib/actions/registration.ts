@@ -473,6 +473,64 @@ export async function withdrawRegistration(
       error = result.error;
     }
     if (error) return { error: friendly(error.message) };
+
+    // Cancelling dissolves the team so both players are immediately free to register again with a new
+    // partner - no separate "leave team" step. The partner is notified. We only dissolve once the team
+    // has no remaining active registration (the one just cancelled was its only active entry).
+    let dissolvedWithPartner = false;
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('team_id')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const teamId = (regRow as { team_id: string } | null)?.team_id;
+    if (teamId) {
+      const { data: stillActive } = await svc
+        .from('registrations')
+        .select('id')
+        .eq('team_id', teamId)
+        .not('status', 'in', '(withdrawn,cancelled,rejected)')
+        .limit(1);
+      if (!stillActive || stillActive.length === 0) {
+        const { data: memberRows } = await svc
+          .from('team_members')
+          .select('player_id')
+          .eq('team_id', teamId);
+        const others = ((memberRows ?? []) as { player_id: string }[])
+          .map((m) => m.player_id)
+          .filter((id) => id !== user.id);
+        await svc.from('team_members').delete().eq('team_id', teamId);
+        await svc
+          .from('teams')
+          .update({ status: 'disbanded', updated_at: new Date().toISOString() })
+          .eq('id', teamId);
+        await svc.from('audit_logs').insert({
+          actor_id: user.id,
+          actor_role: 'player',
+          action: 'team_dissolved_on_cancellation',
+          entity_type: 'team',
+          entity_id: teamId,
+          before_snapshot: { registration_id: registrationId },
+          after_snapshot: { status: 'disbanded' },
+        });
+        if (others.length > 0) {
+          dissolvedWithPartner = true;
+          const [me, tmName] = await Promise.all([
+            getActorMini(user.id),
+            getTournamentMini(tournamentId),
+          ]);
+          await notifyMany(others, {
+            type: 'partner_team_left',
+            actorId: user.id,
+            params: { actorName: me.name, tournamentName: tmName.name },
+            link: tmName.slug ? `/tournaments/${tmName.slug}?register=1` : '/tournaments',
+            entityType: 'tournament',
+            entityId: tournamentId,
+          });
+        }
+      }
+    }
+
     // Notify organizers of the withdrawal, and any promoted team (§27.1, §27.3).
     const [organizers, tm] = await Promise.all([
       getTournamentOrganizerIds(tournamentId),
@@ -488,10 +546,15 @@ export async function withdrawRegistration(
     const promoted = (data as { promoted?: string | null } | null)?.promoted;
     if (promoted) await notifyRegistrationTeam(promoted, tournamentId, 'registration_promoted');
     await revalTournament(tournamentId);
+    return {
+      ok: true,
+      message: dissolvedWithPartner
+        ? 'Registration cancelled. Your team was dissolved and your partner was notified.'
+        : 'Registration cancelled. You can register again anytime.',
+    };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Registration withdrawn.' };
 }
 
 /** Move an unpaid pending team into an immediately available compatible division (§1D). */

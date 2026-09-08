@@ -2,6 +2,14 @@ import Link from 'next/link';
 import { ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
 import { skillByOrdinal } from '@vouchplay/config';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
+
+/** Skill-band colour for a real division's meter (band divisions only; else the brand primary). */
+function divisionColor(d: DivisionDTO): string {
+  if (d.skillPolicy === 'band' && d.minimumSkill != null) {
+    return skillByOrdinal(d.minimumSkill)?.color ?? 'var(--primary)';
+  }
+  return 'var(--primary)';
+}
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { InfoDisclosure } from '@/components/ui/info-disclosure';
 import { RegisterActions } from './register-actions';
@@ -133,8 +141,8 @@ export function DivisionBrowser({
                         className="bg-surface-muted h-1.5 overflow-hidden rounded-full"
                       >
                         <div
-                          className="bg-primary h-full rounded-full"
-                          style={{ width: `${percent}%` }}
+                          className="h-full rounded-full"
+                          style={{ width: `${percent}%`, backgroundColor: divisionColor(d) }}
                         />
                       </div>
                     )}

@@ -3,10 +3,17 @@
 import { useState } from 'react';
 import { Users } from 'lucide-react';
 import { TOURNAMENT_DEMAND_DIVISIONS } from '@vouchplay/core';
+import { SKILL_BANDS } from '@vouchplay/config';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { nameInitials } from '@/lib/storage';
 import { Modal } from '@/components/ui/modal';
 import type { TournamentDemandDTO } from '@/lib/tournaments/dto';
+
+/** Skill-band colour for a demand division key (e.g. "low_intermediate_mixed"). */
+function demandColor(key: string): string {
+  const prefix = key.replace(/_(men|women|mixed)$/, '');
+  return SKILL_BANDS.find((b) => b.key === prefix)?.color ?? 'var(--primary)';
+}
 
 export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDTO }) {
   const [open, setOpen] = useState(false);
@@ -59,9 +66,10 @@ export function TournamentDemandSummary({ demand }: { demand: TournamentDemandDT
                 </div>
                 <div className="bg-surface-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
                   <div
-                    className="bg-primary h-full rounded-full"
+                    className="h-full rounded-full"
                     style={{
                       width: `${Math.round(((demand.divisions[division.key] ?? 0) / peak) * 100)}%`,
+                      backgroundColor: demandColor(division.key),
                     }}
                   />
                 </div>

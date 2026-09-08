@@ -63,7 +63,6 @@ export function InterestButton({
         >
           {complete ? (
             <div className="space-y-4">
-              <p className="text-foreground text-sm">{message}</p>
               {!authed && (
                 <div className="border-primary/30 bg-primary/5 space-y-3 rounded-xl border p-3">
                   <p className="text-foreground text-sm font-medium">

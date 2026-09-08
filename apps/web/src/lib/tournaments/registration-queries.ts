@@ -230,9 +230,14 @@ export async function getViewerRegistrationState(
     }
   }
 
+  // A player is at the pay step whenever a registration is awaiting payment or resubmission, even
+  // before any payment row exists. Basing this on the registration status (not a payment row) is what
+  // makes the organizer QR visible during a fresh payment_pending entry.
   const paymentEligible = Object.values(registrationsByDivision).some(
     (registration) =>
-      registration.paymentStatus === 'pending' || registration.paymentStatus === 'rejected',
+      registration.status === 'payment_pending' ||
+      registration.status === 'payment_submitted' ||
+      registration.paymentStatus === 'rejected',
   );
   let paymentQrUrl: string | null = null;
   if (paymentEligible) {
@@ -247,7 +252,7 @@ export async function getViewerRegistrationState(
       ?.payment_qr_path;
     if (paymentQrPath) {
       paymentQrUrl =
-        (await svc.storage.from(PAYMENT_PROOFS_BUCKET).createSignedUrl(paymentQrPath, 60)).data
+        (await svc.storage.from(PAYMENT_PROOFS_BUCKET).createSignedUrl(paymentQrPath, 300)).data
           ?.signedUrl ?? null;
     }
   }

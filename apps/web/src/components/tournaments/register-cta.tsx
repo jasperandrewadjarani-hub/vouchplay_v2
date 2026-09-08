@@ -45,9 +45,13 @@ export function RegisterButton({
   return (
     <button
       type="button"
-      onClick={() =>
-        document.getElementById('register')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }
+      onClick={() => {
+        const el = document.getElementById('register');
+        if (!el) return;
+        // The division browser is a collapsed <details>; open it so the register actions are visible.
+        el.querySelector('details')?.setAttribute('open', '');
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }}
       className={`${btn} vp-gradient vp-glow text-white`}
     >
       <ClipboardCheck size={16} aria-hidden />
@@ -70,6 +74,7 @@ export function RegisterAnchorScroll() {
     if (!el) return;
     // Defer to after paint so layout is settled.
     const id = window.setTimeout(() => {
+      el.querySelector('details')?.setAttribute('open', '');
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       el.classList.add('vp-in');
     }, 120);

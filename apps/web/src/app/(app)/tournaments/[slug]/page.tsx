@@ -211,8 +211,7 @@ export default async function TournamentPage({ params }: Params) {
               <div className="mt-3">
                 <p className="text-foreground text-sm font-medium">Join this tournament</p>
                 <p className="text-foreground-muted mt-1 text-sm">
-                  Create a free VouchPlay account to register your team. It only takes a minute, and
-                  you&apos;ll pick up right where you left off.
+                  Create a free account to register. You&apos;ll come right back here.
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Link

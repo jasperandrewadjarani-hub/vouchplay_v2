@@ -133,9 +133,9 @@ export function MyRegistrations({
               {d.format === 'doubles' && playerChangesConfigured && (
                 <div className="mt-2">
                   <InfoDisclosure label="Change partner?">
-                    Before you submit payment, cancel this registration, leave your team, and invite
-                    a new partner. After payment, confirmation, or the change lock, contact the
-                    organizer.
+                    Cancel this registration before you submit payment. Your team is dissolved, your
+                    partner is notified, and you can invite a new partner. After payment or the
+                    change lock, contact the organizer.
                   </InfoDisclosure>
                 </div>
               )}

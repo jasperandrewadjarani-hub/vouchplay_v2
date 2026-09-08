@@ -114,8 +114,7 @@ export function RegisterActions({
         )}
         {!canWithdraw && !canMove && (
           <p className="text-foreground-muted text-xs">
-            Player changes are closed after payment activity, confirmation, the change lock, or
-            while the update is being enabled.
+            This entry can no longer be changed here. Contact the organizer for help.
           </p>
         )}
         {msg && <span className="text-foreground-muted text-xs">{msg}</span>}

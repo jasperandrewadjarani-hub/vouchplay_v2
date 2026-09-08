@@ -123,6 +123,41 @@ New/changed files: `apps/web/src/components/ui/info-disclosure.tsx`,
 `apps/web/src/components/leaderboards/leaderboard-panel.tsx`, `apps/web/src/app/(app)/page.tsx`.
 Deleted: `registration-panel.tsx`, `division-list.tsx`, `my-registrations-summary.tsx`.
 
+## UI/UX + bug-fix pass 2 (2026-09-08)
+
+Second round of Jasper feedback. No migration.
+
+**Bugs fixed**
+1. **Payment QR not visible to a paying player.** `getViewerRegistrationState` gated the signed QR on
+   a payment-row status (`pending`/`rejected`), but a fresh `payment_pending` entry has no payment row
+   yet, so the QR never showed. Now gated on the registration status
+   (`payment_pending`/`payment_submitted`) or a rejected proof, matching where the payment form
+   renders. Signed URL TTL raised to 300s.
+2. **Cancel then re-register friction / "leave team" error.** Cancelling a registration now dissolves
+   the team in one step: it removes members, marks the team disbanded, writes an audit record, and
+   notifies the partner. The player can immediately register again (the doubles division shows the
+   partner invite again). This removes the separate "leave team" step that was erroring and the
+   partner is properly notified. The change-partner guidance was updated to the one-step flow.
+
+**UI tweaks**
+3. **Interest modal** no longer prints the "Your interest has been counted..." line twice (it was in
+   both the modal subtitle and body).
+4. **Dark is already the first-render default** (`defaultTheme="dark"`, `enableSystem=false`) - verified,
+   no change needed.
+5. **Top bar stays dark in light mode.** New `.vp-topbar` utility re-pins the dark palette tokens (and
+   an explicit `color`) on the header so the logo, bell, and profile area never lighten under the
+   light theme.
+6. **Register button expands the division browser.** The upper Register control (and a shared
+   `?register=1` link) now opens the collapsed Divisions `<details>` and scrolls to it.
+7. **Skill-coloured meters.** The interest-by-division bars and the real-division capacity/joining bars
+   are coloured by skill band (Beginner green, Novice teal, Low Intermediate blue, High Intermediate
+   violet, Advanced orange; age/open/custom use the brand primary). Counts and labels remain, so
+   colour is never the only signal.
+8. **Copy trims:** shorter file hints, a clearer "this entry can no longer be changed" line, and a
+   tighter anonymous register prompt.
+
+None of these are deferred to a later phase.
+
 ## Key files
 
 - `apps/web/src/lib/tournaments/dto.ts`, `queries.ts` - detail columns + gated `paymentQrUrl`,

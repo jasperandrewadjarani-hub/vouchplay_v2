@@ -24,7 +24,7 @@ export async function Header() {
     (profile?.nickname?.[0] ?? 'Y').toUpperCase();
 
   return (
-    <header className="border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
+    <header className="vp-topbar border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
       {/* Powered-by line (top middle), links to the JT Consulting & Analytics page (§5.2.1). */}
       <div className="flex justify-center px-4 pt-1.5">
         <a

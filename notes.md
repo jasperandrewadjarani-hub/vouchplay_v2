@@ -1322,6 +1322,18 @@ Getting the first deploy up hit two issues:
     typecheck, lint, tests (web 30, config 19, core 95), format, build (42 pages). Signed-out browser
     QA of Home and a tournament page clean.
 
+- **2026-09-08** - **Phase 13.5 UI/UX + bug-fix pass 2.** No migration. Bugs: payment QR now shows for
+  a fresh `payment_pending` entry (was gated on a not-yet-existing payment row); cancelling a
+  registration dissolves the team in one step, notifies the partner, and frees both to re-register
+  (removes the erroring "leave team" step). Tweaks: de-duplicated interest modal text; top bar stays
+  dark in light mode (`.vp-topbar`); Register button expands the Divisions browser; interest and
+  capacity meters are skill-band coloured; several copy trims. Gates green (web 30, config 19, core
+  95; build 42 pages). See `working/P_006b_Phase13_5_Walkthrough_(2026-09).md`.
+- **Requested next (needs migration 0022 + Jasper):** organizer global division rules - a default-ON
+  "cannot register below your skill level" floor (equal/higher allowed), plus moving "require Skill
+  Verified" and "organizer approval required" from per-division to one global tournament toggle each
+  (both default OFF). Not yet implemented as of this entry.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

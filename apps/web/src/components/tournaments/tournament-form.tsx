@@ -286,7 +286,7 @@ export function TournamentForm({
           <Field
             label="Cover photo (optional)"
             htmlFor="cover"
-            hint="PNG, JPG or WebP, up to 4 MB. Landscape images work best; VouchPlay optimizes the file automatically."
+            hint="PNG, JPG, or WebP up to 4 MB. Landscape works best."
           >
             <div className="space-y-3">
               {coverPreview && (
