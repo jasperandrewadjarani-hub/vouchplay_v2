@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { CheckCheck } from 'lucide-react';
 import { markNotificationRead, markAllNotificationsRead } from '@/lib/actions/notifications';
 import type { NotificationDTO } from '@/lib/notifications/queries';
+import { formatMonthDay } from '@/lib/format-date';
 
 function relative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -15,7 +16,7 @@ function relative(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.round(h / 24);
   if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatMonthDay(iso);
 }
 
 export function NotificationList({ initial }: { initial: NotificationDTO[] }) {

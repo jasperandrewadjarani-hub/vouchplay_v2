@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.22
+# VouchPlay Master Product & Code Execution Handover v1.23
 
-_(File retains its `…v1.1.md` name; content is v1.22 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.23 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,55 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.23 (2026-09-09)
+
+_No migration. Both items are code-only and were verified on both production domains._
+
+- **The nightly leaderboard rebuild was never broken, and now it says so itself.** v1.22 recorded an
+  "open operational issue: the nightly rebuild is not landing, and the cause is not yet known." That
+  finding was wrong, and the database proves it. Every `leaderboard_snapshot_runs` row ever written
+  falls into three batches: the initial feature ship (2026-09-07 16:21 UTC), an Admin rebuild
+  (2026-09-07 22:05 to 22:10 UTC, reason "Controlled production public leaderboard verification"),
+  and an Admin rebuild (2026-09-08 17:42 UTC, reason "Need leaderboards"). The `crons` entry was added
+  to `vercel.json` at 2026-09-07 16:39 UTC, so the schedule has had exactly **one** opportunity to
+  fire: 2026-09-08 01:17 UTC. At that instant the most recent publish was 2026-09-07 22:10:41 UTC,
+  **three hours and six minutes earlier**, so the route's own cadence guard returned
+  `CADENCE_NOT_DUE` and correctly did nothing. The board looked empty because the Sep 7 rebuild ran
+  before the community had any contribution rows to rank, not because a job failed; the Sep 8 rebuild
+  published 25 community and 24 player entries. **The actual defect was observability: a skip leaves
+  no trace anywhere**, so the only way to distinguish "ran and correctly did nothing" from "never
+  ran" was the Vercel invocation log, outside the app and behind a dashboard login. Every
+  authenticated cron invocation now writes one append-only `audit_logs` row (`leaderboard.cron.run`,
+  actor `null`, role `system`) carrying its outcome (`published`, `skipped_cadence`,
+  `skipped_disabled`, `skipped_all_paused`, `failed`) and the facts behind it. **Unauthenticated
+  calls are deliberately not logged** - auditing before the secret check would let any anonymous
+  caller fill the table. Admin → Leaderboards now leads with a plain-language **Nightly rebuild**
+  panel: when it last ran and what it did, when it next runs, and whether it will publish then or
+  skip, phrased as a sentence an operator can act on rather than a status code. The prediction is
+  computed from the same two inputs the route uses (newest active published snapshot,
+  `leaderboard_publish_cadence_hours`), because a panel that disagreed with the route would be worse
+  than none. The cron schedule lives in one module (`lib/leaderboards/cron-schedule.ts`) and a unit
+  test reads the repo-root `vercel.json` and fails if the two drift. **The 24h cadence is unchanged
+  and is correct**: a manual rebuild resets the window, so an Admin rebuild after 01:17 UTC costs that
+  night's automatic publish, and that is the intended trade. A publish appends to the immutable
+  snapshot trail, fires rank-movement notifications, and sets the beat of the vouch-to-rank feedback
+  loop; publishing twice inside eight hours would spam all three to buy a few hours of freshness. What
+  was missing was not a shorter cadence but a sentence saying when the next publish lands.
+- **Every displayed date in the app is now produced by one pinned formatter.** v1.22 fixed the two
+  date paths that were provably wrong in production but left thirteen display sites calling
+  `new Date(iso).toLocale*()` directly. The server-rendered ones (player "Member since", tournament
+  announcements, Admin audit, Admin users, Admin leaderboards, staff coach applications) formatted in
+  the **runtime's** timezone, which is UTC on Vercel, so any instant between 4:00 PM and midnight
+  Manila rendered the previous day. The client-rendered ones (notifications, the moderation queue,
+  the vouch moderation panel, the settings "last changed" note) formatted in the **viewer's**
+  timezone, so the same row could differ between the server pass and the browser pass, which is the
+  exact shape of React hydration error #418. All thirteen now call `lib/format-date.ts`, which gained
+  `formatMonthDay` ("Sep 8"), `formatMonthYear` ("September 2026") and `formatShortMonthYear`
+  ("Sep 2026") alongside the existing `formatDate` and `formatDateTime`, all pinned to `en-US` +
+  `Asia/Manila`. A unit test exercises each helper with an instant that falls on a different calendar
+  day in UTC than in Manila, so a regression to a bare formatter fails the suite instead of shipping
+  quietly. This closes the §35.5 rule stated in v1.22 rather than restating it.
 
 ## v1.22 (2026-09-09)
 

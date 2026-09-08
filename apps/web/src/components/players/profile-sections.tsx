@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { PlayerAvatar } from './player-avatar';
 import { CommentReportButton } from '@/components/safety/comment-report-button';
+import { formatDate, formatShortMonthYear } from '@/lib/format-date';
 
 /** Titled card wrapper for profile sections (handover §9). */
 export function SectionCard({
@@ -192,13 +193,7 @@ export function VouchComments({
                 ) : (
                   <span className="text-sm font-medium">{c.authorName}</span>
                 )}
-                <time className="text-foreground-muted text-xs">
-                  {new Date(c.date).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </time>
+                <time className="text-foreground-muted text-xs">{formatDate(c.date)}</time>
               </div>
               <p className="text-foreground mt-0.5 text-sm">{c.body}</p>
               {authed && (
@@ -265,12 +260,7 @@ export function PlayingHistory({
                 {HISTORY_STATUS_LABELS[h.status] ?? h.status}
               </span>
               {h.date && (
-                <p className="text-foreground-muted text-[11px]">
-                  {new Date(h.date).toLocaleDateString('en-US', {
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </p>
+                <p className="text-foreground-muted text-[11px]">{formatShortMonthYear(h.date)}</p>
               )}
             </div>
           </li>

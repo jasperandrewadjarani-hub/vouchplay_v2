@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/moderation/staff';
 import { listAuditLogs, listAuditEntityTypes, type AuditLogItem } from '@/lib/admin/audit-queries';
+import { formatDateTime } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Audit log' };
 
@@ -129,7 +130,7 @@ export default async function AuditLogPage({ searchParams }: Props) {
 }
 
 function AuditRow({ item }: { item: AuditLogItem }) {
-  const when = new Date(item.createdAt).toLocaleString();
+  const when = formatDateTime(item.createdAt);
   const hasSnapshot = item.before != null || item.after != null;
   return (
     <li className="border-border bg-surface rounded-2xl border p-3">

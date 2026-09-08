@@ -10,6 +10,7 @@ import {
 import { updateSystemSettings } from '@/lib/actions/admin-settings';
 import { SubmitButton } from '@/components/ui/button';
 import { FormError, FormMessage } from '@/components/ui/field';
+import { formatDate } from '@/lib/format-date';
 
 interface SettingMeta {
   updatedAt: string | null;
@@ -70,7 +71,7 @@ function SettingRow({
 }) {
   const changedNote =
     meta?.updatedByName && meta.updatedAt
-      ? `Last changed by ${meta.updatedByName} · ${new Date(meta.updatedAt).toLocaleDateString()}`
+      ? `Last changed by ${meta.updatedByName} · ${formatDate(meta.updatedAt)}`
       : 'Default';
 
   if (field.kind === 'bool') {

@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { SUPPORT_TICKET_CATEGORY_LABELS, type SupportTicketCategory } from '@vouchplay/config';
 import { SupportForm } from '@/components/safety/support-form';
+import { formatDate } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Support & appeals' };
 
@@ -72,12 +73,7 @@ export default async function SupportPage() {
                 <p className="text-foreground-muted mt-0.5 text-xs">
                   {SUPPORT_TICKET_CATEGORY_LABELS[t.category as SupportTicketCategory] ??
                     t.category}{' '}
-                  ·{' '}
-                  {new Date(t.created_at).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
+                  · {formatDate(t.created_at)}
                 </p>
               </li>
             ))}

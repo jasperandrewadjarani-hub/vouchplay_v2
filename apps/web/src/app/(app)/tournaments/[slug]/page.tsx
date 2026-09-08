@@ -18,7 +18,7 @@ import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
 import { demandOptions, mergeLegacyDemand } from '@/lib/tournaments/demand-options';
-import { formatDate, formatDateTime } from '@/lib/format-date';
+import { formatDate, formatDateTime, formatMonthDay } from '@/lib/format-date';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -263,10 +263,7 @@ export default async function TournamentPage({ params }: Params) {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-foreground text-sm font-semibold">{a.title}</span>
                   <time className="text-foreground-muted text-xs">
-                    {new Date(a.publishedAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+                    {formatMonthDay(a.publishedAt)}
                   </time>
                 </div>
                 <p className="text-foreground mt-0.5 text-sm whitespace-pre-wrap">{a.body}</p>

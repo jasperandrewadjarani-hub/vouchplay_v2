@@ -4,6 +4,7 @@ import { requireAdminPage } from '@/lib/moderation/staff';
 import { listCoachApplications } from '@/lib/coach/queries';
 import { loadSettingNumber } from '@/lib/settings';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { formatDate } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Coach applications' };
 
@@ -53,7 +54,7 @@ export default async function CoachApplicationsPage() {
                 </div>
                 <p className="text-foreground-muted mt-1 text-xs">
                   {item.city ?? 'City not supplied'} · {item.evidenceCount} evidence file(s) ·
-                  submitted {new Date(item.submittedAt).toLocaleDateString()}
+                  submitted {formatDate(item.submittedAt)}
                 </p>
               </div>
               <span className="text-primary flex items-center gap-2 text-sm font-semibold">

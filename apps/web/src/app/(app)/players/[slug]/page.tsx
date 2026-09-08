@@ -37,6 +37,7 @@ import {
 } from '@/lib/players/profile-extras';
 import { getContributionProgress } from '@/lib/leaderboards/queries';
 import { getVouchSettings } from '@/lib/settings';
+import { formatMonthYear } from '@/lib/format-date';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -98,10 +99,7 @@ export default async function PlayerProfilePage({ params }: Params) {
       ? { band: player.selfRatedSkill, source: 'self' as const }
       : null;
   const shareUrl = `${publicEnv.siteUrl}/players/${slug}`;
-  const memberSince = new Date(player.memberSince).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-  });
+  const memberSince = formatMonthYear(player.memberSince);
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">

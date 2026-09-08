@@ -3,12 +3,15 @@ import { requireAdminPage } from '@/lib/moderation/staff';
 import { createServiceClient } from '@/lib/supabase/service';
 import { RebuildForm, ExclusionForm, ActivateForm } from '@/components/leaderboards/action-forms';
 import { ButtonLink } from '@/components/ui/button';
+import { NightlyRebuildPanel } from '@/components/leaderboards/nightly-rebuild-panel';
+import { getCronStatus } from '@/lib/leaderboards/cron-status';
+import { formatDateTime } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Leaderboard operations' };
 export default async function AdminLeaderboardsPage() {
   await requireAdminPage('/admin/leaderboards');
   const db = createServiceClient();
-  const [{ data: runs }, { data: requests }, { data: exclusions }] = await Promise.all([
+  const [{ data: runs }, { data: requests }, { data: exclusions }, cronStatus] = await Promise.all([
     db
       .from('leaderboard_snapshot_runs')
       .select(
@@ -27,6 +30,7 @@ export default async function AdminLeaderboardsPage() {
       .eq('active', true)
       .order('created_at', { ascending: false })
       .limit(25),
+    getCronStatus(),
   ]);
   return (
     <div className="space-y-5">
@@ -41,6 +45,7 @@ export default async function AdminLeaderboardsPage() {
           Open system settings
         </ButtonLink>
       </header>
+      <NightlyRebuildPanel status={cronStatus} />
       <div className="grid gap-4 lg:grid-cols-2">
         <RebuildForm />
         <ExclusionForm />
@@ -67,9 +72,7 @@ export default async function AdminLeaderboardsPage() {
                       {r.active ? ' · ACTIVE' : ''}
                     </p>
                     <p className="text-foreground-muted text-xs">
-                      {r.published_at
-                        ? new Date(String(r.published_at)).toLocaleString()
-                        : new Date(String(r.created_at)).toLocaleString()}
+                      {formatDateTime(String(r.published_at ?? r.created_at))}
                     </p>
                   </div>
                   {!r.active && (r.status === 'published' || r.status === 'rolled_back') && (

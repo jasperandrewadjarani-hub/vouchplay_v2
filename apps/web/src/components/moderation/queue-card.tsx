@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { formatDateTime } from '@/lib/format-date';
 
 export interface MiniProfile {
   id: string;
@@ -29,15 +30,7 @@ export function QueueCard({
           {status}
         </span>
       </div>
-      <time className="text-foreground-muted text-xs">
-        {new Date(createdAt).toLocaleString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })}
-      </time>
+      <time className="text-foreground-muted text-xs">{formatDateTime(createdAt)}</time>
       {children}
     </article>
   );

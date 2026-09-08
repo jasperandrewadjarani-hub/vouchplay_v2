@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { loadActiveVouchesForTarget, invalidateVouch } from '@/lib/actions/moderation';
 import { interactionLabel } from '@/lib/vouches/interaction';
+import { formatDate } from '@/lib/format-date';
 
 interface Vouch {
   id: string;
@@ -101,11 +102,7 @@ export function VouchModerationPanel({
                 </p>
                 <p className="text-foreground-muted text-xs">
                   Rated {bandLabel(v.skillLevel)} · {interactionLabel(v.interactionType)} ·{' '}
-                  {new Date(v.createdAt).toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
+                  {formatDate(v.createdAt)}
                 </p>
                 <div className="mt-1 flex gap-2">
                   <input

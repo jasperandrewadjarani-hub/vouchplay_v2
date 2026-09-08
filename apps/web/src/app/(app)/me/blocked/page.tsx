@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { BlockControl } from '@/components/safety/block-control';
+import { formatDate } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Blocked users' };
 
@@ -83,12 +84,7 @@ export default async function BlockedPage() {
                     <span className="text-sm font-medium">{name}</span>
                   )}
                   <p className="text-foreground-muted text-xs">
-                    Blocked{' '}
-                    {new Date(b.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+                    Blocked {formatDate(b.created_at)}
                   </p>
                 </div>
                 <BlockControl

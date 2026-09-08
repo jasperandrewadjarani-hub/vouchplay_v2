@@ -1560,7 +1560,7 @@ Getting the first deploy up hit two issues:
 
 ## Next up
 
-### START HERE (state as of 2026-09-09, end of the live-launch support conversation)
+### START HERE (state as of 2026-09-09, second post-launch session)
 
 The app is **live and in use** for B-Steel Hermosa 2026 (Oct 17-18, Zamboanga City). Registration
 opened **Sep 9, 2026, 5:00 PM Manila**. Treat production as hot: every change lands in front of real
@@ -1571,24 +1571,34 @@ before shipping anything that needs a migration.
 
 Open items, highest value first:
 
-1. **Leaderboard snapshot is stale and the nightly cron is not landing.** Active snapshot is dated
-   2026-09-07 with **0 entries** on the community board, while there are now 24 scored contributors
-   and 93 active vouches. `CRON_SECRET` **is** configured (unauthenticated `GET
-   /api/cron/leaderboards` returns 401, not 503), cadence is 24h, `leaderboards_enabled=true`, and no
-   category is paused - so the cause is still unknown. **Check the Vercel cron invocation log first.**
-   An **Admin → Leaderboards → rebuild** (stepped-up AAL2 session) publishes a current snapshot on
-   demand and is independent of that investigation.
+1. **~~Leaderboard cron is not landing~~ - RESOLVED, and it was never broken.** See master_plan §1O
+   for the evidence. Every snapshot batch ever written is accounted for by two Admin rebuilds plus
+   the initial ship; the schedule has had exactly **one** opportunity to fire since `crons` was added
+   to `vercel.json` (2026-09-08 01:17 UTC), and at that moment the last publish was three hours old,
+   so the route's cadence guard correctly returned `CADENCE_NOT_DUE`. The board looked empty because
+   the Sep 7 rebuild ran before anyone had contribution rows, not because a job died. A rebuild at
+   2026-09-08 17:42 UTC published 25 community and 24 player entries and the live board is current.
+   **The real defect was that a skip left no trace**, so the only way to answer "did it run?" was the
+   Vercel dashboard. Fixed: the cron now writes one `audit_logs` row per invocation, and Admin →
+   Leaderboards leads with a plain-language "Nightly rebuild" panel saying when it last ran, what it
+   did, when it next runs, and whether it will publish or skip. **Prediction to check:** the
+   2026-09-09 01:17 UTC run skips, the 2026-09-10 01:17 UTC run publishes.
 2. **Registration CLOSE time still holds the old UTC value.** It renders `Sep 17, 2026, 1:00 AM`,
    which is the pre-fix artefact, not an intended time. The PH-time fix (§1K) means editing it in the
-   organizer form now stores correctly - it just needs Jasper's intended close time.
-3. **Controlled authenticated browser walkthrough** of
+   organizer form now stores correctly - it just needs Jasper's intended close time. **Blocked on
+   Jasper.**
+3. **~37MB of marketing assets are untracked in git** (`deliverables/`, `fb_posting_assets/`, and
+   `working/P_006b_VouchPlay_Carousel_About_FAQ_Source_(2026-09).md`). Nothing in `.gitignore`
+   excludes them, so this looks accidental rather than deliberate. **Blocked on Jasper:** commit them
+   or ignore them.
+4. **Controlled authenticated browser walkthrough** of
    `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md` - the only Phase 13.5 gate never
    evidenced. Worth doing against live now that real registrations exist.
-4. **New surfaces from 2026-09-09 have not been exercised by a real user yet:** the `observed` vouch
+5. **New surfaces from 2026-09-09 have not been exercised by a real user yet:** the `observed` vouch
    option and the peer-nominated achievement confirm/decline loop. Both are server-guarded and
    unit-covered, but neither has live usage.
-5. Carry-over: Supabase org over-quota before 21 Sep 2026; Gmail SMTP → dedicated provider before
-   public scale; `supabase gen types` → `packages/db` once the CLI/token is wired.
+6. Carry-over: Supabase org over-quota before 21 Sep 2026; Gmail SMTP -> dedicated provider before
+   public scale; `supabase gen types` -> `packages/db` once the CLI/token is wired.
 
 ### Earlier entries
 
@@ -1656,3 +1666,25 @@ Open items, highest value first:
   the central Rise of the Empires/Hermosa lockup, retained the centered tournament subtitle and date,
   removed the small right-side badge, and added a larger centered `BY` + B-STEEL badge below the date.
   Saved new `B-Steel_Centered` PNG and WebP variants; earlier versions remain available.
+
+- **2026-09-09** - **The leaderboard cron was never broken.** Reconstructed every
+  `leaderboard_snapshot_runs` row from production: three batches only, all accounted for (the initial
+  ship at 16:21 UTC Sep 7, an Admin rebuild at 22:05-22:10 UTC Sep 7, an Admin rebuild at 17:42 UTC
+  Sep 8). `crons` entered `vercel.json` at 16:39 UTC Sep 7, so the schedule has had exactly one
+  opportunity to fire, 01:17 UTC Sep 8, and the last publish was 3h06m old at that instant, so the
+  route's cadence guard returned `CADENCE_NOT_DUE` and correctly did nothing. The board looked empty
+  because the Sep 7 rebuild predated any contribution rows. The Sep 8 rebuild published 25 community
+  and 24 player entries, verified in the live SSR HTML. **The real defect: a skip left no trace, so
+  the only way to answer "did it run?" was the Vercel dashboard.** The cron now writes one
+  `audit_logs` row per authenticated invocation (`leaderboard.cron.run`, actor null, role `system`)
+  and Admin -> Leaderboards leads with a plain-language "Nightly rebuild" panel giving last run,
+  outcome, next run, and whether it will publish or skip. No migration. The 24h cadence is unchanged
+  and remains correct: a manual rebuild resetting the window is the intended trade, and the panel now
+  says so out loud. See master_plan §1O.
+
+- **2026-09-09** - **Swept the last thirteen bare date formatters** into `lib/format-date.ts`
+  (master_plan §1K follow-up). Server-rendered sites were formatting in UTC, so anything between
+  4:00 PM and midnight Manila displayed the previous day; client-rendered sites formatted in the
+  viewer's timezone, which is the shape of React hydration error #418. Added three pinned variants
+  (`formatMonthDay`, `formatMonthYear`, `formatShortMonthYear`) and a unit test that uses an instant
+  falling on a different calendar day in UTC than in Manila, so a regression fails the suite.

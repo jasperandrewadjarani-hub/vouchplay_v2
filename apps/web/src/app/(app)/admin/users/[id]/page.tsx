@@ -7,6 +7,7 @@ import { getUserAdminDetail } from '@/lib/admin/user-queries';
 import { nameInitials } from '@/lib/storage';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { UserAdminPanel } from '@/components/admin/user-admin-panel';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'User detail' };
 
@@ -15,7 +16,7 @@ interface Props {
 }
 
 function fmt(iso: string | null): string | null {
-  return iso ? new Date(iso).toLocaleString() : null;
+  return iso ? formatDateTime(iso) : null;
 }
 
 /** Admin user detail + actions (handover §30.1, §30.2). */
@@ -53,7 +54,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
             </p>
             <p className="text-foreground-muted text-xs">
               Status: <span className="text-foreground font-medium">{user.accountStatus}</span>
-              {' · '}Joined {new Date(user.createdAt).toLocaleDateString()}
+              {' · '}Joined {formatDate(user.createdAt)}
               {!user.onboarded && ' · not onboarded'}
             </p>
           </div>
@@ -135,9 +136,7 @@ export default async function AdminUserDetailPage({ params }: Props) {
                   >
                     {h.status}
                   </span>
-                  <span className="text-foreground-muted ml-auto">
-                    {new Date(h.createdAt).toLocaleDateString()}
-                  </span>
+                  <span className="text-foreground-muted ml-auto">{formatDate(h.createdAt)}</span>
                 </div>
                 {h.reason && <p className="text-foreground-muted mt-0.5">{h.reason}</p>}
               </li>

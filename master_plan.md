@@ -298,6 +298,23 @@ Two live corrections requested by Jasper.
   `toLocale*`, and never pin app copy to `timeZone: 'UTC'`. That combination produces both silent
   day-shifts and React hydration error #418.
 
+### Follow-up sweep: the last bare formatters (2026-09-09)
+
+- The §1K fix corrected the two paths that were provably wrong in production, but thirteen display
+  sites still called `new Date(iso).toLocale*()` directly. Server-rendered ones (player "Member
+  since", tournament announcements, the Admin audit, users, leaderboards and staff pages) formatted
+  in the **runtime's** timezone, which is UTC on Vercel, so any instant between 4:00 PM and midnight
+  Manila showed the previous day. Client-rendered ones (notifications, the moderation queue, the
+  vouch moderation panel, the settings "last changed" note) formatted in the **viewer's** timezone,
+  so the same row could render differently on the server and in the browser - the exact shape of
+  hydration error #418.
+- All thirteen now go through `lib/format-date.ts`, which gained three pinned variants alongside the
+  existing two: `formatMonthDay` ("Sep 8"), `formatMonthYear` ("September 2026") and
+  `formatShortMonthYear` ("Sep 2026"). Every displayed date in the app is therefore produced by one
+  module pinned to `en-US` + `Asia/Manila`.
+- A unit test asserts each helper against an instant that falls on a different calendar day in UTC
+  than in Manila, so a regression to a bare formatter fails the suite rather than shipping quietly.
+
 ## 1L. Vouch context, peer achievements, and leaderboard clarity (2026-09-09, post-launch)
 
 **Status: shipped.** Migration 0024 applied 2026-09-09 (`vouch_interaction_observed=1`,
@@ -408,6 +425,67 @@ to jump. One shared `components/ui/pagination.tsx` now serves Players and Clubs:
   nothing to its left can reflow.
 - The detailed card's player name also shows a spinner now, matching the "View profile" link below it,
   since the name is the other thing people tap on that card.
+
+## 1O. The nightly leaderboard rebuild explains itself (2026-09-09, post-launch)
+
+### The cron was never broken
+
+The open item read "the nightly cron is not landing". The database says otherwise. Every
+`leaderboard_snapshot_runs` row ever written falls into three batches, and all three are accounted
+for:
+
+| Batch (UTC) | What it was |
+| --- | --- |
+| 2026-09-07 16:21 | the initial ship of the leaderboards feature |
+| 2026-09-07 22:05 to 22:10 | Admin rebuild, reason "Controlled production public leaderboard verification" |
+| 2026-09-08 17:42 | Admin rebuild, reason "Need leaderboards" |
+
+The `crons` entry was added to `vercel.json` in commit `a850d27` at **2026-09-07 16:39 UTC**, so the
+schedule has had exactly **one** opportunity to fire since it existed: 2026-09-08 01:17 UTC. At that
+instant the most recent publish was 2026-09-07 22:10:41 UTC, **three hours and six minutes earlier**.
+The route's own cadence guard therefore returned `CADENCE_NOT_DUE` and correctly did nothing.
+
+There is no failure to explain. The board looked empty because the Sep 7 rebuild ran before the
+community had contribution rows to rank, not because a job died. The 2026-09-08 17:42 rebuild
+published 25 community and 24 player entries, and the live board has been current since.
+
+**A skip leaves no trace anywhere.** That is the actual defect: the only way to tell "the job ran and
+correctly did nothing" from "the job never ran" was the Vercel invocation log, outside the app, behind
+a dashboard login. A whole session went into a bug that did not exist.
+
+### What was built instead
+
+- **Every authenticated cron invocation now writes one `audit_logs` row** (`leaderboard.cron.run`,
+  actor `null`, role `system`) recording its outcome: `published`, `skipped_cadence`,
+  `skipped_disabled`, `skipped_all_paused` or `failed`, plus the facts behind it. No migration:
+  `audit_logs` already accepts a null actor, and it is append-only, so the trail cannot be edited.
+- **Unauthenticated calls are never logged.** Writing an audit row before the secret check would let
+  any anonymous caller fill the table. The audit starts after authorization, which is also where the
+  interesting outcomes are.
+- **Admin → Leaderboards leads with a plain-language "Nightly rebuild" panel**, above the controls:
+  when it last ran and what it did, when it next runs, and whether it will publish then or skip. It
+  states the reason in words a non-technical operator can act on ("the boards were published 7 hours
+  ago and the cadence is 24 hours, so tonight's run will skip"), not a status code.
+- **The panel predicts, it does not guess.** "Will publish" versus "will skip" is computed from the
+  same two inputs the route uses: the newest active published snapshot and
+  `leaderboard_publish_cadence_hours`. If the panel and the route ever disagreed, the panel would be
+  worse than nothing.
+- **The schedule lives in one place and is drift-tested.** `lib/leaderboards/cron-schedule.ts` holds
+  the UTC hour and minute; a unit test reads the repo-root `vercel.json` and fails if the two ever
+  diverge, so the panel cannot advertise a run time the platform is not using.
+
+### The 24h cadence stays as it is
+
+A manual rebuild resets the cadence window, so an Admin rebuild after 01:17 UTC costs that night's
+automatic publish and the boards publish the following night instead. **That is correct behaviour, not
+a bug to fix.** A publish appends to the immutable snapshot audit trail, fires rank-movement
+notifications, and is the beat of the vouch-to-rank feedback loop. Publishing twice inside eight hours
+would spam all three to save a few hours of freshness. The panel now says plainly when the next
+publish lands, which was the only thing actually missing.
+
+**Concrete prediction, recorded so it can be checked:** the last publish was 2026-09-08 17:42 UTC, so
+the 2026-09-09 01:17 UTC run will skip (7h35m elapsed) and the 2026-09-10 01:17 UTC run will publish
+(31h35m elapsed). After that the panel answers the question without anyone reading a log.
 
 ## 1. Prompt Contract
 
