@@ -1245,6 +1245,10 @@ Getting the first deploy up hit two issues:
     pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
 
 ## Next up
+- **Apply migration 0019 before demand launch:** Jasper runs `scripts/apply-0019.sql` against
+  `itrosesiywpbaxtmucbb` and returns `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and
+  `demand_direct_policies=0`. Run direct anon/auth RLS denial checks afterwards; only then is
+  anonymous planning interest live. The estimate is intentionally not registration or a slot.
 - **Apply migration 0018:** Jasper runs `scripts/apply-0018.sql` against
   `itrosesiywpbaxtmucbb`, returns `unknown_dob_optional=1` and `leaderboard_setting_row=1`, then
   triggers a leaderboard rebuild. Until then, the existing production setting retains conservative

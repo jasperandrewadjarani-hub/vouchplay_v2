@@ -2,9 +2,9 @@
 
 **Status:** Ready for scoped planning; do not implement until Jasper confirms the selected slice.  
 **Predecessor:** Phase 13C Coach Flow, 13A Community Contribution, and 13D Home Leaderboards are
-production-verified. Phase 13 maintenance refinement 0018 is committed but requires Jasper to apply
-`scripts/apply-0018.sql` and return its two verification counts before optional-DOB leaderboard rows
-can publish in production.
+production-verified. Maintenance refinements 0018 and 0019 are committed but require Jasper to apply
+their exact SQL Editor scripts and return verification counts before optional-DOB leaderboard rows or
+the privacy-safe tournament demand flow can be considered live.
 
 ## What is already live
 
@@ -13,6 +13,10 @@ can publish in production.
 - `CONTRIB_V1`, privacy-safe `LEADER_V1` Players/Community Champions/Clubs snapshots, private
   momentum, opt-out, Admin controls, and a gated empty Most Bidded adapter.
 - Mobile resume recovery and detailed/compact Player directory views.
+- Staged (pending 0019): planning-only tournament demand by standard division, anonymous-browser
+  HMAC identity (not fingerprinting), aggregate breakdown/public-profile avatar stack, a dedicated
+  audited `/admin/clubs` view, dark-first default, and action-first Home hierarchy. Interest never
+  reserves a slot or becomes recruitment consent.
 
 ## Recommended Phase 14 objective
 
@@ -65,3 +69,10 @@ Choose one:
 - Run `npm run typecheck`, `npm run lint`, `npm run test`, `npm run format:check`, and `npm run build`.
 - Jasper applies migrations in the Supabase SQL Editor and returns exact verification counts. Commit,
   push `main`, wait for Vercel Ready, and verify both production domains over HTTP and in a browser.
+
+## Pre-Phase-14 operational prerequisite
+
+- Apply `scripts/apply-0018.sql` and `scripts/apply-0019.sql` in order. Expected 0019 values are
+  `demand_settings=3`, `demand_table=1`, `demand_rpcs=2`, and `demand_direct_policies=0`. Then run
+  the direct anon/auth/service RLS abuse check for `tournament_demand_interests` before enabling a
+  public launch tournament.

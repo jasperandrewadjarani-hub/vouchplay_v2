@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Star } from 'lucide-react';
-import { toggleInterest } from '@/lib/actions/tournament';
+import { TOURNAMENT_DEMAND_DIVISIONS } from '@vouchplay/core';
+import { submitTournamentDemandInterest } from '@/lib/actions/tournament';
+import { Modal } from '@/components/ui/modal';
 
 const btn =
   'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all focus-visible:outline-2 focus-visible:outline-offset-2';
 
-/** "I'm interested" toggle for a tournament (handover §36.22). Anonymous → signup with resume. */
+/** Demand is collected before it is counted and never creates a registration or a slot. */
 export function InterestButton({
   tournamentId,
   slug,
@@ -22,39 +24,115 @@ export function InterestButton({
   interested: boolean;
 }) {
   const router = useRouter();
-  const [on, setOn] = useState(interested);
+  const [open, setOpen] = useState(false);
+  const [division, setDivision] = useState('');
+  const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
-
-  if (!authed) {
-    return (
-      <Link
-        href={`/signup?next=${encodeURIComponent(`/tournaments/${slug}`)}`}
-        className={`${btn} border-border text-foreground hover:bg-surface-muted border`}
-      >
-        <Star size={16} aria-hidden />
-        I&apos;m interested
-      </Link>
-    );
-  }
-
+  const submit = () => {
+    if (!division) return setMessage('Choose the division you would be most interested in.');
+    start(async () => {
+      const result = await submitTournamentDemandInterest(tournamentId, slug, division);
+      if (result.error) return setMessage(result.error);
+      setMessage(result.message ?? 'Your interest has been counted.');
+      router.refresh();
+    });
+  };
+  const complete = message?.startsWith('Your interest');
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        start(async () => {
-          const res = await toggleInterest(tournamentId, slug, null);
-          if (res.ok) {
-            setOn((v) => !v);
-            router.refresh();
-          }
-        })
-      }
-      className={`${btn} border disabled:opacity-60 ${on ? 'border-primary text-primary bg-primary/10' : 'border-border text-foreground hover:bg-surface-muted'}`}
-      aria-pressed={on}
-    >
-      <Star size={16} aria-hidden className={on ? 'fill-current' : ''} />
-      {on ? 'Interested' : "I'm interested"}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setMessage(null);
+          setOpen(true);
+        }}
+        className={`${btn} border ${interested ? 'border-primary bg-primary/10 text-primary' : 'border-border text-foreground hover:bg-surface-muted'}`}
+      >
+        <Star size={16} aria-hidden className={interested ? 'fill-current' : ''} />
+        {interested ? 'Update interest' : "I'm interested"}
+      </button>
+      {open && (
+        <Modal
+          title={complete ? 'Interest recorded' : 'Tell us what you would play'}
+          subtitle="A planning signal only—not registration, eligibility, or a reserved tournament slot."
+          onClose={() => setOpen(false)}
+        >
+          {complete ? (
+            <div className="space-y-4">
+              <p className="text-foreground text-sm">{message}</p>
+              {!authed && (
+                <div className="border-primary/30 bg-primary/5 space-y-3 rounded-xl border p-3">
+                  <p className="text-foreground text-sm font-medium">
+                    Be ready when registration opens
+                  </p>
+                  <p className="text-foreground-muted text-xs">
+                    Create a profile or club now. This does not hold a slot.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      href={`/signup?next=${encodeURIComponent(`/tournaments/${slug}`)}`}
+                      className="vp-gradient rounded-lg px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Create profile
+                    </Link>
+                    <Link
+                      href={`/signup?next=${encodeURIComponent('/clubs/new')}`}
+                      className="border-border text-foreground rounded-lg border px-3 py-2 text-xs font-semibold"
+                    >
+                      Create a club
+                    </Link>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="border-border text-foreground w-full rounded-xl border px-4 py-2.5 text-sm font-semibold"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-foreground text-sm font-medium">
+                  Most interested division
+                </span>
+                <select
+                  value={division}
+                  onChange={(event) => setDivision(event.target.value)}
+                  disabled={pending}
+                  className="border-border bg-surface text-foreground mt-1.5 w-full rounded-xl border px-3 py-2.5 text-sm"
+                >
+                  <option value="">Select a division</option>
+                  {TOURNAMENT_DEMAND_DIVISIONS.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-foreground-muted text-xs">
+                No account is needed. We use a privacy-preserving browser token to limit duplicate
+                interest; clearing browser data may create another estimate.
+              </p>
+              {message && (
+                <p role="alert" className="text-danger text-sm">
+                  {message}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={submit}
+                disabled={pending}
+                className="vp-gradient w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {pending ? 'Saving interest…' : 'Count my interest'}
+              </button>
+            </div>
+          )}
+        </Modal>
+      )}
+    </>
   );
 }

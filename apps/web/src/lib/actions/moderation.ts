@@ -393,6 +393,7 @@ export async function verifyClub(
     return { error: 'Moderation action failed. Please try again.' };
   }
   revalidatePath('/staff/moderation');
+  revalidatePath('/admin/clubs');
   return { ok: true, message: 'Club verification updated.' };
 }
 
@@ -436,6 +437,7 @@ export async function setClubModerationStatus(
     return { error: 'Moderation action failed. Please try again.' };
   }
   revalidatePath('/staff/moderation');
+  revalidatePath('/admin/clubs');
   return { ok: true, message: 'Club status updated.' };
 }
 

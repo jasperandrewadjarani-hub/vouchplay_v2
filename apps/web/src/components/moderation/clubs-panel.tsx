@@ -26,7 +26,7 @@ export function ClubsPanel({ items }: { items: ClubItem[] }) {
   if (items.length === 0)
     return (
       <p className="text-foreground-muted border-border bg-surface rounded-2xl border p-6 text-center text-sm">
-        No clubs awaiting review.
+        No clubs match this view.
       </p>
     );
   return (

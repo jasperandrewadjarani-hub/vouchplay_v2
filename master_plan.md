@@ -1,5 +1,40 @@
 # VouchPlay v2 — Leaderboard, Resilience, Directory, and Media-Normalization Plan
 
+> **Addendum v1.13 — Tournament demand signal, Club Administration, and dark-first Home.** This
+> addendum is an approved extension of the active hardening plan. It deliberately does **not** turn
+> interest into registration, a reserved slot, eligibility, or a marketing-consent list.
+
+## 1A. Tournament demand-signal contract
+
+- A public, published or registration-open tournament may collect one expression of interest per
+  signed-in player or per anonymous browser. The anonymous path uses a random, HTTP-only first-party
+  cookie whose HMAC is stored; it never fingerprints a device, stores the raw token, or collects PII.
+  Cookie clearing/new browsers can produce a new count, so the UI calls this an *interest estimate*,
+  never a verified unique-player total.
+- The visitor selects a demand taxonomy before the count is recorded: Beginner, Novice, Low
+  Intermediate, High Intermediate, or Advanced × Men’s/Women’s/Mixed, plus 50+ Men’s/Women’s/Mixed.
+  This taxonomy informs planning only; it does not create a tournament division or determine skill,
+  age, eligibility, registration priority, or a slot.
+- Public detail shows an aggregate count, a capped overlapping stack of only public signed-in profile
+  avatars, and an accessible division-count dialog. Anonymous interest is intentionally never
+  identifiable. The dialog shows aggregate counts, not names or per-division identities.
+- After a successful anonymous response, the user may create an account, complete a profile, or
+  create/join a club for when registration opens. Copy must state plainly that no slot is held.
+- A new private-RLS table, SECURITY DEFINER write RPC, HMAC cookie, status validation, bounded daily
+  anonymous limit, explicit Admin settings, audit-safe aggregate read, and cache invalidation protect
+  the flow. Direct anon/auth table access and RPC execution remain denied.
+
+## 1B. Administration and home UX
+
+- `/admin/clubs` is a discoverable AAL2 Admin surface for every non-deleted club, with verification
+  and activity controls reusing the existing audited Staff actions. It complements, rather than
+  weakens, the focused Staff moderation queue.
+- Home leads with the three concise Discover Players → Build Trust → Play More cards, then Community
+  Leaderboards. Leaderboard cards use a trophy/medal visual cue while retaining text labels; supporting
+  copy is shortened.
+- Dark is the first-render default independent of OS preference. The existing explicit Light/Dark
+  choice remains available; a prior user choice is respected.
+
 ## 1. Prompt Contract
 
 ### In scope

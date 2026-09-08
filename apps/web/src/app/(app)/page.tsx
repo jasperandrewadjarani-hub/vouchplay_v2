@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Users, ShieldCheck, Trophy } from 'lucide-react';
+import { Users, ShieldCheck, Trophy, Medal } from 'lucide-react';
 import { BRAND } from '@vouchplay/config';
 import { getOptionalUser } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui/button';
@@ -47,8 +47,7 @@ export default async function HomePage() {
           actually play with.
         </h1>
         <p className="text-foreground-muted mt-3 max-w-xl text-sm sm:text-base">
-          Skill reputation built by real community vouches - not self-declaration. Find players,
-          build a trusted profile, and give organizers the evidence to run fair tournaments.
+          Find players, build trusted profiles, and play more.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <ButtonLink href="/players" className="px-5 py-3">
@@ -66,17 +65,39 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* What you can do — lead with action, then show proof and momentum. */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FeatureCard
+          icon={<Users size={20} aria-hidden />}
+          title="Discover players"
+          body="Find people to play with by skill, city, and role."
+        />
+        <FeatureCard
+          icon={<ShieldCheck size={20} aria-hidden />}
+          title="Build trust"
+          body="Share real vouches from players and coaches who know your game."
+        />
+        <FeatureCard
+          icon={<Trophy size={20} aria-hidden />}
+          title="Play more"
+          body="Join clubs and register for tournaments when they open."
+        />
+      </section>
+
       {settings.enabled && (
         <section className="space-y-5" aria-labelledby="home-rankings-title">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="vp-label text-primary">Verified momentum</p>
-              <h2 id="home-rankings-title" className="text-foreground text-2xl font-extrabold">
+              <h2
+                id="home-rankings-title"
+                className="text-foreground flex items-center gap-2 text-2xl font-extrabold"
+              >
+                <Trophy className="text-primary" size={22} aria-hidden />
                 Community leaderboards
               </h2>
               <p className="text-foreground-muted mt-1 max-w-2xl text-sm">
-                Deterministic snapshots that reward verified participation and genuine community
-                support—not raw STS, favorable ratings, or spam.
+                Participation and genuine support—not raw STS, ratings, or volume.
               </p>
             </div>
             <ButtonLink href="/leaderboards" variant="secondary">
@@ -85,50 +106,40 @@ export default async function HomePage() {
           </div>
           {user && <MomentumCard rows={momentum} />}
           <div className="space-y-5">
-            <LeaderboardPanel
-              board={players.board}
-              error={players.error}
-              category="players"
-              paused={settings.paused.players}
-              compact
-            />
-            <LeaderboardPanel
-              board={community.board}
-              error={community.error}
-              category="community"
-              paused={settings.paused.community}
-              compact
-            />
-            <LeaderboardPanel
-              board={clubs.board}
-              error={clubs.error}
-              category="clubs"
-              paused={settings.paused.clubs}
-              compact
-            />
+            <div className="relative">
+              <Medal className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
+              <LeaderboardPanel
+                board={players.board}
+                error={players.error}
+                category="players"
+                paused={settings.paused.players}
+                compact
+              />
+            </div>
+            <div className="relative">
+              <Medal className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
+              <LeaderboardPanel
+                board={community.board}
+                error={community.error}
+                category="community"
+                paused={settings.paused.community}
+                compact
+              />
+            </div>
+            <div className="relative">
+              <Trophy className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
+              <LeaderboardPanel
+                board={clubs.board}
+                error={clubs.error}
+                category="clubs"
+                paused={settings.paused.clubs}
+                compact
+              />
+            </div>
           </div>
           <RankingsExplanation />
         </section>
       )}
-
-      {/* What you can do */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <FeatureCard
-          icon={<Users size={20} aria-hidden />}
-          title="Discover players"
-          body="Search the directory by skill, city and role. Every profile is backed by community vouches."
-        />
-        <FeatureCard
-          icon={<ShieldCheck size={20} aria-hidden />}
-          title="Build trust"
-          body="Get vouched by players and coaches. Your Community Skill and Skill-Trust Score grow with real evidence."
-        />
-        <FeatureCard
-          icon={<Trophy size={20} aria-hidden />}
-          title="Play more"
-          body="Join clubs, find partners, and register for tournaments with a profile organizers can trust."
-        />
-      </section>
 
       <footer className="border-border mt-2 border-t pt-5 text-center">
         <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">

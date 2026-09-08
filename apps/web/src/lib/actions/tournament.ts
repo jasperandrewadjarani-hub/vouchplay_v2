@@ -2,6 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { revalidateTag } from 'next/cache';
+import { cookies } from 'next/headers';
+import { createHmac, randomBytes } from 'node:crypto';
 import {
   tournamentCreateSchema,
   tournamentUpdateSchema,
@@ -11,6 +13,7 @@ import {
 import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
 import {
   buildDefaultDivisionPreset,
+  isTournamentDemandDivision,
   isManageableTournamentStatus,
   tournamentArchiveNameMatches,
 } from '@vouchplay/core';
@@ -27,7 +30,7 @@ import {
 } from '@/lib/tournaments/queries';
 import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentParticipantIds } from '@/lib/notifications/recipients';
-import { loadSettingNumber } from '@/lib/settings';
+import { loadSettingFlag, loadSettingNumber } from '@/lib/settings';
 import { prepareTournamentCover } from '@/lib/tournaments/cover-image';
 
 export interface TournamentActionState {
@@ -645,6 +648,86 @@ export async function toggleInterest(
     return { ok: true, message: "You're marked as interested." };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+const DEMAND_COOKIE = 'vp_tournament_interest_v1';
+
+function hashAnonymousDemand(raw: string): string | null {
+  const secret =
+    process.env.TOURNAMENT_INTEREST_COOKIE_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return secret
+    ? createHmac('sha256', secret).update(`tournament-demand:v1:${raw}`).digest('hex')
+    : null;
+}
+
+/** Planning-only demand signal. Anonymous identity is an HMAC of a random HTTP-only browser cookie. */
+export async function submitTournamentDemandInterest(
+  tournamentId: string,
+  slug: string,
+  divisionKey: string,
+): Promise<TournamentActionState> {
+  if (!isTournamentDemandDivision(divisionKey))
+    return { error: 'Choose one of the listed divisions.' };
+  if (!(await loadSettingFlag('tournament_demand_interest_enabled', false))) {
+    return { error: 'Tournament interest is not available right now.' };
+  }
+  try {
+    const svc = createServiceClient();
+    const { data: tournament } = await svc
+      .from('tournaments')
+      .select('id, status, visibility')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (
+      !tournament ||
+      !['published', 'registration_open'].includes((tournament as { status: string }).status) ||
+      (tournament as { visibility: string }).visibility !== 'public'
+    ) {
+      return { error: 'Interest is only available for a public upcoming tournament.' };
+    }
+    const user = await getOptionalUser();
+    let anonymousHash: string | null = null;
+    if (!user) {
+      const store = await cookies();
+      let raw = store.get(DEMAND_COOKIE)?.value;
+      if (!raw || !/^[A-Za-z0-9_-]{32,128}$/.test(raw)) {
+        raw = randomBytes(32).toString('base64url');
+        store.set(DEMAND_COOKIE, raw, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/',
+          maxAge: 60 * 60 * 24 * 365,
+        });
+      }
+      anonymousHash = hashAnonymousDemand(raw);
+      if (!anonymousHash)
+        return { error: 'Interest is temporarily unavailable. Please try again later.' };
+      const limit = await loadSettingNumber('tournament_demand_anonymous_daily_limit', 12);
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count } = await svc
+        .from('tournament_demand_interests')
+        .select('id', { count: 'exact', head: true })
+        .eq('anonymous_key_hash', anonymousHash)
+        .gte('created_at', since);
+      if ((count ?? 0) >= limit)
+        return { error: 'You have reached today’s interest limit. Please try again tomorrow.' };
+    }
+    const { error } = await svc.rpc('submit_tournament_demand_interest', {
+      p_tournament_id: tournamentId,
+      p_player_id: user?.id ?? null,
+      p_anonymous_key_hash: anonymousHash,
+      p_division_key: divisionKey,
+    });
+    if (error) return { error: 'Could not record your interest. Please try again.' };
+    invalidate(slug, tournamentId);
+    return {
+      ok: true,
+      message: 'Your interest has been counted. This is not registration or a reserved slot.',
+    };
+  } catch {
+    return { error: 'Interest is temporarily unavailable. Please try again shortly.' };
   }
 }
 

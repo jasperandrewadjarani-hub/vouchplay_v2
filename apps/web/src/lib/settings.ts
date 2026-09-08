@@ -147,6 +147,11 @@ export async function getVouchSettings(): Promise<VouchSettings> {
   };
 }
 
+/** Tournament planning interest is fail-closed until migration 0019 seeds its explicit flag. */
+export async function getTournamentDemandSettings(): Promise<{ enabled: boolean }> {
+  return { enabled: await loadSettingFlag('tournament_demand_interest_enabled', false) };
+}
+
 export async function getContributionSettings(): Promise<{
   enabled: boolean;
   activeVersion: string;

@@ -1,6 +1,6 @@
-# VouchPlay Master Product & Code Execution Handover v1.12
+# VouchPlay Master Product & Code Execution Handover v1.13
 
-_(File retains its `…v1.1.md` name; content is v1.12 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.13 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -71,6 +71,17 @@ pilot (not a dedicated provider - §34A.11), behind the `EmailProvider` interfac
 
 **Ops flags:** Supabase org is **over-quota** (projects restricted from 21 Sep 2026 if not cleared);
 Google consent screen shows the Supabase project domain (cosmetic; needs paid custom domain to rebrand).
+
+**Pilot demand signal + Admin Clubs + home hierarchy: staged (migration 0019 pending Jasper SQL
+Editor application).** Interest is a planning signal only: a user chooses a standard demand division
+before one signed-in-player or privacy-minimized anonymous-browser interest is recorded. Anonymous
+interest uses a random first-party HTTP-only cookie represented in storage only by an HMAC; it is not
+device fingerprinting and cookie resets can raise the estimate. Public detail shows aggregate counts,
+public opted-in signed-in avatar stack only, and an aggregate per-division dialog—never anonymous or
+per-division identity. It never creates registration, a reservation, eligibility, a real tournament
+division, or marketing consent. `/admin/clubs` adds a discoverable AAL2 Admin management surface while
+keeping existing Staff actions/audit controls. Home now leads with concise action cards before rankings;
+dark is the OS-independent default (while an explicit user choice remains respected).
 
 **Phase 3 - Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
 STS components, Skill-Verified, effective weights) - pure/deterministic, 11 unit tests incl.
@@ -6543,6 +6554,15 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.13 (2026-09-08)
+- **Tournament demand signal:** locked one-interest-per-player/browser, pre-count standard demand
+  division selection, privacy-minimized anonymous token design, aggregate-only public breakdown,
+  public-profile-only avatar stack, abuse limits, Admin settings, and explicit no-registration/no-slot
+  wording. The feature awaits migration 0019 verification before it is considered live.
+- **Club administration and dark-first home:** specified a dedicated audited AAL2 Admin club surface,
+  Discover → Trust → Play-first home hierarchy with accessible trophy/medal cues, reduced copy, and a
+  dark default independent of the device setting.
 
 ## v1.12 (2026-09-08)
 - **Storage normalization:** locked server-side decoding, MIME-content matching, orientation, metadata

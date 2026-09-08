@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Trophy,
+  Building2,
 } from 'lucide-react';
 import { requireAdminPage } from '@/lib/moderation/staff';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -36,6 +37,12 @@ export default async function AdminHome() {
       label: 'Users & roles',
       desc: 'Search, inspect, grant roles, account actions.',
       icon: Users,
+    },
+    {
+      href: '/admin/clubs',
+      label: 'Club administration',
+      desc: 'Verify, unverify, suspend, and reinstate clubs.',
+      icon: Building2,
     },
     {
       href: '/admin/analytics',

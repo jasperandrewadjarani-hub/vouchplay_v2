@@ -14,13 +14,66 @@ import {
   type TournamentViewer,
   type OrganizerDTO,
   type AnnouncementDTO,
+  type TournamentDemandDTO,
 } from './dto';
+import { avatarUrl } from '@/lib/storage';
+import { loadSettingNumber } from '@/lib/settings';
 
 export const TOURNAMENTS_LIST_TAG = 'tournaments:list';
 export const tournamentTag = (slug: string) => `tournament:${slug}`;
 export const tournamentDivisionsTag = (id: string) => `tournament-divisions:${id}`;
 export const tournamentAnnouncementsTag = (id: string) => `tournament-announcements:${id}`;
 export const PAGE_SIZE = 24;
+
+async function getDemandSummary(tournamentId: string): Promise<TournamentDemandDTO> {
+  const fallback: TournamentDemandDTO = { total: 0, divisions: {}, avatars: [] };
+  try {
+    const svc = createServiceClient();
+    const avatarLimit = await loadSettingNumber('tournament_demand_public_avatar_limit', 5);
+    const { data, error } = await svc.rpc('get_tournament_demand_summary', {
+      p_tournament_id: tournamentId,
+      p_avatar_limit: avatarLimit,
+    });
+    if (error || !data || typeof data !== 'object') throw new Error('summary unavailable');
+    const raw = data as {
+      total?: number;
+      divisions?: Array<{ key?: string; count?: number }>;
+      avatars?: Array<{
+        id?: string;
+        name?: string;
+        slug?: string | null;
+        avatarPath?: string | null;
+      }>;
+    };
+    return {
+      total: Number.isFinite(Number(raw.total)) ? Number(raw.total) : 0,
+      divisions: Object.fromEntries(
+        (raw.divisions ?? [])
+          .filter((row) => typeof row.key === 'string' && Number.isFinite(Number(row.count)))
+          .map((row) => [row.key as string, Number(row.count)]),
+      ),
+      avatars: (raw.avatars ?? [])
+        .filter((row) => typeof row.id === 'string' && typeof row.name === 'string')
+        .map((row) => ({
+          id: row.id as string,
+          name: row.name as string,
+          slug: row.slug ?? null,
+          avatarUrl: avatarUrl(row.avatarPath),
+        })),
+    };
+  } catch {
+    // Before 0019 is applied, retain the existing authenticated-interest count without failing detail.
+    try {
+      const { count } = await createServiceClient()
+        .from('tournament_interests')
+        .select('id', { count: 'exact', head: true })
+        .eq('tournament_id', tournamentId);
+      return { ...fallback, total: count ?? 0 };
+    } catch {
+      return fallback;
+    }
+  }
+}
 
 // Statuses shown in public discovery (§19). Draft/archived/cancelled excluded.
 const DISCOVERABLE: TournamentStatus[] = [
@@ -244,22 +297,29 @@ export async function getTournamentBySlug(
         .limit(50),
     ]);
 
-    const svc = createServiceClient();
-    const { count: interestedCount } = await svc
-      .from('tournament_interests')
-      .select('id', { count: 'exact', head: true })
-      .eq('tournament_id', row.id);
+    const demand = await getDemandSummary(row.id);
 
     let myInterest = false;
     if (viewer.viewerId) {
-      const { data: mine } = await supabase
-        .from('tournament_interests')
-        .select('id')
-        .eq('tournament_id', row.id)
-        .eq('player_id', viewer.viewerId)
-        .is('division_id', null)
-        .maybeSingle();
-      myInterest = !!mine;
+      try {
+        const { data: mine, error } = await createServiceClient()
+          .from('tournament_demand_interests')
+          .select('id')
+          .eq('tournament_id', row.id)
+          .eq('player_id', viewer.viewerId)
+          .maybeSingle();
+        if (error) throw error;
+        myInterest = !!mine;
+      } catch {
+        const { data: mine } = await supabase
+          .from('tournament_interests')
+          .select('id')
+          .eq('tournament_id', row.id)
+          .eq('player_id', viewer.viewerId)
+          .is('division_id', null)
+          .maybeSingle();
+        myInterest = !!mine;
+      }
     }
 
     const orgRows = (orgRes.data ?? []) as Array<{
@@ -324,8 +384,9 @@ export async function getTournamentBySlug(
       divisions: ((divRes.data ?? []) as unknown as DivisionRow[]).map(toDivisionDTO),
       organizers,
       announcements,
-      interestedCount: interestedCount ?? 0,
+      interestedCount: demand.total,
       myInterest,
+      demand,
       isOwner,
       canManage: isOwner || isCo || viewer.isStaff,
     };

@@ -252,14 +252,20 @@ export interface ClubModerationItem {
 
 /** Clubs needing verification review (§15.2). Staff-only (page-guarded). */
 export async function listClubsForModeration(): Promise<ClubModerationItem[]> {
+  return listClubsForAdministration(false);
+}
+
+/** All non-deleted clubs for the AAL2 Admin control centre; Staff keeps the focused queue. */
+export async function listClubsForAdministration(includeAll = true): Promise<ClubModerationItem[]> {
   const svc = createServiceClient();
-  const { data } = await svc
+  let query = svc
     .from('clubs')
     .select('id, slug, name, city, verification_status, activity_status, created_by, created_at')
     .neq('activity_status', 'deleted')
-    .or('verification_status.eq.pending,activity_status.eq.suspended')
     .order('created_at', { ascending: false })
     .limit(200);
+  if (!includeAll) query = query.or('verification_status.eq.pending,activity_status.eq.suspended');
+  const { data } = await query;
   const rows = (data ?? []) as Array<{
     id: string;
     slug: string;

@@ -65,6 +65,19 @@ export interface AnnouncementDTO {
   publishedAt: string;
 }
 
+export interface TournamentDemandAvatarDTO {
+  id: string;
+  name: string;
+  slug: string | null;
+  avatarUrl: string | null;
+}
+
+export interface TournamentDemandDTO {
+  total: number;
+  divisions: Record<string, number>;
+  avatars: TournamentDemandAvatarDTO[];
+}
+
 export interface TournamentDetailDTO extends TournamentCardDTO {
   id: string;
   description: string | null;
@@ -86,6 +99,7 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   announcements: AnnouncementDTO[];
   interestedCount: number;
   myInterest: boolean;
+  demand: TournamentDemandDTO;
   isOwner: boolean;
   canManage: boolean;
 }

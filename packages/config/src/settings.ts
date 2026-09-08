@@ -32,6 +32,11 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   default_division_capacity_teams: 20,
   club_representation_required: false,
   verified_clubs_only: false,
+  // Tournament planning demand (not registration, eligibility, or a slot).
+  // Fail closed until migration 0019 has seeded the explicit live setting.
+  tournament_demand_interest_enabled: false,
+  tournament_demand_anonymous_daily_limit: 12,
+  tournament_demand_public_avatar_limit: 5,
 
   // Slot & payment timing (handover §23.1, §24).
   slot_hold_minutes: 30,

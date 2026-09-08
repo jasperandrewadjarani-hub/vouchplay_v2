@@ -277,6 +277,31 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     kind: 'bool',
   },
   { key: 'verified_clubs_only', label: 'Verified clubs only', group: 'tournament', kind: 'bool' },
+  {
+    key: 'tournament_demand_interest_enabled',
+    label: 'Tournament demand interest enabled',
+    group: 'tournament',
+    kind: 'bool',
+    help: 'Planning signal only. It never registers a player or holds a slot.',
+  },
+  {
+    key: 'tournament_demand_anonymous_daily_limit',
+    label: 'Anonymous demand interests / 24h',
+    group: 'tournament',
+    kind: 'int',
+    min: 1,
+    max: 100,
+    help: 'Per privacy-preserving browser token; cookie resets can create a new estimate.',
+  },
+  {
+    key: 'tournament_demand_public_avatar_limit',
+    label: 'Public demand avatar limit',
+    group: 'tournament',
+    kind: 'int',
+    min: 0,
+    max: 12,
+    help: 'Only public signed-in profiles may appear; anonymous interest is never identifiable.',
+  },
 
   // Timing
   {

@@ -5,8 +5,8 @@ import { useTheme } from 'next-themes';
 import { Sun, Moon } from 'lucide-react';
 
 /**
- * Light/Dark toggle. The initial theme is "system" (set on the provider), but this control switches
- * explicitly between light and dark based on what's currently showing. Icon-only.
+ * Light/Dark toggle. The provider starts in deterministic dark mode, while this control preserves an
+ * explicit user choice between light and dark. Icon-only.
  */
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();

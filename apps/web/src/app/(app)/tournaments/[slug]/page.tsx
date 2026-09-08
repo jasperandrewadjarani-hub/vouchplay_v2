@@ -1,20 +1,21 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Users, Settings, ExternalLink, ClipboardCheck } from 'lucide-react';
+import { MapPin, CalendarDays, Settings, ExternalLink, ClipboardCheck } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
 import { getViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { publicEnv } from '@/lib/env';
 import { ShareButton } from '@/components/players/share-button';
 import { InterestButton } from '@/components/tournaments/interest-button';
+import { TournamentDemandSummary } from '@/components/tournaments/demand-summary';
 import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { RegistrationPanel } from '@/components/tournaments/registration-panel';
 import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
-import { getEligibilitySettings } from '@/lib/settings';
+import { getEligibilitySettings, getTournamentDemandSettings } from '@/lib/settings';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -58,6 +59,7 @@ export default async function TournamentPage({ params }: Params) {
   const viewer = await getViewerContext();
   const t = await getTournamentBySlug(slug, { viewerId: viewer.viewerId, isStaff: viewer.isStaff });
   if (!t) notFound();
+  const demandSettings = await getTournamentDemandSettings();
 
   const authed = viewer.viewerId !== null;
   const isOpen = t.status === 'registration_open';
@@ -108,10 +110,6 @@ export default async function TournamentPage({ params }: Params) {
                 {start}
               </span>
             )}
-            <span className="inline-flex items-center gap-1">
-              <Users size={14} aria-hidden />
-              {t.interestedCount} interested
-            </span>
           </div>
           <p className="text-foreground-muted text-xs">
             Organized by{' '}
@@ -127,12 +125,14 @@ export default async function TournamentPage({ params }: Params) {
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <RegisterButton slug={slug} authed={authed} open={isOpen} />
-            <InterestButton
-              tournamentId={t.id}
-              slug={slug}
-              authed={authed}
-              interested={t.myInterest}
-            />
+            {demandSettings.enabled && (
+              <InterestButton
+                tournamentId={t.id}
+                slug={slug}
+                authed={authed}
+                interested={t.myInterest}
+              />
+            )}
             <ShareButton
               url={shareUrl}
               title={`${t.name} on VouchPlay`}
@@ -149,6 +149,7 @@ export default async function TournamentPage({ params }: Params) {
               </Link>
             )}
           </div>
+          <TournamentDemandSummary demand={t.demand} />
         </div>
       </header>
 
