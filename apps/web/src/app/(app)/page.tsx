@@ -43,11 +43,11 @@ export default async function HomePage() {
         <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
         <p className="vp-label text-primary mb-3">Community-verified skill</p>
         <h1 className="text-foreground max-w-2xl text-3xl leading-tight font-extrabold tracking-tight sm:text-4xl">
-          Your game, <span className="vp-gradient-text">vouched for</span> by the players you
-          actually play with.
+          Your game, <span className="vp-gradient-text">vouched for</span> by the players you play
+          with.
         </h1>
         <p className="text-foreground-muted mt-3 max-w-xl text-sm sm:text-base">
-          Find players, build trusted profiles, and play more.
+          Find players, build a trusted profile, climb the leaderboards, and play more.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <ButtonLink href="/players" className="px-5 py-3">

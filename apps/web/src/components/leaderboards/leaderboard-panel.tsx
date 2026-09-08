@@ -48,10 +48,7 @@ export function LeaderboardPanel({
         <h2 id={emptyId} className="text-foreground font-semibold">
           {title}
         </h2>
-        <p className="text-foreground-muted mt-2 text-sm">
-          No published snapshot yet. Rankings appear after enough verified activity is safely
-          processed.
-        </p>
+        <p className="text-foreground-muted mt-2 text-sm">No rankings yet.</p>
       </section>
     );
   }
@@ -70,8 +67,8 @@ export function LeaderboardPanel({
           <h2 id={`board-${board.category}`} className="text-foreground text-xl font-bold">
             {title}
           </h2>
-          <p className="text-foreground-muted mt-1 text-xs">
-            {board.period.replace('_', ' ')} · {board.scoringVersion}
+          <p className="text-foreground-muted mt-1 text-xs capitalize">
+            {board.period.replace('_', ' ')}
           </p>
         </div>
         <span className="flex flex-wrap gap-2">
@@ -95,10 +92,7 @@ export function LeaderboardPanel({
       </header>
       {board.entries.length === 0 ? (
         <div className="p-5">
-          <p className="text-foreground-muted text-sm">
-            No eligible activity in this scope and period yet. Private momentum may still be
-            available.
-          </p>
+          <p className="text-foreground-muted text-sm">No rankings yet.</p>
         </div>
       ) : (
         <>
@@ -159,7 +153,7 @@ export function LeaderboardPanel({
       )}
       <footer className="border-border bg-surface-muted flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs">
         <span className="text-foreground-muted">
-          Published {new Date(board.publishedAt).toLocaleDateString()} · no raw STS ranking
+          Published {new Date(board.publishedAt).toLocaleDateString()}
         </span>
         <span className="flex flex-wrap items-center gap-3">
           <Link

@@ -1300,6 +1300,28 @@ Getting the first deploy up hit two issues:
     same-division rejection, club edit before/after lock + reasoned override, My registrations
     expansion) - these need real sessions and are the remaining definition-of-done evidence.
 
+- **2026-09-08** - **Phase 13.5 UI/UX follow-up pass (after Jasper review).** No migration; pure UI,
+  copy, and one new organizer control. See `working/P_006b_Phase13_5_Walkthrough_(2026-09).md` for
+  detail.
+  - Built the missing **club representation override UI** (`getClubOverrideParticipants` +
+    `ClubOverrideControl`, collapsed section on the manage page). The override action already existed;
+    now it has a trigger. The manual test script's override step is no longer blocked.
+  - **Registration IA rebuilt:** one collapsed **My registrations (N)** manager (entries + payment +
+    cancel/move + change-partner) plus one always-present, collapsed **Divisions (N)** browser where a
+    signed-in player can register into any division. This fixes "can't register in other divisions
+    once I have an entry / no register buttons appear." Deleted `RegistrationPanel`, `DivisionList`,
+    and `MyRegistrationsSummary`.
+  - **Progressive help text:** new `InfoDisclosure` "i" control; change-partner, skill-mismatch, and
+    leave-team guidance moved behind a tap; removed the "Other divisions stay collapsed" line.
+  - **Home/leaderboard copy de-cluttered:** dropped `LEADER_V1`, the "no raw STS ranking" footer, and
+    the wordy empty-state text; empty boards read "No rankings yet." New hero: "Your game, vouched for
+    by the players you play with." / "Find players, build a trusted profile, climb the leaderboards,
+    and play more."
+  - None of these are deferred to a later phase; all are this-slice UI/UX and copy polish and touch no
+    ranking algorithm, eligibility, CSL/STS, vouch weight, or payment-state logic. Gates green:
+    typecheck, lint, tests (web 30, config 19, core 95), format, build (42 pages). Signed-out browser
+    QA of Home and a tournament page clean.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

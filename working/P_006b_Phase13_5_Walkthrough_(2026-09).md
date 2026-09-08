@@ -82,6 +82,47 @@ controlled authenticated browser verification. No SQL migration to apply this sl
   rejection; club edit before/after lock plus reasoned organizer/Admin override; My registrations
   expansion and per-entry actions.
 
+## UI/UX follow-up pass (2026-09-08, after Jasper review)
+
+Requested changes after the first production release. All shipped in the same phase.
+
+1. **Club representation override control (built the missing UI).** The override action existed
+   server-side but had no trigger. Added `getClubOverrideParticipants` (bounded per-player: current
+   clubs + selectable active-membership clubs) and a `ClubOverrideControl` in a collapsed
+   "Club representation override" section on the manage page. Organizer/Admin picks a player, sets
+   clubs, gives a required reason, and the audited action writes the override.
+2. **Register in other divisions when you already have an entry.** Root cause: when a tournament was
+   not `registration_open`, the old panel showed only your registered division and a read-only
+   division list with no register buttons; even when open, registration lived in a separate panel.
+   Replaced with a single always-present, collapsed **Divisions (N)** browser where every division
+   expands to its facts and the correct register action for a signed-in player, so a player with one
+   entry can enter more divisions. Divisions you already hold link back to My registrations.
+3. **Merged "Your entries and divisions" into "My registrations".** There is now one collapsed
+   "My registrations (N)" manager (entries, status, payment, cancel/move, change-partner) plus the
+   separate Divisions browser. The old `RegistrationPanel`, `DivisionList`, and
+   `MyRegistrationsSummary` components were deleted.
+4. **Progressive help text.** New reusable `InfoDisclosure` ("i" control). Change-partner guidance,
+   the skill-mismatch note, and the leave-team control are now behind a tap instead of always-on
+   blocks. Removed the "Other divisions stay collapsed until you open them" helper text.
+5. **Home / leaderboard copy de-cluttered.** Removed the `LEADER_V1` scoring-version tag, the
+   "no raw STS ranking" footer line, and the wordy "No eligible activity in this scope and period
+   yet. Private momentum may still be available." Empty boards now read simply "No rankings yet."
+6. **Home hero copy.** Headline is now "Your game, vouched for by the players you play with." and the
+   subtext "Find players, build a trusted profile, climb the leaderboards, and play more."
+
+Not deferred to a later phase: every item above is UI/UX and copy polish that belongs to this
+hardening slice. None touch Phase 14 (Recruitment, Sponsorship, Bidding) scope, and none change any
+ranking algorithm, eligibility, CSL/STS, vouch weight, or payment-state logic.
+
+New/changed files: `apps/web/src/components/ui/info-disclosure.tsx`,
+`apps/web/src/components/tournaments/my-registrations.tsx`,
+`apps/web/src/components/tournaments/division-browser.tsx`,
+`apps/web/src/components/tournaments/club-override-control.tsx`,
+`apps/web/src/lib/tournaments/registration-queries.ts` (`getClubOverrideParticipants`),
+`apps/web/src/app/(app)/tournaments/[slug]/page.tsx` and `.../manage/page.tsx`,
+`apps/web/src/components/leaderboards/leaderboard-panel.tsx`, `apps/web/src/app/(app)/page.tsx`.
+Deleted: `registration-panel.tsx`, `division-list.tsx`, `my-registrations-summary.tsx`.
+
 ## Key files
 
 - `apps/web/src/lib/tournaments/dto.ts`, `queries.ts` - detail columns + gated `paymentQrUrl`,

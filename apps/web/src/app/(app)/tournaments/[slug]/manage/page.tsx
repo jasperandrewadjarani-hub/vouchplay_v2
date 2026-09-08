@@ -3,7 +3,11 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
-import { getOrganizerRegistrations } from '@/lib/tournaments/registration-queries';
+import {
+  getOrganizerRegistrations,
+  getClubOverrideParticipants,
+} from '@/lib/tournaments/registration-queries';
+import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
@@ -35,7 +39,10 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t) notFound();
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
-  const registrations = await getOrganizerRegistrations(t.id);
+  const [registrations, clubOverrideParticipants] = await Promise.all([
+    getOrganizerRegistrations(t.id),
+    getClubOverrideParticipants(t.id),
+  ]);
   const overview = computeOverview(
     registrations.map((r) => ({
       divisionId: r.divisionId,
@@ -127,6 +134,19 @@ export default async function ManageTournamentPage({ params }: Params) {
         <h2 className="text-foreground mb-3 text-base font-semibold">Announcements</h2>
         <AnnouncementForm tournamentId={t.id} slug={slug} />
       </section>
+
+      <details className="border-border bg-surface rounded-2xl border p-5">
+        <summary className="text-foreground cursor-pointer text-base font-semibold">
+          Club representation override
+        </summary>
+        <div className="mt-3">
+          <ClubOverrideControl
+            tournamentId={t.id}
+            participants={clubOverrideParticipants}
+            maxClubs={t.maxClubsPerPlayer}
+          />
+        </div>
+      </details>
 
       {t.isOwner && (
         <section className="border-border bg-surface rounded-2xl border p-5">

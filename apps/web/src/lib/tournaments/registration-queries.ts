@@ -498,3 +498,92 @@ export async function getPartnerCandidates(
       avatarUrl: avatarUrl(p.avatar_path),
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Club representation override data (handover Phase 13.5) - organizer/Admin post-lock corrections.
+// ---------------------------------------------------------------------------
+export interface ClubOverrideParticipant {
+  playerId: string;
+  name: string;
+  currentClubIds: string[];
+  selectableClubs: EligibleClub[];
+}
+
+/**
+ * Bounded per-player club data for the organizer override control. Lists each distinct player with
+ * a registration in the tournament, their current representations, and the clubs they may be set to
+ * (their active memberships plus any club they currently represent, so the organizer can also remove
+ * one). Read-only aggregate; the actual write goes through the audited override action.
+ */
+export async function getClubOverrideParticipants(
+  tournamentId: string,
+): Promise<ClubOverrideParticipant[]> {
+  const svc = createServiceClient();
+  const { data: regs } = await svc
+    .from('registrations')
+    .select('team_id')
+    .eq('tournament_id', tournamentId)
+    .not('status', 'in', '(withdrawn,cancelled,rejected)')
+    .limit(1000);
+  const teamIds = Array.from(
+    new Set(((regs ?? []) as { team_id: string }[]).map((r) => r.team_id)),
+  );
+  if (teamIds.length === 0) return [];
+
+  const { data: memberRows } = await svc
+    .from('team_members')
+    .select('player_id')
+    .in('team_id', teamIds);
+  const playerIds = Array.from(
+    new Set(((memberRows ?? []) as { player_id: string }[]).map((m) => m.player_id)),
+  );
+  if (playerIds.length === 0) return [];
+
+  const [{ data: repRows }, { data: memRows }, profiles] = await Promise.all([
+    svc
+      .from('tournament_player_club_representations')
+      .select('player_id, club_id, display_order')
+      .eq('tournament_id', tournamentId)
+      .in('player_id', playerIds),
+    svc
+      .from('club_memberships')
+      .select('user_id, club_id')
+      .eq('status', 'active')
+      .in('user_id', playerIds),
+    resolve(playerIds),
+  ]);
+
+  const reps = (repRows ?? []) as { player_id: string; club_id: string; display_order: number }[];
+  const mems = (memRows ?? []) as { user_id: string; club_id: string }[];
+  const allClubIds = Array.from(
+    new Set([...reps.map((r) => r.club_id), ...mems.map((m) => m.club_id)]),
+  );
+  const clubNames = new Map<string, string>();
+  if (allClubIds.length > 0) {
+    const { data: clubs } = await svc.from('clubs').select('id, name').in('id', allClubIds);
+    for (const c of (clubs ?? []) as { id: string; name: string }[]) clubNames.set(c.id, c.name);
+  }
+
+  return playerIds
+    .map((playerId) => {
+      const current = reps
+        .filter((r) => r.player_id === playerId)
+        .sort((a, b) => a.display_order - b.display_order);
+      const selectableIds = Array.from(
+        new Set([
+          ...current.map((r) => r.club_id),
+          ...mems.filter((m) => m.user_id === playerId).map((m) => m.club_id),
+        ]),
+      );
+      return {
+        playerId,
+        name: profiles.get(playerId)?.name ?? 'VouchPlay player',
+        currentClubIds: current.map((r) => r.club_id),
+        selectableClubs: selectableIds.map((clubId) => ({
+          clubId,
+          name: clubNames.get(clubId) ?? 'Club',
+        })),
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

@@ -9,18 +9,14 @@ import { publicEnv } from '@/lib/env';
 import { ShareButton } from '@/components/players/share-button';
 import { InterestButton } from '@/components/tournaments/interest-button';
 import { TournamentDemandSummary } from '@/components/tournaments/demand-summary';
-import { DivisionList } from '@/components/tournaments/division-list';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
-import { RegistrationPanel } from '@/components/tournaments/registration-panel';
-import { MyRegistrationsSummary } from '@/components/tournaments/my-registrations-summary';
+import { MyRegistrations } from '@/components/tournaments/my-registrations';
+import { DivisionBrowser } from '@/components/tournaments/division-browser';
+import { ClubRepSelector } from '@/components/tournaments/club-rep-selector';
 import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
-import {
-  getEligibilitySettings,
-  getTournamentDemandSettings,
-  hasPlayerRegistrationChangePolicy,
-} from '@/lib/settings';
+import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -69,13 +65,12 @@ export default async function TournamentPage({ params }: Params) {
   const authed = viewer.viewerId !== null;
   const isOpen = t.status === 'registration_open';
   const registerable = isOpen || t.status === 'published';
-  const [regState, eligibilitySettings, playerChangesConfigured] = authed
+  const [regState, playerChangesConfigured] = authed
     ? await Promise.all([
         getViewerRegistrationState(t.id, viewer.viewerId as string),
-        getEligibilitySettings(),
         hasPlayerRegistrationChangePolicy(),
       ])
-    : [null, null, false];
+    : [null, false];
   // Shareable link that lands on the registration options (§28.1) when registration is relevant.
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
@@ -158,34 +153,50 @@ export default async function TournamentPage({ params }: Params) {
         </div>
       </header>
 
-      {/* Default-collapsed summary of the player's own active entries, immediately after details. */}
-      {authed && regState && <MyRegistrationsSummary state={regState} divisions={t.divisions} />}
-
-      {/* Existing registration leads the signed-in player journey; shared links still target this id. */}
+      {/* My registrations: collapsed manager of the player's own active entries, after details. */}
       {authed && regState && (
-        <div id="register" className="scroll-mt-24">
-          <RegistrationPanel
-            tournamentId={t.id}
-            maxClubsPerPlayer={t.maxClubsPerPlayer}
-            paymentInstructions={t.paymentInstructions}
-            paymentMethods={t.paymentMethods}
-            divisions={t.divisions}
-            state={regState}
-            eligibilityThresholds={eligibilitySettings!.thresholds}
-            registrationOpen={isOpen}
-            playerChangesConfigured={playerChangesConfigured}
-          />
-        </div>
+        <MyRegistrations
+          tournamentId={t.id}
+          divisions={t.divisions}
+          state={regState}
+          registrationOpen={isOpen}
+          playerChangesConfigured={playerChangesConfigured}
+          paymentInstructions={t.paymentInstructions}
+          paymentMethods={t.paymentMethods}
+        />
       )}
 
-      {!(isOpen && authed && regState) && (
-        <section className="border-border bg-surface rounded-2xl border p-4">
-          <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
-          <DivisionList divisions={t.divisions} />
-        </section>
+      {/* Division browser: collapsed by default; registers a signed-in player into any division. */}
+      <div id={authed ? 'register' : undefined} className="scroll-mt-24">
+        <DivisionBrowser
+          tournamentId={t.id}
+          divisions={t.divisions}
+          state={regState}
+          registrationOpen={isOpen}
+          authed={authed}
+          signInHref={loginToRegister}
+        />
+      </div>
+
+      {/* Clubs you represent: collapsed, independent of division/team (handover §22). */}
+      {authed && regState && (
+        <details className="border-border bg-surface rounded-2xl border">
+          <summary className="text-foreground flex cursor-pointer list-none items-center gap-2 p-4 text-base font-semibold">
+            Clubs you represent
+            <span className="text-foreground-muted ml-auto text-xs font-normal">Show</span>
+          </summary>
+          <div className="border-border border-t p-4">
+            <ClubRepSelector
+              tournamentId={t.id}
+              eligibleClubs={regState.eligibleClubs}
+              selected={regState.clubReps.map((r) => r.clubId)}
+              max={t.maxClubsPerPlayer}
+            />
+          </div>
+        </details>
       )}
 
-      {/* Registration - the shared ?register=1 link scrolls here (handover §19.2, §19.3, §28.1). */}
+      {/* Anon register prompt - the shared ?register=1 link scrolls here (§19.2, §19.3, §28.1). */}
       {!authed && (
         <div id="register" className="scroll-mt-24">
           <section className="border-primary/30 bg-primary/5 rounded-2xl border p-4">
