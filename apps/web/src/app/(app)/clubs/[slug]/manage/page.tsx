@@ -3,9 +3,12 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getViewerContext } from '@/lib/auth';
 import { getClubBySlug, getClubMembers } from '@/lib/clubs/queries';
+import { getClubOffers, getResponsesForClub } from '@/lib/offers/queries';
 import { ClubSettingsForm } from '@/components/clubs/club-settings-form';
 import { ClubMembersManager } from '@/components/clubs/club-members-manager';
 import { ClubDangerZone } from '@/components/clubs/club-danger-zone';
+import { OfferCreateForm } from '@/components/offers/offer-create-form';
+import { ClubOffersManager } from '@/components/offers/club-offers-manager';
 
 export const metadata: Metadata = { title: 'Manage club' };
 
@@ -23,6 +26,10 @@ export default async function ManageClubPage({ params }: Params) {
   if (!club.canManage) redirect(`/clubs/${slug}`);
 
   const members = await getClubMembers(club.id);
+  const offers = club.verified ? await getClubOffers(club.id) : [];
+  const responsesByOffer = club.verified
+    ? Object.fromEntries(await getResponsesForClub(club.id))
+    : {};
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
@@ -55,6 +62,30 @@ export default async function ManageClubPage({ params }: Params) {
             logoUrl: club.logoUrl,
           }}
         />
+      </section>
+
+      <section className="border-border bg-surface rounded-2xl border p-5">
+        <h2 className="text-foreground mb-1 text-base font-semibold">Opportunities</h2>
+        <p className="text-foreground-muted mb-3 text-xs">
+          Publish recruitment or sponsorship offers for players to respond to.
+        </p>
+        {club.verified ? (
+          <div className="space-y-4">
+            <details className="border-border rounded-xl border p-3">
+              <summary className="text-foreground cursor-pointer text-sm font-semibold">
+                New offer
+              </summary>
+              <div className="mt-3">
+                <OfferCreateForm clubId={club.id} />
+              </div>
+            </details>
+            <ClubOffersManager offers={offers} responsesByOffer={responsesByOffer} />
+          </div>
+        ) : (
+          <p className="text-foreground-muted text-sm">
+            Your club must be verified before you can publish offers.
+          </p>
+        )}
       </section>
 
       {club.isOwner && (

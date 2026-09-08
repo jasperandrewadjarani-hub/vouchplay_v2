@@ -10,3 +10,4 @@ export * from './club';
 export * from './tournament';
 export * from './payment';
 export * from './coach';
+export * from './offer';

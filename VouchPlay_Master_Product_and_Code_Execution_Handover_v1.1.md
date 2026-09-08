@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.17
+# VouchPlay Master Product & Code Execution Handover v1.18
 
-_(File retains its `…v1.1.md` name; content is v1.17 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.18 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,22 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.18 (2026-09-08)
+- **Phase 14A Recruitment / Sponsorship foundation (implemented; needs migration 0023 to activate).**
+  Verified, active clubs publish controlled offers (recruitment or sponsorship); players opt in
+  (reusing the existing `profiles.open_for_sponsorship` flag), browse relevance-sorted open offers,
+  and respond; clubs review responses (accept/decline). All writes are service-role and server
+  authorized, reads are RLS-scoped (only open, non-expired offers from verified active clubs are
+  public; responses are visible only to the responding player, the offer's club managers, and staff),
+  actions are rate-limited and audited, and there is a `recruitment_enabled` master switch. Offer
+  lifecycle and targeting are pure, versioned, unit-tested modules; targeting is advisory only and
+  never blocks a response. **Offers never influence CSL, STS, Skill Verified, vouch weight, tournament
+  eligibility, contribution, or any leaderboard.** No bidding (§16A), no offer-based leaderboards, no
+  payment, no scraped contacts, no mass outreach. Migration 0023 adds `club_offers` and
+  `club_offer_responses` with RLS plus the recruitment settings; apply `scripts/apply-0023.sql`
+  (expect `club_offer_tables=2`, `club_offer_rls_policies=2`, `recruitment_settings=4`), then run
+  `scripts/phase14a-abuse.mjs`.
 
 ## v1.17 (2026-09-08)
 - **Organizer global division rules (implemented; needs migration 0022 to activate).** Three

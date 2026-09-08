@@ -873,6 +873,31 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     kind: 'bool',
   },
   { key: 'club_creation_enabled', label: 'Club creation enabled', group: 'flags', kind: 'bool' },
+  { key: 'recruitment_enabled', label: 'Club offers enabled', group: 'flags', kind: 'bool' },
+  {
+    key: 'club_offers_per_24h',
+    label: 'Club offers / 24h',
+    group: 'safety',
+    kind: 'int',
+    min: 0,
+    max: 1000,
+  },
+  {
+    key: 'offer_responses_per_24h',
+    label: 'Offer responses / 24h',
+    group: 'safety',
+    kind: 'int',
+    min: 0,
+    max: 1000,
+  },
+  {
+    key: 'offer_default_expiry_days',
+    label: 'Offer expiry (days)',
+    group: 'safety',
+    kind: 'int',
+    min: 1,
+    max: 180,
+  },
 
   // Announcement banner
   {

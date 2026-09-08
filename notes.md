@@ -1343,6 +1343,25 @@ Getting the first deploy up hit two issues:
   `working/P_006b_Phase13_5_Walkthrough_(2026-09).md`.
 - **Apply migration 0022 to activate organizer rules:** Jasper runs `scripts/apply-0022.sql` against
   `itrosesiywpbaxtmucbb` and returns `tournament_rule_columns=3`. Until then the rules are dormant.
+  ✅ APPLIED 2026-09-08 (`tournament_rule_columns=3`); organizer rules live, both domains verified.
+
+- **2026-09-08** - **Phase 14A Recruitment/Sponsorship IMPLEMENTED (needs migration 0023 to activate).**
+  Jasper chose 14A only (no bidding). Verified, active clubs publish recruitment/sponsorship offers;
+  players opt in (reusing `profiles.open_for_sponsorship`) and respond; clubs accept/decline. All
+  server-authorized, RLS-protected, rate-limited (`club_offers_per_24h`, `offer_responses_per_24h`),
+  audited, with a `recruitment_enabled` master switch and `offer_default_expiry_days`. Pure lifecycle
+  + advisory targeting in `@vouchplay/core` (offers never touch CSL/STS/eligibility/leaderboards).
+  New: migration `0023_club_offers.sql` + `scripts/apply-0023.sql` (2 tables + 2 RLS policies + 4
+  settings), `packages/core/src/offers/*`, `packages/validation/src/offer.ts`,
+  `apps/web/src/lib/offers/queries.ts`, `apps/web/src/lib/actions/offer.ts`, offer notification types,
+  club manage "Opportunities" section, `/opportunities` player browse with opt-in, Clubs-page entry
+  link, `scripts/phase14a-abuse.mjs`. Code deploys safely dormant until 0023 (missing tables return
+  empty). Gates green: typecheck, lint, tests (web 30, config 19, core 110), format, build (43 pages).
+  Plan: `working/P_006b_Phase14A_RecruitmentSponsorship_Plan_(2026-09).md`.
+- **Apply migration 0023 to activate 14A:** Jasper runs `scripts/apply-0023.sql` against
+  `itrosesiywpbaxtmucbb` and returns `club_offer_tables=2`, `club_offer_rls_policies=2`,
+  `recruitment_settings=4`. Then run `node scripts/phase14a-abuse.mjs` (expect all pass) before
+  claiming the surface live.
 
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No

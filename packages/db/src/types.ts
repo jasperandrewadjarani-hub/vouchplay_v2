@@ -320,6 +320,41 @@ export interface ClubMembershipRow {
   ended_at: string | null;
 }
 
+// ---------- Club offers - recruitment / sponsorship (migration 0023) ----------
+export type ClubOfferType = 'recruitment' | 'sponsorship';
+export type ClubOfferStatus = 'draft' | 'open' | 'closed' | 'expired' | 'cancelled';
+export type ClubOfferResponseStatus = 'submitted' | 'accepted' | 'declined' | 'withdrawn';
+
+export interface ClubOfferRow {
+  id: string;
+  club_id: string;
+  type: ClubOfferType;
+  title: string;
+  description: string | null;
+  city: string | null;
+  min_skill: number | null;
+  max_skill: number | null;
+  status: ClubOfferStatus;
+  published_at: string | null;
+  expires_at: string | null;
+  closed_reason: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClubOfferResponseRow {
+  id: string;
+  offer_id: string;
+  player_id: string;
+  status: ClubOfferResponseStatus;
+  message: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------- Tournaments (migration 0007) ----------
 export type TournamentStatus =
   | 'draft'

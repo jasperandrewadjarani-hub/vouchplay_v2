@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, Megaphone } from 'lucide-react';
 import { listClubs, type ClubFilters } from '@/lib/clubs/queries';
 import { getOptionalUser } from '@/lib/auth';
 import { ClubCard } from '@/components/clubs/club-card';
@@ -52,14 +52,24 @@ export default async function ClubsPage({ searchParams }: { searchParams: Promis
           </h1>
           <p className="text-foreground-muted text-sm">Find your community and represent it.</p>
         </div>
-        <Link
-          href={user ? '/clubs/new' : '/signup?next=/clubs/new'}
-          className="vp-gradient vp-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-        >
-          <Plus size={16} aria-hidden />
-          Create club
-          <LinkSpinner size={16} />
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/opportunities"
+            className="border-border text-foreground hover:bg-surface-muted inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"
+          >
+            <Megaphone size={16} aria-hidden />
+            Opportunities
+            <LinkSpinner size={16} />
+          </Link>
+          <Link
+            href={user ? '/clubs/new' : '/signup?next=/clubs/new'}
+            className="vp-gradient vp-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            <Plus size={16} aria-hidden />
+            Create club
+            <LinkSpinner size={16} />
+          </Link>
+        </div>
       </div>
 
       <InstantFilterForm

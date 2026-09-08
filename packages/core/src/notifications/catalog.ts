@@ -24,6 +24,7 @@ export interface NotificationParams {
   tournamentName?: string;
   divisionName?: string;
   clubName?: string;
+  offerTitle?: string;
   reason?: string;
   outcome?: string; // 'approved' | 'rejected' etc.
   extra?: string;
@@ -179,6 +180,26 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     'clubs',
     false,
     (p) => `Your request to join ${p.clubName ?? 'the club'} wasn't accepted`,
+  ),
+
+  // --- Club offers / recruitment (§16, Phase 14A) ---
+  offer_response_received: t(
+    'clubs',
+    false,
+    (p) => `${who(p)} responded to ${p.offerTitle ?? 'your offer'}`,
+    (p) => (p.clubName ? `For ${p.clubName}.` : undefined),
+  ),
+  offer_response_accepted: t(
+    'clubs',
+    false,
+    (p) => `${p.clubName ?? 'A club'} accepted your response`,
+    (p) => (p.offerTitle ? `For ${p.offerTitle}.` : undefined),
+  ),
+  offer_response_declined: t(
+    'clubs',
+    false,
+    (p) => `${p.clubName ?? 'A club'} responded to your interest`,
+    (p) => (p.offerTitle ? `For ${p.offerTitle}.` : undefined),
   ),
 
   // --- Achievements (§9.4, §27.1) ---

@@ -65,6 +65,12 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   coach_applications_enabled: true,
   club_creation_enabled: true,
 
+  // Club offers - recruitment / sponsorship (handover §16, Phase 14A). 0 = unlimited where noted.
+  recruitment_enabled: true,
+  club_offers_per_24h: 10,
+  offer_responses_per_24h: 20,
+  offer_default_expiry_days: 30,
+
   // Coach application operations (handover §4.4, Phase 13C).
   coach_application_review_sla_days: 7,
   coach_evidence_max_files: 5,
