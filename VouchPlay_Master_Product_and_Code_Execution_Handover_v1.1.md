@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.14
+# VouchPlay Master Product & Code Execution Handover v1.16
 
-_(File retains its `…v1.1.md` name; content is v1.14 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.16 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -95,12 +95,24 @@ for organizers; private managed records are opt-in and default-hide draft, cance
 Payment QR is a private signed image for the existing manual proof-and-review workflow, not a gateway
 or payment confirmation.
 
-**Registration-first refinement: staged (migration 0021 pending Jasper SQL Editor application).**
+**Registration-first refinement: live (migration 0021 applied and verified on 2026-09-08).**
 Signed-in players see an existing entry immediately after tournament details. Tournament cards show
 separate interest and joining counts plus a text-and-icon viewer cue. Divisions stay collapsed until
 opened. Player cancellation and division changes are bounded, auditable, and payment-safe; a partner
 is never replaced unilaterally after registration. Co-organizer eligibility uses an existence check,
 so multiple qualifying roles do not trigger a false rejection.
+
+**Next execution slice: tournament reliability and registration flexibility, planned only.** Before
+Phase 14 work, reproduce and correct the organizer Payment QR save/disappear failure and the
+long-idle browser client error. Preserve private normalized QR storage, manual proof-and-review, and
+the bounded mobile resume model. Make the existing tournament-wide club representation lock usable by
+organizers: players may update their eligible representation after payment or confirmation until the
+single all-divisions deadline, with reasoned organizer/Admin override only after lock. Restore the
+locked multiple-entry rule for distinct divisions while blocking duplicate active same-division teams.
+Make **My registrations (N)** collapsed by default and audit Home copy for concise canonical wording.
+This slice does not add a payment gateway, recruiting, sponsorship, bidding, or partner-matching
+recommendations. Its full handover is
+`docs/PHASE_13_5_TOURNAMENT_RELIABILITY_AND_REGISTRATION_FLEXIBILITY_HANDOVER.md`.
 
 **Phase 3 - Vouch Engine: ✅ DONE (live).** STS_V1 in `@vouchplay/core` (weighted-median CSL,
 STS components, Skill-Verified, effective weights) - pure/deterministic, 11 unit tests incl.
@@ -6140,6 +6152,16 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.16 (2026-09-08)
+- **Next-phase reliability and flexibility contract:** plans controlled diagnosis of private Payment
+  QR persistence and long-idle browser recovery; locks organizer-wide club-representation editing
+  through the existing deadline model; restores distinct-division multiple entries with strict
+  same-division prevention; makes My registrations collapsed by default; and requires concise,
+  canonical Home copy. No implementation is included in this documentation-only revision.
+- **Migration status:** migration 0021 is applied and verified with
+  `registration_change_settings=2`, `registration_change_functions=4`, and
+  `card_engagement_function=1`.
 
 ## v1.15 (2026-09-08)
 - **Registration-first tournament management:** active entries lead the signed-in player flow;

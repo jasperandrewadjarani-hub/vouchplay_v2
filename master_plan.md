@@ -1,8 +1,13 @@
-# VouchPlay v2 - Leaderboard, Resilience, Directory, and Media-Normalization Plan
+# VouchPlay v2 - Leaderboard, Resilience, Directory, Media-Normalization, and Tournament Reliability Plan
 
 > **Addendum v1.13 - Tournament demand signal, Club Administration, and dark-first Home.** This
 > addendum is an approved extension of the active hardening plan. It deliberately does **not** turn
 > interest into registration, a reserved slot, eligibility, or a marketing-consent list.
+
+> **Addendum v1.16 - Next-phase tournament reliability, registration flexibility, and copy review.**
+> This is a planning-only addendum. No application code, schema change, or production behavior is
+> changed by this document update. It is the required starting scope for the next implementation
+> conversation, before Phase 14 Recruitment, Sponsorship, or Gamified Bidding.
 
 ## 1A. Tournament demand-signal contract
 
@@ -85,6 +90,71 @@
 - The organizer picker accepts only active approved Organizer, Admin, or Super Admin accounts. The
   server uses an existence check rather than a single-row assumption, so an account holding more
   than one qualifying role is not falsely rejected.
+
+## 1E. Next phase: tournament reliability and registration flexibility
+
+- **Payment QR reliability:** reproduce the organizer save failure against a controlled tournament
+  before changing code. First verify migration 0020 and the `payment_qr_path` column, then trace the
+  form payload, normalization, private Storage upload, database update, cache invalidation, and
+  reload. A successful replacement must upload the new private object first, update the row only
+  after that succeeds, retain the prior QR if any later step fails, and remove an orphaned new object
+  best-effort. The organizer receives a specific actionable error, never a false success or a
+  disappearing QR. The player payment screen receives a short-lived signed QR URL only when the
+  authenticated registration is entitled to view it. This remains manual proof and review, not a
+  payment gateway.
+- **Long-idle browser reliability:** diagnose the observed client-side application error with
+  production-safe error telemetry, browser console evidence, App Router error boundaries, and
+  controlled idle/BFCache/session-expiry tests. Extend the existing bounded resume recovery only if
+  evidence shows it is insufficient. Recovery must preserve the current route and unsaved work where
+  possible, offer a clear retry or sign-in path when auth is stale, avoid polling and refresh loops,
+  and never expose private error payloads to the browser.
+- **Club representation changes:** retain the existing player-and-tournament representation source of
+  truth. Players may edit their own eligible club representation even after payment submission or
+  confirmation until the tournament-wide `club_lock_at` deadline. The organizer manages one clear
+  all-divisions control, expressed as an optional lock date/time, rather than per-division exceptions.
+  A locked player request fails server-side; an authorized organizer or Admin override requires a
+  reason and immutable audit. Changes never alter payment state, team membership, fee, eligibility,
+  or historical organizer export facts without an explicit refresh/audit event.
+- **Multiple tournament entries:** a player may hold active entries in multiple distinct divisions in
+  the same tournament, for example Men's and Mixed Doubles, up to the tournament's configured
+  per-player division maximum. The system must still prohibit two active teams or registrations for
+  the same player in the same division, preserve per-entry capacity, hold, eligibility, payment, and
+  waitlist behavior, and surface a schedule-conflict warning when usable division scheduling data
+  exists. Do not use a broad one-registration-per-tournament guard.
+- **Registration panel:** replace the single-entry assumption with a default-collapsed **My
+  registrations (N)** summary immediately after tournament details. Each entry shows division, team,
+  status, and the next valid action; expansion exposes only authorized actions. It remains accessible,
+  keyboard-operable, screen-reader labelled, and concise on mobile.
+- **Home copy cleanup:** conduct a route-by-route content audit before changing wording. Use canonical
+  capitalization for product terms, remove redundant or non-actionable helper text, retain required
+  safety/privacy/payment disclosure, and use progressive disclosure for genuinely necessary detail.
+  Product copy, placeholders, help text, plan, and handover additions must remain free of em dashes.
+- **Next-phase boundaries:** do not build a payment gateway, automated settlement, recruitment,
+  sponsorship, bidding, Most Bidded, partner-matching recommendations, a new public identity surface,
+  or any score/eligibility linkage. Preserve append-only audit logs, server authorization plus RLS,
+  private payment evidence, anonymous-voucher protections, and the Next 15/Vercel deployment
+  workaround.
+
+### 1E acceptance and release requirements
+
+- QR upload is proven by organizer upload, save, hard reload, safe replacement, and a controlled
+  eligible-player payment-screen check. Direct anonymous and unrelated-player Storage/API access is
+  denied. Migration 0020 is confirmed before any QR code diagnosis is closed.
+- A stale Chrome and mobile-browser tab is tested after a realistic idle interval, BFCache return, and
+  expired-session path. The page either resumes safely or presents a recoverable, accessible retry or
+  sign-in state, with no generic client-side crash screen.
+- Controlled accounts prove one player can register in two permitted divisions while duplicate
+  same-division entry is rejected atomically. Capacity, waitlist promotion, payments, eligibility,
+  cancellation, division movement, and exports remain correct per registration.
+- Club edits are permitted after payment and confirmation before the organizer's single tournament
+  deadline, denied afterward except for a reasoned organizer/Admin override, and recorded in
+  immutable audit/history without changing payment or team facts.
+- My registrations is collapsed by default and reveals correct per-entry actions. Home copy passes a
+  keyboard, screen-reader, mobile, desktop, dark, light, loading, empty, and error-state review.
+- Any schema work follows inspection of live `tournaments`, registrations, teams, payment, club
+  representation, Storage, RLS, settings, and audit records. Use the next confirmed migration number,
+  copy it exactly to `scripts/apply-00NN.sql`, have Jasper apply it in SQL Editor, and record exact
+  verification counts before claiming new database behavior is live.
 
 ## 1. Prompt Contract
 

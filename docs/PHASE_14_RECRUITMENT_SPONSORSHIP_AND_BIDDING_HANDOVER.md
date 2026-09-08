@@ -1,6 +1,7 @@
 # VouchPlay Phase 14 Handover - Recruitment, Sponsorship, and Gamified Bidding
 
-**Status:** Ready for scoped planning; do not implement until Jasper confirms the selected slice.  
+**Status:** Deferred until the pre-Phase 14 reliability slice is completed; do not implement until
+Jasper confirms the selected slice.
 **Predecessor:** Phase 13C Coach Flow, 13A Community Contribution, and 13D Home Leaderboards are
 production-verified. Maintenance refinements 0018 and 0019 are committed but require Jasper to apply
 their exact SQL Editor scripts and return verification counts before optional-DOB leaderboard rows or
@@ -10,9 +11,18 @@ The pre-Phase-14 tournament refinement adds migration 0020 for private payment Q
 not change the Phase 14 decision. Payment QR supports the existing manual proof-and-review flow only;
 it is not a payment gateway or an automated confirmation mechanism.
 
-The subsequent registration-first refinement adds migration 0021 for an atomic player division move
-with payment, capacity, team-fit, and audit safeguards. It does not change Phase 14 scope. Broader
-partner matching and any payment gateway remain deferred.
+The subsequent registration-first refinement is live: migration 0021 was applied and verified for an
+atomic player division move with payment, capacity, team-fit, and audit safeguards. It does not change
+Phase 14 scope. Broader partner matching and any payment gateway remain deferred.
+
+## Required pre-Phase 14 execution slice
+
+Execute
+[`PHASE_13_5_TOURNAMENT_RELIABILITY_AND_REGISTRATION_FLEXIBILITY_HANDOVER.md`](./PHASE_13_5_TOURNAMENT_RELIABILITY_AND_REGISTRATION_FLEXIBILITY_HANDOVER.md)
+in a new conversation before selecting Phase 14A or 14B. It covers Payment QR persistence, long-idle
+browser recovery, the existing tournament-wide club representation lock, distinct-division multiple
+entries, collapsed My registrations, and Home copy cleanup. It deliberately excludes recruitment,
+sponsorship, bidding, and payment-gateway work.
 
 ## What is already live
 

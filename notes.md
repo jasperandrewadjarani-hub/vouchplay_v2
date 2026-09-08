@@ -1245,10 +1245,13 @@ Getting the first deploy up hit two issues:
     pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
 
 ## Next up
-- **Apply migration 0021 before player division moves:** Jasper runs `scripts/apply-0021.sql` against
-  `itrosesiywpbaxtmucbb` and returns `registration_change_settings=2`,
-  `registration_change_functions=4`, and `card_engagement_function=1`. Until then, player move
-  controls fail closed; cancellation and existing payment actions retain their current safeguards.
+- **Migration 0021 applied and verified:** Jasper ran `scripts/apply-0021.sql` against
+  `itrosesiywpbaxtmucbb` and returned `registration_change_settings=2`,
+  `registration_change_functions=4`, and `card_engagement_function=1`. Tournament-card engagement
+  and registration-change functions are live. The next documented slice is
+  `docs/PHASE_13_5_TOURNAMENT_RELIABILITY_AND_REGISTRATION_FLEXIBILITY_HANDOVER.md`; do not treat
+  the planned QR, long-idle, multiple-entry, club-lock, registration-summary, or Home-copy changes as
+  implemented yet.
 - **Apply migration 0020 before payment QR use:** Jasper runs `scripts/apply-0020.sql` against
   `itrosesiywpbaxtmucbb` and returns `payment_qr_column=1`. The QR is private and signed during the
   existing manual proof-and-review payment step. It is not a gateway or payment confirmation.
