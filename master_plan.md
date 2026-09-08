@@ -162,7 +162,7 @@ parse-validated, retained as PDFs, and never converted to images.
 - [x] Route avatar, logo, and payment-proof writes through the prepared output and transactional
   cleanup paths; update form help text.
 - [x] Run all repository gates and controlled private/public storage smoke tests.
-- [ ] Commit/push `main`, wait for Vercel Ready, and verify both production domains.
+- [x] Commit/push `main`, wait for Vercel Ready, and verify both production domains.
 
 ## 5. Verification and Safety Protocol
 

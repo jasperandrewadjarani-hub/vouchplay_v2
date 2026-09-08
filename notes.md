@@ -1224,7 +1224,7 @@ Getting the first deploy up hit two issues:
     `docs/PHASE_14_RECRUITMENT_SPONSORSHIP_AND_BIDDING_HANDOVER.md`. Local gates green: typecheck,
     lint, tests (web 20, config 19, core 93), format, and Next 15.5.25 build (40 routes).
 
-- **2026-09-08** - **Media normalization v1.12 staged for scale.**
+- **2026-09-08** - **Media normalization v1.12 production release for scale.**
   - **All new avatar, club-logo, and image payment-proof uploads are server-normalized:** decoded
     bytes must match declared PNG/JPEG/WebP MIME; output is auto-oriented, metadata-free, bounded
     WebP. Profiles are Avatar (512 px / 250 KB), Club logo (768 px / 384 KB), and private payment
@@ -1238,7 +1238,10 @@ Getting the first deploy up hit two issues:
     no enlargement, output bounds, and PDFs. A controlled live Storage smoke test uploaded/read back
     temporary public/private WebP objects (512×354 / 420 B and 2048×1418 / 5,272 B) and removed them.
     Local gates are green: typecheck, lint, tests (web 26, config 19, core 93), format, and Next 15.5.25
-    build. No migration is required. Phase 14 handover is unchanged because this is a cross-cutting
+    build. Release commit `2e699f9` is Ready at
+    `vouchplayph-4lnc1aw1r-jasperandrewadjarani-hubs-projects.vercel.app`; both production domains
+    returned HTTP 200 for Home, Players, and Leaderboards, and browser validation was clean. No
+    migration is required. Phase 14 handover is unchanged because this is a cross-cutting
     pilot-hardening refinement, not recruitment/sponsorship or bidding scope.
 
 ## Next up
