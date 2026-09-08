@@ -18,7 +18,7 @@ export function InfoDisclosure({
   const [open, setOpen] = useState(false);
   const id = useId();
   return (
-    <span className="inline-flex flex-col">
+    <div className="flex flex-col">
       <button
         type="button"
         aria-expanded={open}
@@ -30,13 +30,13 @@ export function InfoDisclosure({
         {label}
       </button>
       {open && (
-        <span
+        <div
           id={id}
-          className="text-foreground-muted border-border mt-1.5 block rounded-lg border border-dashed p-2 text-xs leading-relaxed"
+          className="text-foreground-muted border-border mt-1.5 rounded-lg border border-dashed p-2 text-xs leading-relaxed"
         >
           {children}
-        </span>
+        </div>
       )}
-    </span>
+    </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   startCoachReview,
 } from '@/lib/actions/coach';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { formatDateTime } from '@/lib/format-date';
 
 export function CoachReviewPanel({ detail }: { detail: CoachReviewDetail }) {
   const router = useRouter();
@@ -274,7 +275,7 @@ export function CoachReviewPanel({ detail }: { detail: CoachReviewDetail }) {
                 <p className="text-foreground font-medium">{event.action}</p>
                 {event.reason && <p className="text-foreground-muted">{event.reason}</p>}
                 <time className="text-foreground-muted text-xs">
-                  {new Date(event.createdAt).toLocaleString()}
+                  {formatDateTime(event.createdAt)}
                 </time>
               </li>
             ))}

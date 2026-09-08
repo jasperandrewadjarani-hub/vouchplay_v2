@@ -13,6 +13,7 @@ import {
 import type { SafetyActionState } from '@/lib/actions/report';
 import { Field, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 
 const empty: SafetyActionState = {};
 const COACH_STATUS_LABEL: Readonly<Record<ApplicationStatus, string>> = {
@@ -99,7 +100,7 @@ export function CoachApplication({
             )}
             {coachRole.revokedAt && (
               <p className="text-foreground-muted mt-1 text-xs">
-                Revoked {new Date(coachRole.revokedAt).toLocaleDateString()}
+                Revoked {formatDate(coachRole.revokedAt)}
               </p>
             )}
           </section>
@@ -115,8 +116,7 @@ export function CoachApplication({
                 {COACH_STATUS_LABEL[application.status]}
               </h2>
               <p className="text-foreground-muted mt-1 text-sm">
-                Submitted {new Date(application.submittedAt).toLocaleDateString()}. Target review
-                SLA: {slaDays} days.
+                Submitted {formatDate(application.submittedAt)}. Target review SLA: {slaDays} days.
               </p>
             </div>
           </div>
@@ -182,7 +182,7 @@ export function CoachApplication({
                   </p>
                   {event.message && <p className="text-foreground-muted">{event.message}</p>}
                   <time className="text-foreground-muted text-xs">
-                    {new Date(event.createdAt).toLocaleString()}
+                    {formatDateTime(event.createdAt)}
                   </time>
                 </li>
               ))}

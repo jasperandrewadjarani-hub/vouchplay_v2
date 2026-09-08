@@ -5,6 +5,7 @@ import { avatarUrl, clubLogoUrl, nameInitials } from '@/lib/storage';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ButtonLink } from '@/components/ui/button';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { formatDate } from '@/lib/format-date';
 
 const TITLES = { players: 'Players', community: 'Community Champions', clubs: 'Clubs' } as const;
 const BOARD_CTA = {
@@ -152,9 +153,7 @@ export function LeaderboardPanel({
         </>
       )}
       <footer className="border-border bg-surface-muted flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs">
-        <span className="text-foreground-muted">
-          Published {new Date(board.publishedAt).toLocaleDateString()}
-        </span>
+        <span className="text-foreground-muted">Published {formatDate(board.publishedAt)}</span>
         <span className="flex flex-wrap items-center gap-3">
           <Link
             href={BOARD_CTA[board.category].href}
