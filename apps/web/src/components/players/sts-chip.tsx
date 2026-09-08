@@ -15,9 +15,28 @@ import { Modal } from '@/components/ui/modal';
  * CSL, STS, Identity Verified and Skill Verified are four separate concepts, and VouchPlay never
  * ranks players by STS).
  */
-export function StsChip({ sts }: { sts: number | null }) {
+export function StsChip({
+  sts,
+  interactive = true,
+}: {
+  sts: number | null;
+  /**
+   * Set false when the chip sits inside a link or other interactive element. A button nested in an
+   * anchor is invalid HTML and would both open this dialog and follow the link on one tap, so those
+   * placements render a plain chip and rely on the profile page for the explanation.
+   */
+  interactive?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   if (sts == null) return null;
+
+  if (!interactive) {
+    return (
+      <span className="border-border text-foreground-muted inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
+        STS {sts.toFixed(1)}
+      </span>
+    );
+  }
 
   return (
     <>

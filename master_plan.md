@@ -212,6 +212,28 @@ is met.
   (player profile and both player-card variants) pick it up unchanged and the remaining badges stay
   server-rendered.
 
+## 1H. Compact player list layout (2026-09-08, post-launch)
+
+Reported from a live phone: names in the compact directory were being cut off, and the STS chips did
+not line up down the list.
+
+- **Cause:** the row put the name and the skill/STS group side by side, and the right-hand group was
+  `shrink-0`. Flexbox therefore took every pixel of squeeze out of the name, so the most important
+  field truncated first while the pill kept its full width. STS also sat inline right after the pill,
+  so its x-position moved with pill width, and a player without STS left no column at all.
+- **Priority is name, then skill level, then STS.** The row is now two lines: the name owns the full
+  row width on the first line (truncating only in the extreme), the skill pill sits on its own line
+  beneath where it can render in full, and STS occupies a fixed-width right column that keeps its
+  width even when a player has none, so the column reads straight down the list. Row height is
+  effectively unchanged because the previous row already had a 56 px minimum.
+- Verified on a 375 px viewport across the live list: zero truncated names and a single shared STS
+  column x-position across every row.
+- **Also fixed an invalid-nesting bug introduced with the STS explainer:** the compact row is a link,
+  and the explainer had made the STS chip a `<button>`, so a button was nested inside an anchor - one
+  tap would have both opened the dialog and navigated. `StsChip` gained an `interactive` flag; inside
+  links it renders a plain chip, and the explainer remains available on the profile and detailed card.
+  **Rule: never place an interactive control inside a row that is itself a link.**
+
 ## 1. Prompt Contract
 
 ### In scope

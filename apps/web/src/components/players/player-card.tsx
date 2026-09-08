@@ -51,15 +51,22 @@ export function PlayerCard({
           size="sm"
           className="ring-primary/15 shrink-0 ring-2 ring-offset-0"
         />
-        <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
-          {player.displayName}
-        </span>
-        {(skill || player.sts != null) && (
-          <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-            {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-            <StsChip sts={player.sts} />
+        {/* Name owns the full row width and is never squeezed by the skill pill: the pill moves to its
+            own line beneath. STS then sits in a fixed-width column so it lines up down the list, and
+            keeps that width when a player has none so the column stays straight. */}
+        <span className="min-w-0 flex-1">
+          <span className="text-foreground block truncate text-sm font-semibold">
+            {player.displayName}
           </span>
-        )}
+          {skill && (
+            <span className="mt-1 flex min-w-0 overflow-hidden">
+              <SkillPill band={skill.band} source={skill.source} size="sm" />
+            </span>
+          )}
+        </span>
+        <span className="flex w-[66px] shrink-0 justify-end">
+          <StsChip sts={player.sts} interactive={false} />
+        </span>
       </Link>
     );
   }

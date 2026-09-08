@@ -1408,6 +1408,17 @@ Getting the first deploy up hit two issues:
   dialogs are centered and compact; only image-led announcements use the full-width sheet. See
   `master_plan.md` §1G and handover v1.20.
 
+- **2026-09-08** - **Compact player list fixed (live report).** Names were truncating and STS chips did
+  not align. Cause: the name and the skill/STS group sat side by side with the right group `shrink-0`,
+  so flexbox squeezed the name (the most important field) first, and STS sat inline after the pill so
+  its position moved with pill width. Rebuilt as two lines: name owns the full width, skill pill on its
+  own line, STS in a fixed-width right column that holds its width when absent. Verified at 375 px:
+  0 truncated names, single shared STS column x-position across all 24 rows; row height effectively
+  unchanged. **Also fixed an invalid-nesting bug from the STS explainer** - the compact row is a link
+  and the chip had become a `<button>` inside it (one tap would open the dialog and navigate).
+  `StsChip` gained an `interactive` flag; inside links it renders a plain chip. See `master_plan.md`
+  §1H.
+
 ## Next up
 - **Phase 13.5 (this slice):** shipped to production (commit `f89af55`, both domains verified). No
   migration to apply. Remaining: controlled authenticated organizer/player browser verification of the

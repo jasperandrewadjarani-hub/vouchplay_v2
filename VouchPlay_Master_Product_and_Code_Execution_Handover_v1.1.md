@@ -6168,6 +6168,12 @@ Maintain a changelog at the bottom.
   explainer first shipped as the large sheet, which on a tall phone pushed its heading under the
   browser chrome and read as clipped. `Modal` gained an `align` prop for this. Keep explainer copy
   short - a lead sentence, a few scannable bullets, one reassurance, one action.
+- **List row priority (compact player directory):** identity first. The player name owns the row width
+  and truncates last; the skill band may wrap or clip before the name does; STS occupies a fixed-width
+  column that keeps its width when a player has none, so the column reads straight down the list.
+- **Never nest an interactive control inside a row that is itself a link.** The STS chip briefly became
+  a `<button>` inside the compact row's anchor - invalid HTML, and one tap would both open the dialog
+  and navigate. Interactive chips take an `interactive={false}` static form in those placements.
 
 ## v1.19 (2026-09-08)
 - **Launch welcome pop-up (Admin-controlled campaign dialog).** A near-full-screen, one-tap-dismissible
