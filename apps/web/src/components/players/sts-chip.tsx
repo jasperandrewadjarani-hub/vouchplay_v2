@@ -54,7 +54,7 @@ export function StsChip({
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Skill-Trust Score ${sts.toFixed(1)} out of 5${
-          voucherCount ? `, from ${voucherCount} vouches` : ''
+          voucherCount ? `, from ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}` : ''
         }. What does this mean?`}
         className="border-border text-foreground-muted hover:border-primary hover:text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
