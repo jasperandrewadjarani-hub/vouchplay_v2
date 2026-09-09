@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { requestRegistrationCancellation } from '@/lib/actions/registration';
+import { ChangePartnerForm } from './change-partner-form';
 
 /**
  * What a player can do once their receipt is in (master_plan §1Y).
@@ -16,15 +17,21 @@ import { requestRegistrationCancellation } from '@/lib/actions/registration';
  * receipt exists the money went straight to the organizer, so only they can undo it. A control that
  * implies it cancels and then does not would be worse than no control at all.
  */
-// Post-payment partner change is designed (§1Y) but needs the transactional RPC in migration 0027.
-// The sentence promising it is deliberately NOT shipped yet: copy that describes a capability the
-// app does not have is worse than no copy.
 export function PaidEntryActions({
   registrationId,
   tournamentId,
+  teamId,
+  divisionId,
+  partnerName,
+  canChangePartner,
 }: {
   registrationId: string;
   tournamentId: string;
+  teamId?: string;
+  divisionId?: string;
+  partnerName?: string | null;
+  /** Doubles only, and only once migration 0027 is applied (§2A). */
+  canChangePartner?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -56,8 +63,20 @@ export function PaidEntryActions({
     <div className="mt-2 space-y-2">
       <p className="text-foreground text-sm font-semibold">Payment submitted.</p>
       <p className="text-foreground-muted text-sm">
-        This entry cannot be changed while the organizer reviews it.
+        Your payment is with the organizer to review, so the entry itself is fixed for now.
+        {canChangePartner
+          ? ' You can still change your partner, as long as the new player fits this division: the same skill level and the same gender.'
+          : ''}
       </p>
+
+      {canChangePartner && teamId && divisionId && (
+        <ChangePartnerForm
+          teamId={teamId}
+          tournamentId={tournamentId}
+          divisionId={divisionId}
+          currentPartnerName={partnerName ?? null}
+        />
+      )}
 
       {sent ? (
         <p className="text-foreground-muted flex items-start gap-2 text-sm" role="status">

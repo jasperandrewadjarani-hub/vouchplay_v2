@@ -27,6 +27,9 @@ export function PaymentForm({
   paymentStatus,
   rejectionReason,
   paymentQrUrl,
+  teamId,
+  divisionId,
+  partnerName,
 }: {
   registrationId: string;
   tournamentId: string;
@@ -41,6 +44,10 @@ export function PaymentForm({
   paymentStatus: string | null;
   rejectionReason: string | null;
   paymentQrUrl: string | null;
+  /** Team context for the post-payment partner change (§2A). */
+  teamId?: string;
+  divisionId?: string;
+  partnerName?: string | null;
 }) {
   const router = useRouter();
   const action = submitPayment.bind(null, registrationId, tournamentId);
@@ -51,7 +58,16 @@ export function PaymentForm({
   }, [state.ok, router]);
 
   if (paymentStatus === 'submitted') {
-    return <PaidEntryActions registrationId={registrationId} tournamentId={tournamentId} />;
+    return (
+      <PaidEntryActions
+        registrationId={registrationId}
+        tournamentId={tournamentId}
+        teamId={teamId}
+        divisionId={divisionId}
+        partnerName={partnerName}
+        canChangePartner={teamSize > 1 && Boolean(teamId && divisionId)}
+      />
+    );
   }
   if (paymentStatus === 'verified') return null;
 

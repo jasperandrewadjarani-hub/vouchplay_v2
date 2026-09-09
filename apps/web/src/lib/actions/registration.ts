@@ -56,6 +56,12 @@ const RPC_ERRORS: Record<string, string> = {
   target_division_full: 'That division no longer has an available slot.',
   same_division: 'Choose a different division.',
   team_has_active_registration: 'Cancel the active registration before changing partner.',
+  partner_does_not_fit_division:
+    'That player does not fit this division. They need the same skill level and the same gender the division is for.',
+  no_partner_to_replace: 'There is no partner on this team to change.',
+  same_partner: 'That is already your partner.',
+  seat_not_vacant: 'Your partner has not left this team.',
+  no_declined_invitation: 'You can only name a replacement after your partner declines.',
 };
 function friendly(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
@@ -407,6 +413,101 @@ export async function replacePendingPartner(
     });
     await revalTournament(tournamentId);
     return { ok: true, message: 'New partner named. Your slot and payment are unchanged.' };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/**
+ * Swap the other member of a team for someone else, after payment (master_plan §2A).
+ *
+ * `replacePendingPartner` only ever worked on a seat already vacated by a decline. This is the case
+ * where the seat is still occupied and the player simply needs somebody else - which had no route at
+ * all before migration 0027.
+ *
+ * The registration, the payment and the waitlist position are untouched. The removed player is ALWAYS
+ * notified: §1D exists so nobody is displaced without their knowledge, and telling them is what keeps
+ * that promise.
+ */
+export async function changePartner(
+  tournamentId: string,
+  _prev: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const teamId = String(formData.get('teamId') ?? '');
+  const parsed = partnerInviteSchema.safeParse({
+    divisionId: formData.get('divisionId'),
+    inviteeSlug: formData.get('inviteeSlug') ?? '',
+    message: formData.get('message') ?? '',
+  });
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
+  const v = parsed.data;
+  const statusErr = await checkActorCanInteract(user.id);
+  if (statusErr) return { error: statusErr };
+
+  const svc = createServiceClient();
+  try {
+    const { data: invitee, error: inviteeError } = await svc
+      .from('profiles')
+      .select('id, account_status, onboarded_at')
+      .eq('slug', v.inviteeSlug)
+      .maybeSingle();
+    if (inviteeError) return { error: 'Could not look up that player. Please try again.' };
+    const inv = invitee as {
+      id: string;
+      account_status: string;
+      onboarded_at: string | null;
+    } | null;
+    if (!inv) return { error: 'No player found with that handle.' };
+    if (inv.id === user.id) return { error: 'You cannot enter yourself as your own partner.' };
+    if (inv.account_status !== 'active' || !inv.onboarded_at)
+      return {
+        error: 'That player cannot be entered yet. Ask them to finish their profile first.',
+      };
+    if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
+
+    const { data, error } = await svc.rpc('change_partner', {
+      p_team_id: teamId,
+      p_actor: user.id,
+      p_new_invitee: inv.id,
+      p_message: v.message ? v.message.trim() : null,
+      p_expires_at: null,
+    });
+    if (error) return { error: friendly(error.message) };
+
+    const removedPlayer = (data as { removed_player?: string } | null)?.removed_player;
+    const registrationId = (data as { registration_id?: string } | null)?.registration_id;
+    // Eligibility is recomputed because the team changed, even though the entry did not.
+    if (registrationId) await computeRegistrationEligibility(registrationId);
+
+    const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
+    const link = tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments';
+    await notify({
+      recipientId: inv.id,
+      type: 'partner_named_paid',
+      actorId: user.id,
+      params: { actorName: me.name, tournamentName: tm.name },
+      link,
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+    // Non-negotiable: the person removed from the team is told (§1D).
+    if (removedPlayer) {
+      await notify({
+        recipientId: removedPlayer,
+        type: 'partner_removed',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link,
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+    await revalTournament(tournamentId);
+    return { ok: true, message: 'Partner changed. Your slot and payment are unchanged.' };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }

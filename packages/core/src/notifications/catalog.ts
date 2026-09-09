@@ -98,6 +98,16 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} confirmed as your partner`,
     (p) => `Your team is complete for ${tour(p)}.`,
   ),
+  // Critical: being taken off a team is not something a person should be able to mute or miss.
+  // §1D forbids displacing somebody WITHOUT THEIR KNOWLEDGE - this notification is what makes the
+  // swap permissible at all (master_plan §2A).
+  partner_removed: t(
+    'partners',
+    true,
+    (p) => `${who(p)} changed partner`,
+    (p) =>
+      `You are no longer on their team for ${tour(p)}. You are free to enter with someone else.`,
+  ),
   partner_team_left: t(
     'partners',
     false,

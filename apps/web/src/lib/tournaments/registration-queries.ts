@@ -100,6 +100,8 @@ export interface ViewerRegistrationState {
   eligibleClubs: EligibleClub[];
   viewerSkill: ViewerRegistrationSkillProfile;
   paymentQrUrl: string | null;
+  /** So a team member list can say which of the two players is the OTHER one (§2A). */
+  viewerId: string;
 }
 
 export async function getViewerRegistrationState(
@@ -385,6 +387,7 @@ export async function getViewerRegistrationState(
     eligibleClubs,
     viewerSkill,
     paymentQrUrl,
+    viewerId: userId,
   };
 }
 

@@ -2047,3 +2047,22 @@ Open items, highest value first:
   Expected verification: `fits_division_fn=1`, `change_partner_fn=1`, `invitation_team_id_column=1`,
   plus an informational `teams_with_two_members`. **No app code ships until Jasper returns the
   counts** - the gap would be a visible control on the payment path.
+
+- **2026-09-09** - **Post-payment partner change SHIPPED.** Migration 0027 verified by Jasper
+  (`fits_division_fn=1`, `change_partner_fn=1`, `invitation_team_id_column=1`,
+  `teams_with_two_members=4`) and independently probed here: both functions present and guarding
+  (`change_partner` raises `team_not_found` before any write).
+  **The gate was tested, not assumed**, against live rows: a woman in a men's division rejected, a man
+  in a men's division accepted, a man in a women's division rejected, and skill 2 and skill 4 both
+  rejected by a 3-3 band. That verification exists because 0026's `onboarding_completed_at` typo
+  shipped a broken doubles path.
+  `replace_pending_partner` only handled a seat already vacated by a decline, so the ordinary case - a
+  paid player who simply needs someone else - had no route. `change_partner` removes the other member
+  and names a replacement in one transaction, with `player_fits_division()` enforcing sex
+  classification and skill band **in SQL** so a swap cannot route around a division's rules;
+  registration, payment and waitlist position are untouched; and the RPC **returns the removed
+  player's id** so the caller cannot forget to notify them. That notification is critical and
+  unmutable - §1D forbids displacing somebody *without their knowledge*, and telling them is what makes
+  the swap permissible rather than a hole in the rule.
+  The §1Y sentence promising this was previously written and pulled; it is restored now that it is
+  true. **Copy and capability ship together or not at all.** See master_plan §2A.

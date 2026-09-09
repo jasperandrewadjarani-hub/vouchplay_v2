@@ -1337,6 +1337,58 @@ sorting and the counts, with 19 unit tests. The row, the sheet and the queue cou
 so they cannot disagree about what state an entry is in - which is exactly the class of bug that makes
 a dashboard untrustworthy.
 
+## 2A. Changing partner after paying (2026-09-09, post-launch)
+
+**Migration 0027 applied and verified 2026-09-09**: `fits_division_fn=1`, `change_partner_fn=1`,
+`invitation_team_id_column=1`, `teams_with_two_members=4`.
+
+### The gap
+
+`replace_pending_partner` (§1U, migration 0025) only ever worked on a seat **already vacated by a
+decline**. A player who had paid and simply needed somebody else had no route at all: the seat was
+occupied, so every path refused. That is the ordinary case, not the edge case.
+
+### What the swap is allowed to do, and what it must not
+
+`change_partner` removes the other member and names a replacement, in one transaction. Three
+constraints define it:
+
+- **The replacement must fit the same division.** `player_fits_division()` checks the sex
+  classification and the skill band using the same precedence as everywhere else - community skill if
+  known, otherwise self-rating, and an unknown skill never blocks. **This lives in SQL, not only in the
+  action**, so a partner swap can never be used to route around a division's own rules.
+- **The registration, the payment and the waitlist position are never touched.** Nothing about a
+  partner change is a financial event.
+- **The removed player is always notified**, and the RPC returns their id specifically so the caller
+  cannot forget. §1D forbids displacing somebody *without their knowledge*; being told is precisely
+  what makes this permissible rather than a hole in that rule. The notification is **critical**, so it
+  cannot be muted.
+
+The organizer's change-lock window still applies: when player changes close, so does this.
+
+### Verified against live data before it shipped
+
+Every column and dependency was checked against production first, and then the gate itself was tested
+rather than assumed:
+
+| Case | Result |
+| --- | --- |
+| Female player in a men's division | rejected |
+| Male player in a men's division | accepted |
+| Male player in a women's division | rejected |
+| Skill 2 in a band of 3-3 | rejected |
+| Skill 4 in a band of 3-3 | rejected |
+
+That check exists because migration 0026 shipped `onboarding_completed_at`, a column that did not
+exist, and broke the whole doubles path. A migration full of names that merely look right is how that
+happens twice.
+
+### The copy now says it, because now it is true
+
+§1Y wrote the sentence promising post-payment partner change and then deliberately pulled it, because
+the capability did not exist yet. It is restored alongside the control that implements it. **Copy and
+capability ship together or not at all.**
+
 ## 1. Prompt Contract
 
 ### In scope

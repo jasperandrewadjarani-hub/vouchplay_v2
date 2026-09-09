@@ -139,6 +139,9 @@ export function MyRegistrations({
                     paymentQrUrl={state.paymentQrUrl}
                     paymentStatus={reg.paymentStatus}
                     rejectionReason={reg.paymentRejectionReason}
+                    teamId={team?.teamId}
+                    divisionId={divisionId}
+                    partnerName={team?.members.find((m) => m.id !== state.viewerId)?.name ?? null}
                   />
                 )}
               <div className="mt-2">
