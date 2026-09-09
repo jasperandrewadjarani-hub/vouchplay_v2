@@ -1,8 +1,18 @@
 import type { Metadata } from 'next';
 import { getViewerContext } from '@/lib/auth';
-import { listPlayers, type PlayerFilters } from '@/lib/players/queries';
+import {
+  getDirectoryCityOptions,
+  getDirectoryClubOptions,
+  listPlayers,
+} from '@/lib/players/queries';
+import {
+  parsePlayerFilters,
+  playerFiltersToQuery,
+  type PlayerFilters,
+  type SearchParamRecord,
+} from '@/lib/players/filters';
 import { PlayerCard } from '@/components/players/player-card';
-import { SearchFilters, type ActiveFilters } from '@/components/players/search-filters';
+import { SearchFilters } from '@/components/players/search-filters';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { Pagination } from '@/components/ui/pagination';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
@@ -15,59 +25,26 @@ export const metadata: Metadata = {
     'Browse the VouchPlay player directory - skill reputations built by community vouches, not self-declaration.',
 };
 
-type SP = Record<string, string | string[] | undefined>;
+type SP = SearchParamRecord;
 
 function one(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-function parseFilters(sp: SP): PlayerFilters {
-  const q = one(sp.q);
-  const city = one(sp.city);
-  const sexRaw = one(sp.sex);
-  const sex = sexRaw === 'male' || sexRaw === 'female' ? sexRaw : undefined;
-  const minSkillRaw = one(sp.minSkill);
-  const minSkillNum = minSkillRaw != null ? Number(minSkillRaw) : NaN;
-  const minSkill =
-    Number.isInteger(minSkillNum) && minSkillNum >= 0 && minSkillNum <= 6 ? minSkillNum : undefined;
-  const pageNum = Number(one(sp.page));
-  return {
-    q,
-    city,
-    sex,
-    minSkill,
-    identityVerified: one(sp.identityVerified) === '1',
-    coach: one(sp.coach) === '1',
-    lookingForPartner: one(sp.lookingForPartner) === '1',
-    openForSponsorship: one(sp.openForSponsorship) === '1',
-    page: Number.isInteger(pageNum) && pageNum > 0 ? pageNum : 1,
-  };
-}
-
-function toQueryString(f: PlayerFilters, page: number, compact: boolean): string {
-  const p = new URLSearchParams();
-  if (f.q) p.set('q', f.q);
-  if (f.city) p.set('city', f.city);
-  if (f.sex) p.set('sex', f.sex);
-  if (typeof f.minSkill === 'number') p.set('minSkill', String(f.minSkill));
-  if (f.identityVerified) p.set('identityVerified', '1');
-  if (f.coach) p.set('coach', '1');
-  if (f.lookingForPartner) p.set('lookingForPartner', '1');
-  if (f.openForSponsorship) p.set('openForSponsorship', '1');
-  if (!compact) p.set('view', 'detailed');
-  if (page > 1) p.set('page', String(page));
-  const qs = p.toString();
-  return qs ? `?${qs}` : '';
-}
-
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
-  const filters = parseFilters(sp);
+  // Parsing, serialising and describing filters all live in one pure module, so the URL, the chips
+  // and the pagination links cannot drift apart (master_plan §2B).
+  const filters: PlayerFilters = parsePlayerFilters(sp);
   // Compact is the default directory view (§1S): a directory is for scanning names, and the
   // detailed card spends a whole screen on three players. Detailed keeps its existing URL.
   const compact = one(sp.view) !== 'detailed';
   const viewer = await getViewerContext();
-  const { players, total, page, pageCount } = await listPlayers(filters, viewer);
+  const [{ players, total, page, pageCount }, cityOptions, clubOptions] = await Promise.all([
+    listPlayers(filters, viewer),
+    getDirectoryCityOptions(),
+    getDirectoryClubOptions(),
+  ]);
   // The entry card names the current leader, so it needs the board it points at. Cached read; a
   // failure here must never take down the directory, so it degrades to the invitation variant.
   const leaders = await getLeaderboardSettings()
@@ -76,17 +53,6 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     )
     .catch(() => null);
   const authed = viewer.viewerId !== null;
-
-  const active: ActiveFilters = {
-    q: filters.q,
-    city: filters.city,
-    sex: filters.sex,
-    minSkill: typeof filters.minSkill === 'number' ? String(filters.minSkill) : undefined,
-    identityVerified: filters.identityVerified,
-    coach: filters.coach,
-    lookingForPartner: filters.lookingForPartner,
-    openForSponsorship: filters.openForSponsorship,
-  };
 
   return (
     <div className="space-y-5">
@@ -101,7 +67,12 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
 
       <LeaderboardsEntryCard board={leaders} />
 
-      <SearchFilters current={active} />
+      <SearchFilters
+        current={filters}
+        cityOptions={cityOptions}
+        clubOptions={clubOptions}
+        compact={compact}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-foreground-muted text-sm" aria-live="polite">
@@ -129,7 +100,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       <Pagination
         page={page}
         pageCount={pageCount}
-        hrefFor={(n) => `/players${toQueryString(filters, n, compact)}`}
+        hrefFor={(n) => `/players${playerFiltersToQuery(filters, { page: n, compact })}`}
         label="Player pages"
       />
     </div>

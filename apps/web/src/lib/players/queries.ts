@@ -3,7 +3,7 @@ import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
-import { getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
+import { CLUBS_LIST_TAG, getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
 import {
   PLAYER_CARD_COLUMNS,
   PLAYER_PROFILE_COLUMNS,
@@ -15,6 +15,15 @@ import {
   type SkillSnapshot,
   type ViewerContext,
 } from './dto';
+import {
+  buildCityOptions,
+  effectiveSkillOrdinal,
+  idsMatchingSkillFilters,
+  intersectIds,
+  type CityOption,
+  type PlayerFilters,
+  type SkillIndexEntry,
+} from './filters';
 
 export const PLAYERS_LIST_TAG = 'players:list';
 export const playerTag = (slug: string) => `player:${slug}`;
@@ -22,17 +31,7 @@ export const commentsTag = (id: string) => `player-comments:${id}`;
 
 export const PAGE_SIZE = 24;
 
-export interface PlayerFilters {
-  q?: string;
-  city?: string;
-  sex?: 'male' | 'female';
-  minSkill?: number; // self-rated ordinal 0..6
-  identityVerified?: boolean;
-  coach?: boolean;
-  lookingForPartner?: boolean;
-  openForSponsorship?: boolean;
-  page?: number;
-}
+export type { PlayerFilters } from './filters';
 
 /** Stable, order-independent cache key for a filter set. */
 function filtersKey(f: PlayerFilters): string {
@@ -40,7 +39,9 @@ function filtersKey(f: PlayerFilters): string {
     q: f.q?.trim().toLowerCase() ?? '',
     city: f.city?.trim().toLowerCase() ?? '',
     sex: f.sex ?? '',
-    minSkill: f.minSkill ?? '',
+    skills: [...(f.skills ?? [])].sort((a, b) => a - b).join(','),
+    minSts: f.minSts ?? 0,
+    club: f.club ?? '',
     identityVerified: f.identityVerified ? 1 : 0,
     coach: f.coach ? 1 : 0,
     lfp: f.lookingForPartner ? 1 : 0,
@@ -176,6 +177,137 @@ const fetchVerifiedUserIds = unstable_cache(
 );
 
 // ----------------------------------------------------------------------------
+// Filter option sources and the skill index (master_plan §2B)
+//
+// SCALE NOTE, read this before reusing the pattern: the skill index and the club/identity/role
+// filters each build an id list that is intersected and handed to `.in('id', ...)`. Effective skill
+// is a per-row fallback across `player_skill_profiles` and `profiles`, which PostgREST cannot
+// express in one query, so the fallback is resolved here instead. At the directory's real size
+// (163 active profiles, 141 skill rows) this is a couple of small cached reads and an `in(...)` of
+// at most a few hundred uuids. **It is sound to roughly a thousand players.** Past that the id list
+// outgrows a URL and this belongs in a SQL view or a SECURITY DEFINER RPC that filters server-side.
+// ----------------------------------------------------------------------------
+
+/**
+ * Every directory player's filterable skill facts: community skill where the community has rated
+ * them, otherwise their self-rating, plus STS (0 for a player with no skill profile - the same
+ * value the chip now renders, §2B).
+ */
+const fetchSkillIndex = unstable_cache(
+  async (): Promise<Record<string, SkillIndexEntry>> => {
+    const out: Record<string, SkillIndexEntry> = {};
+    try {
+      const supabase = createPublicClient();
+      const [profilesRes, skillsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, self_rated_skill')
+          .eq('account_status', 'active')
+          .not('onboarded_at', 'is', null),
+        supabase.from('player_skill_profiles').select('player_id, community_skill_level, sts'),
+      ]);
+
+      const skills = new Map<string, { csl: number | null; sts: number }>();
+      for (const r of skillsRes.data ?? []) {
+        const row = r as { player_id: string; community_skill_level: number | null; sts: number };
+        skills.set(row.player_id, {
+          csl: row.community_skill_level,
+          sts: Number(row.sts) || 0,
+        });
+      }
+
+      for (const p of profilesRes.data ?? []) {
+        const row = p as { id: string; self_rated_skill: number | null };
+        const s = skills.get(row.id);
+        out[row.id] = {
+          effectiveSkill: effectiveSkillOrdinal(s?.csl ?? null, row.self_rated_skill),
+          sts: s?.sts ?? 0,
+        };
+      }
+    } catch {
+      // An unavailable index must not empty the directory; the caller treats {} as "cannot
+      // restrict", which returns every player rather than none.
+    }
+    return out;
+  },
+  ['player-skill-index'],
+  { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/** Ids of the active members of one club (for the club filter). */
+const fetchClubMemberIds = unstable_cache(
+  async (slug: string): Promise<string[]> => {
+    try {
+      const supabase = createPublicClient();
+      const { data: club } = await supabase
+        .from('clubs')
+        .select('id')
+        .eq('slug', slug)
+        .eq('activity_status', 'active')
+        .maybeSingle();
+      const clubId = (club as { id: string } | null)?.id;
+      if (!clubId) return [];
+      const { data } = await supabase
+        .from('club_memberships')
+        .select('user_id')
+        .eq('club_id', clubId)
+        .eq('status', 'active');
+      return Array.from(new Set((data ?? []).map((r) => (r as { user_id: string }).user_id)));
+    } catch {
+      return [];
+    }
+  },
+  ['player-club-member-ids'],
+  { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/**
+ * The cities that actually have players, grouped across spellings. Offering the whole PH city list
+ * would be a menu of a hundred places where three have anybody in them (§2B).
+ */
+export const getDirectoryCityOptions = unstable_cache(
+  async (): Promise<CityOption[]> => {
+    try {
+      const supabase = createPublicClient();
+      const { data } = await supabase
+        .from('profiles')
+        .select('city')
+        .eq('account_status', 'active')
+        .not('onboarded_at', 'is', null);
+      return buildCityOptions((data ?? []).map((r) => (r as { city: string | null }).city));
+    } catch {
+      return [];
+    }
+  },
+  ['player-city-options'],
+  { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
+);
+
+export interface ClubOption {
+  slug: string;
+  name: string;
+}
+
+/** Active clubs, for the club filter. */
+export const getDirectoryClubOptions = unstable_cache(
+  async (): Promise<ClubOption[]> => {
+    try {
+      const supabase = createPublicClient();
+      const { data } = await supabase
+        .from('clubs')
+        .select('slug, name')
+        .eq('activity_status', 'active')
+        .order('name', { ascending: true });
+      return (data ?? []) as ClubOption[];
+    } catch {
+      return [];
+    }
+  },
+  ['player-club-options'],
+  { revalidate: 300, tags: [CLUBS_LIST_TAG, PLAYERS_LIST_TAG] },
+);
+
+// ----------------------------------------------------------------------------
 // Directory listing (cache-first public read; §34A.5 PUBLIC_REVALIDATED)
 // ----------------------------------------------------------------------------
 
@@ -212,9 +344,10 @@ async function fetchListRows(
         `first_name.ilike.%${term}%,last_name.ilike.%${term}%,nickname.ilike.%${term}%,city.ilike.%${term}%`,
       );
     }
+    // `f.city` is the NORMALISED key ("zamboanga"), and a contains match is what makes it find
+    // "Zamboanga City", "City of Zamboanga" and "zamboanga" alike (§2B).
     if (f.city && f.city.trim()) query = query.ilike('city', `%${f.city.trim()}%`);
     if (f.sex) query = query.eq('sex', f.sex);
-    if (typeof f.minSkill === 'number') query = query.gte('self_rated_skill', f.minSkill);
     if (f.lookingForPartner) query = query.eq('looking_for_partner', true);
     if (f.openForSponsorship) query = query.eq('open_for_sponsorship', true);
 
@@ -243,14 +376,26 @@ export async function listPlayers(
   filters: PlayerFilters,
   viewer: ViewerContext,
 ): Promise<PlayerListPage> {
-  // Role / identity filters constrain the id set first.
+  // Role, identity, club, skill and STS all live outside `profiles`, so each contributes an id set
+  // that is intersected before the page query runs. `null` means "this filter is off", which is not
+  // the same as an empty list - an empty list is a filter that genuinely matched nobody.
   let restrictIds: string[] | null = null;
   if (filters.coach) {
-    restrictIds = await fetchUserIdsWithRole('coach');
+    restrictIds = intersectIds(restrictIds, await fetchUserIdsWithRole('coach'));
   }
   if (filters.identityVerified) {
-    const verified = await fetchVerifiedUserIds();
-    restrictIds = restrictIds ? restrictIds.filter((id) => verified.includes(id)) : verified;
+    restrictIds = intersectIds(restrictIds, await fetchVerifiedUserIds());
+  }
+  if (filters.club) {
+    restrictIds = intersectIds(restrictIds, await fetchClubMemberIds(filters.club));
+  }
+  if ((filters.skills && filters.skills.length > 0) || (filters.minSts && filters.minSts > 0)) {
+    const index = await fetchSkillIndex();
+    // An index that failed to load is empty, and restricting to nothing would empty the directory
+    // for everyone. Leave the skill filters unapplied rather than lie about the result.
+    if (Object.keys(index).length > 0) {
+      restrictIds = intersectIds(restrictIds, idsMatchingSkillFilters(index, filters));
+    }
   }
 
   const key = filtersKey(filters) + '|restrict:' + (restrictIds ? restrictIds.join(',') : 'none');
@@ -347,11 +492,16 @@ export async function getPlayerMetaBySlug(slug: string): Promise<PlayerProfileDT
 
 export interface PlayerComment {
   id: string;
+  /** The author's user id, so a viewer can be offered edit/delete on their OWN comment only (§2B).
+   *  Comments are always attributed, so this exposes nothing the name does not already. */
+  authorId: string;
   authorName: string;
   authorSlug: string | null;
   authorInitials: string;
   authorAvatarUrl: string | null;
   date: string;
+  /** True when the body has been changed since it was written - shown, not hidden (§2B). */
+  edited: boolean;
   body: string;
 }
 
@@ -362,7 +512,7 @@ export async function getPlayerComments(targetId: string): Promise<PlayerComment
         const supabase = createPublicClient();
         const { data: comments } = await supabase
           .from('vouch_comments')
-          .select('id, author_id, body, created_at')
+          .select('id, author_id, body, created_at, updated_at')
           .eq('target_id', targetId)
           .eq('status', 'active')
           .order('created_at', { ascending: false })
@@ -372,6 +522,7 @@ export async function getPlayerComments(targetId: string): Promise<PlayerComment
           author_id: string;
           body: string;
           created_at: string;
+          updated_at: string;
         }>;
         if (rows.length === 0) return [];
 
@@ -403,13 +554,19 @@ export async function getPlayerComments(targetId: string): Promise<PlayerComment
           const initials =
             `${a?.first_name?.[0] ?? ''}${a?.last_name?.[0] ?? ''}`.toUpperCase() ||
             (a?.nickname?.[0] ?? '?').toUpperCase();
+          // The 0004 trigger stamps updated_at on every write, including the insert, so "edited"
+          // is a real difference rather than a truthy timestamp. A second of slack absorbs the
+          // insert's own two writes without labelling a brand-new comment as edited.
+          const edited = new Date(r.updated_at).getTime() - new Date(r.created_at).getTime() > 1000;
           return {
             id: r.id,
+            authorId: r.author_id,
             authorName: name,
             authorSlug: a?.slug ?? null,
             authorInitials: initials,
             authorAvatarUrl: avatarUrl(a?.avatar_path),
             date: r.created_at,
+            edited,
             body: r.body,
           };
         });

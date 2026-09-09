@@ -38,12 +38,20 @@ export function StsChip({
   interactive?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  if (sts == null) return null;
+
+  /*
+   * A player nobody has vouched for yet has no `player_skill_profiles` row, so `sts` arrives null -
+   * but that is not missing data, it is a known value: the community has zero confidence about their
+   * level, and zero confidence is 0.0. Rendering nothing left a gap on their card where every other
+   * player had a chip, which reads as a rendering fault rather than as information (master_plan §2B).
+   * Only the DISPLAY collapses null and zero; the DTO keeps them distinct because the database does.
+   */
+  const value = sts ?? 0;
 
   if (!interactive) {
     return (
       <span className="border-border text-foreground-muted inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium">
-        STS {sts.toFixed(1)}
+        STS {value.toFixed(1)}
         {voucherCount != null && voucherCount > 0 && (
           <span className="opacity-70"> · {voucherCount}</span>
         )}
@@ -56,12 +64,12 @@ export function StsChip({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={`Skill-Trust Score ${sts.toFixed(1)} out of 5${
+        aria-label={`Skill-Trust Score ${value.toFixed(1)} out of 5${
           voucherCount ? `, from ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}` : ''
         }. What does this mean?`}
         className="border-border text-foreground-muted hover:border-primary hover:text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
       >
-        STS {sts.toFixed(1)}
+        STS {value.toFixed(1)}
         {voucherCount != null && voucherCount > 0 && (
           <span className="opacity-70">
             {terse

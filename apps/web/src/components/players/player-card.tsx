@@ -147,12 +147,12 @@ export function PlayerCard({
         <ClubStack clubs={player.clubs} />
       </div>
 
-      {(skill || player.sts != null) && (
-        <div className="flex flex-wrap items-center gap-2">
-          {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-          <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
-        </div>
-      )}
+      {/* The STS chip always renders now (0.0 when nobody has vouched yet, §2B), so this row is no
+          longer conditional on there being a score to show. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+        <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
+      </div>
 
       {(player.identityVerified ||
         player.skillVerified ||
