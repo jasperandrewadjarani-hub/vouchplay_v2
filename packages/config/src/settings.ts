@@ -133,7 +133,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   leaderboard_player_skill_verified_weight: 1,
   leaderboard_community_min_score: 1,
   leaderboard_community_contribution_weight: 1,
-  leaderboard_club_min_score: 1,
+  // 1 let a club with no contribution, no participation and one member onto the board on the
+  // strength of the member count alone. 5 keeps empty clubs off without touching anyone real
+  // (master_plan §1X).
+  leaderboard_club_min_score: 5,
   leaderboard_club_participation_weight: 4,
   leaderboard_club_active_members_weight: 2,
   leaderboard_club_attendance_weight: 4,

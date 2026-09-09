@@ -1174,6 +1174,45 @@ he still wants it after reading the above, the change is small (drop three clamp
 the consequences are listed here so the decision is made with them in view rather than discovered
 later.
 
+## 1X. A dialog trapped inside a row (2026-09-09, post-launch)
+
+Tapping the STS chip in the player directory opened a dialog that was see-through: the rows behind it
+painted straight over the copy, and the dark backdrop covered only part of the screen.
+
+**`fixed inset-0 z-50` is not absolute.** It positions against the viewport and stacks at 50 only when
+no ancestor has created a stacking context. §1S gave the compact row's trailing column
+`relative z-10` so the STS chip and Vouch button would sit above the row's tap overlay. That is a
+positioned element with a z-index, which **creates a stacking context**, and the dialog was rendered
+inline inside it. So the whole modal - backdrop included - was confined to that one row's box, and
+every later row's `z-10` column, being later in DOM order at the same level, painted over it.
+
+Nothing was wrong with the modal's own styles, which is why it looked like a rendering glitch rather
+than a layout bug.
+
+**The fix is a portal, and it is load-bearing rather than tidiness.** `Modal` now renders through
+`createPortal(..., document.body)`, so it escapes every ancestor stacking context regardless of what
+a caller nests it in. That fixes the whole class: any future dialog opened from inside a card, a row,
+a sticky header or a transformed element is now safe by construction instead of by luck.
+
+- Portaling is guarded by a `mounted` flag so it never runs during server rendering.
+- **The body scroll lock the docstring had always promised was never implemented.** It is now. Without
+  it the page scrolls behind an open dialog on a phone, which reads as the dialog sliding around.
+- Verified by driving the real component: the dialog's parent is `document.body`, a hit test at the
+  dialog's own centre lands inside the dialog rather than on a row behind it, and `body.style.overflow`
+  is `hidden` while it is open.
+
+**Two other inline dialogs share the old pattern** (`vouch-form`, `request-vouch-form`). Neither is
+currently opened from inside a stacking context, so neither is broken, and they were deliberately left
+alone: they sit on the live registration path that was being tested at the time. They should move onto
+the shared `Modal` when that path is quiet.
+
+### Clubs minimum score raised to 5
+
+A club with no contribution, no participation and one member was appearing on the Clubs board with a
+score of exactly 1.0, qualifying purely on the member count against a minimum of 1. A leaderboard that
+lists clubs which have done nothing cheapens the ones that have. The default is now 5, which excludes
+empty clubs without touching anyone real - fifth place scores 41.
+
 ## 1. Prompt Contract
 
 ### In scope

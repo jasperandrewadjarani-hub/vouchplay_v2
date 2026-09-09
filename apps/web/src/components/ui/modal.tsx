@@ -1,11 +1,19 @@
 'use client';
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 /**
  * Shared bottom-sheet-on-mobile / centered-on-desktop modal shell (matches the vouch form pattern).
  * Closes on overlay click, the X button, or Escape. Locks body scroll while open.
+ *
+ * RENDERED THROUGH A PORTAL ON document.body, and that is load-bearing rather than tidiness.
+ * `fixed inset-0 z-50` only escapes the page when no ancestor has created a stacking context. The
+ * STS chip lives inside a compact directory row whose trailing column is `relative z-10`, so an
+ * inline modal was trapped in that row: its backdrop covered only the row, and every later row
+ * painted straight through the dialog. A portal escapes every ancestor, whatever the caller nests it
+ * in (master_plan §1X).
  */
 export function Modal({
   title,
@@ -28,6 +36,9 @@ export function Modal({
    */
   align?: 'sheet' | 'center';
 }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -36,7 +47,19 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  // The docstring has always promised this and it was never implemented: without it the page
+  // scrolls behind the dialog on a phone, which reads as the modal sliding around.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex justify-center bg-black/50 ${
         align === 'center' ? 'items-center p-4' : 'items-end p-0 sm:items-center sm:p-4'
@@ -78,6 +101,7 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

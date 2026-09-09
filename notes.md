@@ -1944,3 +1944,24 @@ Open items, highest value first:
   `whitespace-nowrap`, so it keeps its natural width and the row clips instead of going ragged.
   Verified by measuring the live DOM at 375px rather than by eye: 24 rows, **0 pills wrapped**, max
   pill height 20px, row height unchanged at 71px.
+
+- **2026-09-09** - **The STS dialog was trapped inside a directory row, and it was my §1S change that
+  trapped it.** `fixed inset-0 z-50` only escapes the page when no ancestor creates a stacking
+  context. §1S gave the compact row's trailing column `relative z-10` so the STS chip and Vouch button
+  would sit above the row's tap overlay - a positioned element with a z-index, which creates a
+  stacking context - and the dialog rendered inline inside it. The whole modal, backdrop included, was
+  confined to one row's box, and later rows painted over it. Nothing was wrong with the modal's own
+  styles, which is why it read as a rendering glitch rather than a layout bug.
+  **`Modal` now renders through `createPortal(document.body)`**, guarded by a `mounted` flag so it
+  never runs during SSR. That fixes the class, not the instance: any dialog opened from inside a card,
+  row, sticky header or transformed element is now safe by construction. **The body scroll lock its
+  docstring had always promised was never implemented** - added at the same time. Verified against the
+  real component from a compact row: parent is `document.body`, a hit test at the dialog's centre
+  lands inside the dialog, and `body.style.overflow` is `hidden` while open.
+  **Two other inline dialogs share the old pattern** (`vouch-form`, `request-vouch-form`); neither is
+  opened from inside a stacking context so neither is broken, and both were left alone because they
+  sit on the live registration path Jasper was testing. Move them onto `Modal` when that path is quiet.
+  **`leaderboard_club_min_score` default raised 1 -> 5** so clubs with no contribution and no
+  participation stop appearing on the board on member count alone. **The DB row still pins it to 1**,
+  so Jasper must change it in Admin -> System settings and rebuild; a direct write from here would
+  leave the settings audit trail showing the wrong actor. See master_plan §1X.
