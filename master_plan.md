@@ -1389,6 +1389,200 @@ happens twice.
 the capability did not exist yet. It is restored alongside the control that implements it. **Copy and
 capability ship together or not at all.**
 
+## 2B. A directory you can actually filter, and comments that stand on their own (2026-09-09, post-launch)
+
+Three changes, two of which need no migration and one of which does. They are released in that order.
+
+### Every player shows an STS, including 0.0
+
+`StsChip` returned `null` when `sts` was null, so a player nobody has vouched for yet had a visible
+gap where everyone else had a chip. On a card grid and on the compact row that reads as a rendering
+fault, not as information, and it made the directory look inconsistent to the one group most likely
+to be new: players with no vouches.
+
+**A missing skill profile is not missing data - it is a real, known value.** No vouches means the
+community has zero confidence about that player's level, and zero confidence is `0.0`, not blank.
+The chip now renders `STS 0.0` in that case, the vouch count stays hidden at zero rather than
+printing "0 vouches", and the explainer the chip already opens carries the sentence that makes it
+safe: **a low STS does not mean a weak player, usually just fewer vouches so far.**
+
+The DTO is unchanged: `sts` stays `number | null`, because null and zero are genuinely different
+facts about the database and only the display collapses them. The detailed card no longer gates the
+chip row on `sts != null`.
+
+### The directory filters become the filters people asked for
+
+The panel offered City, Sex, **Minimum self-rated skill**, and four checkboxes. Self-rated skill is
+the one number on a VouchPlay profile that nobody else has attested to, so filtering a search by it
+inverted the product's entire premise, and the three filters that matter most - what the community
+says a player's level is, how confident that is, and which club they play with - were all missing.
+
+**Filters now available:** skill level, minimum STS, city, sex, club, identity verified, coach,
+looking for partner, open to sponsorship. The self-rated filter is gone.
+
+**Skill uses the app-wide precedence, not community rating alone.** `player_fits_division()` and
+`evaluateSkillFloor` already resolve a player's level as *community skill if the community has rated
+them, otherwise their self-rating*, and a filter that departed from that would answer a different
+question from the rest of the app. It matters concretely: 140 of the 163 directory profiles have a
+community skill level, so a strict community-only filter would make the other 23 invisible the moment
+anybody touched the control. The label says "Skill level" and the hint says which rating it used.
+
+**Controls are chosen per data type, not by fashion.**
+
+- **Skill level: tappable band chips**, multi-select. Seven named, ordered, discrete values. A
+  two-thumb range slider is the classic choice and it is the wrong one here - dual-thumb sliders are
+  poor on touch, poor with a screen reader, and give no name to what you selected. Chips say
+  "Novice" and "Low Intermediate" out loud, and tapping two adjacent chips expresses a range anyway.
+- **STS: a single-thumb slider**, 0 to 5 in half steps, with a live readout and Any at zero. This
+  *is* continuous numeric data with no useful names, which is exactly the case a slider fits, and one
+  thumb keeps it keyboard- and screen-reader-safe.
+- **Sex: a segmented Any / Male / Female**, not a select. Three options do not need a menu.
+- **The four booleans: toggle pills** with a check mark, not checkboxes. A 44px pill is a real touch
+  target for an older player on a phone; a default checkbox is roughly 13px. State is carried by the
+  mark and the label as well as the fill, never by colour alone.
+- **City: a list of the cities that actually have players**, with counts, not a datalist of every
+  chartered city in the country. The directory holds 8 distinct city strings that are really 3
+  places - `Zamboanga`, `Zamboanga City`, `Zamboanga city`, `zamboanga city`, `zamboanga` and
+  `City of Zamboanga` are one city typed six ways. The options are normalised (case-folded, with a
+  leading `City of ` or trailing ` City` removed) so those six collapse into one row, and the filter
+  still matches with a case-insensitive contains, so every spelling is found.
+- **Club: a plain select** of the 7 active clubs.
+
+**Filtering by STS is not ranking by STS.** §8.4 forbids ordering the directory by STS and that has
+not changed: the sort is still recent activity with a verified-first tiebreak. A minimum-confidence
+filter answers "show me players the community has actually assessed", which is a different question
+from "who is best", and the slider's label says so.
+
+**An active filter is always visible and always removable.** The Filters button carries a count, and
+each applied filter appears as a chip with its own X. A filter you cannot see is a filter you cannot
+undo, and the previous panel hid every setting behind a closed disclosure.
+
+**How the query works, and the scale it assumes.** Role, identity, club, skill and STS all live
+outside `profiles`, so each contributes an id set that is intersected before the page query runs.
+The skill and STS sets are computed in one pure module from two small cached reads
+(`player_skill_profiles`, and `id, self_rated_skill` for the directory), because effective skill is a
+per-row fallback that PostgREST cannot express across two tables. At 163 profiles that is trivial and
+correct. **It is documented as valid to roughly a thousand players**, past which the id list belongs
+in a SQL view or an RPC; the comment in `queries.ts` says so rather than leaving the next person to
+discover the ceiling.
+
+All of the parsing, normalising, matching and counting lives in `lib/players/filters.ts` as pure
+functions with unit tests, so the URL, the chips, the count on the button and the rows returned
+cannot disagree - the same discipline §1Z applied to the organizer's queues.
+
+Old `?minSkill=` links keep working: the value maps onto the new minimum band rather than dropping
+a shared search on the floor.
+
+### Comments no longer need a rating attached, and can be edited or deleted
+
+A comment could only be created as a field on the vouch form, which meant the only way to say
+something about a player was to also assert a skill level for them - and once said, it was permanent.
+There was no edit and no delete anywhere in the product.
+
+- **A comment can stand alone.** `vouch_comments.vouch_id` becomes nullable (migration 0028). When
+  the author does happen to have an active vouch for that player the comment is still linked to it,
+  so nothing about existing rows or the existing vouch-with-comment path changes.
+- **One active comment per author per player, editable.** This mirrors the one-active-vouch rule,
+  makes "your comment" unambiguous in the UI, and matches the data exactly: **0 of the 44 active
+  comments in production are a second comment from the same author about the same player**, so no
+  backfill and no constraint violation is possible. It is enforced in the action rather than by a
+  unique index, so a legacy duplicate could never break a deploy.
+- **Edit updates the body**; `updated_at` already had a trigger, and an edited comment is labelled as
+  edited rather than quietly rewritten under a reader who saw the original.
+- **Delete is a soft delete** to `status = 'removed'`, a value the enum has always had. The comment
+  leaves every public read immediately, which is what the author asked for, and the row survives for
+  moderation - a comment that was reported and then deleted by its author must not vanish from the
+  moderation trail.
+- **The same gates as vouching**, because a standalone comment is a new way to write on a stranger's
+  profile: signed in, target active and onboarded, no block in either direction, the account-status
+  check `checkActorCanVouch` that already applies to vouches, no commenting on your own profile, and
+  a rolling 24h limit that is a `system_settings` row (`player_comments_per_24h`), never a constant.
+- **The target is notified.** `vouch_comment_received` was already in the notification catalog and
+  had never been used by anything; its copy said "left a comment with their vouch", which is now
+  false half the time, so it reads "commented on your profile".
+
+RLS gains author update and delete policies. The writes go through audited server actions on the
+service client, so the policies are defence in depth rather than the mechanism - but a table that can
+now be edited should say in its own policies who may edit it.
+
+**Release order.** The STS chip and the filters need no migration and ship first. The comment work is
+**migrate-before-deploy**: without 0028 the "Add a comment" button is a visible control that would
+throw a not-null violation at a real person, which is exactly the case the v1.22 rule reserves for
+migrating first.
+
+## 2C. Three registration bugs found by using it (2026-09-09, post-launch)
+
+Found while Jasper walked the registration flow. Two of them shipped a control that could only fail,
+which is worse than a missing feature: a button that does nothing teaches people the app is broken.
+
+### The early-bird window saved, then vanished
+
+Setting the early-bird dates reported success and the fields were empty again after a refresh.
+
+`createTournament` wrote `early_bird_starts_at` and `early_bird_ends_at`; `updateTournament` never
+put them in its patch, and the manage page never passed them back into the form's `initial`. Either
+one alone produces exactly what Jasper saw. The write was discarded and the read had nothing to show.
+
+There is no clever fix here, only the boring one: the update patch carries the two columns, and the
+manage page seeds the two inputs. What is worth keeping is the shape of the bug. **A create path and
+an update path that list their columns separately will drift, and the drift is silent** - the form
+still submits the field, the action still returns ok, and nothing anywhere reports a problem. It is
+the same failure mode as the `onboarding_completed_at` typo in v1.31: the code was confident and
+wrong, and only a round trip through the database would have caught it.
+
+### Divisions came back in an order nobody chose
+
+A fresh tournament listed Advanced above Beginner, and the order changed between visits.
+
+Divisions were read with `.order('created_at')`. The fifteen starter divisions are written in ONE
+insert, so they share a timestamp to the microsecond - `created_at` is not an order, it is a tie.
+Postgres was free to return them however it liked, and did.
+
+**The canonical order is now computed, not stored:** lowest skill band first, and Men, Women, Mixed
+inside each band - the order a player reads down a printed entry form, and the same order
+`buildDefaultDivisionPreset` already generates. It lives in `packages/core` with 20 unit tests,
+including that sorting an already-sorted list changes nothing, because a list that reshuffles on
+refresh reads as a bug even when every row in it is correct. An Open bracket with no skill bound
+sorts LAST rather than first: an unbounded event is not the easiest one, and putting it at the top
+buries the beginner brackets a new player is looking for.
+
+Organizers can also arrange divisions by hand (migration 0029). `display_order` is nullable and is
+deliberately NOT backfilled: null means "use the canonical order", so a division added next month
+still slots in where it belongs instead of landing at the bottom of a hand-made list. A tournament
+carries explicit positions only once someone has actually arranged it.
+
+### A cancelled entry left a team behind, and the team offered a button that could not work
+
+After an entry was cancelled, its division still showed **Register team** - next to "waiting for your
+partner to confirm" - and pressing it said "That action failed."
+
+Both halves were true and they contradicted each other. Teams were loaded when their status was
+`forming`, `formed` or `locked`; registrations were loaded excluding `withdrawn`, `cancelled` and
+`rejected`. `withdrawRegistration` disbands the team it cancels, but the organizer's **reject** path
+only released the slot and left the team `formed`. So the entry was gone while the team was still
+live, and the division rendered the state for "you have a team but have not entered yet" - a
+register button pointed at a team that was already spoken for.
+
+Fixed on both sides, because either alone is insufficient:
+
+- **Write side.** The disband logic moves into one helper used by both the player's cancellation and
+  the organizer's rejection, and it now also cancels the team's outstanding invitations - an
+  invitation into a closed entry is a decision that no longer exists. The rejection notification is
+  sent BEFORE the team is taken apart, because recipients are resolved from its members.
+- **Read side.** A team is live unless it HAS registrations and every one of them is closed. This is
+  read from the registrations rather than inferred from the team row, so the three teams already
+  stranded in production heal on the next page load with no data migration - and any future path
+  that forgets to clean up cannot resurrect a dead team.
+
+A team with no registration at all stays live: that is the ordinary doubles case, formed and not yet
+entered, and it is the one state the old rule got right.
+
+### Release order
+
+The first two fixes and the read-side repair need no migration and ship together. Migration 0029 is
+the organizer's manual ordering; the code that reads `display_order` ships only after it is applied,
+since selecting a column that does not exist fails the whole tournament page.
+
 ## 1. Prompt Contract
 
 ### In scope

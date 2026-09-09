@@ -929,6 +929,68 @@ export async function requestRegistrationCancellation(
   };
 }
 
+/**
+ * Retire the team behind a registration that has just closed, if that entry was its last one
+ * (master_plan §2C).
+ *
+ * A team exists to hold an entry. Once the entry is withdrawn, cancelled or rejected the team is
+ * history, and leaving it `formed` is what produced a division offering "Register team" beside
+ * "waiting for your partner" - two states that cannot both be true. Outstanding invitations are
+ * cancelled with it, because an invitation into a closed entry is a decision that no longer exists.
+ *
+ * Returns the OTHER members, so the caller can notify them in the order that suits its own flow -
+ * a rejection has to reach the team before the team is taken apart.
+ */
+async function disbandTeamIfEntryClosed(
+  svc: ReturnType<typeof createServiceClient>,
+  registrationId: string,
+  actorId: string,
+  actorRole: 'player' | 'organizer',
+): Promise<string[]> {
+  const { data: regRow } = await svc
+    .from('registrations')
+    .select('team_id')
+    .eq('id', registrationId)
+    .maybeSingle();
+  const teamId = (regRow as { team_id: string | null } | null)?.team_id;
+  if (!teamId) return [];
+  const { data: stillActive } = await svc
+    .from('registrations')
+    .select('id')
+    .eq('team_id', teamId)
+    .not('status', 'in', '(withdrawn,cancelled,rejected)')
+    .limit(1);
+  if (stillActive && stillActive.length > 0) return [];
+
+  const { data: memberRows } = await svc
+    .from('team_members')
+    .select('player_id')
+    .eq('team_id', teamId);
+  const others = ((memberRows ?? []) as { player_id: string }[])
+    .map((m) => m.player_id)
+    .filter((id) => id !== actorId);
+  await svc.from('team_members').delete().eq('team_id', teamId);
+  await svc
+    .from('teams')
+    .update({ status: 'disbanded', updated_at: new Date().toISOString() })
+    .eq('id', teamId);
+  await svc
+    .from('partner_invitations')
+    .update({ status: 'cancelled' })
+    .eq('team_id', teamId)
+    .eq('status', 'sent');
+  await svc.from('audit_logs').insert({
+    actor_id: actorId,
+    actor_role: actorRole,
+    action: 'team_dissolved_on_cancellation',
+    entity_type: 'team',
+    entity_id: teamId,
+    before_snapshot: { registration_id: registrationId },
+    after_snapshot: { status: 'disbanded' },
+  });
+  return others;
+}
+
 export async function withdrawRegistration(
   registrationId: string,
   tournamentId: string,
@@ -984,58 +1046,21 @@ export async function withdrawRegistration(
     // Cancelling dissolves the team so both players are immediately free to register again with a new
     // partner - no separate "leave team" step. The partner is notified. We only dissolve once the team
     // has no remaining active registration (the one just cancelled was its only active entry).
-    let dissolvedWithPartner = false;
-    const { data: regRow } = await svc
-      .from('registrations')
-      .select('team_id')
-      .eq('id', registrationId)
-      .maybeSingle();
-    const teamId = (regRow as { team_id: string } | null)?.team_id;
-    if (teamId) {
-      const { data: stillActive } = await svc
-        .from('registrations')
-        .select('id')
-        .eq('team_id', teamId)
-        .not('status', 'in', '(withdrawn,cancelled,rejected)')
-        .limit(1);
-      if (!stillActive || stillActive.length === 0) {
-        const { data: memberRows } = await svc
-          .from('team_members')
-          .select('player_id')
-          .eq('team_id', teamId);
-        const others = ((memberRows ?? []) as { player_id: string }[])
-          .map((m) => m.player_id)
-          .filter((id) => id !== user.id);
-        await svc.from('team_members').delete().eq('team_id', teamId);
-        await svc
-          .from('teams')
-          .update({ status: 'disbanded', updated_at: new Date().toISOString() })
-          .eq('id', teamId);
-        await svc.from('audit_logs').insert({
-          actor_id: user.id,
-          actor_role: 'player',
-          action: 'team_dissolved_on_cancellation',
-          entity_type: 'team',
-          entity_id: teamId,
-          before_snapshot: { registration_id: registrationId },
-          after_snapshot: { status: 'disbanded' },
-        });
-        if (others.length > 0) {
-          dissolvedWithPartner = true;
-          const [me, tmName] = await Promise.all([
-            getActorMini(user.id),
-            getTournamentMini(tournamentId),
-          ]);
-          await notifyMany(others, {
-            type: 'partner_team_left',
-            actorId: user.id,
-            params: { actorName: me.name, tournamentName: tmName.name },
-            link: tmName.slug ? `/tournaments/${tmName.slug}?register=1` : '/tournaments',
-            entityType: 'tournament',
-            entityId: tournamentId,
-          });
-        }
-      }
+    const others = await disbandTeamIfEntryClosed(svc, registrationId, user.id, 'player');
+    const dissolvedWithPartner = others.length > 0;
+    if (dissolvedWithPartner) {
+      const [me, tmName] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(tournamentId),
+      ]);
+      await notifyMany(others, {
+        type: 'partner_team_left',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tmName.name },
+        link: tmName.slug ? `/tournaments/${tmName.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
     }
 
     // Notify organizers of the withdrawal, and any promoted team (§27.1, §27.3).
@@ -1364,12 +1389,15 @@ export async function rejectRegistration(
         .update({ review_reason: reason.trim() })
         .eq('id', registrationId);
     }
+    // Notify BEFORE the team is taken apart: recipients are resolved from its members, so a
+    // rejection sent afterwards would reach nobody.
     await notifyRegistrationTeam(
       registrationId,
       tournamentId,
       'registration_rejected',
       reason.trim() || undefined,
     );
+    await disbandTeamIfEntryClosed(svc, registrationId, user.id, 'organizer');
     const promoted = (data as { promoted?: string | null } | null)?.promoted;
     if (promoted) await notifyRegistrationTeam(promoted, tournamentId, 'registration_promoted');
     await revalTournament(tournamentId);

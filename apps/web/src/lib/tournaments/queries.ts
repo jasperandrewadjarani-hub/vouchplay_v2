@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache';
 import type { TournamentRow, DivisionRow, TournamentStatus } from '@vouchplay/db';
+import { sortDivisions } from '@vouchplay/core';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -502,8 +503,12 @@ export async function getTournamentBySlug(
       ownerName: owner?.name ?? null,
       ownerSlug: owner?.slug ?? null,
       maxClubsPerPlayer: row.max_clubs_per_player ?? 3,
-      divisions: ((divRes.data ?? []) as unknown as DivisionRow[]).map((division) =>
-        toDivisionDTO(division, registeredByDivision.get(division.id) ?? 0),
+      // Ordered here rather than in SQL: the starter divisions share one insert timestamp, so
+      // `order('created_at')` returned them in whatever sequence Postgres felt like (§2C).
+      divisions: sortDivisions(
+        ((divRes.data ?? []) as unknown as DivisionRow[]).map((division) =>
+          toDivisionDTO(division, registeredByDivision.get(division.id) ?? 0),
+        ),
       ),
       organizers,
       announcements,

@@ -149,6 +149,8 @@ export async function getViewerRegistrationState(
 
   const teamsByDivision: Record<string, ViewerTeam> = {};
   const registrationsByDivision: Record<string, ViewerRegistration> = {};
+  /** Teams whose every registration is closed. They are history, and nothing may act on them. */
+  const retiredTeamIds = new Set<string>();
 
   if (myTeamIds.length > 0) {
     const { data: teams } = await svc
@@ -159,6 +161,36 @@ export async function getViewerRegistrationState(
       .in('status', ['forming', 'formed', 'locked']);
     const teamRows = (teams ?? []) as { id: string; division_id: string; status: string }[];
     const activeTeamIds = teamRows.map((t) => t.id);
+
+    // Every registration these teams have ever had, closed ones included (§2C).
+    //
+    // A team outlives its entry. `withdrawRegistration` disbands the team it cancels, but the
+    // organizer's reject path only released the slot, so a rejected entry left a `formed` team
+    // behind. The team then read as live while its registration read as gone, and the division
+    // offered "Register team" next to "Waiting for your partner to confirm" - a button that could
+    // only fail, because the team it would register was already spoken for.
+    //
+    // So the rule is read here, not inferred from the team row: a team is live unless it HAS
+    // registrations and every one of them is closed. A team with no registration at all is the
+    // ordinary doubles case - formed, not yet entered - and stays live.
+    const { data: allRegs } = activeTeamIds.length
+      ? await svc
+          .from('registrations')
+          .select('id, division_id, status, slot_hold_expires_at, team_id')
+          .in('team_id', activeTeamIds)
+      : { data: [] };
+    const allRegList = (allRegs ?? []) as {
+      id: string;
+      division_id: string;
+      status: string;
+      slot_hold_expires_at: string | null;
+      team_id: string;
+    }[];
+    const CLOSED_REG = new Set(['withdrawn', 'cancelled', 'rejected']);
+    for (const id of activeTeamIds) {
+      const mine = allRegList.filter((r) => r.team_id === id);
+      if (mine.length > 0 && mine.every((r) => CLOSED_REG.has(r.status))) retiredTeamIds.add(id);
+    }
 
     // Members of those teams.
     const { data: memberRows } = activeTeamIds.length
@@ -188,6 +220,7 @@ export async function getViewerRegistrationState(
         if (r.team_id) declinedTeamIds.add(r.team_id);
     }
     for (const t of teamRows) {
+      if (retiredTeamIds.has(t.id)) continue;
       const teamMembers = members.filter((m) => m.team_id === t.id);
       const pending = teamMembers.find((m) => !m.confirmed_at && m.player_id !== userId);
       const hasOpenSeat = teamMembers.length < 2 && declinedTeamIds.has(t.id);
@@ -204,20 +237,9 @@ export async function getViewerRegistrationState(
       };
     }
 
-    // Registrations for those teams.
-    const { data: regs } = activeTeamIds.length
-      ? await svc
-          .from('registrations')
-          .select('id, division_id, status, slot_hold_expires_at, team_id')
-          .in('team_id', activeTeamIds)
-          .not('status', 'in', '(withdrawn,cancelled,rejected)')
-      : { data: [] };
-    const regList = (regs ?? []) as {
-      id: string;
-      division_id: string;
-      status: string;
-      slot_hold_expires_at: string | null;
-    }[];
+    // The open registrations, filtered from the set already fetched above rather than queried
+    // again - two round trips could disagree with each other about the same rows.
+    const regList = allRegList.filter((r) => !CLOSED_REG.has(r.status));
     // Payments for those registrations.
     const paymentByReg = new Map<
       string,
@@ -291,14 +313,19 @@ export async function getViewerRegistrationState(
     .eq('tournament_id', tournamentId)
     .eq('status', 'sent')
     .or(`inviter_id.eq.${userId},invitee_id.eq.${userId}`);
-  const inv = (invRows ?? []) as {
-    id: string;
-    division_id: string;
-    inviter_id: string;
-    invitee_id: string;
-    message: string | null;
-    team_id: string | null;
-  }[];
+  const inv = (
+    (invRows ?? []) as {
+      id: string;
+      division_id: string;
+      inviter_id: string;
+      invitee_id: string;
+      message: string | null;
+      team_id: string | null;
+    }[]
+  )
+    // An invitation to join a team whose entry is already closed cannot be accepted into anything.
+    // Showing it would offer the invitee a decision that no longer exists (§2C).
+    .filter((i) => !(i.team_id && retiredTeamIds.has(i.team_id)));
 
   // An invitation whose team already carries a submitted or verified receipt is prepaid: the person
   // being asked to confirm is not being asked for money (§1U).

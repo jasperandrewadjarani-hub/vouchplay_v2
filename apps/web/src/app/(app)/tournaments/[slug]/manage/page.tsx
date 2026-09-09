@@ -122,6 +122,8 @@ export default async function ManageTournamentPage({ params }: Params) {
             endAt: toDateInput(t.endAt),
             registrationOpenAt: toLocalInput(t.registrationOpenAt),
             registrationCloseAt: toLocalInput(t.registrationCloseAt),
+            earlyBirdStartsAt: toLocalInput(t.earlyBirdStartsAt),
+            earlyBirdEndsAt: toLocalInput(t.earlyBirdEndsAt),
             contact: t.contact ?? '',
             termsText: t.termsText ?? '',
             paymentInstructions: t.paymentInstructions ?? '',

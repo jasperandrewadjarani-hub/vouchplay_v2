@@ -278,6 +278,10 @@ export async function updateTournament(
       end_at: toIso(formData.get('endAt')),
       registration_open_at: toIso(formData.get('registrationOpenAt')),
       registration_close_at: toIso(formData.get('registrationCloseAt')),
+      // The create path has always written these; leaving them out of the update patch meant the
+      // form accepted the dates, reported success, and silently discarded them (§1V).
+      early_bird_starts_at: toIso(formData.get('earlyBirdStartsAt')),
+      early_bird_ends_at: toIso(formData.get('earlyBirdEndsAt')),
       contact: v.contact || null,
       terms_text: v.termsText || null,
       payment_instructions: v.paymentInstructions || null,
