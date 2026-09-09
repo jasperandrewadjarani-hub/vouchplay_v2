@@ -1806,3 +1806,32 @@ Open items, highest value first:
   Champions to show one number, which pushed the highlight down and opened a page about the community
   with a paragraph about the viewer. Below the boards is also the more honest order. See master_plan
   §1T, handover v1.27. No migration.
+
+- **2026-09-09** - **DESIGN ONLY, awaiting Jasper's go-ahead: pay first, confirm the partner after.**
+  Written up in master_plan §1U. Nothing implemented and nothing deployed. The current doubles path
+  is blocked by structure, not polish: `accept_partner_invitation` is what **creates** the `teams`
+  row, so until the partner taps accept there is no team to register and nothing to pay for. The
+  proposed flow creates the team at partner selection (inviter confirmed, invitee
+  `confirmed_at = null`, team `forming`), lets the payer go straight to QR and receipt upload, and
+  confirms the partner afterwards. `register_team` already permits this - it only ever required the
+  actor to be a team member - and the capacity count already treats `payment_submitted` as holding a
+  slot, so "the receipt reserves the slot" needs no change to capacity or waitlist logic.
+  **The decline case is the one that decides whether the design is honest:** the entry is not
+  cancelled and the slot is not released, the payer is notified and can name a replacement keeping
+  slot, payment and position, and replacement is permitted **only** when the named partner actively
+  declined or their invitation expired. That is a deliberate carve-out from §1D, which forbids
+  unilateral partner replacement so nobody is displaced without their knowledge - a person who said
+  no has not been displaced, they created a vacancy. Accepted partners and still-deciding partners
+  remain unswappable.
+  **Receipts, answering Jasper's question:** they already have a home. Uploads go to the private
+  `payment-proofs` bucket at `{registration_id}/proof-{ts}-{rand}.{ext}` (`public = false`, no public
+  policy), and organizers review them at Manage -> Registrations via a **60-second signed URL** minted
+  server-side after an authz check, plus a Verify control. There is deliberately **no browsable master
+  folder** - that would be a folder of other people's names, reference numbers and bank screenshots.
+  The real gap is that organizers have no "payments awaiting review" queue and must scroll the
+  registrations list; that is a filter on an existing screen and belongs in this slice.
+  **Needs migration 0025** (`partner_invitations.team_id`, a create-team-with-pending-partner RPC, a
+  backward-compatible branch in `accept_partner_invitation` so invitations already in flight keep
+  working, a guarded replace-pending-partner RPC, and RLS for the named invitee).
+  **Release order: migrate first, then deploy** - the gap is a visible control that would error, on
+  the payment path, during a live registration window.

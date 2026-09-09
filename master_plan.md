@@ -810,6 +810,134 @@ the disclosure, which is the same pattern the leaderboards page uses for its own
 below the boards is also the more honest order: you see where the community stands, then where you
 stand in it.
 
+## 1U. Pay first, confirm the partner after (DESIGN, 2026-09-09) - NOT YET IMPLEMENTED
+
+**Status: design only.** Nothing in this section has shipped. It changes the live payment path during
+an open registration window, so it needs Jasper's go-ahead and migration 0025 applied before any code
+is deployed.
+
+### What the flow costs a player today
+
+The doubles path is four separate sessions, and the app cannot do anything useful in three of them:
+
+1. Player A picks a division and invites Player B.
+2. **A waits.** No team exists yet - `accept_partner_invitation` is what *creates* the `teams` row -
+   so there is nothing to register and nothing to pay.
+3. B accepts. Now a team exists.
+4. A comes back, taps Register, gets a short slot hold, pays, uploads the receipt.
+5. The organizer verifies, and the entry is confirmed.
+
+The blocker is structural, not cosmetic: **the team is created by the acceptance**, so every step
+after it is gated behind another person picking up their phone. A player who has already agreed with
+their partner in person, over Messenger, or at the court has to wait anyway.
+
+### The flow we want
+
+1. Player A picks a division, picks their partner, and **goes straight to payment**.
+2. A pays and uploads the receipt. **The receipt reserves the slot.**
+3. B is notified that A has entered them as a partner and already paid, and confirms or declines.
+4. The organizer verifies the payment; **both players are notified** and the entry is confirmed.
+
+Two clicks and an upload, in one sitting, without waiting for anyone.
+
+### How it is built
+
+**The team is created at selection, not at acceptance.** A new RPC creates the `teams` row
+(status `forming`) with A as a confirmed member and B as a member whose `confirmed_at` is null.
+`team_members.confirmed_at` has always been nullable and has always been set eagerly; this is the
+first use of what the column was for. Registration and payment then work unchanged, because
+`register_team` only ever required the actor to be a team member - it never required the partner to
+have accepted.
+
+**The slot logic already does what we need.** `register_team` counts a division as occupied by
+`confirmed`, `payment_submitted`, `under_review`, and un-expired `payment_pending`. So a short hold
+covers the walk to the payment screen, and the uploaded receipt (`payment_submitted`) holds the slot
+with no expiry until the organizer rules on it. No change to capacity or waitlist behaviour.
+
+**Accepting attaches to the existing team.** `partner_invitations` gains a nullable `team_id`. When
+it is set, accepting stamps `confirmed_at` on B's existing row and moves the team to `formed`. When
+it is null, the RPC behaves exactly as it does today and creates a team.
+**That branch is what makes this safe to deploy mid-tournament:** every invitation already sitting in
+someone's inbox has a null `team_id` and keeps working.
+
+### If the partner declines
+
+This is the case that decides whether the design is honest, because A has already paid.
+
+- **The entry is not cancelled and the slot is not released.** The money is in and the organizer has
+  a receipt to review.
+- **A is notified and the entry enters "needs a partner".** A can name a replacement, keeping the
+  slot, the payment and the position. The replacement is put through the same eligibility and skill
+  floor checks as the original.
+- **A replacement is only permitted when the named partner actively declined, or their invitation
+  expired.** Never while they are still deciding, and never after they have accepted.
+
+**This is a deliberate carve-out from §1D, and the reason matters.** §1D forbids unilateral partner
+replacement so that a teammate cannot be displaced without their knowledge, and that protection is
+untouched here: a person who has accepted still cannot be swapped out, and a person still deciding
+still cannot be overridden. The carve-out only covers someone who has **said no**, which is not a
+displacement - it is a vacancy they created. The locked rule protects people from being removed; it
+was never meant to trap a paid entry behind somebody else's decline.
+
+**Partner lock.** Once B accepts, or the organizer verifies the payment, or the tournament's
+`club_lock_at` passes, or registration closes - whichever comes first - only the organizer can change
+the partner, with a reason and an audit row. That is §1D's existing rule, unchanged.
+
+### What Player A is told before they pay
+
+The warning has to do real work, because A is about to spend money on somebody else's behalf:
+
+- It names the partner and states plainly that **they have not confirmed yet**.
+- It says **agree with them first** - this is not an invitation to enter a stranger.
+- It says what happens if they decline: **the slot and the payment are kept, and a replacement can be
+  named**. A player who does not know that will not risk paying.
+- It requires an explicit acknowledgement (a checkbox), because a warning nobody has to touch is a
+  warning nobody reads.
+
+Partners must already have a VouchPlay account - partner search only returns existing, active,
+onboarded profiles - so "make sure your partner is registered" is enforced, not merely advised.
+
+### What Player B is told
+
+B is being asked to confirm something already paid for, so the message cannot be a bare
+accept/decline:
+
+- Who entered them, which division, and that **the fee is already paid**.
+- Confirming costs them nothing and does not ask them for money.
+- Declining is safe and free, and it releases nothing of theirs. It is stated without guilt, because
+  a person pressured into a tournament they cannot play is worse for everyone.
+
+### Where the receipts go (answering the question directly)
+
+They already have a home, and it is private by design:
+
+- Every uploaded receipt goes to the private Supabase Storage bucket **`payment-proofs`**, at
+  `{registration_id}/proof-{timestamp}-{random}.{ext}`. The bucket has `public = false` and no public
+  policy, so the file is not reachable by URL.
+- Organizers review them at **Manage → Registrations**, where each paid entry has a **View proof**
+  control that mints a **60-second signed URL** server-side after an authorization check, and a
+  **Verify** control that moves the payment to `verified` and the registration to `confirmed`.
+- There is no "master folder" to browse, and that is on purpose: a browsable folder of receipts is a
+  folder of other people's names, reference numbers and bank screenshots. Access is per-entry,
+  per-organizer, time-limited and audited.
+- **Gap worth closing:** the organizer has no single "payments awaiting review" queue - proofs are
+  found by scrolling the registrations list. That is a filter on an existing screen, not new
+  infrastructure, and it belongs in this slice.
+
+### Migration 0025 (required before any of this deploys)
+
+- `partner_invitations.team_id uuid null references teams(id) on delete cascade`, plus an index.
+- `create_team_with_pending_partner(...)` - team + confirmed inviter + unconfirmed invitee + the
+  invitation, in one transaction, rejecting the same partner conflicts the current accept path does.
+- `accept_partner_invitation` extended with the `team_id` branch described above, keeping the old
+  path for invitations already in flight.
+- `replace_pending_partner(...)` - permitted only when the current invitee declined or expired;
+  writes `registration_events` and leaves the registration and payment rows untouched.
+- RLS: the invitee can read the team and registration they are named in before they accept.
+
+**Release order (v1.22 rule): migrate first, then deploy.** The gap here is a visible control that
+would error, not a silent read, and it sits on the payment path during a live registration window.
+
 ## 1. Prompt Contract
 
 ### In scope
