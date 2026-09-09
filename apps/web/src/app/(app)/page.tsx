@@ -85,9 +85,6 @@ export default async function HomePage() {
                 All rankings
               </ButtonLink>
             </div>
-            {/* A signed-in player sees their own position immediately before seeing whose position
-                they are chasing. */}
-            {user && <MomentumCard rows={momentum} />}
             <div className="vp-glow relative overflow-hidden rounded-2xl">
               <div className="vp-gradient absolute inset-x-0 top-0 z-10 h-1" aria-hidden />
               <LeaderboardPanel
@@ -125,6 +122,9 @@ export default async function HomePage() {
               compact
               viewerId={user?.id ?? null}
             />
+            {/* Below the boards, not above them: the middle of Home belongs to the community, and
+                this is where you stand in it (§1T). Collapsed, with the rank still in the summary. */}
+            {user && <MomentumCard rows={momentum} />}
             <RankingsExplanation />
           </section>
         </>

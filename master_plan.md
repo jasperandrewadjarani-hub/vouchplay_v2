@@ -767,6 +767,49 @@ place most people meet the score. Leaving it unexplained there and saying "open 
 out" puts the answer one navigation away from the question. A club logo does not raise a question
 that urgent.
 
+## 1T. Three corrections found on a real phone (2026-09-09, post-launch)
+
+All three came from Jasper using the live app on an Android device, and all three are the same class
+of mistake: something that looked fine in a component looked wrong in a list.
+
+### Club icons come back out of the directory row
+
+§1S put club affiliations on line two of the compact row, beside the skill pill. On a real phone that
+line has to hold a pill like "High Intermediate · Community" plus up to two logos, and the pill wraps
+onto a second line - the exact ragged-list failure §1H and §1N were both written about.
+
+**The icons are removed from the compact row.** The trade is not close: the skill band is the thing a
+player is scanned for, and a wrapped pill costs the whole list its rhythm, while a club logo at 20px
+is decoration in that context. Club affiliation is still on the detailed card and on the profile,
+where it has room to be read rather than glanced at.
+
+**Rule, now stated plainly: a compact row gets one pill per line and nothing beside it.** Anything
+else added to that line has to earn its place against making every row in the list taller.
+
+### The row's tap now shows that it is loading
+
+§1N's pending spinner stopped appearing for most taps and nobody noticed for a release. §1S split the
+row into an invisible overlay link covering the row and a named link on the player's name; the
+spinner lived inside the **name** link, but almost every tap lands on the **overlay**. `useLinkStatus`
+only reports for the `<Link>` it sits inside, so the common case silently lost its feedback while the
+rare case kept it.
+
+The cue now sits inside both links. Whichever one a person actually hits, the avatar shows the
+spinner. **The general lesson: when a component is split in two, its state hooks do not follow - check
+every path, not the one that was refactored.**
+
+### Your momentum moves below the boards, and collapses
+
+Home's job in the middle of the page is the community, not the viewer. The momentum card sat directly
+above Community Champions taking a full card's height to show one number, which pushed the highlight
+down and made a page about the community open with a paragraph about you.
+
+It now sits **below** the rankings, as a single collapsed row. The closed summary still states the
+rank, so the number is never hidden - only the explanation, the points and the next action are behind
+the disclosure, which is the same pattern the leaderboards page uses for its own stats (§1Q). Being
+below the boards is also the more honest order: you see where the community stands, then where you
+stand in it.
+
 ## 1. Prompt Contract
 
 ### In scope

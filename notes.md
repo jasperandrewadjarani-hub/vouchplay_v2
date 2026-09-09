@@ -1789,3 +1789,20 @@ Open items, highest value first:
   form no longer auto-closes, and its confirmation offers "Vouch for someone else you have played
   with" - growth toward more distinct vouchers, which is what the scoring actually rewards.
   **Jasper's call if he still wants the paired button.** See master_plan §1R and §1S, handover v1.26.
+
+- **2026-09-09** - **Three corrections found on a real phone.** (1) **Club icons out of the compact
+  row.** §1S put them on line two beside the skill pill; on a real device that line has to hold "High
+  Intermediate · Community" plus up to two logos and the pill wraps, which is the exact ragged-list
+  failure §1H and §1N were written about. Removed. **Rule: a compact row gets one pill per line and
+  nothing beside it.** Clubs remain on the detailed card and the profile. (2) **The row's pending
+  spinner was silently broken for almost every tap and shipped that way.** §1S split the row into an
+  invisible overlay link covering the row and a named link on the name; the cue lived inside the
+  *name* link, but nearly every tap lands on the *overlay*, and `useLinkStatus` only reports for the
+  `<Link>` it sits inside. It is now inside both, and its offset was corrected to `left-0` (the
+  containing block is the row's padding box, whose left edge is where the avatar starts - the old
+  `left-2.5` was 10px out). **Lesson: when a component is split in two, its state hooks do not
+  follow.** (3) **"Your momentum" moved below the boards on Home and collapsed** into a single row
+  whose closed summary still shows the rank. It was taking a full card's height above Community
+  Champions to show one number, which pushed the highlight down and opened a page about the community
+  with a paragraph about the viewer. Below the boards is also the more honest order. See master_plan
+  §1T, handover v1.27. No migration.

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Crown, Medal, Users } from 'lucide-react';
+import { ChevronDown, Crown, Medal, Users } from 'lucide-react';
 import type { LeaderboardDTO, MomentumDTO } from '@/lib/leaderboards/types';
 import { avatarUrl, clubLogoUrl, nameInitials } from '@/lib/storage';
 import { PlayerAvatar } from '@/components/players/player-avatar';
@@ -294,39 +294,56 @@ const CTA: Record<string, { href: string; label: string }> = {
   join_club: { href: '/clubs', label: 'Join a club' },
 };
 
+/**
+ * The viewer's own standing, as a collapsed row.
+ *
+ * It used to sit above the Community Champions highlight as a full card, spending a card's height on
+ * one number and opening a page about the community with a paragraph about the viewer (§1T). It now
+ * sits below the boards: you see where the community stands, then where you stand in it.
+ *
+ * The closed summary states the rank, so the number is never hidden - only the explanation, the
+ * points and the next action are behind the disclosure.
+ */
 export function MomentumCard({ rows }: { rows: MomentumDTO[] }) {
   if (!rows.length) return null;
   const row = rows.find((item) => item.category === 'players') ?? rows[0]!;
   const delta = row.previousRank && row.privateRank ? row.previousRank - row.privateRank : 0;
   const cta = CTA[row.ctaKey ?? ''] ?? CTA.complete_profile!;
+  const position = row.privateRank ? `#${row.privateRank}` : 'Building';
+  const movement = delta > 0 ? ` · up ${delta}` : '';
   return (
-    <aside
-      className="border-primary/40 bg-primary/5 rounded-2xl border p-5"
-      aria-labelledby="momentum-title"
-    >
-      <div className="flex items-center gap-2">
-        <Users className="text-primary" size={20} aria-hidden />
-        <h2 id="momentum-title" className="text-foreground font-bold">
-          Your momentum
-        </h2>
-      </div>
-      <p className="text-foreground mt-3 text-2xl font-extrabold">
-        {row.privateRank ? `#${row.privateRank}` : 'Building'}
-      </p>
-      <p className="text-foreground-muted mt-1 text-sm">
-        Private all-time position · {row.score.toFixed(1)} points{delta > 0 ? ` · up ${delta}` : ''}
-      </p>
-      {!row.eligiblePublic && (
-        <p className="text-foreground-muted mt-2 text-xs">
-          You are not in the public snapshot (
-          {row.exclusionCode?.replaceAll('_', ' ') ?? 'privacy or eligibility'}). This private view
-          remains visible only to you.
+    <details className="border-border bg-surface group rounded-2xl border">
+      <summary className="text-foreground flex min-h-[44px] cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
+        <Users size={15} className="text-primary shrink-0" aria-hidden />
+        <span className="font-semibold">Your momentum</span>
+        <span className="text-foreground-muted truncate text-xs">
+          {position}
+          {movement}
+        </span>
+        <ChevronDown
+          size={16}
+          className="text-foreground-muted ml-auto shrink-0 transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="border-border border-t p-4">
+        <p className="text-foreground text-2xl font-extrabold">{position}</p>
+        <p className="text-foreground-muted mt-1 text-sm">
+          Private all-time position · {row.score.toFixed(1)} points
+          {movement}
         </p>
-      )}
-      <ButtonLink href={cta.href} variant="secondary" className="mt-4">
-        {cta.label}
-      </ButtonLink>
-    </aside>
+        {!row.eligiblePublic && (
+          <p className="text-foreground-muted mt-2 text-xs">
+            You are not in the public snapshot (
+            {row.exclusionCode?.replaceAll('_', ' ') ?? 'privacy or eligibility'}). This private
+            view remains visible only to you.
+          </p>
+        )}
+        <ButtonLink href={cta.href} variant="secondary" className="mt-4">
+          {cta.label}
+        </ButtonLink>
+      </div>
+    </details>
   );
 }
 

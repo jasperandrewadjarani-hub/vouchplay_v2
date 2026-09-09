@@ -53,12 +53,11 @@ export function PlayerCard({
           the row reads as exactly one link, not two. Positioned, so it paints above the row's
           in-flow content; the STS and Vouch controls sit above it with z-10.
         */}
-        <Link
-          href={profileHref}
-          aria-hidden
-          tabIndex={-1}
-          className="absolute inset-0 rounded-xl"
-        />
+        <Link href={profileHref} aria-hidden tabIndex={-1} className="absolute inset-0 rounded-xl">
+          {/* useLinkStatus only reports for the Link it sits inside, and nearly every tap lands on
+              this overlay rather than on the name, so the cue has to be here as well (§1T). */}
+          <CompactRowPending />
+        </Link>
         <PlayerAvatar
           url={player.avatarUrl}
           initials={player.initials}
@@ -84,11 +83,12 @@ export function PlayerCard({
             )}
             <SexBadge sex={player.sex} symbolOnly />
           </span>
-          {/* Line two: skill, then club affiliations. */}
-          {(skill || player.clubs.length > 0) && (
-            <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-              {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-              <ClubStack clubs={player.clubs} max={2} interactive={false} size={20} />
+          {/* Line two: the skill pill alone. Club logos used to sit beside it and pushed the
+              longer pills onto a second line, which leaves the whole list ragged (§1H, §1T).
+              A compact row gets one pill per line and nothing beside it. */}
+          {skill && (
+            <span className="mt-1 flex min-w-0 overflow-hidden">
+              <SkillPill band={skill.band} source={skill.source} size="sm" />
             </span>
           )}
         </span>

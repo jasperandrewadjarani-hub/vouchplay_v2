@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.26
+# VouchPlay Master Product & Code Execution Handover v1.27
 
-_(File retains its `…v1.1.md` name; content is v1.26 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.27 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,37 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.27 (2026-09-09)
+
+_No migration. Three corrections found by using the live app on a phone; all three are the same class
+of mistake, where something that looked fine in a component looked wrong in a list._
+
+- **Club icons are out of the compact directory row again.** v1.26 put club affiliations on line two
+  beside the skill pill. On a real phone that line has to hold a pill like "High Intermediate ·
+  Community" plus up to two logos, and the pill wraps onto a second line - **the exact ragged-list
+  failure v1.19 and v1.24 were both written about.** The trade is not close: the skill band is what a
+  player is scanned for, a wrapped pill costs the whole list its rhythm, and a 20px club logo is
+  decoration in that context. Club affiliation stays on the detailed card and the profile, where it
+  has room to be read rather than glanced at. **Rule, now stated plainly: a compact row gets one pill
+  per line and nothing beside it.** Anything added to that line has to earn its place against making
+  every row taller.
+- **Tapping a row shows that it is loading again.** The v1.24 pending spinner stopped appearing for
+  almost every tap and it shipped that way. v1.26 split the row into an invisible overlay link
+  covering the whole row and a named link on the player's name; the spinner lived inside the **name**
+  link, but virtually every tap lands on the **overlay**. `useLinkStatus` only reports for the
+  `<Link>` it sits inside, so the common path silently lost its feedback while the rare path kept it.
+  The cue now sits inside both links, so whichever one is hit, the avatar shows the spinner.
+  **General lesson: when a component is split in two, its state hooks do not follow - check every
+  path, not just the one that was refactored.**
+- **"Your momentum" moved below the rankings on Home, and collapsed.** Home's middle belongs to the
+  community, not the viewer. The card sat directly above Community Champions spending a full card's
+  height on one number, pushing the highlight down and opening a page about the community with a
+  paragraph about you. It is now a single collapsed row **below** the boards. The closed summary still
+  states the rank, so the number is never hidden - only the explanation, the points and the next
+  action sit behind the disclosure, matching the pattern the leaderboards page already uses for its
+  own stats (v1.25). Below the boards is also the more honest order: you see where the community
+  stands, then where you stand in it.
 
 ## v1.26 (2026-09-09)
 

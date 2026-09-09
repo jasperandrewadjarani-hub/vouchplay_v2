@@ -14,14 +14,15 @@ import { Loader2 } from 'lucide-react';
  * a sibling button rather than a descendant. The avatar is the better anchor anyway - it is a fixed
  * 40px that every row has, whereas STS is null for plenty of players.
  *
- * Rendered inside the row's link and positioned against the row, so it costs no layout at all.
+ * Positioned against the row's padding box, whose left edge is exactly where the avatar starts, so
+ * it lands on the avatar from inside either of the row's two links and costs no layout at all.
  */
 export function CompactRowPending() {
   const { pending } = useLinkStatus();
   if (!pending) return null;
   return (
     <span
-      className="bg-surface/75 absolute top-1/2 left-2.5 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full backdrop-blur-[1px]"
+      className="bg-surface/75 absolute top-1/2 left-0 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full backdrop-blur-[1px]"
       aria-hidden
     >
       <Loader2 size={18} className="text-primary animate-spin" />
