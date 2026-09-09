@@ -52,6 +52,14 @@ Shipped in the last session and verified live on both production domains
   stats into one thin row. **Top Players withholds its list until a real tournament placement
   exists**, because it was ranking profile completeness under a play-and-placements heading
   (handover v1.25).
+- Home is hero, then **Community Champions as the middle highlight**, then the other boards, then
+  condensed explainer cards. The header and home footer read **"Developed by"**.
+- Players defaults to **compact**; rows carry name + nickname + sex, then skill + clubs, with a
+  tappable STS chip over a Vouch button. The row is an overlay link plus sibling controls, so §1H
+  (never nest an interactive control inside a link) still holds (handover v1.26).
+- The vouch form confirms instead of auto-closing and offers "Vouch for someone else". **A paired
+  "submit and request a vouch back" button was recommended against** - it manufactures the reciprocal
+  pairs CONTRIB_V1 discounts. Jasper's call if he still wants it.
 
 ## Open items, highest value first
 
