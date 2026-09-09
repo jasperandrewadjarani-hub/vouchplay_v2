@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.38
+# VouchPlay Master Product & Code Execution Handover v1.39
 
-_(File retains its `…v1.1.md` name; content is v1.38 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.39 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,22 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.39 (2026-09-10)
+
+_App-side, no migration. Payment becomes a centered modal._
+
+- **Payment is a modal now, and the pay step no longer looks like a failure (master_plan §2K).**
+  §2J fixed the wording but not the shape. Tapping "Enter and pay" showed "Proceeding to payment…",
+  then the invite form reset itself before the refresh finished - swapping in a blank partner-search
+  box on the division list for several seconds, which read as "it failed / nothing happened" - and the
+  payment only appeared later, inline in My registrations. The form no longer resets on success: the
+  button stays "Proceeding to payment…" through the refresh, and a centered **payment modal**
+  (shared `Modal`, portaled to `document.body`, §1X) **auto-opens** on the just-created entry the
+  moment the page settles. My registrations now shows one **"Pay now to secure your slot"** button
+  per unpaid entry (with the §2G "not secured" checklist above it) instead of the whole form inline;
+  it opens the same modal. A receipt already under review keeps its inline management; only the unpaid
+  state moved to the modal. Submitting closes the modal and refreshes; "I'll pay later" closes it with
+  the honest hold warning stated first. `payment-form.tsx` removed - its content lives in the modal.
 ## v1.38 (2026-09-10)
 
 _The partner-conflict fix is migration 0031; the payment-flow and default-fee changes are app-side._

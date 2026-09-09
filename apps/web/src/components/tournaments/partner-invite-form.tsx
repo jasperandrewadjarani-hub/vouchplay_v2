@@ -82,14 +82,12 @@ export function PartnerInviteForm({
     start(async () => {
       const res = await enterWithPendingPartner(tournamentId, {}, fd);
       if (res.ok) {
-        setMsg(res.message ?? 'Entered.');
-        setIsError(false);
-        setChosen(null);
-        setAcknowledged(false);
-        setQ('');
-        setResults([]);
-        // Straight to the payment step for the entry we just created, rather than back to the
-        // division list to look for it. The anchor scrolls natively (§1Y).
+        // Deliberately do NOT reset the form here. Resetting swapped the "Proceeding to payment…"
+        // card back to the empty search box before navigation finished, so the form looked like it
+        // had failed and dumped the player back on the division list (§2K). Instead the button stays
+        // pending through the refresh, and My registrations opens the payment modal on the new
+        // entry (PayNowCell autoOpen). The refresh unmounts this form once the division reads as
+        // registered, so there is nothing to reset.
         if (res.registrationId) {
           router.push(`?entered=${res.registrationId}#my-registrations`, { scroll: false });
         }

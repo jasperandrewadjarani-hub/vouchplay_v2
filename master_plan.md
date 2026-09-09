@@ -1978,6 +1978,55 @@ The partner-conflict fix is **entirely in migration 0031** - the app code for re
 change - so the bug persists until Jasper runs it; there is no half-state to guard against. The
 payment-flow wording, the "I'll pay later" control and the default-fee setting are app-side and ship
 independently (the fee default merges through `system_settings` with no migration).
+## 2K. Payment is a modal, and the pay step never looks like a failure (2026-09-10, post-launch)
+
+§2J changed the wording of the pay step but left its shape wrong, and the shape was the real problem.
+Jasper described it exactly: tap "Enter and pay", it shows "Proceeding to payment…", then the form
+**disappears and the page falls back to the division list as if it had failed**, and only ~5 seconds
+later does My registrations scroll into view with the payment details. A player watching that has every
+reason to think the attempt broke, or that they are already done.
+
+### Why it looked like a failure
+
+The invite form reset its own state (`setChosen(null)`, cleared the search) the instant the action
+returned `ok`, **before** the navigation and server refresh finished. Resetting swapped the
+"Proceeding to payment…" card back to the empty partner-search box, so for the several seconds the
+refresh took, the player saw a blank form on the division list - a screen that reads as "nothing
+happened." The payment lived inline in My registrations, a different place entirely, which only
+appeared once the refresh landed.
+
+### The fix: payment is its own centered modal
+
+Payment is the **last step** of registering, so it now gets a focused surface of its own instead of
+being poured into a list.
+
+- **A centered payment modal** (`payment-modal.tsx`) holds the amount, the QR, the proof form and the
+  "I'll pay later" choice. It uses the shared `Modal`, which portals to `document.body` (§1X), so it
+  floats center-screen over whatever opened it and cannot be trapped by a stacking context.
+- **"Enter and pay" flows straight into it.** The invite form no longer resets on success - the button
+  stays "Proceeding to payment…" through the refresh, and the entry's "Pay now" cell in My
+  registrations **auto-opens** the modal the moment the page settles. So the sequence a player sees is
+  now: tap → "Proceeding to payment…" (held) → the payment modal appears. No vanished form, no
+  fall-back-to-the-list, no five-second void.
+- **My registrations shows one control, not a form.** A pending entry now renders a single
+  **"Pay now to secure your slot"** button (with the §2G "not secured" checklist above it) instead of
+  the whole payment form inline. Tapping it opens the same modal. A receipt already in review keeps
+  its inline management (partner change, request to cancel) - only the *unpaid* state moved to the
+  modal.
+- Submitting a receipt closes the modal and refreshes, so the entry flips to "under review" in the
+  list. "I'll pay later" closes the modal; the entry waits with its "Pay now" button, and the honest
+  hold warning (§2J) is stated inside the modal before the player leaves.
+
+### Why a modal rather than a page or an inline block
+
+A dedicated payment page would add a navigation the player has to come back from; an inline block is
+what caused the "am I done?" confusion in the first place, because it has no edges. A modal has a
+clear open and close, keeps the tournament context visible behind it, and - because it is the same
+portaled `Modal` the rest of the app uses - it is center-screen and accessible by construction. It
+also reinforces the gamified "one last step to lock it in" feel: a focused, single-purpose surface
+titled "Pay to secure your slot," entered with a glowing primary button.
+
+No migration. `payment-form.tsx` is removed; its content now lives in the modal.
 ## 1. Prompt Contract
 
 ### In scope

@@ -2277,3 +2277,14 @@ it done. Several fixes in this session were found only that way.
   **Default fee:** new setting `default_division_fee_amount` (₱1,000 per player, Admin-editable). The
   15 starter divisions of a new tournament now stamp it instead of 0, and the add-division form
   defaults to it. Merges via system_settings, no migration.
+
+- **2026-09-10** - **Payment is now a centered modal; the pay step no longer looks like it failed**
+  (master_plan §2K, handover v1.39). Jasper: after "Enter and pay" the form vanished to the division
+  list as if it failed, then ~5s later My registrations appeared with the payment. Cause: the invite
+  form reset its own state on success before the refresh finished, blanking the "Proceeding to
+  payment…" card. Fix: the form no longer resets - the button stays pending through the refresh, and a
+  centered payment modal (shared portaled Modal) auto-opens on the just-created entry once the page
+  settles. My registrations shows one "Pay now to secure your slot" button per unpaid entry (with the
+  §2G checklist above it) that opens the same modal; a receipt under review keeps inline management.
+  Submitting closes+refreshes; "I'll pay later" closes with the hold warning first. Removed the now
+  dead payment-form.tsx. No migration. All gates green (typecheck, lint, 193 tests, format, build).

@@ -4,7 +4,8 @@ import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
 import { RegisterActions } from './register-actions';
-import { PaymentForm } from './payment-form';
+import { PayNowCell } from './payment-modal';
+import { PaidEntryActions } from './paid-entry-actions';
 
 /**
  * Default-collapsed "My registrations (N)" manager shown immediately after the tournament details
@@ -163,27 +164,46 @@ export function MyRegistrations({
                   )}
                 </div>
               )}
-              {d.feeAmount > 0 &&
-                (reg.status === 'payment_pending' || reg.status === 'payment_submitted') && (
-                  <PaymentForm
+              {/* Payment is the last step, so it lives in a focused modal, not poured into the list
+                  (§2K). A receipt already in review keeps its inline management (partner change,
+                  request to cancel); an entry still awaiting payment shows one clear "Pay now"
+                  control that opens the modal - which auto-opens for the entry just created, so
+                  "Enter and pay" flows straight into it. */}
+              {d.feeAmount > 0 && reg.paymentStatus === 'submitted' ? (
+                <div className="mt-2">
+                  <PaidEntryActions
                     registrationId={reg.id}
                     tournamentId={tournamentId}
-                    amountDue={quoteFor(d).teamTotal}
-                    perPlayer={quoteFor(d).perPlayer}
-                    teamSize={d.teamSize}
-                    earlyBird={quoteFor(d).earlyBirdApplied}
-                    currency={d.currency}
-                    instructions={paymentInstructions}
-                    methods={paymentMethods}
-                    paymentQrUrl={state.paymentQrUrl}
-                    paymentStatus={reg.paymentStatus}
-                    rejectionReason={reg.paymentRejectionReason}
                     teamId={team?.teamId}
                     divisionId={divisionId}
                     partnerName={team?.members.find((m) => m.id !== state.viewerId)?.name ?? null}
-                    slotHoldMinutes={slotHoldMinutes}
+                    canChangePartner={d.teamSize > 1 && Boolean(team?.teamId && divisionId)}
                   />
-                )}
+                </div>
+              ) : (
+                d.feeAmount > 0 &&
+                reg.status === 'payment_pending' && (
+                  <PayNowCell
+                    autoOpen={reg.id === enteredRegistrationId}
+                    details={{
+                      registrationId: reg.id,
+                      tournamentId,
+                      divisionName: d.name,
+                      amountDue: quoteFor(d).teamTotal,
+                      perPlayer: quoteFor(d).perPlayer,
+                      teamSize: d.teamSize,
+                      earlyBird: quoteFor(d).earlyBirdApplied,
+                      currency: d.currency,
+                      instructions: paymentInstructions,
+                      methods: paymentMethods,
+                      paymentStatus: reg.paymentStatus,
+                      rejectionReason: reg.paymentRejectionReason,
+                      paymentQrUrl: state.paymentQrUrl,
+                      slotHoldMinutes,
+                    }}
+                  />
+                )
+              )}
               <div className="mt-2">
                 <RegisterActions
                   tournamentId={tournamentId}
