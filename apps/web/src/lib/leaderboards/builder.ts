@@ -197,7 +197,16 @@ async function loadSources(max: number): Promise<SourceBundle> {
     limit,
     limit,
   ];
-  if (results.some((result) => result.error)) throw new Error('leaderboard_source_read_failed');
+  // Name the table and carry the Postgres detail, so a swallowed failure can still be diagnosed
+  // (master_plan §2H). Bare 'leaderboard_source_read_failed' told the operator nothing.
+  const failedRead = results.findIndex((result) => result.error);
+  if (failedRead !== -1) {
+    const err = results[failedRead]!.error;
+    throw new Error(
+      `leaderboard_source_read_failed at source #${failedRead}: ${err?.message ?? 'unknown'}` +
+        `${err?.code ? ` [${err.code}]` : ''}${err?.details ? ` - ${err.details}` : ''}`,
+    );
+  }
   if (results.some((result, index) => (result.count ?? 0) > bounds[index]!))
     throw new Error('leaderboard_source_bound_exceeded');
   if (results.some((result) => result.count !== null && (result.data?.length ?? 0) < result.count))
@@ -677,8 +686,14 @@ export async function buildAllLeaderboards(): Promise<BuildSummary> {
           p_entries: payloadEntries,
           p_momentum: momentum,
         });
+        // Carry the real Postgres reason, not just which snapshot failed - a rebuild that dies here
+        // used to store only 'BUILD_FAILED' with the actual cause discarded (master_plan §2H).
         if (error)
-          throw new Error(`Snapshot publish failed for ${category}/${scope.type}/${period}.`);
+          throw new Error(
+            `Snapshot publish failed for ${category}/${scope.type}/${period}: ${error.message}` +
+              `${error.code ? ` [${error.code}]` : ''}${error.details ? ` - ${error.details}` : ''}` +
+              `${error.hint ? ` (hint: ${error.hint})` : ''}`,
+          );
         runs += 1;
         entries += publicRows.length;
         if (scope.type === 'global' && period === 'all_time' && settings.milestoneNotifications)

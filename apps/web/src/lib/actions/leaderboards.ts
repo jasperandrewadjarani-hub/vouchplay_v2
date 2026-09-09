@@ -112,17 +112,33 @@ export async function requestAndBuildLeaderboards(
       ok: true,
       message: `Published ${result.runs} snapshots with ${result.entries} ranked rows.`,
     };
-  } catch {
+  } catch (caught) {
+    // The real reason used to be thrown away (only 'BUILD_FAILED' was stored), so neither the
+    // operator nor a later investigation could see what actually broke - the same "a failure that
+    // leaves no trace" problem §1O fixed for the nightly cron, now closed for the manual rebuild
+    // too (master_plan §2H). Record it on the request row AND the append-only audit trail, and show
+    // it to the admin on screen so one build names the cause.
+    const detail = caught instanceof Error ? caught.message : String(caught);
     if (requestId)
       await svc
         .from('leaderboard_rebuild_requests')
         .update({
           status: 'failed',
           completed_at: new Date().toISOString(),
-          error_code: 'BUILD_FAILED',
+          error_code: detail.slice(0, 480),
         })
         .eq('id', requestId);
-    return { error: 'The rebuild failed safely. Existing active snapshots were preserved.' };
+    await writeAudit({
+      actorId: actor.viewerId,
+      actorRole: actor.role,
+      action: 'leaderboard.rebuild.failed',
+      entityType: 'leaderboard_rebuild_request',
+      entityId: typeof requestId === 'string' ? requestId : null,
+      reason: detail.slice(0, 480),
+    });
+    return {
+      error: `The rebuild failed safely. Existing active snapshots were preserved. Reason: ${detail}`,
+    };
   }
 }
 

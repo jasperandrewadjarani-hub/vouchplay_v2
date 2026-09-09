@@ -2208,3 +2208,20 @@ it done. Several fixes in this session were found only that way.
   affected pages render clean; "Not secured yet" and the assurance copy are present in the built client
   chunk. The signed-in applicant walkthrough is auth-gated and was validated by unit tests plus the
   production data-path check rather than a live login.
+
+- **2026-09-09** - **The leaderboard rebuild now reports the real reason it failed** (master_plan
+  §2H, handover v1.36). "Rebuild all snapshots" had started failing with only "The rebuild failed
+  safely" and nothing published since 5:34 PM; each attempt died in ~1s at the first snapshot publish.
+  A full read-only investigation ruled out quota (registrations, payments, profiles, audit rows all
+  kept writing), settings (all numeric values valid; last edit predates the last success), the size
+  bounds (all counts far under 5,000), a source-read failure (all 12 builder reads return 200),
+  numeric overflow (`score numeric(16,4)`), duplicate ranks (assigned by index, always unique), and
+  the code (builder unchanged since before the last good run) - so the trigger is data that arrived
+  during the day. **The actual database error could not be seen because the rebuild caught it and
+  stored only `BUILD_FAILED`** - the same "a failure leaves no trace" gap §1O closed for the nightly
+  cron. Fixed diagnostically (no migration, no change to a successful build): `buildAllLeaderboards`
+  now carries the Postgres message/code/details in the publish and source-read throws, and the action
+  records it on the request row, writes it to `audit_logs` as `leaderboard.rebuild.failed`, and shows
+  it on the Admin screen after "Reason:". **ACTION FOR JASPER: once deployed, click "Queue and build"
+  once - it will now name the exact failing record/constraint - and paste me the Reason line so I can
+  fix the root cause.**

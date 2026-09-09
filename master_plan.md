@@ -1816,6 +1816,44 @@ is on record here so the decision is his, not one made by omission.
 Every fact this needs - registration status, payment status, whether a named partner has confirmed - is
 already in the viewer's registration state and, for the card, one extra confirmed-ids read. Nothing in
 the schema changes.
+## 2H. The rebuild now says why it failed (2026-09-09, post-launch)
+
+The manual "Rebuild all snapshots" started failing with only "The rebuild failed safely. Existing
+active snapshots were preserved." - and that was all anyone could learn. The last good publish stuck
+at Sep 9, 5:34 PM while every new attempt died in about a second.
+
+### What the investigation could and could not establish
+
+Ruled out from production, without changing anything: it is not the Supabase quota (registrations,
+payments, profiles and audit rows all kept writing through the failures), not a settings mistake
+(every weight, cap and min-score is a valid number, and the last settings edit predates the last
+successful run), not the size bounds (all counts are far under 5,000), not a source-read failure (all
+twelve builder reads return 200), not numeric overflow (`score` is `numeric(16,4)`), not duplicate
+ranks (ranks are assigned by array index, always unique), and not the code (the builder has not
+changed since before the last successful run - only the data has). It fails at the first snapshot
+publish, immediately, which is why nothing has published since 5:34 PM.
+
+**What could not be established was the exact cause, and that was the real defect:** the rebuild
+caught the database error and threw it away, storing only `error_code = 'BUILD_FAILED'`. This is the
+same "a failure that leaves no trace" problem §1O fixed for the nightly cron - never applied to the
+manual path - so the one place that knew the reason discarded it.
+
+### What changed
+
+Diagnostic only; no behaviour changes on a successful build, and no migration.
+
+- **`buildAllLeaderboards` now carries the real Postgres reason** in the two places that used to
+  discard it: the snapshot-publish throw (`Snapshot publish failed for players/global/month: <message>
+  [code] - details (hint)`) and the source-read throw (which now names the failing source index and
+  its message). Previously the publish throw kept only the category/scope/period.
+- **The rebuild action records and shows the reason.** The caught error's message is written to the
+  request row's `error_code` (free text) and to the append-only `audit_logs` as
+  `leaderboard.rebuild.failed`, and returned to the Admin screen after the word "Reason:". One
+  "Queue and build" now names the exact failing record or constraint instead of a generic message.
+
+The "failed safely" guarantee is unchanged: a failed publish RPC rolls back its own transaction, so
+the previously active snapshot stays active. Once the next attempt prints the real cause, the
+root-cause fix follows.
 ## 1. Prompt Contract
 
 ### In scope

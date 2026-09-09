@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.35
+# VouchPlay Master Product & Code Execution Handover v1.36
 
-_(File retains its `…v1.1.md` name; content is v1.35 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.36 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,22 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.36 (2026-09-09)
+
+_Diagnostic only. No migration, no behaviour change on a successful build._
+
+- **The manual leaderboard rebuild now says why it failed (master_plan §2H).** It had begun failing
+  with only "The rebuild failed safely" - dying in about a second, nothing published since 5:34 PM -
+  and the actual database error was caught and discarded, stored only as `error_code = 'BUILD_FAILED'`.
+  That is the same "a failure that leaves no trace" problem §1O fixed for the nightly cron, never
+  applied to the manual path. `buildAllLeaderboards` now carries the real Postgres reason in the two
+  throws that discarded it (the snapshot-publish failure and the source-read failure), and the rebuild
+  action records that reason on the request row's `error_code`, writes it to the append-only
+  `audit_logs` as `leaderboard.rebuild.failed`, and shows it on the Admin screen. One "Queue and
+  build" now names the exact failing record or constraint. Investigation had already ruled out quota
+  (other writes kept working), settings (unchanged before the last success), the size bounds, a
+  source-read failure, numeric overflow, duplicate ranks, and the code itself (unchanged since the
+  last good run) - so the cause is data that arrived during the day, and this change surfaces which.
 ## v1.35 (2026-09-09)
 
 _Code-only. No migration - every fact needed was already in the viewer's registration state, plus one
