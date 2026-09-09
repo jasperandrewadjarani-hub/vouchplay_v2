@@ -1088,6 +1088,92 @@ or with no early amount configured, the normal per-player fee applies.
   the amount owed is the amount that was true at the moment of payment, which is the only reading
   that survives someone starting an entry before the deadline and paying after it.
 
+## 1W. The 100-point wall, and why STS stays 0-5 (2026-09-09, post-launch)
+
+Two questions about caps. They have different answers, and the difference is the point: one cap is
+doing nothing but truncating, the other is the entire meaning of the number.
+
+### The Community Champions 100 is a bug in effect, and it is going
+
+There is **no 100-point limit in the contribution engine.** `computeContribution` is an unbounded sum
+over distinct players helped, so a raw contribution score can be any size. The wall is in the
+leaderboard scorer:
+
+```
+component = max(0, min(config.maximumComponentValue, fact.components[key] ?? 0))
+```
+
+with `leaderboard_component_cap = 100`. For Community Champions the weights are exactly one component
+(`contribution`, weight 1), so the published board score is literally `min(contribution, 100)`.
+
+That is why the top entry reads **exactly 100.0** while second and third read 86.6 and 79.6 - the
+leader's real score is above 100 and is being clipped. Right now one person is affected. As vouching
+grows, everyone above the cap flattens into a tie at 100.0, and **the board stops telling apart
+exactly the people it exists to celebrate.** Ties would then be broken by newcomers-helped and
+distinct-players, invisibly, so two very different contributors would appear identical.
+
+**Why the cap exists at all, and why it should stay for the other boards.** It is a guard against one
+runaway component dominating a multi-component score. That is real for Players (participation,
+placement, profile, skillVerified) and for Clubs (participation, activeMembers, attendance, placement,
+contribution), where components live on different scales and an unbounded one would swamp the rest.
+Community has **one** component, so the guard protects nothing there and only truncates.
+
+**The fix: make the cap per category, not global.** `leaderboard_component_cap_players`,
+`_community` and `_clubs`, each defaulting to today's 100, with community set high enough to be
+effectively unbounded. `system_settings` merges code defaults over DB rows, so **new settings keys
+need no migration** and the value stays tunable from Admin without a deploy. The global
+`leaderboard_component_cap` stays as the fallback so nothing silently changes for a board nobody
+touched.
+
+A rebuild is needed for the change to show, because scores live in published snapshots.
+
+### STS should stay 0-5, and raising the number would not do what it looks like
+
+STS is **not** capped by a single ceiling that could simply be lifted. Each of its three inputs is a
+normalised fraction:
+
+- `countComponent = min(uniqueVouchers / 5, 1)` - saturates at five distinct vouchers
+- `weightComponent = min(sumWeights / 7.5, 1)` - saturates at 7.5 total effective weight
+- `agreementComponent = max(0, 1 - min(dispersion / 2, 1))`
+
+blended 0.50 / 0.25 / 0.25 and multiplied by `scale` (5). **The `scale` is already an Admin setting**,
+so STS could read 0-10 tomorrow with no code change - and it would achieve nothing, because everyone
+with five or more vouchers would simply max out at 10 instead of 5. The saturation is in the
+components, not the ceiling.
+
+Genuinely uncapping it means deleting those `min(x, 1)` clamps, and that changes what the number
+means rather than how large it gets:
+
+- **STS stops being confidence and becomes volume.** §3.3 defines CSL, STS, Identity Verified and
+  Skill Verified as four separate concepts, and STS as confidence in a rating, never ability. An
+  unbounded STS is a vouch counter wearing a confidence label.
+- **§6 and §8.4 say VouchPlay never ranks players by STS.** A number that keeps climbing is a ranking
+  whether or not a board exists for it; people will screenshot it and compare.
+- **It re-creates the exact confusion that §1G was written to fix.** Within minutes of launch, real
+  players read STS as a skill or quality score. The explainer that fixed it opens with "how confident
+  we are about a player's skill level, not how good they are. Scored 0 to 5." Remove the bound and
+  that sentence becomes false.
+- **Skill Verified breaks.** It is derived from `sts >= 3.0` plus a unique-voucher minimum. On an
+  unbounded scale, 3.0 stops meaning "reasonably confident" and starts meaning "has a handful of
+  vouches", so a badge about confidence silently becomes a badge about popularity.
+
+**Confidence is genuinely a saturating quantity.** After enough independent, verified, agreeing
+vouchers you cannot become more sure. That is not a limitation being worked around; it is the
+measurement being honest.
+
+**What Jasper actually wants is legitimate, and there is a better way to give it.** The desire is that
+more vouches keep visibly counting for something. They already do - just not in STS. The unbounded,
+truthful number is the **unique voucher count**, which is already computed and stored
+(`player_skill_profiles.unique_voucher_count`) and already in the DTO, and simply is not shown next to
+the score. So the chip becomes **"STS 4.8 · 23 vouches"**: the confidence number stays bounded and
+meaningful, and the number that grows forever is the one that honestly grows forever. The explainer
+gains one line saying vouches keep counting even once STS is full.
+
+**This is a recommendation, not a refusal.** Uncapping STS is Jasper's call on his own locked rule; if
+he still wants it after reading the above, the change is small (drop three clamps, raise `scale`) and
+the consequences are listed here so the decision is made with them in view rather than discovered
+later.
+
 ## 1. Prompt Contract
 
 ### In scope

@@ -144,7 +144,7 @@ export default async function PlayerProfilePage({ params }: Params) {
 
             <div className="flex flex-wrap items-center gap-2">
               {skill && <SkillPill band={skill.band} source={skill.source} />}
-              <StsChip sts={player.sts} />
+              <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
               <SexBadge sex={player.sex} />
             </div>
 

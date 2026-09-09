@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.29
+# VouchPlay Master Product & Code Execution Handover v1.30
 
-_(File retains its `…v1.1.md` name; content is v1.29 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.30 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,49 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.30 (2026-09-09)
+
+_No migration. `system_settings` merges code defaults over DB rows, so the new keys need none. A
+leaderboard rebuild is required for the score change to appear, because scores live in snapshots._
+
+- **The Community Champions 100-point wall is gone, and it was truncating a real score.** There is no
+  100-point limit in the contribution engine - `computeContribution` is an unbounded sum over distinct
+  players helped. The wall was in the leaderboard scorer, which clamps every component to
+  `leaderboard_component_cap` (100). Community Champions weights exactly **one** component
+  (`contribution`, weight 1), so the published score was literally `min(contribution, 100)` - which is
+  why the leader read **exactly 100.0** while second and third read 86.6 and 79.6. One person is
+  affected today; as vouching grows everyone above the cap would flatten into a tie at 100.0, and the
+  board would **stop telling apart exactly the people it exists to celebrate**, with ties broken
+  invisibly by newcomers-helped and distinct-players. **The cap is now per category**
+  (`leaderboard_component_cap_players` / `_community` / `_clubs`), each falling back to the global
+  value so nothing silently changes for a board nobody touched. Players and Clubs keep the guard at
+  100, because it does real work there: those boards mix components on different scales
+  (participation, placement, profile, activeMembers, attendance) and an unbounded one would swamp the
+  rest. Community has a single component, so a cap protected nothing and only truncated.
+- **STS stays 0-5, and this is a recommendation with the reasoning shown rather than a refusal.** STS
+  is not held down by a single ceiling that could be lifted: each of its three inputs is a normalised
+  fraction - `min(uniqueVouchers / 5, 1)`, `min(sumWeights / 7.5, 1)`, and an agreement term - blended
+  0.50 / 0.25 / 0.25 and multiplied by `scale`. **`scale` is already an Admin setting**, so STS could
+  read 0-10 tomorrow with no code change and it would achieve nothing: everyone with five or more
+  vouchers would simply max out at 10 instead of 5. The saturation lives in the components, not the
+  ceiling. Genuinely uncapping means deleting those clamps, which changes what the number **means**
+  rather than how large it gets: STS stops being confidence and becomes volume, contradicting §3.3
+  (four separate concepts; STS is confidence, never ability) and §6/§8.4 (VouchPlay never ranks
+  players by STS); it re-creates the precise confusion v1.18's explainer was written to fix, whose
+  opening line - "how confident we are about a player's skill level, not how good they are. Scored 0
+  to 5" - would become false; and **Skill Verified breaks**, because it is derived from `sts >= 3.0`,
+  a threshold that means "reasonably confident" only on a bounded scale and would quietly become "has
+  a handful of vouches" on an unbounded one. Confidence is genuinely a saturating quantity: after
+  enough independent, verified, agreeing vouchers you cannot become more sure, and that is the
+  measurement being honest rather than a limitation to work around.
+- **What was shipped instead gives the same thing truthfully.** The wish - that more vouches keep
+  visibly counting - is legitimate, and the unbounded number already exists:
+  `player_skill_profiles.unique_voucher_count`, already computed, stored and in the DTO, and simply
+  never shown next to the score. The chip now reads **"STS 4.8 · 23 vouches"**, so the bounded number
+  stays meaningful and the number that grows forever is the one that honestly grows forever. The
+  explainer gained a line saying STS tops out once enough people have vouched and the vouch count
+  keeps growing after that. The screen-reader label carries the count too.
 
 ## v1.29 (2026-09-09)
 

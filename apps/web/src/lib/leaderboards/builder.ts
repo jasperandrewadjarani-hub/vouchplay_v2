@@ -599,7 +599,7 @@ export async function buildAllLeaderboards(): Promise<BuildSummary> {
         const privateRows = rankLeaderboard(facts, {
           weights: settings.weights[category],
           minimumScore: settings.minimumScores[category],
-          maximumComponentValue: settings.componentCap,
+          maximumComponentValue: settings.componentCaps[category] ?? settings.componentCap,
         });
         const publicIds = new Set(
           scopedSubjects.filter((subject) => subject.publicEligible).map((subject) => subject.id),
@@ -609,7 +609,7 @@ export async function buildAllLeaderboards(): Promise<BuildSummary> {
           {
             weights: settings.weights[category],
             minimumScore: settings.minimumScores[category],
-            maximumComponentValue: settings.componentCap,
+            maximumComponentValue: settings.componentCaps[category] ?? settings.componentCap,
           },
         ).slice(0, settings.fullLimit);
         const subjects = new Map(scopedSubjects.map((subject) => [subject.id, subject]));

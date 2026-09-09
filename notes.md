@@ -1911,3 +1911,23 @@ Open items, highest value first:
   receipt submission**, not at entry creation. Two guards worth remembering: a half-configured window
   (one date blank) never discounts, and an early amount that is not actually cheaper is refused, so a
   typo cannot become a quiet price rise. See master_plan §1V, handover v1.29.
+
+- **2026-09-09** - **Community Champions 100-point wall removed; STS stays 0-5 with the reasoning
+  recorded.** There is no 100 limit in the contribution engine - `computeContribution` is an unbounded
+  sum. The wall was `leaderboard_component_cap = 100` clamping every component in the leaderboard
+  scorer, and Community Champions weights exactly one component, so its published score was literally
+  `min(contribution, 100)`. That is why the leader read exactly 100.0 against 86.6 and 79.6. The cap
+  is now **per category** (`leaderboard_component_cap_players` / `_community` / `_clubs`, falling back
+  to the global value); Players and Clubs keep 100 because they mix components on different scales and
+  the guard does real work there, while Community has one component so the cap only truncated.
+  **No migration** - `system_settings` merges code defaults - but a **rebuild is required** for the
+  change to show, since scores live in snapshots.
+  **STS was not uncapped, and the reason is in master_plan §1W.** It is not held by one ceiling: each
+  input is a normalised fraction (`min(uniqueVouchers/5,1)`, `min(sumWeights/7.5,1)`, agreement),
+  blended and multiplied by `scale` - and `scale` is *already* an Admin setting, so raising it to 10
+  would just move where everyone maxes out. Real uncapping means deleting the clamps, which turns
+  confidence into volume: it breaks §3.3 and §6/§8.4, falsifies the §1G explainer's opening line, and
+  silently redefines Skill Verified (`sts >= 3.0`). Shipped instead: the chip shows the genuinely
+  unbounded number that already existed - `unique_voucher_count` - as **"STS 4.8 · 23 vouches"**, plus
+  an explainer line saying STS tops out but vouch count keeps growing. **Uncapping remains Jasper's
+  call**; the change is small and the consequences are listed. See handover v1.30.

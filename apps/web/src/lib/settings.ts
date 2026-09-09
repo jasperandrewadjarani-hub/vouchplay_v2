@@ -212,6 +212,8 @@ export interface LeaderboardSettings {
   maxSubjects: number;
   maxScopes: number;
   componentCap: number;
+  /** Per-category component caps (§1W). Fall back to the global cap when unset. */
+  componentCaps: { players: number; community: number; clubs: number };
   clubMovementNotifyPlaces: number;
   minAge: number;
   excludeUnknownDob: boolean;
@@ -253,6 +255,12 @@ export async function getLeaderboardSettings(): Promise<LeaderboardSettings> {
     maxSubjects: num(m, 'leaderboard_builder_max_subjects'),
     maxScopes: num(m, 'leaderboard_builder_max_scopes'),
     componentCap: num(m, 'leaderboard_component_cap'),
+    componentCaps: {
+      players: num(m, 'leaderboard_component_cap_players') || num(m, 'leaderboard_component_cap'),
+      community:
+        num(m, 'leaderboard_component_cap_community') || num(m, 'leaderboard_component_cap'),
+      clubs: num(m, 'leaderboard_component_cap_clubs') || num(m, 'leaderboard_component_cap'),
+    },
     clubMovementNotifyPlaces: num(m, 'leaderboard_club_movement_notify_places'),
     minAge: num(m, 'leaderboard_min_age'),
     excludeUnknownDob: bool('leaderboard_exclude_unknown_dob', false),

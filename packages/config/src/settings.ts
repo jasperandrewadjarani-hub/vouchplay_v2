@@ -110,6 +110,12 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   leaderboard_builder_max_subjects: 5000,
   leaderboard_builder_max_scopes: 20,
   leaderboard_component_cap: 100,
+  // Per-category caps (master_plan §1W). The cap guards a multi-component score against one runaway
+  // component. Community Champions has a SINGLE component, so a cap there only truncates the leaders
+  // into a tie - it is set high enough to never bind.
+  leaderboard_component_cap_players: 100,
+  leaderboard_component_cap_community: 1000000,
+  leaderboard_component_cap_clubs: 100,
   leaderboard_club_movement_notify_places: 3,
   leaderboard_min_age: 18,
   leaderboard_exclude_unknown_dob: false,
