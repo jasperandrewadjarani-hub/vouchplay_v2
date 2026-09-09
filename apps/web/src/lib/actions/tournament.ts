@@ -208,14 +208,22 @@ export async function createTournament(
     const t = created as { id: string; slug: string };
     newSlug = t.slug;
 
-    const configuredCapacity = await loadSettingNumber(
-      'default_division_capacity_teams',
-      DEFAULT_SYSTEM_SETTINGS.default_division_capacity_teams,
+    const [configuredCapacity, configuredFee] = await Promise.all([
+      loadSettingNumber(
+        'default_division_capacity_teams',
+        DEFAULT_SYSTEM_SETTINGS.default_division_capacity_teams,
+      ),
+      loadSettingNumber(
+        'default_division_fee_amount',
+        DEFAULT_SYSTEM_SETTINGS.default_division_fee_amount,
+      ),
+    ]);
+    const starterDivisions = buildDefaultDivisionPreset(configuredCapacity, configuredFee).map(
+      (division) => ({
+        tournament_id: t.id,
+        ...division,
+      }),
     );
-    const starterDivisions = buildDefaultDivisionPreset(configuredCapacity).map((division) => ({
-      tournament_id: t.id,
-      ...division,
-    }));
     const { error: divisionError } = await svc.from('divisions').insert(starterDivisions);
     if (divisionError) {
       // Creation is one logical operation: compensate by removing the empty draft and all children.

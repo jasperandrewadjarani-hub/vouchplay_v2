@@ -16,7 +16,12 @@ import { ClubRepSelector } from '@/components/tournaments/club-rep-selector';
 import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
-import { getTournamentDemandSettings, hasPlayerRegistrationChangePolicy } from '@/lib/settings';
+import {
+  getTournamentDemandSettings,
+  hasPlayerRegistrationChangePolicy,
+  loadSettingNumber,
+} from '@/lib/settings';
+import { DEFAULT_SYSTEM_SETTINGS } from '@vouchplay/config';
 import { demandOptions, mergeLegacyDemand } from '@/lib/tournaments/demand-options';
 import { formatDate, formatDateTime, formatMonthDay } from '@/lib/format-date';
 
@@ -70,12 +75,14 @@ export default async function TournamentPage({ params, searchParams }: Params) {
   const authed = viewer.viewerId !== null;
   const isOpen = t.status === 'registration_open';
   const registerable = isOpen || t.status === 'published';
-  const [regState, playerChangesConfigured] = authed
+  const [regState, playerChangesConfigured, slotHoldMinutes] = authed
     ? await Promise.all([
         getViewerRegistrationState(t.id, viewer.viewerId as string),
         hasPlayerRegistrationChangePolicy(),
+        // How long an unpaid entry holds its slot, for the honest "pay later" warning (§2J).
+        loadSettingNumber('slot_hold_minutes', DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes),
       ])
-    : [null, false];
+    : [null, false, DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes];
   // Shareable link that lands on the registration options (§28.1) when registration is relevant.
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
@@ -178,6 +185,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           paymentInstructions={t.paymentInstructions}
           paymentMethods={t.paymentMethods}
           earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
+          slotHoldMinutes={slotHoldMinutes}
           enteredRegistrationId={typeof sp.entered === 'string' ? sp.entered : null}
         />
       )}

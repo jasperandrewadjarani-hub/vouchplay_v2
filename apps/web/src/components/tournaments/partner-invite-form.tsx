@@ -154,7 +154,9 @@ export function PartnerInviteForm({
           className="vp-gradient inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-50"
         >
           {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}
-          {pending ? 'Reserving your slot…' : 'Enter and pay'}
+          {/* Not "Reserving your slot" - the slot is not secured until payment is verified (§2J).
+              This says what is actually happening: we are taking them to the payment step. */}
+          {pending ? 'Proceeding to payment…' : 'Enter and pay'}
         </button>
 
         {msg && (

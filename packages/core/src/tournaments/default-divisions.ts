@@ -21,7 +21,7 @@ export interface DefaultDivisionPresetRow {
   maximum_age: null;
   team_size: 2;
   capacity_teams: number;
-  fee_amount: 0;
+  fee_amount: number;
   currency: 'PHP';
   skill_verified_required: false;
   minimum_sts: null;
@@ -31,12 +31,18 @@ export interface DefaultDivisionPresetRow {
 
 /**
  * Build the canonical starter divisions for a newly created tournament (§18.6). Operational
- * capacity is injected by the caller from system_settings; this pure function owns only the
- * versioned preset shape and ordering.
+ * capacity and the per-player fee are injected by the caller from system_settings; this pure
+ * function owns only the versioned preset shape and ordering.
  */
-export function buildDefaultDivisionPreset(capacityTeams: number): DefaultDivisionPresetRow[] {
+export function buildDefaultDivisionPreset(
+  capacityTeams: number,
+  feeAmount = 0,
+): DefaultDivisionPresetRow[] {
   if (!Number.isInteger(capacityTeams) || capacityTeams < 1) {
     throw new Error('Default division capacity must be a positive whole number.');
+  }
+  if (!Number.isFinite(feeAmount) || feeAmount < 0) {
+    throw new Error('Default division fee must be zero or a positive number.');
   }
 
   return STARTER_SKILL_KEYS.flatMap((key) => {
@@ -54,7 +60,7 @@ export function buildDefaultDivisionPreset(capacityTeams: number): DefaultDivisi
       maximum_age: null,
       team_size: 2 as const,
       capacity_teams: capacityTeams,
-      fee_amount: 0 as const,
+      fee_amount: feeAmount,
       currency: 'PHP' as const,
       skill_verified_required: false as const,
       minimum_sts: null,

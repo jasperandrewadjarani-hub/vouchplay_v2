@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.37
+# VouchPlay Master Product & Code Execution Handover v1.38
 
-_(File retains its `…v1.1.md` name; content is v1.37 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.38 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,35 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.38 (2026-09-10)
+
+_The partner-conflict fix is migration 0031; the payment-flow and default-fee changes are app-side._
+
+- **A dead team no longer blocks a new one (migration 0031, master_plan §2J).** "One of you is
+  already on a team in this division" blocked two players who had no active entry there. The
+  `partner_conflict` guard counted any team in status forming/formed/locked without checking whether
+  its registration was still alive - and a team outlives its entry, so a cancelled test from days
+  earlier kept both players "on a team" forever (proven in production: both were on a `formed` team
+  whose only registration was `withdrawn`). A team now counts as occupied only when it has an active
+  (non-closed) registration, via a new helper `player_on_active_team_in_division`, applied to all five
+  guard sites (create / accept ×2 / replace / change). Verified against live data: the two players can
+  now enter Mixed Doubles Low Intermediate, while divisions where they hold a paid or pending entry
+  still block a second one. Also unsticks a player from an orphan team left by a failed "Enter and
+  pay".
+- **How a slot is held, documented (§2J).** One timer, three states: unpaid (`payment_pending`) holds
+  a slot for `slot_hold_minutes` (default 30, Admin setting) and stops counting once that expires;
+  a submitted receipt (`payment_submitted`) converts the soft hold into a firm reservation that does
+  not expire while the organizer reviews (the §1U promise); `confirmed` is permanent. "Secured" means
+  confirmed.
+- **The pay step reads as a step, not a finish line (§2J).** "Enter and pay" now loads as
+  **"Proceeding to payment…"** (not "Reserving your slot…"); the payment card leads with **"Next: pay
+  to secure your slot"** in the brand tint; and **"I'll pay later"** is a deliberate two-step warning -
+  "your slot is not confirmed until you pay… held for about 30 minutes… come back from My
+  registrations" - that collapses the panel without pretending the entry is done. A literal payment
+  modal was considered and deferred as a larger, riskier change than the confusion warranted.
+- **New tournaments start priced (§2J).** The 15 starter divisions were created free, forcing an
+  organizer to price all fifteen. They now default to a per-player fee from a new Admin setting,
+  `default_division_fee_amount` (₱1,000, editable), and the add-division form defaults to it too.
 ## v1.37 (2026-09-09)
 
 _The root-cause fix for the leaderboard rebuild. No migration._

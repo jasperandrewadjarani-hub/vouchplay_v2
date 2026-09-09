@@ -1,8 +1,8 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
-import { Download } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useActionState, useEffect, useState } from 'react';
+import { Download, Clock, ArrowRight } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { submitPayment, type PaymentActionState } from '@/lib/actions/payment';
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
@@ -30,6 +30,7 @@ export function PaymentForm({
   teamId,
   divisionId,
   partnerName,
+  slotHoldMinutes = 30,
 }: {
   registrationId: string;
   tournamentId: string;
@@ -48,8 +49,12 @@ export function PaymentForm({
   teamId?: string;
   divisionId?: string;
   partnerName?: string | null;
+  /** How long an unpaid entry holds its slot, for the "pay later" warning (§2J). */
+  slotHoldMinutes?: number;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const [payingLater, setPayingLater] = useState(false);
   const action = submitPayment.bind(null, registrationId, tournamentId);
   const [state, formAction] = useActionState(action, empty);
 
@@ -72,10 +77,16 @@ export function PaymentForm({
   if (paymentStatus === 'verified') return null;
 
   return (
-    <div className="border-border mt-2 rounded-lg border border-dashed p-3">
+    <div className="border-primary/40 bg-primary/5 mt-2 rounded-lg border p-3">
+      {/* This is the next step, not a receipt. Naming it keeps a player from thinking they are done
+          the moment they land here (§2J). */}
+      <p className="text-primary flex items-center gap-1.5 text-xs font-semibold">
+        <ArrowRight size={13} aria-hidden />
+        Next: pay to secure your slot
+      </p>
       {/* State the arithmetic, not just a total. Somebody comparing this against the fee they were
           quoted should never have to work out where the difference came from (§1V). */}
-      <p className="text-foreground text-base font-bold">
+      <p className="text-foreground mt-1 text-base font-bold">
         Send {currency} {amountDue.toLocaleString()}
       </p>
       {perPlayer != null && teamSize > 1 && (
@@ -157,6 +168,53 @@ export function PaymentForm({
         </Field>
         <SubmitButton pendingLabel="Submitting…">Submit payment proof</SubmitButton>
       </form>
+
+      {/* Paying now is not compulsory - but leaving is a real decision with a consequence, so it is
+          a deliberate two-step, not a silent exit. The warning states the honest hold rule (§2J). */}
+      <div className="border-border mt-3 border-t pt-3">
+        {payingLater ? (
+          <div className="border-warning/40 bg-warning/10 rounded-lg border p-2.5">
+            <p className="text-foreground flex items-start gap-1.5 text-sm font-semibold">
+              <Clock size={14} className="text-warning mt-0.5 shrink-0" aria-hidden />
+              Your slot is not confirmed until you pay
+            </p>
+            <p className="text-foreground-muted mt-1 text-xs leading-relaxed">
+              This entry holds your place for about {slotHoldMinutes} minutes. After that the slot
+              can go to someone else, and it is only locked in once you pay and the organizer
+              verifies it. You can come back and pay any time from My registrations.
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPayingLater(false)}
+                className="vp-gradient inline-flex min-h-[44px] items-center rounded-xl px-4 text-sm font-semibold text-white"
+              >
+                Pay now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Drop the ?entered focus so the panel collapses back to the tournament; the
+                  // entry stays exactly as it is, waiting in My registrations.
+                  router.push(pathname, { scroll: false });
+                  router.refresh();
+                }}
+                className="border-border text-foreground-muted hover:text-foreground inline-flex min-h-[44px] items-center rounded-xl border px-4 text-sm font-medium"
+              >
+                Yes, I&rsquo;ll pay later
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPayingLater(true)}
+            className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
+          >
+            I&rsquo;ll pay later
+          </button>
+        )}
+      </div>
     </div>
   );
 }

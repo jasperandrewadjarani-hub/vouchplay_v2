@@ -280,6 +280,15 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: 'Applied to each of the 15 starter divisions created with a new tournament.',
   },
   {
+    key: 'default_division_fee_amount',
+    label: 'Starter division fee per player',
+    group: 'tournament',
+    kind: 'int',
+    min: 0,
+    max: 1000000,
+    help: 'Per-player fee stamped on each of the 15 starter divisions of a new tournament. 0 = free.',
+  },
+  {
     key: 'club_representation_required',
     label: 'Club representation required',
     group: 'tournament',

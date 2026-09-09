@@ -37,6 +37,7 @@ export function MyRegistrations({
   paymentInstructions,
   paymentMethods,
   earlyBird = { startsAt: null, endsAt: null },
+  slotHoldMinutes = 30,
   enteredRegistrationId = null,
 }: {
   tournamentId: string;
@@ -48,6 +49,8 @@ export function MyRegistrations({
   paymentMethods: string | null;
   /** Tournament-wide early-bird window (§1V). */
   earlyBird?: { startsAt: string | null; endsAt: string | null };
+  /** How long an unpaid entry holds its slot, for the "pay later" warning (§2J). */
+  slotHoldMinutes?: number;
   /** A registration just created by this visit: open the panel straight onto it (§1Y). */
   enteredRegistrationId?: string | null;
 }) {
@@ -178,6 +181,7 @@ export function MyRegistrations({
                     teamId={team?.teamId}
                     divisionId={divisionId}
                     partnerName={team?.members.find((m) => m.id !== state.viewerId)?.name ?? null}
+                    slotHoldMinutes={slotHoldMinutes}
                   />
                 )}
               <div className="mt-2">

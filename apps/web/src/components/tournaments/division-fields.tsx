@@ -123,7 +123,10 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
             type="number"
             min={0}
             step="0.01"
-            defaultValue={initial?.feeAmount ?? 0}
+            // A new division defaults to a real per-player fee, not free, so an organizer does not
+            // have to price every division from zero (master_plan §2J). Editing an existing one
+            // keeps its saved value.
+            defaultValue={initial?.feeAmount ?? 1000}
           />
         </Field>
         <Field

@@ -1895,6 +1895,89 @@ a table actually crosses 1,000 - the change is inert now and correct later. No m
 `.limit(n)` in Supabase is not "give me up to n rows" - past ~1,000 it is "give me 1,000, quietly".
 Any full-table read that could grow must page with `.range()`, never trust `.limit()`. §2H is what
 made this findable in one click instead of a night of guessing; §2H and §2I ship together.
+## 2J. A dead team must not block a new one, and the pay step must read as a pay step (2026-09-10, post-launch)
+
+Jasper hit "One of you is already on a team in this division" trying to enter Mixed Doubles Low
+Intermediate with a partner whose skill matched, when neither had an active entry there. Alongside it,
+a cluster of payment-flow wording and default-fee fixes.
+
+### The bug: the conflict guard counted teams that were already dead
+
+`create_team_with_pending_partner` (and the accept / replace / change RPCs) refused if either player
+sat on a team in status `forming/formed/locked` in that division - **without checking whether that
+team's registration was still alive**. A team OUTLIVES its entry: withdrawing or rejecting a
+registration left the `teams` row `formed`. So a cancelled test from days earlier kept both players
+"on a team" forever.
+
+Proven against production before the fix: Jasper and Christine were both still on one `formed` team in
+that division whose only registration was `withdrawn`. That single dead row produced the error on
+every fresh attempt - which also answers "we cancelled it, why is this happening": cancelling released
+the slot but never retired the team.
+
+**Fix (migration 0031).** A team counts as occupied only when it has an active (non-closed)
+registration. A new SQL helper, `player_on_active_team_in_division(division, player, exclude_team)`,
+encodes that once, and the five guard sites call it: `create_team_with_pending_partner` (both
+players), `accept_partner_invitation` (both its checks), `replace_pending_partner`, and
+`change_partner`. The closed-status set is the schema's usual `('withdrawn','cancelled','rejected')`.
+A bonus: a player who abandoned a failed "Enter and pay" (an orphan team with no registration) is no
+longer stuck on it either.
+
+Verified against live data: in Mixed Doubles Low Intermediate both players now read `blocked = false`
+(they can enter together), while a division where they hold a `payment_pending` or `payment_submitted`
+team still correctly blocks a second entry. `register_team`'s own `already_registered` guard is
+per-team and was already correct, so it is untouched.
+
+### How a slot is actually held, before and after payment (answering Jasper's question)
+
+There is one hold timer and three states:
+
+- **Before payment (`payment_pending`).** Registering stamps `slot_hold_expires_at = now +
+  `slot_hold_minutes`` (default **30 minutes**, an Admin setting). The capacity count only counts a
+  `payment_pending` entry **while that hold is unexpired**. So an unpaid entry holds a real slot for
+  30 minutes; after that the slot is countable by someone else. The entry row is not auto-cancelled
+  (the hold-expiry cron is still deferred) - it simply stops occupying a slot. This is a soft,
+  time-boxed hold.
+- **After a receipt is submitted (`payment_submitted` / `under_review`).** The entry counts toward
+  capacity **regardless of the timer** - submitting a receipt converts the soft 30-minute hold into a
+  firm reservation that does not expire, so a player who has paid is never bumped while the organizer
+  reviews (this is the §1U promise).
+- **After the organizer verifies (`confirmed`).** The slot is permanent.
+
+`waitlisted` entries never hold a slot; they wait for one to open. So "secured" means confirmed;
+everything before it is a hold that is either time-boxed (unpaid) or firm-pending-review (paid).
+
+### The pay step now reads as a step, not a finish line
+
+- **"Enter and pay" loading label** is now **"Proceeding to payment…"**, not "Reserving your slot…":
+  the slot is not reserved-for-good, and the honest promise is that we are taking them to pay.
+- **The payment card leads with "Next: pay to secure your slot"** and sits in the brand tint, so
+  landing on it reads as the next action rather than a receipt.
+- **"I'll pay later" is a real, deliberate choice.** A quiet secondary control opens a two-step
+  warning - "Your slot is not confirmed until you pay… held for about 30 minutes… come back any time
+  from My registrations" - with "Pay now" or "Yes, I'll pay later". Choosing later drops the
+  `?entered` focus so the panel collapses; the entry waits untouched in My registrations. Nobody is
+  told they are done when they are not.
+- **The long-delay-feels-done problem** is addressed by the honest label carrying through the
+  transition and by the payment card being the first thing the panel opens onto (it already scrolls
+  there via `?entered=…#my-registrations`). A literal payment modal was considered and deferred:
+  converting the inline flow to a modal on the live payment path is a larger, riskier change than the
+  wording and focus fixes that solve the actual confusion, and the §2G "not secured" notice already
+  frames the state.
+
+### New tournaments start priced
+
+Creating a tournament stamped its 15 starter divisions at a **free** fee, so every organizer had to
+price fifteen divisions by hand. They now default to a per-player fee from a new Admin setting,
+`default_division_fee_amount` (**₱1,000**, per player, editable), and the add-division form defaults a
+new division to the same rather than to zero. Operational value, so it lives in `system_settings`, not
+in code - and an organizer can still zero or change any division.
+
+### Release order
+
+The partner-conflict fix is **entirely in migration 0031** - the app code for registration does not
+change - so the bug persists until Jasper runs it; there is no half-state to guard against. The
+payment-flow wording, the "I'll pay later" control and the default-fee setting are app-side and ship
+independently (the fee default merges through `system_settings` with no migration).
 ## 1. Prompt Contract
 
 ### In scope

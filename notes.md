@@ -2244,3 +2244,36 @@ it done. Several fixes in this session were found only that way.
   publish fresh rankings.** (`recomputePlayerContribution`, which runs on each vouch submit, still
   uses `.limit()` but its per-player reads are far under 1,000; noted as a latent follow-up, not
   currently failing.)
+
+- **2026-09-10** - **Partner-conflict bug fixed, payment flow reads honestly, new tournaments start
+  priced** (master_plan §2J, handover v1.38). Jasper could not enter Mixed Doubles Low Intermediate
+  with Christine ("One of you is already on a team in this division") despite neither having an active
+  entry there. Root cause proven in production: the `partner_conflict` guard counted any team in
+  status forming/formed/locked regardless of whether its registration was alive, and a cancelled test
+  from days earlier left both on a `formed` team whose only registration was `withdrawn`. Cancelling
+  released the slot but never retired the team, so it blocked forever.
+
+  **Migration 0031** adds `player_on_active_team_in_division()` - a team counts as occupied only when
+  it has an active (non-closed) registration - and applies it to all five guard sites
+  (create_team_with_pending_partner, accept_partner_invitation ×2, replace_pending_partner,
+  change_partner). Simulated against live data: both players now `blocked=false` in Mixed Low Inter
+  (can enter together), still blocked where they hold a payment_pending / payment_submitted team.
+  Also unsticks a player from an orphan team left by a failed "Enter and pay".
+  **ACTION FOR JASPER: run `scripts/apply-0031.sql`** and return `helper_fn=1, create_fn=1, accept_fn=1,
+  replace_fn=1, change_fn=1` (plus the informational dead-teams count). The partner bug persists until
+  0031 is applied - the fix is entirely in the RPCs, so app code needs no gating.
+
+  **Payment flow (app-side, no migration):** "Enter and pay" now loads as "Proceeding to payment…"
+  (not "Reserving your slot…"); the payment card leads with "Next: pay to secure your slot" in the
+  brand tint; and "I'll pay later" is a deliberate two-step warning ("not confirmed until you pay…
+  held ~30 min… come back from My registrations") that collapses the panel without implying done. A
+  literal payment modal was deferred as larger/riskier than the confusion warranted.
+
+  **How slots are held (Jasper's question):** one timer, three states. Unpaid `payment_pending` holds
+  a slot for `slot_hold_minutes` (default 30, Admin) then stops counting; a submitted receipt
+  (`payment_submitted`) makes the hold firm and non-expiring while the organizer reviews (§1U);
+  `confirmed` is permanent. Waitlisted never holds. "Secured" = confirmed.
+
+  **Default fee:** new setting `default_division_fee_amount` (₱1,000 per player, Admin-editable). The
+  15 starter divisions of a new tournament now stamp it instead of 0, and the add-division form
+  defaults to it. Merges via system_settings, no migration.

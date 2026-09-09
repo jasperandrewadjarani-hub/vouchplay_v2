@@ -19,8 +19,14 @@ describe('buildDefaultDivisionPreset', () => {
     expect(rows.every((row) => row.capacity_teams === 20 && row.status === 'draft')).toBe(true);
   });
 
-  it('rejects invalid operational capacity values', () => {
+  it('defaults the per-player fee to zero, and stamps the configured fee on every division', () => {
+    expect(buildDefaultDivisionPreset(20).every((row) => row.fee_amount === 0)).toBe(true);
+    expect(buildDefaultDivisionPreset(20, 1000).every((row) => row.fee_amount === 1000)).toBe(true);
+  });
+
+  it('rejects invalid operational capacity and fee values', () => {
     expect(() => buildDefaultDivisionPreset(0)).toThrow(/positive whole number/i);
     expect(() => buildDefaultDivisionPreset(2.5)).toThrow(/positive whole number/i);
+    expect(() => buildDefaultDivisionPreset(20, -5)).toThrow(/zero or a positive number/i);
   });
 });

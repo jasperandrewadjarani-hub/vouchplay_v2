@@ -34,6 +34,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   default_max_divisions_per_player: 3,
   default_max_clubs_per_player: 3,
   default_division_capacity_teams: 20,
+  // Per-player fee stamped on each of the 15 starter divisions of a new tournament, so an organizer
+  // is not left with a set of free divisions to price one by one (master_plan §2J). Per player, in
+  // the tournament's currency; the organizer can still edit or zero any division.
+  default_division_fee_amount: 1000,
   club_representation_required: false,
   verified_clubs_only: false,
   // Tournament planning demand (not registration, eligibility, or a slot).
