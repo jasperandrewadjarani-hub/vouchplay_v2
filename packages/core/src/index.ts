@@ -25,6 +25,7 @@ export * from './tournaments/cover';
 export * from './tournaments/lifecycle';
 export * from './tournaments/retention';
 export * from './tournaments/skill-floor';
+export * from './tournaments/fees';
 export * from './offers/lifecycle';
 export * from './offers/targeting';
 export * from './time/ph-time';

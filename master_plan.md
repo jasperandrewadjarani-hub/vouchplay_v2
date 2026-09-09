@@ -1012,6 +1012,13 @@ described.
 
 ## 1V. Fixing what the pay-first flow broke, and pricing per player (2026-09-09, post-launch)
 
+**Migration 0026 applied and verified 2026-09-09**: `early_bird_tournament_cols=2`,
+`early_bird_division_col=1`, `effective_fee_fn=1`, `per_player_flag=1`, `fee_3000_divisions=0`,
+`fee_1500_divisions=15`. Confirmed directly against the database afterwards: 15 divisions at 1500 x 2
+= 3000 and 2 at 2000 x 2 = 4000, both unchanged from their old team totals, with **zero payment rows
+in flight** at conversion time. The predicted count was 11 rather than 15 - that estimate came from a
+truncated table view earlier in the session, not from a miscount of the conversion.
+
 ### Two bugs, one cause
 
 Both bugs Jasper hit came from the same place: §1U made a team carry a registration **from the moment

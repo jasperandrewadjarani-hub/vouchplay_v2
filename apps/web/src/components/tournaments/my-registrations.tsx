@@ -1,4 +1,5 @@
 import { CircleCheck, CircleDollarSign, Clock, ListChecks, TriangleAlert } from 'lucide-react';
+import { quoteFee } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { InfoDisclosure } from '@/components/ui/info-disclosure';
@@ -45,6 +46,7 @@ export function MyRegistrations({
   playerChangesConfigured,
   paymentInstructions,
   paymentMethods,
+  earlyBird = { startsAt: null, endsAt: null },
 }: {
   tournamentId: string;
   divisions: DivisionDTO[];
@@ -53,7 +55,18 @@ export function MyRegistrations({
   playerChangesConfigured: boolean;
   paymentInstructions: string | null;
   paymentMethods: string | null;
+  /** Tournament-wide early-bird window (§1V). */
+  earlyBird?: { startsAt: string | null; endsAt: string | null };
 }) {
+  // One quote per division, so the price shown and the price charged come from the same function.
+  const quoteFor = (d: DivisionDTO) =>
+    quoteFee({
+      feeAmount: d.feeAmount,
+      earlyBirdFeeAmount: d.earlyBirdFeeAmount,
+      earlyBirdStartsAt: earlyBird.startsAt,
+      earlyBirdEndsAt: earlyBird.endsAt,
+      teamSize: d.teamSize,
+    });
   const byId = new Map(divisions.map((d) => [d.id, d]));
   const entries = Object.entries(state.registrationsByDivision)
     .filter(([, reg]) => ACTIVE.has(reg.status))
@@ -102,7 +115,10 @@ export function MyRegistrations({
                   <PaymentForm
                     registrationId={reg.id}
                     tournamentId={tournamentId}
-                    amountDue={d.feeAmount}
+                    amountDue={quoteFor(d).teamTotal}
+                    perPlayer={quoteFor(d).perPlayer}
+                    teamSize={d.teamSize}
+                    earlyBird={quoteFor(d).earlyBirdApplied}
                     currency={d.currency}
                     instructions={paymentInstructions}
                     methods={paymentMethods}

@@ -109,7 +109,14 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
             defaultValue={initial?.capacityTeams ?? 0}
           />
         </Field>
-        <Field label="Fee" htmlFor="feeAmount">
+        {/* Per player since migration 0026: the organizer types the number the player reads, and a
+            doubles team is charged it twice. Before this, one price existed as three different
+            numbers (§1V). */}
+        <Field
+          label="Fee per player"
+          htmlFor="feeAmount"
+          hint="What ONE player pays. A doubles team is charged this twice."
+        >
           <Input
             id="feeAmount"
             name="feeAmount"
@@ -117,6 +124,21 @@ export function DivisionFields({ initial }: { initial?: Partial<DivisionDTO> }) 
             min={0}
             step="0.01"
             defaultValue={initial?.feeAmount ?? 0}
+          />
+        </Field>
+        <Field
+          label="Early bird fee per player"
+          htmlFor="earlyBirdFeeAmount"
+          hint="Optional. Charged while the tournament early-bird dates are open. Leave blank for no promo."
+        >
+          <Input
+            id="earlyBirdFeeAmount"
+            name="earlyBirdFeeAmount"
+            type="number"
+            min={0}
+            step="0.01"
+            defaultValue={initial?.earlyBirdFeeAmount ?? ''}
+            placeholder="No early bird price"
           />
         </Field>
         <Field label="Currency" htmlFor="currency">

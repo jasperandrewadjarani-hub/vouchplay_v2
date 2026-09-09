@@ -2,6 +2,7 @@
 
 import { revalidateTag } from 'next/cache';
 import { paymentSubmitSchema } from '@vouchplay/validation';
+import { quoteFee } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
@@ -92,13 +93,39 @@ export async function submitPayment(
       return { error: 'This registration is not awaiting payment.' };
     }
 
+    // fee_amount is PER PLAYER since migration 0026, so the amount owed is fee x team size.
+    // The early-bird price is resolved HERE, at submission - the amount owed is the amount that was
+    // true when the receipt was sent, not when the entry was started (§1V).
     const { data: division } = await svc
       .from('divisions')
-      .select('fee_amount, currency')
+      .select('fee_amount, early_bird_fee_amount, currency, team_size, tournament_id')
       .eq('id', r.division_id)
       .maybeSingle();
-    const div = division as { fee_amount: number; currency: string } | null;
+    const div = division as {
+      fee_amount: number;
+      early_bird_fee_amount: number | null;
+      currency: string;
+      team_size: number;
+      tournament_id: string;
+    } | null;
     if (!div) return { error: 'Division not found.' };
+    const { data: tourn } = await svc
+      .from('tournaments')
+      .select('early_bird_starts_at, early_bird_ends_at')
+      .eq('id', div.tournament_id)
+      .maybeSingle();
+    const t = tourn as {
+      early_bird_starts_at: string | null;
+      early_bird_ends_at: string | null;
+    } | null;
+    const quote = quoteFee({
+      feeAmount: Number(div.fee_amount),
+      earlyBirdFeeAmount:
+        div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
+      earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
+      earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
+      teamSize: div.team_size,
+    });
 
     // Upload proof (required).
     const file = formData.get('proof');
@@ -114,8 +141,8 @@ export async function submitPayment(
     const { error: payErr } = await svc.from('payments').upsert(
       {
         registration_id: registrationId,
-        amount_due: div.fee_amount,
-        amount_submitted: p.amountSubmitted ?? div.fee_amount,
+        amount_due: quote.teamTotal,
+        amount_submitted: p.amountSubmitted ?? quote.teamTotal,
         currency: div.currency,
         method: p.method,
         payer_name: p.payerName || null,

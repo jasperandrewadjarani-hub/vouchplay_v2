@@ -6,8 +6,14 @@ import type { ViewerRegistrationState } from '@/lib/tournaments/registration-que
 import { InfoDisclosure } from '@/components/ui/info-disclosure';
 import { RegisterActions } from './register-actions';
 import { PartnerInviteForm } from './partner-invite-form';
+import { quoteFee, formatFee } from '@vouchplay/core';
 import { InvitationActions } from './invitation-actions';
 import { PartnerChangeActions } from './partner-change-actions';
+
+export interface EarlyBirdWindow {
+  startsAt: string | null;
+  endsAt: string | null;
+}
 
 /**
  * Collapsed-by-default division browser (handover Phase 13.5, §1D). Public facts for every division;
@@ -16,10 +22,21 @@ import { PartnerChangeActions } from './partner-change-actions';
  * player already holds link back to My registrations instead of repeating the action.
  */
 
-function moneyPerPlayer(d: DivisionDTO): string {
-  if (d.feeAmount <= 0) return 'Free';
-  const amount = d.feeAmount / Math.max(1, d.teamSize);
-  return `${d.currency} ${amount.toLocaleString(undefined, { maximumFractionDigits: 2 })} / player`;
+// fee_amount IS the per-player price since migration 0026 - it is no longer divided by team size
+// (§1V). Dividing again would quietly halve every quoted price.
+function moneyPerPlayer(d: DivisionDTO, earlyBird: EarlyBirdWindow): string {
+  const quote = quoteFee({
+    feeAmount: d.feeAmount,
+    earlyBirdFeeAmount: d.earlyBirdFeeAmount,
+    earlyBirdStartsAt: earlyBird.startsAt,
+    earlyBirdEndsAt: earlyBird.endsAt,
+    teamSize: d.teamSize,
+  });
+  if (quote.perPlayer <= 0) return 'Free';
+  const base = `${formatFee(d.currency, quote.perPlayer)} / player`;
+  return quote.earlyBirdApplied
+    ? `${base} (early bird, was ${formatFee(d.currency, quote.standardPerPlayer)})`
+    : base;
 }
 
 export function DivisionBrowser({
@@ -31,6 +48,7 @@ export function DivisionBrowser({
   signInHref,
   enforceSkillFloor,
   requireSkillVerified,
+  earlyBird = { startsAt: null, endsAt: null },
 }: {
   tournamentId: string;
   divisions: DivisionDTO[];
@@ -39,6 +57,8 @@ export function DivisionBrowser({
   authed: boolean;
   signInHref: string;
   enforceSkillFloor: boolean;
+  /** Tournament-wide early-bird window; every division shares it (§1V). */
+  earlyBird?: EarlyBirdWindow;
   requireSkillVerified: boolean;
 }) {
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
@@ -138,7 +158,7 @@ export function DivisionBrowser({
                     <div className="text-foreground-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="inline-flex items-center gap-1">
                         <Coins size={12} aria-hidden />
-                        {moneyPerPlayer(d)}
+                        {moneyPerPlayer(d, earlyBird)}
                       </span>
                       {isFull && (
                         <span className="text-warning inline-flex items-center gap-1 font-medium">

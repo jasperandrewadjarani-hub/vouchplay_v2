@@ -388,6 +388,9 @@ export interface TournamentRow {
   end_at: string | null;
   registration_open_at: string | null;
   registration_close_at: string | null;
+  /** Early-bird window, tournament-wide across every division (migration 0026). */
+  early_bird_starts_at: string | null;
+  early_bird_ends_at: string | null;
   club_lock_at: string | null;
   registration_lock_at: string | null;
   status: TournamentStatus;
@@ -433,7 +436,9 @@ export interface DivisionRow {
   maximum_age: number | null;
   team_size: number;
   capacity_teams: number;
+  /** Price PER PLAYER since migration 0026. */
   fee_amount: number;
+  early_bird_fee_amount: number | null;
   currency: string;
   skill_verified_required: boolean;
   minimum_sts: number | null;

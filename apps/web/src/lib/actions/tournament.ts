@@ -190,6 +190,8 @@ export async function createTournament(
         end_at: toIso(formData.get('endAt')),
         registration_open_at: toIso(formData.get('registrationOpenAt')),
         registration_close_at: toIso(formData.get('registrationCloseAt')),
+        early_bird_starts_at: toIso(formData.get('earlyBirdStartsAt')),
+        early_bird_ends_at: toIso(formData.get('earlyBirdEndsAt')),
         contact: v.contact || null,
         terms_text: v.termsText || null,
         payment_instructions: v.paymentInstructions || null,
@@ -440,6 +442,8 @@ function divisionPatchFromForm(formData: FormData) {
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
   const d = parsed.data;
+  const rawEarly = String(formData.get('earlyBirdFeeAmount') ?? '').trim();
+  const earlyBirdFee = rawEarly === '' ? null : Math.max(0, Number(rawEarly) || 0);
   return {
     data: {
       name_override: d.nameOverride || null,
@@ -453,6 +457,9 @@ function divisionPatchFromForm(formData: FormData) {
       team_size: d.format === 'singles' ? 1 : d.teamSize,
       capacity_teams: d.capacityTeams,
       fee_amount: d.feeAmount,
+      // Blank means no promo. An early amount that is not cheaper is rejected at quote time, so a
+      // typo can never quietly raise the price (§1V).
+      early_bird_fee_amount: earlyBirdFee,
       currency: d.currency.toUpperCase(),
       skill_verified_required: d.skillVerifiedRequired,
       minimum_sts: d.minimumSts ?? null,

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.28
+# VouchPlay Master Product & Code Execution Handover v1.29
 
-_(File retains its `…v1.1.md` name; content is v1.28 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.29 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,56 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.29 (2026-09-09)
+
+_Migration 0026 applied and verified before the code deployed: `early_bird_tournament_cols=2`,
+`early_bird_division_col=1`, `effective_fee_fn=1`, `per_player_flag=1`, `fee_3000_divisions=0`,
+`fee_1500_divisions=15`._
+
+- **Two bugs, one cause, both mine.** v1.28 made a team carry a registration from the moment it is
+  created, and two older rules assumed the opposite. `leave_team_after_cancel` refuses when a team has
+  an active registration, so "Leave team and change partner" could **only ever fail**; and
+  `player_cancel_registration` refuses once a `payments` row exists while the UI only offered Cancel
+  for `payment_pending` / `waitlisted`, so a payer lost the button within a minute of paying and was
+  left with one control that could not succeed and none that could. **The fix was to stop pretending a
+  partner change means dissolving a team** - v1.28 already built the right primitives and the UI had
+  not caught up. The partner area now renders only the state a player is actually in: a seat left
+  vacant by a decline gets an inline **"Name a new partner"** that keeps slot, payment and waitlist
+  position; a partner who has not answered gets a plain sentence saying so and that declining is
+  theirs to do; otherwise nothing renders. Cancel appears only while it will work, and when it will
+  not, the screen says **message the organizer, who can refund you and release your slot** instead of
+  hiding the option or failing on tap. A control that cannot succeed is worse than no control.
+- **The skill ceiling already blocked; it just would not say who.** `evaluateSkillFloor` has always
+  refused a player whose skill sits **above** a division's ceiling - that is its `blocked` branch. What
+  was wrong was the sentence: "you cannot join because it is below **your** skill level" is meaningless
+  when the person over the ceiling is the partner you just named. It now names them. **The gate only
+  runs when the tournament's `enforceSkillFloor` rule is on**; with it off nothing is blocked at any
+  level, which is worth knowing before concluding it is broken.
+- **Fees are configured per player.** `divisions.fee_amount` used to hold a **team** total that the UI
+  divided by `team_size` to display, so one price existed as three different numbers - the organizer
+  typed 3000, the player read 1500, the QR collected 3000 - which is exactly how a fee gets entered
+  wrong. The stored number is now the per-player price: the organizer types 1500, the player reads
+  1500, and the payment screen says **PHP 1,500 per player x 2 players**. **Nobody's price changed.**
+  The conversion was `fee_amount / team_size`, exact for every row, verified afterwards against the
+  database as 15 divisions at 1500 x 2 = 3000 and 2 at 2000 x 2 = 4000, with **zero payment rows in
+  flight**. It is guarded by a `division_fee_is_per_player` settings row, so re-running the script
+  cannot halve the fees a second time - that guard is the only thing between a re-run and real
+  financial damage, which is why it is a row and not a comment. **The old display-time division was
+  removed at the same time**; leaving it would have quietly halved every quoted price.
+- **Early bird.** One window for the whole tournament, one optional discounted amount per division.
+  **The dates live on the tournament and the amounts on the divisions** because "the promo runs until
+  the 30th" is one decision made once, while how much off can reasonably differ between a Novice and
+  an Open bracket - putting the dates on all eleven divisions would be eleven chances to typo the same
+  date. **The price is resolved when the receipt is submitted**, not when the entry was created, which
+  is the only reading that survives someone starting an entry before the deadline and paying after it.
+  Two guards: a **half-configured window never discounts** (charging a promo price because one date was
+  left blank is worse than charging the standard one), and an early amount that is **not actually
+  cheaper is refused**, so a typo cannot become a quiet price rise.
+- **All fee arithmetic lives in one pure module**, `@vouchplay/core` `tournaments/fees.ts`
+  (`quoteFee`, `isEarlyBirdOpen`, `formatFee`), with 13 unit tests including the exact live conversion,
+  so the price a player is quoted, the total on the payment screen and the amount recorded against the
+  payment cannot drift apart.
 
 ## v1.28 (2026-09-09)
 

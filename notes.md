@@ -1894,3 +1894,20 @@ Open items, highest value first:
   price changes**: live divisions hold 3000/team and already display 1500/player, so after conversion
   they hold 1500/player, display 1500, and collect 3000. Organizer fee UI, early-bird UI and the
   payment-total display are held until Jasper applies 0026. See master_plan §1V.
+
+- **2026-09-09** - **Per-player fees and early bird SHIPPED.** Migration 0026 verified
+  (`early_bird_tournament_cols=2`, `early_bird_division_col=1`, `effective_fee_fn=1`,
+  `per_player_flag=1`, `fee_3000_divisions=0`, `fee_1500_divisions=15`) and then confirmed directly
+  against the database: 15 divisions at 1500 x 2 = 3000 and 2 at 2000 x 2 = 4000, identical to their
+  old team totals, with **zero payment rows in flight** during conversion. I predicted 11 divisions;
+  the real number is 15, because my earlier estimate came from a truncated table view.
+  All fee arithmetic now lives in one pure module, `@vouchplay/core` `tournaments/fees.ts`
+  (`quoteFee`, `isEarlyBirdOpen`, `formatFee`), 13 unit tests, so the price quoted, the total shown
+  and the amount recorded cannot drift. **The old `feeAmount / teamSize` display division was removed**
+  - leaving it would have quietly halved every quoted price. Organizer input is now "Fee per player"
+  with an optional early-bird amount per division; the window is two datetime fields on the tournament
+  and applies to every division, per Jasper. The payment screen states the arithmetic
+  ("PHP 1,500 per player x 2 players") rather than only a total. **The early-bird price is resolved at
+  receipt submission**, not at entry creation. Two guards worth remembering: a half-configured window
+  (one date blank) never discounts, and an early amount that is not actually cheaper is refused, so a
+  typo cannot become a quiet price rise. See master_plan §1V, handover v1.29.

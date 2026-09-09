@@ -175,6 +175,7 @@ export default async function TournamentPage({ params }: Params) {
           playerChangesConfigured={playerChangesConfigured}
           paymentInstructions={t.paymentInstructions}
           paymentMethods={t.paymentMethods}
+          earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
         />
       )}
 
@@ -189,6 +190,7 @@ export default async function TournamentPage({ params }: Params) {
           signInHref={loginToRegister}
           enforceSkillFloor={t.enforceSkillFloor}
           requireSkillVerified={t.requireSkillVerified}
+          earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
         />
       </div>
 

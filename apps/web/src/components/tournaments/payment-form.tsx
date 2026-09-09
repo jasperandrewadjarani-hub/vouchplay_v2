@@ -16,6 +16,9 @@ export function PaymentForm({
   registrationId,
   tournamentId,
   amountDue,
+  perPlayer,
+  teamSize = 1,
+  earlyBird = false,
   currency,
   instructions,
   methods,
@@ -26,6 +29,10 @@ export function PaymentForm({
   registrationId: string;
   tournamentId: string;
   amountDue: number;
+  /** Per-player price behind the total, so the payer can check the arithmetic. */
+  perPlayer?: number | null;
+  teamSize?: number;
+  earlyBird?: boolean;
   currency: string;
   instructions: string | null;
   methods: string | null;
@@ -52,9 +59,17 @@ export function PaymentForm({
 
   return (
     <div className="border-border mt-2 rounded-lg border border-dashed p-3">
-      <p className="text-foreground text-sm font-semibold">
-        Payment due: {currency} {amountDue.toLocaleString()}
+      {/* State the arithmetic, not just a total. Somebody comparing this against the fee they were
+          quoted should never have to work out where the difference came from (§1V). */}
+      <p className="text-foreground text-base font-bold">
+        Send {currency} {amountDue.toLocaleString()}
       </p>
+      {perPlayer != null && teamSize > 1 && (
+        <p className="text-foreground-muted mt-0.5 text-xs">
+          {currency} {perPlayer.toLocaleString()} per player x {teamSize} players
+          {earlyBird ? ' (early bird price)' : ''}
+        </p>
+      )}
       {instructions && (
         <p className="text-foreground-muted mt-1 text-xs whitespace-pre-wrap">{instructions}</p>
       )}

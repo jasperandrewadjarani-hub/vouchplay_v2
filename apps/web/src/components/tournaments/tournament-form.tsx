@@ -18,6 +18,8 @@ export interface TournamentFormInitial {
   endAt?: string;
   registrationOpenAt?: string;
   registrationCloseAt?: string;
+  earlyBirdStartsAt?: string;
+  earlyBirdEndsAt?: string;
   contact?: string;
   termsText?: string;
   paymentInstructions?: string;
@@ -167,6 +169,33 @@ export function TournamentForm({
               name="registrationCloseAt"
               type="datetime-local"
               defaultValue={initial.registrationCloseAt ?? ''}
+            />
+          </Field>
+          {/* One window for the whole tournament, shared by every division (§1V). Dates here and
+              amounts on each division: the deadline is one decision made once, while how much off
+              can differ per bracket. Eleven copies of the same date is eleven chances to typo it. */}
+          <Field
+            label="Early bird starts"
+            htmlFor="earlyBirdStartsAt"
+            hint="Optional. Applies to every division. Set the discounted amount on each division."
+          >
+            <Input
+              id="earlyBirdStartsAt"
+              name="earlyBirdStartsAt"
+              type="datetime-local"
+              defaultValue={initial.earlyBirdStartsAt ?? ''}
+            />
+          </Field>
+          <Field
+            label="Early bird ends"
+            htmlFor="earlyBirdEndsAt"
+            hint="Both dates are needed. If either is blank, the normal fee applies everywhere."
+          >
+            <Input
+              id="earlyBirdEndsAt"
+              name="earlyBirdEndsAt"
+              type="datetime-local"
+              defaultValue={initial.earlyBirdEndsAt ?? ''}
             />
           </Field>
         </div>

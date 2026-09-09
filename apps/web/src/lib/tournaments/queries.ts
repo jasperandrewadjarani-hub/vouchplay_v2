@@ -492,6 +492,8 @@ export async function getTournamentBySlug(
       timezone: row.timezone,
       registrationOpenAt: row.registration_open_at,
       registrationCloseAt: row.registration_close_at,
+      earlyBirdStartsAt: row.early_bird_starts_at ?? null,
+      earlyBirdEndsAt: row.early_bird_ends_at ?? null,
       contact: row.contact,
       termsText: row.terms_text,
       paymentInstructions: row.payment_instructions,
