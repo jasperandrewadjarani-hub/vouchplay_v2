@@ -2027,3 +2027,23 @@ Open items, highest value first:
   at a glance. All of it - queue membership, chip, team label, filtering, sorting, counts - lives in
   one pure module `lib/tournaments/entry-view.ts` with **19 unit tests**, so the row, the sheet and the
   counts cannot disagree. No migration.
+
+- **2026-09-09** - **Migration 0027 written and awaiting Jasper's run** (`scripts/apply-0027.sql`).
+  It did not exist before this: earlier replies listed it under "still outstanding", which read as if a
+  file was already waiting. It was only ever a described plan. My wording, my fault.
+  It adds `change_partner(team, actor, new_invitee, ...)`, the swap that works while the seat is still
+  OCCUPIED - `replace_pending_partner` (0025) only ever handled a seat already vacated by a decline, so
+  a player who had paid and simply needed a different partner had no route at all.
+  Deliberately narrow: the replacement must **fit the same division** (same sex classification, inside
+  the same skill band) via a new `player_fits_division()`, so a swap can never route around a
+  division's own rules; the **registration, payment and waitlist position are never touched**; and the
+  **removed player's id is returned** so the caller must notify them. §1D exists so nobody is displaced
+  *without their knowledge* - being told is what keeps that promise.
+  **Every column and dependency was verified against the live database before handing it over**
+  (profiles.sex / self_rated_skill, player_skill_profiles.community_skill_level, division skill+sex
+  columns, teams.updated_at, team_members.confirmed_at, partner_invitations.team_id,
+  registration_events, audit_logs, and `player_registration_changes_are_open`). That check exists
+  because 0026's `onboarding_completed_at` typo shipped a broken doubles path.
+  Expected verification: `fits_division_fn=1`, `change_partner_fn=1`, `invitation_team_id_column=1`,
+  plus an informational `teams_with_two_members`. **No app code ships until Jasper returns the
+  counts** - the gap would be a visible control on the payment path.
