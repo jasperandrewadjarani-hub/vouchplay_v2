@@ -1560,44 +1560,57 @@ Getting the first deploy up hit two issues:
 
 ## Next up
 
-### START HERE (state as of 2026-09-09, second post-launch session)
+### START HERE (state as of 2026-09-09, end of the registration-flow session)
 
 The app is **live and in use** for B-Steel Hermosa 2026 (Oct 17-18, Zamboanga City). Registration
 opened **Sep 9, 2026, 5:00 PM Manila**. Treat production as hot: every change lands in front of real
 registrants, so prefer small reversible slices and read the release-order rule in handover v1.22
 before shipping anything that needs a migration.
 
-**All migrations through 0024 are applied.** Nothing is pending in Supabase.
+**All migrations through 0027 are applied and verified.** Nothing is pending in Supabase.
 
-Open items, highest value first:
+Handover content is **v1.31**. master_plan decision records run to **§2A**.
 
-1. **~~Leaderboard cron is not landing~~ - RESOLVED, and it was never broken.** See master_plan §1O
-   for the evidence. Every snapshot batch ever written is accounted for by two Admin rebuilds plus
-   the initial ship; the schedule has had exactly **one** opportunity to fire since `crons` was added
-   to `vercel.json` (2026-09-08 01:17 UTC), and at that moment the last publish was three hours old,
-   so the route's cadence guard correctly returned `CADENCE_NOT_DUE`. The board looked empty because
-   the Sep 7 rebuild ran before anyone had contribution rows, not because a job died. A rebuild at
-   2026-09-08 17:42 UTC published 25 community and 24 player entries and the live board is current.
-   **The real defect was that a skip left no trace**, so the only way to answer "did it run?" was the
-   Vercel dashboard. Fixed: the cron now writes one `audit_logs` row per invocation, and Admin →
-   Leaderboards leads with a plain-language "Nightly rebuild" panel saying when it last ran, what it
-   did, when it next runs, and whether it will publish or skip. **Prediction to check:** the
-   2026-09-09 01:17 UTC run skips, the 2026-09-10 01:17 UTC run publishes.
-2. **Registration CLOSE time still holds the old UTC value.** It renders `Sep 17, 2026, 1:00 AM`,
-   which is the pre-fix artefact, not an intended time. The PH-time fix (§1K) means editing it in the
-   organizer form now stores correctly - it just needs Jasper's intended close time. **Blocked on
-   Jasper.**
-3. **~~Marketing assets untracked in git~~ - RESOLVED.** Jasper chose to ignore them, so
-   `/deliverables/`, `/fb_posting_assets/` and the carousel source doc are now in `.gitignore`.
-   They are large binaries the app never imports; they stay in the project folder for the client.
-4. **Controlled authenticated browser walkthrough** of
-   `working/P_006b_Phase13_5_Manual_Test_Script_(2026-09).md` - the only Phase 13.5 gate never
-   evidenced. Worth doing against live now that real registrations exist.
-5. **New surfaces from 2026-09-09 have not been exercised by a real user yet:** the `observed` vouch
-   option and the peer-nominated achievement confirm/decline loop. Both are server-guarded and
-   unit-covered, but neither has live usage.
-6. Carry-over: Supabase org over-quota before 21 Sep 2026; Gmail SMTP -> dedicated provider before
-   public scale; `supabase gen types` -> `packages/db` once the CLI/token is wired.
+#### What this session changed
+
+Registration was reshaped end to end, then debugged against a real run:
+
+- **Pay-first doubles (§1U, migration 0025).** Naming a partner creates the team immediately with the
+  partner unconfirmed, so the payer goes straight to QR and receipt. The partner confirms afterwards.
+- **Per-player fees and early bird (§1V, migration 0026).** `divisions.fee_amount` is now the price
+  **per player**, not a team total. Nobody's price changed - the conversion was exact.
+- **Continuous partner-to-paid flow, downloadable QR, Request to cancel (§1Y).**
+- **The organizer's Manage screen is a list of rows plus a detail sheet, with queue chips (§1Z).**
+- **Partner change after paying (§2A, migration 0027)**, gated on the division's own skill and sex
+  rules, enforced in SQL.
+
+#### Open items, highest value first
+
+1. **Nothing is blocked on Jasper.** Every migration is applied and every settings change he was asked
+   for is done.
+2. **The full end-to-end registration walkthrough is still unfinished.** Jasper got as far as payment
+   before this session's fixes landed. The remaining path to prove: pay -> partner confirms ->
+   organizer verifies -> both notified -> confirmed. Also worth exercising the decline path, the
+   replacement path, Request to cancel, and partner change after paying.
+3. **Two dialogs still use the old inline pattern** (`vouch-form`, `request-vouch-form`). Neither is
+   opened from inside a stacking context so neither is broken, but they should move onto the shared
+   `Modal` (which now portals) when the registration path is quiet.
+4. **`supabase gen types` is still not wired into `packages/db`.** The types are hand-synced, and that
+   is exactly what let migration 0026's `onboarding_completed_at` typo through five green gates and
+   break the whole doubles path. **This is now the highest-value piece of engineering hygiene left.**
+5. **Phase 15 - run the event** (see the phase note below). Oct 17-18 is the deadline that does not
+   move.
+6. Carry-over ops: Supabase org over-quota before 21 Sep 2026; Gmail SMTP -> dedicated provider before
+   public scale.
+
+#### The lesson this session kept teaching
+
+Three separate bugs shipped through five green gates, and all three were invisible to typecheck:
+a column name that did not exist, a modal trapped by a stacking context, and a spinner wired to the
+wrong link. **The gates prove the code compiles and the tests pass; they do not prove the thing works.**
+Where a change is observable, drive it - in a browser, or against the live database - before calling
+it done. Several fixes in this session were found only that way.
+
 
 ### Earlier entries
 

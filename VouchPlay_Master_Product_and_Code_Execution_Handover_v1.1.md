@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.30
+# VouchPlay Master Product & Code Execution Handover v1.31
 
-_(File retains its `…v1.1.md` name; content is v1.30 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.31 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,77 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.31 (2026-09-09)
+
+_Migration 0027 applied and verified before its code shipped. Everything else here is code-only._
+
+- **The doubles path was broken from the moment pay-first shipped, and the error message pointed the
+  wrong way.** "Enter and pay" always failed with "No player found with that handle." The partner
+  lookup selected `onboarding_completed_at`, a column that does not exist - the real one is
+  `onboarded_at` - so PostgREST returned `400 / 42703`, `data` came back null, and the code read null
+  as "no such player". **Five green gates missed it** because the Supabase `.select()` argument is an
+  unchecked string and the result was cast with a type *assertion* rather than validated, so
+  TypeScript believed a field that never existed; the `packages/db` types are hand-synced, which is
+  exactly where that bites. Both lookups now inspect the PostgREST error and say "Could not look up
+  that player" instead of letting a failed **query** wear the "missing **player**" message. That
+  mislabelling is what turned a one-line typo into a debugging session.
+- **A dialog was trapped inside a directory row.** Tapping the STS chip opened a see-through modal
+  with rows painting over the copy. `fixed inset-0 z-50` only escapes the page when no ancestor has
+  created a stacking context, and v1.26 gave the compact row's trailing column `relative z-10` so its
+  controls would sit above the row's tap overlay - which confined the whole modal, backdrop included,
+  to one row's box. Nothing was wrong with the modal's own styles, which is why it read as a rendering
+  glitch. `Modal` now renders through `createPortal(document.body)`, fixing the class rather than the
+  instance: any dialog opened from inside a card, row, sticky header or transformed element is now
+  safe by construction. The body scroll lock its docstring had always promised, and never had, was
+  implemented at the same time.
+- **Partner to paid is one continuous path.** The partner search flashed **"No players found"** before
+  every result, because `searching` was set *inside* the 300ms debounce, leaving a window where the
+  component was not searching, had no results and had a long enough query - the exact combination that
+  renders the empty state. **Rule: a "nothing found" state must be reachable only from a completed
+  lookup, never a pending one.** "Enter and pay" then dropped the player back on the division list to
+  hunt for the payment form; the action now returns the new registration id, the form navigates to
+  `?entered=<id>#my-registrations`, and the panel opens on that entry - the anchor scrolls natively,
+  so the continuous flow needed no client JavaScript. The **QR is larger, `object-contain` so it is
+  never squashed, and downloadable** through the existing short-lived signed URL, because people pay
+  from the same phone they are reading on and cannot scan a code with the device displaying it.
+- **After paying, the app says what is true and offers the one action that exists.** The old line told
+  players to message the organizer about a refund, inviting a conversation about money VouchPlay never
+  handled. It now reads that the entry is fixed while the organizer reviews it, with **Request to
+  cancel** and a reason. **It does not cancel anything and says so before it is pressed** - once a
+  receipt exists the money went straight to the organizer. Stored in `registration_events`, already the
+  immutable per-registration history, so **no migration**; one open request per entry; organizers get
+  a critical notification.
+- **The organizer's Manage screen became a list.** It expanded every registration inline, so on a
+  phone withdrawn entries filled the page by default, the players in a team were buried under their
+  own controls, and there was no way to find the entries needing a decision. Rebuilt as **rows plus a
+  detail sheet**: one row per entry showing players by name, division, amount and a status chip, with
+  the **whole row as the control** (a small "Manage" link beside a tall row is a smaller target than
+  the row itself). **Closed entries are hidden by default** behind a counted checkbox - they are
+  history, not work. Entries needing a decision **sort to the top**, and **search matches player
+  names**, because "did Maria get in?" is the question organizers are actually asked and no status
+  filter answers it. Four dropdowns of database enums became **four queue chips that are the
+  decisions** - All open / Check payment / Cancellations / Eligibility - each with a live count. An
+  entry can be in **more than one queue**, and a **closed entry is never in any queue** whatever else
+  is true of it. Rows also flag a partner who has not confirmed and the eligibility verdict in plain
+  words. Cancellation requests, which the previous release wrote but nothing surfaced, are now
+  visible: **a request nobody can find is not a request.** Queue membership, chip, label, filtering,
+  sorting and counts live in one pure module with 19 unit tests, so the row, the sheet and the counts
+  cannot disagree - the class of bug that makes a dashboard untrustworthy.
+- **A partner can be changed after paying (migration 0027).** `replace_pending_partner` only ever
+  worked on a seat already vacated by a decline, so the ordinary case - a paid player who simply needs
+  somebody else - had no route at all. `change_partner` removes the other member and names a
+  replacement in one transaction. **`player_fits_division()` enforces the sex classification and skill
+  band in SQL**, so a swap can never route around a division's own rules; **registration, payment and
+  waitlist position are never touched**, because a partner change is not a financial event; and the
+  RPC **returns the removed player's id** so the caller cannot forget to notify them. That
+  notification is critical and unmutable: §1D forbids displacing somebody *without their knowledge*,
+  and being told is precisely what makes the swap permissible rather than a hole in the rule. **The
+  gate was tested against live rows rather than assumed** - a woman in a men's division rejected, a man
+  in a men's division accepted, a man in a women's division rejected, and skill 2 and skill 4 both
+  rejected by a 3-3 band. The copy promising this was written a release earlier and deliberately
+  pulled because the capability did not exist; it ships now that it does. **Copy and capability ship
+  together or not at all.**
 
 ## v1.30 (2026-09-09)
 
