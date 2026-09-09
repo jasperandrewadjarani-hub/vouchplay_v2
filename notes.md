@@ -1835,3 +1835,19 @@ Open items, highest value first:
   working, a guarded replace-pending-partner RPC, and RLS for the named invitee).
   **Release order: migrate first, then deploy** - the gap is a visible control that would error, on
   the payment path, during a live registration window.
+
+- **2026-09-09** - **Migration 0025 written and awaiting Jasper's run** (`scripts/apply-0025.sql`).
+  Adds `partner_invitations.team_id` plus `create_team_with_pending_partner`,
+  `decline_partner_invitation` and `replace_pending_partner`, and extends
+  `accept_partner_invitation` with a `team_id` branch that leaves every invitation already in flight
+  on the original path - which is what makes this safe to apply mid-registration.
+  **No RLS changes are needed:** `is_team_member()` tests membership, not confirmation, so a pending
+  invitee can already read the team, the registration and its events.
+  Expected verification: `invitation_team_id_column=1`, `new_rpcs=3`, `accept_rpc=1`,
+  `invitation_team_index=1`, and `legacy_open_invitations` as an informational count of invitations
+  that keep the old path. **No app code has been deployed for this** - the release order is migrate
+  first, because the gap is a visible control on the payment path during a live registration window.
+  Jasper's decisions are recorded in master_plan §1U: refunds are the organizer's call case by case,
+  there is **no automatic deadline** (only an explicit decline frees the seat, with the squatting and
+  never-responds trade-offs written down), and the organizer gets a "payments awaiting review" filter
+  in this slice.

@@ -938,6 +938,36 @@ They already have a home, and it is private by design:
 **Release order (v1.22 rule): migrate first, then deploy.** The gap here is a visible control that
 would error, not a silent read, and it sits on the payment path during a live registration window.
 
+### Decisions taken (Jasper, 2026-09-09)
+
+- **Refunds are the organizer's call, case by case.** If the partner declines and no replacement is
+  found, the entry sits as "needs a partner" and the organizer either helps resolve it or marks the
+  payment refunded with a reason. `payments.status` already has `refunded`, so this is a control on
+  the review screen, not new machinery. It suits a manual proof-and-review model: a human already
+  looks at every receipt, so a human can look at every stuck entry.
+- **No automatic deadline. Only an explicit decline frees the seat.** Jasper chose this over a 48-hour
+  window. **The trade-off, recorded honestly:** a partner who simply never opens the app leaves the
+  payer's entry holding a seat nobody can fill, and there is no automatic escape. Two things keep that
+  from being a dead end - the payer can still cancel their own entry before a receipt is submitted,
+  and after that the organizer can resolve it, which is exactly the case-by-case power chosen above.
+  There is a second, subtler cost: because a named partner is a real team member from the moment they
+  are named, being named blocks that person from entering the same division with anybody else until
+  they decline. Declining has to be **one obvious tap** in the notification, not buried, or this
+  becomes a way to squat on people. If either cost shows up in practice, a deadline setting is a small
+  change and `system_settings` is where it would live.
+- **The organizer gets a "payments awaiting review" filter** on Manage → Registrations in this slice:
+  entries with a submitted, unverified receipt, with a count. It is a filter on a screen that already
+  exists, and it is the screen an organizer will live in once receipts start arriving.
+
+### Build order
+
+1. **Migration 0025 first** (`scripts/apply-0025.sql`), verified by Jasper, before any code ships.
+   The gap is a visible control on the payment path during a live registration window, so the
+   v1.22 deploy-before-migrate exception does not apply.
+2. Then the server actions (create team with a pending partner, decline, replace), the payer's
+   warning-and-acknowledge step, the partner's confirm/decline surface, the notifications on both
+   sides, and the organizer's review filter and refund control.
+
 ## 1. Prompt Contract
 
 ### In scope
