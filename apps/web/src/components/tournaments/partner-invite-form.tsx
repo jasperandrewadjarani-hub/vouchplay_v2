@@ -53,14 +53,14 @@ export function PartnerInviteForm({
     setSearching(true);
     setResults([]);
     timer.current = setTimeout(async () => {
-      const res = await searchInvitablePlayers(q);
+      const res = await searchInvitablePlayers(q, divisionId);
       setResults(res);
       setSearching(false);
     }, 300);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [q]);
+  }, [q, divisionId]);
 
   function updateQuery(value: string) {
     setQ(value);
@@ -181,22 +181,35 @@ export function PartnerInviteForm({
       {results.length > 0 && (
         <ul className="border-border divide-border divide-y rounded-lg border">
           {results.map((p) => (
-            <li key={p.slug} className="flex items-center justify-between gap-2 p-2">
-              <span className="text-foreground text-sm">
-                {p.name}
-                {p.city && <span className="text-foreground-muted text-xs"> · {p.city}</span>}
+            <li key={p.slug} className="flex items-start justify-between gap-2 p-2">
+              <span className="min-w-0 flex-1">
+                <span className="text-foreground block text-sm">
+                  {p.name}
+                  {p.city && <span className="text-foreground-muted text-xs"> · {p.city}</span>}
+                </span>
+                {/* The reason sits with the person it is about. A player told only "unavailable"
+                    tries the same name again; a player told why picks someone else (§2D). */}
+                {p.blockedReason && (
+                  <span className="text-warning mt-0.5 block text-xs">{p.blockedReason}</span>
+                )}
               </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setChosen(p);
-                  setMsg(null);
-                  setIsError(false);
-                }}
-                className="vp-gradient min-h-[44px] shrink-0 rounded-lg px-3 text-xs font-semibold text-white"
-              >
-                Choose
-              </button>
+              {p.blockedReason ? (
+                <span className="text-foreground-muted shrink-0 self-center text-xs font-medium">
+                  Can&rsquo;t enter
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChosen(p);
+                    setMsg(null);
+                    setIsError(false);
+                  }}
+                  className="vp-gradient min-h-[44px] shrink-0 self-center rounded-lg px-3 text-xs font-semibold text-white"
+                >
+                  Choose
+                </button>
+              )}
             </li>
           ))}
         </ul>

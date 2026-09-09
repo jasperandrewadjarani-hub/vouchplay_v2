@@ -52,13 +52,13 @@ export function ChangePartnerForm({
     setSearching(true);
     setResults([]);
     timer.current = setTimeout(async () => {
-      setResults(await searchInvitablePlayers(q));
+      setResults(await searchInvitablePlayers(q, divisionId));
       setSearching(false);
     }, 300);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [q]);
+  }, [q, divisionId]);
 
   function choose(slug: string, name: string) {
     setMsg(null);
@@ -127,19 +127,30 @@ export function ChangePartnerForm({
       {results.length > 0 && (
         <ul className="border-border divide-border bg-surface divide-y rounded-lg border">
           {results.map((p) => (
-            <li key={p.slug} className="flex items-center justify-between gap-2 p-2">
-              <span className="text-foreground text-sm">
-                {p.name}
-                {p.city && <span className="text-foreground-muted text-xs"> · {p.city}</span>}
+            <li key={p.slug} className="flex items-start justify-between gap-2 p-2">
+              <span className="min-w-0 flex-1">
+                <span className="text-foreground block text-sm">
+                  {p.name}
+                  {p.city && <span className="text-foreground-muted text-xs"> · {p.city}</span>}
+                </span>
+                {p.blockedReason && (
+                  <span className="text-warning mt-0.5 block text-xs">{p.blockedReason}</span>
+                )}
               </span>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => choose(p.slug, p.name)}
-                className="vp-gradient min-h-[44px] shrink-0 rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : 'Choose'}
-              </button>
+              {p.blockedReason ? (
+                <span className="text-foreground-muted shrink-0 self-center text-xs font-medium">
+                  Can&rsquo;t enter
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => choose(p.slug, p.name)}
+                  className="vp-gradient min-h-[44px] shrink-0 self-center rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  {pending ? <Loader2 size={14} className="animate-spin" aria-hidden /> : 'Choose'}
+                </button>
+              )}
             </li>
           ))}
         </ul>

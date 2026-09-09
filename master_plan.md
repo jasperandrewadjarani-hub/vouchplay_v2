@@ -1583,6 +1583,70 @@ The first two fixes and the read-side repair need no migration and ship together
 the organizer's manual ordering; the code that reads `display_order` ships only after it is applied,
 since selecting a column that does not exist fails the whole tournament page.
 
+## 2D. A division's own rules become a gate, not a warning (2026-09-09, post-launch)
+
+A player could register into a division they did not belong in. The list said **"It targets a higher
+skill level than yours. You can still register."** and meant it. Worse, nothing at all checked the
+sex classification on the way in: a man could enter Women's Doubles, and ELIG_V1 would flag it for
+the organizer to clean up afterwards.
+
+That was a deliberate old choice - decision support, not enforcement - and it does not survive
+contact with a real tournament. An organizer who has to undo entries by hand does not have a
+registration system, they have a queue of apologies.
+
+### One rule, in three places, saying the same thing
+
+`player_fits_division()` already existed in SQL from migration 0027 and already enforced exactly
+this - **but only for changing a partner after payment.** So the app would refuse to *swap* someone
+into a division they did not fit, while happily letting them *register* into it. The rule was right
+and its reach was wrong.
+
+It now runs on every path that puts a player into a division: naming a partner, inviting one,
+entering and paying, replacing a partner who declined, registering a formed team, and entering a
+singles division. **A rule enforced on some paths is not a rule.**
+
+- **`packages/core/division-fit.ts`** is the rule, pure and tested (22 tests). It is the TypeScript
+  twin of the SQL function, and the two must agree.
+- **`checkDivisionFit`** is the server gate. It returns a sentence, not a boolean, because a server
+  action that knows exactly what is wrong should not answer "That action failed."
+- **The SQL function stays the backstop.** It is what makes the rule true for a request the UI never
+  rendered.
+
+This replaces `skillFloorError`, which only ever caught players ABOVE a division's ceiling and only
+when the organizer had ticked a box. The new check is a strict superset, so that helper is gone.
+**Note for the organizer settings screen: "Only allow players at each division's level or higher" is
+now redundant for banded divisions** - the band itself is enforced in both directions. It should be
+relabelled or retired rather than left to imply a choice that no longer exists.
+
+### The rules, and the two that read oddly
+
+Sex classification first, then the skill band, and **only one reason is ever reported**. A player
+told two things are wrong has two problems to solve; a player told the first thing can act now.
+
+- **An unknown skill never blocks.** A player with no community skill and no self-rating has nothing
+  to compare, and refusing them would lock new players out of the tournament they joined for.
+- **An unknown gender gets its own message.** Checking the live database first was what made this
+  matter: **31 of 198 profiles have no gender recorded.** To all of them, every Men's and Women's
+  division would have said "this is for women" - a dead end for someone who simply never filled the
+  field in. They now get "add your gender to your profile and this will open up", which is a door.
+  This is a third of the user base, so it is the common case, not the edge one.
+
+Zero current B-Steel team members fail their own division under the new rule, checked against live
+rows before shipping rather than assumed.
+
+### Saying no before the tap, not after
+
+A refusal that arrives on submit is a worse refusal, so the same rule runs in the UI:
+
+- **The division list** shows the reason **in place of** the register control. The old advisory is
+  gone; a division you cannot enter no longer offers a button, because a control that can only fail
+  teaches people the app is broken.
+- **Partner search** annotates each result. A player who cannot be entered reads as "Can't enter"
+  with the reason underneath, instead of being offered and then refused. The reason sits next to the
+  person it is about - told only "unavailable", people retype the same name.
+
+The server still refuses on submit. The client copy is the courtesy; it is never the gate.
+
 ## 1. Prompt Contract
 
 ### In scope

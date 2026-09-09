@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
-import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
+import { describeDivisionFit, effectivePlayerSkill, evaluateDivisionFit } from '@vouchplay/core';
+import { SKILL_BANDS } from '@vouchplay/config';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { RegisterActions } from './register-actions';
@@ -38,6 +39,26 @@ function moneyPerPlayer(d: DivisionDTO, earlyBird: EarlyBirdWindow): string {
     : base;
 }
 
+/** The band a division is for, in words - "Beginner", or "Beginner to Novice". Null when open. */
+function bandLabelFor(d: {
+  skillPolicy: string;
+  minimumSkill: number | null;
+  maximumSkill: number | null;
+}) {
+  if (d.skillPolicy === 'open') return null;
+  const label = (o: number | null) =>
+    o == null ? null : (SKILL_BANDS.find((b) => b.ordinal === o)?.label ?? null);
+  const min = label(d.minimumSkill);
+  const max = label(d.maximumSkill);
+  if (min && max) return min === max ? min : `${min} to ${max}`;
+  return min ?? max;
+}
+
+function skillLabelFor(ordinal: number | null) {
+  if (ordinal == null) return null;
+  return SKILL_BANDS.find((b) => b.ordinal === ordinal)?.label ?? null;
+}
+
 export function DivisionBrowser({
   tournamentId,
   divisions,
@@ -45,7 +66,6 @@ export function DivisionBrowser({
   registrationOpen,
   authed,
   signInHref,
-  enforceSkillFloor,
   requireSkillVerified,
   earlyBird = { startsAt: null, endsAt: null },
 }: {
@@ -55,7 +75,6 @@ export function DivisionBrowser({
   registrationOpen: boolean;
   authed: boolean;
   signInHref: string;
-  enforceSkillFloor: boolean;
   /** Tournament-wide early-bird window; every division shares it (§1V). */
   earlyBird?: EarlyBirdWindow;
   requireSkillVerified: boolean;
@@ -132,13 +151,28 @@ export function DivisionBrowser({
             const isFull = capacity > 0 && d.registeredTeams >= capacity;
             const registered = registeredIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
-            const floor = evaluateSkillFloor({
-              effectiveSkill,
-              skillPolicy: d.skillPolicy as 'band' | 'open' | 'custom',
-              divisionMinimumSkill: d.minimumSkill,
-              divisionMaximumSkill: d.maximumSkill,
-              enforce: enforceSkillFloor,
-            });
+            // The division's own rules, evaluated exactly as the server evaluates them (§2D). The
+            // list used to warn "You can still register" and then let the entry be refused; a
+            // division a player cannot enter now says so in place of the control.
+            const fit = state
+              ? evaluateDivisionFit({
+                  playerSex: state.viewerSkill.sex,
+                  effectiveSkill,
+                  sexClassification: d.sexClassification,
+                  skillPolicy: d.skillPolicy,
+                  divisionMinimumSkill: d.minimumSkill,
+                  divisionMaximumSkill: d.maximumSkill,
+                })
+              : { fits: true, reason: null };
+            const fitMessage =
+              !fit.fits && fit.reason
+                ? describeDivisionFit(fit.reason, {
+                    subject: 'you',
+                    divisionName: d.name,
+                    bandLabel: bandLabelFor(d),
+                    playerLevel: skillLabelFor(effectiveSkill),
+                  })
+                : null;
             return (
               <li key={d.id}>
                 <details>
@@ -166,28 +200,20 @@ export function DivisionBrowser({
                         </span>
                       )}
                     </div>
-                    {!registered && floor.above && (
-                      <p
-                        role="note"
-                        className="text-warning flex items-center gap-1.5 text-xs font-medium"
-                      >
-                        <AlertCircle size={14} aria-hidden />
-                        Is this the right division for me? It targets a higher skill level than
-                        yours. You can still register.
-                      </p>
-                    )}
 
                     {registered ? (
                       <p className="text-foreground-muted text-xs">
                         You have an entry here. Manage it in My registrations above.
                       </p>
-                    ) : floor.blocked ? (
+                    ) : fitMessage ? (
+                      /* One clear sentence and no control. Offering a button that the server will
+                         refuse teaches people the app is broken (§2D). */
                       <p
                         role="note"
-                        className="text-danger flex items-center gap-1.5 text-xs font-medium"
+                        className="text-warning flex items-start gap-1.5 text-xs font-medium"
                       >
-                        <AlertCircle size={14} aria-hidden />
-                        You cannot join this division because it is below your skill level.
+                        <AlertCircle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                        {fitMessage}
                       </p>
                     ) : !authed ? (
                       <Link

@@ -90,6 +90,8 @@ export interface ViewerRegistrationSkillProfile {
   uniqueVoucherCount: number;
   skillVerified: boolean;
   selfRatedSkillLevel: number | null;
+  /** Needed to apply the division sex rule in the browser, the same way the server does (§2D). */
+  sex: string | null;
 }
 
 export interface ViewerRegistrationState {
@@ -113,7 +115,7 @@ export async function getViewerRegistrationState(
   // Tight, viewer-scoped projection for the §19.4 pre-registration prompt. The aggregate contains
   // no voucher identities; a missing row means the player has no community vouches yet.
   const [{ data: viewerProfileRow }, { data: viewerSkillRow }] = await Promise.all([
-    svc.from('profiles').select('slug, self_rated_skill').eq('id', userId).maybeSingle(),
+    svc.from('profiles').select('slug, self_rated_skill, sex').eq('id', userId).maybeSingle(),
     svc
       .from('player_skill_profiles')
       .select('community_skill_level, sts, unique_voucher_count, skill_verified')
@@ -123,6 +125,7 @@ export async function getViewerRegistrationState(
   const viewerProfile = viewerProfileRow as {
     slug: string | null;
     self_rated_skill: number | null;
+    sex: string | null;
   } | null;
   const skill = viewerSkillRow as {
     community_skill_level: number | null;
@@ -138,6 +141,7 @@ export async function getViewerRegistrationState(
     uniqueVoucherCount: skill?.unique_voucher_count ?? 0,
     skillVerified: skill?.skill_verified ?? false,
     selfRatedSkillLevel: viewerProfile?.self_rated_skill ?? null,
+    sex: viewerProfile?.sex ?? null,
   };
 
   // Teams I'm on in this tournament.

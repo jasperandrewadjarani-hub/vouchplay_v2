@@ -2,15 +2,17 @@
 
 import { revalidateTag } from 'next/cache';
 import { partnerInviteSchema } from '@vouchplay/validation';
-import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
+import { SKILL_BANDS } from '@vouchplay/config';
+import { evaluateDivisionFit, describeDivisionFit } from '@vouchplay/core';
+import { divisionName } from '@/lib/tournaments/dto';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getTournamentRules } from '@/lib/tournaments/queries';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { TOURNAMENTS_LIST_TAG, tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
+import { checkDivisionFit } from '@/lib/tournaments/division-fit-check';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import {
   getActorMini,
@@ -179,6 +181,13 @@ export async function invitePartner(
     if (inv.id === user.id) return { error: 'You cannot invite yourself.' };
     if (inv.account_status !== 'active') return { error: 'That player is unavailable.' };
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That invite is unavailable.' };
+    // Checked at the point the partner is NAMED, not when they answer (§2D). Sending an invitation
+    // that can only be refused wastes the invitee's decision and the inviter's time.
+    const fitError = await checkDivisionFit(v.divisionId, [
+      { playerId: user.id, subject: 'you' },
+      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
+    ]);
+    if (fitError) return { error: fitError };
     // Conflicting-team prevention is authoritatively enforced in accept_partner_invitation (§20.3).
 
     const { error } = await svc.from('partner_invitations').insert({
@@ -282,14 +291,13 @@ export async function enterWithPendingPartner(
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
     // Both players are checked against the division's skill floor before anyone pays.
-    const floorError = await skillFloorError(
-      svc,
-      tournamentId,
-      v.divisionId,
-      [user.id, inv.id],
-      new Map([[inv.id, (await getActorMini(inv.id)).name]]),
-    );
-    if (floorError) return { error: floorError };
+    // The division rules - who it is for, and the band it is for - checked for BOTH players before
+    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why.
+    const fitError = await checkDivisionFit(v.divisionId, [
+      { playerId: user.id, subject: 'you' },
+      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
+    ]);
+    if (fitError) return { error: fitError };
 
     const { data: created, error: teamError } = await svc.rpc('create_team_with_pending_partner', {
       p_tournament_id: tournamentId,
@@ -383,14 +391,13 @@ export async function replacePendingPartner(
       };
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
-    const floorError = await skillFloorError(
-      svc,
-      tournamentId,
-      v.divisionId,
-      [user.id, inv.id],
-      new Map([[inv.id, (await getActorMini(inv.id)).name]]),
-    );
-    if (floorError) return { error: floorError };
+    // The division rules - who it is for, and the band it is for - checked for BOTH players before
+    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why.
+    const fitError = await checkDivisionFit(v.divisionId, [
+      { playerId: user.id, subject: 'you' },
+      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
+    ]);
+    if (fitError) return { error: fitError };
 
     const { error } = await svc.rpc('replace_pending_partner', {
       p_team_id: teamId,
@@ -517,10 +524,37 @@ export interface PlayerSearchResult {
   slug: string;
   name: string;
   city: string | null;
+  /**
+   * Why this player cannot be your partner in the division being searched, or null when they can.
+   * Present only when a divisionId was supplied (§2D).
+   */
+  blockedReason: string | null;
 }
 
-/** Search active, onboarded players by name/nickname/city to invite as a partner (§20.1). */
-export async function searchInvitablePlayers(q: string): Promise<PlayerSearchResult[]> {
+/** The division columns the fit rule needs. Kept here so the shape is checked in one place. */
+interface DivisionRuleShape {
+  id: string;
+  name_override: string | null;
+  skill_policy: string;
+  minimum_skill: number | null;
+  maximum_skill: number | null;
+  format: string;
+  sex_classification: string;
+  minimum_age: number | null;
+  maximum_age: number | null;
+}
+
+/**
+ * Search active, onboarded players to name as a partner (§20.1).
+ *
+ * Pass the division and each result carries its own verdict, so a player who cannot be entered is
+ * shown as unavailable WITH the reason rather than offered and then refused on submit. The server
+ * still refuses on submit - this is the courtesy, not the gate.
+ */
+export async function searchInvitablePlayers(
+  q: string,
+  divisionId?: string,
+): Promise<PlayerSearchResult[]> {
   const user = await getOptionalUser();
   if (!user) return [];
   const term = q.trim();
@@ -529,30 +563,102 @@ export async function searchInvitablePlayers(q: string): Promise<PlayerSearchRes
   const safe = term.replace(/[%,()]/g, ' ');
   const { data } = await svc
     .from('profiles')
-    .select('slug, first_name, last_name, nickname, city')
+    .select('id, slug, first_name, last_name, nickname, city, sex, self_rated_skill')
     .eq('account_status', 'active')
     .not('onboarded_at', 'is', null)
     .neq('id', user.id)
     .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,nickname.ilike.%${safe}%`)
     .limit(8);
-  return (
+  const rows = (
     (data ?? []) as {
+      id: string;
       slug: string | null;
       first_name: string | null;
       last_name: string | null;
       nickname: string | null;
       city: string | null;
+      sex: string | null;
+      self_rated_skill: number | null;
     }[]
-  )
-    .filter((p) => p.slug)
-    .map((p) => ({
-      slug: p.slug as string,
-      name:
-        [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
-        p.nickname ||
-        'VouchPlay player',
-      city: p.city,
-    }));
+  ).filter((p) => p.slug);
+
+  const named = rows.map((p) => ({
+    ...p,
+    displayName:
+      [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
+      p.nickname ||
+      'VouchPlay player',
+  }));
+
+  const reasons = new Map<string, string>();
+  if (divisionId && named.length > 0) {
+    const [{ data: divRow }, { data: skillRows }] = await Promise.all([
+      svc
+        .from('divisions')
+        .select(
+          'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+        )
+        .eq('id', divisionId)
+        .maybeSingle(),
+      svc
+        .from('player_skill_profiles')
+        .select('player_id, community_skill_level')
+        .in(
+          'player_id',
+          named.map((p) => p.id),
+        ),
+    ]);
+    const div = divRow as DivisionRuleShape | null;
+    if (div) {
+      const community = new Map(
+        ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
+          (r) => [r.player_id, r.community_skill_level],
+        ),
+      );
+      const bandLabel = (() => {
+        if (div.skill_policy === 'open') return null;
+        const label = (o: number | null) =>
+          o == null ? null : (SKILL_BANDS.find((b) => b.ordinal === o)?.label ?? null);
+        const min = label(div.minimum_skill);
+        const max = label(div.maximum_skill);
+        if (min && max) return min === max ? min : `${min} to ${max}`;
+        return min ?? max;
+      })();
+      for (const p of named) {
+        const effectiveSkill = community.get(p.id) ?? p.self_rated_skill ?? null;
+        const verdict = evaluateDivisionFit({
+          playerSex: p.sex,
+          effectiveSkill,
+          sexClassification: div.sex_classification,
+          skillPolicy: div.skill_policy,
+          divisionMinimumSkill: div.minimum_skill,
+          divisionMaximumSkill: div.maximum_skill,
+        });
+        if (!verdict.fits && verdict.reason) {
+          reasons.set(
+            p.id,
+            describeDivisionFit(verdict.reason, {
+              subject: 'partner',
+              partnerName: p.displayName,
+              divisionName: divisionName(div),
+              bandLabel,
+              playerLevel:
+                effectiveSkill == null
+                  ? null
+                  : (SKILL_BANDS.find((b) => b.ordinal === effectiveSkill)?.label ?? null),
+            }),
+          );
+        }
+      }
+    }
+  }
+
+  return named.map((p) => ({
+    slug: p.slug as string,
+    name: p.displayName,
+    city: p.city,
+    blockedReason: reasons.get(p.id) ?? null,
+  }));
 }
 
 export async function respondInvitation(
@@ -653,72 +759,6 @@ export async function cancelInvitation(invitationId: string): Promise<Registrati
 
 // ---------------------------------------------------------------------------
 // Registration (§21, §23) - transactional via RPCs
-/**
- * Organizer skill-floor gate (migration 0022). When the tournament enforces the floor, no team member
- * may register into a division whose skill ceiling is below their own skill. Returns a user-facing
- * error string when blocked, or null when the entry is allowed. Playing at level or higher is fine;
- * a player with no known skill is never blocked. This is a hard gate outside ELIG_V1.
- */
-async function skillFloorError(
-  svc: ReturnType<typeof createServiceClient>,
-  tournamentId: string,
-  divisionId: string,
-  playerIds: string[],
-  /** Optional id -> display name, so the message can say WHO is over the ceiling. */
-  names?: Map<string, string>,
-): Promise<string | null> {
-  const rules = await getTournamentRules(tournamentId);
-  if (!rules.enforceSkillFloor || playerIds.length === 0) return null;
-  const { data: divRow } = await svc
-    .from('divisions')
-    .select('skill_policy, minimum_skill, maximum_skill')
-    .eq('id', divisionId)
-    .maybeSingle();
-  const div = divRow as {
-    skill_policy: string;
-    minimum_skill: number | null;
-    maximum_skill: number | null;
-  } | null;
-  if (!div || div.skill_policy === 'open' || div.maximum_skill == null) return null;
-
-  const [{ data: skillRows }, { data: profileRows }] = await Promise.all([
-    svc
-      .from('player_skill_profiles')
-      .select('player_id, community_skill_level')
-      .in('player_id', playerIds),
-    svc.from('profiles').select('id, self_rated_skill').in('id', playerIds),
-  ]);
-  const communityById = new Map(
-    ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
-      (r) => [r.player_id, r.community_skill_level],
-    ),
-  );
-  const selfById = new Map(
-    ((profileRows ?? []) as { id: string; self_rated_skill: number | null }[]).map((r) => [
-      r.id,
-      r.self_rated_skill,
-    ]),
-  );
-  for (const id of playerIds) {
-    const effective = effectivePlayerSkill(communityById.get(id) ?? null, selfById.get(id) ?? null);
-    const { blocked } = evaluateSkillFloor({
-      effectiveSkill: effective,
-      skillPolicy: div.skill_policy as 'band' | 'open' | 'custom',
-      divisionMinimumSkill: div.minimum_skill,
-      divisionMaximumSkill: div.maximum_skill,
-      enforce: true,
-    });
-    if (blocked) {
-      // Naming the player matters: when you are entering a partner, 'your skill level' is simply
-      // wrong and leaves you with no idea what to change.
-      const who = names?.get(id);
-      return who
-        ? `${who} plays above this division. Their skill level is higher than the division allows, so pick a division at their level or higher.`
-        : 'You cannot join this division because it is below your skill level. Choose a division at your level or higher.';
-    }
-  }
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 export async function registerTeam(
@@ -743,8 +783,21 @@ export async function registerTeam(
         .select('player_id')
         .eq('team_id', teamId);
       const memberIds = ((memberRows ?? []) as { player_id: string }[]).map((m) => m.player_id);
-      const floorError = await skillFloorError(svc, tournamentId, divisionId, memberIds);
-      if (floorError) return { error: floorError };
+      const names = await Promise.all(
+        memberIds
+          .filter((id) => id !== user.id)
+          .map(async (id) => [id, (await getActorMini(id)).name] as const),
+      );
+      const nameById = new Map(names);
+      const fitError = await checkDivisionFit(
+        divisionId,
+        memberIds.map((id) =>
+          id === user.id
+            ? { playerId: id, subject: 'you' as const }
+            : { playerId: id, subject: 'partner' as const, name: nameById.get(id) ?? null },
+        ),
+      );
+      if (fitError) return { error: fitError };
     }
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
     if (error) return { error: friendly(error.message) };
@@ -786,8 +839,8 @@ export async function registerSolo(
     if (div.format !== 'singles')
       return { error: 'This is a doubles division - form a team first.' };
 
-    const floorError = await skillFloorError(svc, tournamentId, divisionId, [user.id]);
-    if (floorError) return { error: floorError };
+    const fitError = await checkDivisionFit(divisionId, [{ playerId: user.id, subject: 'you' }]);
+    if (fitError) return { error: fitError };
 
     // Reuse an existing active team for this player in this division, else create a solo team.
     const { data: myTeamRows } = await svc
