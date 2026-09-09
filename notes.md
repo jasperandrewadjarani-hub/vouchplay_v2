@@ -2167,3 +2167,44 @@ it done. Several fixes in this session were found only that way.
   `packages/core`. Both §2B and §2C are present in `master_plan.md` and nothing was clobbered, but
   committing would have swept an unfinished feature into a release to a live site. **Two sessions,
   one tree, one hot production deployment is the hazard here** - the sequencing is Jasper's call.
+
+- **2026-09-09** - **A provisional entry no longer looks like a finished one** (master_plan §2G,
+  handover v1.35). Jasper flagged that applicants who had not paid, whose partner had not confirmed, or
+  whose receipt was not yet verified were seeing a green **"Registered"** and "You're joining" - as if
+  they were done. In production at the time, **1 entry was confirmed and 20 were provisional** (11
+  payment_submitted, 9 payment_pending), so twenty people were being told they were in when they were
+  not.
+
+  **The rule: only `confirmed` is secured.** Everything else active (payment_pending, payment_submitted,
+  under_review, waitlisted) is provisional and the applicant's own view says so and says what is still
+  outstanding. One pure function, `lib/tournaments/registration-status.ts`, 12 unit tests, feeds all
+  three surfaces so they cannot disagree:
+  - **Division browser:** the green "Registered" is gone. The chip is the real state (Payment pending /
+    Under review / Partner not confirmed / Waitlisted / Confirmed), and the line beneath names the
+    slot's safety ("Your slot is not secured yet ..." vs "You're in").
+  - **My registrations:** each provisional entry leads with an unmissable notice - "Your slot is not
+    secured yet" plus a plain checklist (pay and upload the receipt, wait for the organizer, partner
+    must confirm), amber when the applicant can act, muted when waiting on someone else.
+  - **Tournament card:** green "You're in" only when confirmed; a provisional entry reads amber "Not
+    secured yet", never a green tick, never "joining".
+
+  **No migration.** The detail-page surfaces already had the status in the viewer's registration state.
+  The card needed to tell confirmed from provisional, done with one indexed read on the list page
+  (team_members -> teams -> registrations). **Caught before it shipped:** the first draft wrote
+  `.eq('player_id', ...)` on `registrations`, which has no such column (it is keyed by team) - the
+  exact unchecked-select trap v1.31 shipped. Verified against production: a confirmed registrant
+  resolves to secured=true, a payment_pending one to secured=false.
+
+  **The capacity mechanic was deliberately NOT changed.** Jasper also asked that a provisional entry
+  "not have a reserved slot". As *perception*, delivered in full. As the *capacity count* (stop pending
+  entries occupying a slot), held for his explicit sign-off: §1U reserves a slot on receipt to protect
+  people who have PAID, the hold-expiry cron that would release unpaid holds is still deferred, and
+  un-reserving on a live window with 205 registrants could tell a paid person their slot is gone. The
+  safe follow-up - stop counting *unpaid* holds once hold-expiry exists, while protecting *paid* ones -
+  is recorded in §2G for his decision. **ACTION FOR JASPER, optional:** decide whether to pursue that
+  capacity follow-up.
+
+  Verified: all gates green (typecheck, lint, 192 tests incl. 12 new, format, production build); the
+  affected pages render clean; "Not secured yet" and the assurance copy are present in the built client
+  chunk. The signed-in applicant walkthrough is auth-gated and was validated by unit tests plus the
+  production data-path check rather than a live login.

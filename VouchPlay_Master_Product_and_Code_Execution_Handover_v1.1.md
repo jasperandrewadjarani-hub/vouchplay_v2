@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.34
+# VouchPlay Master Product & Code Execution Handover v1.35
 
-_(File retains its `…v1.1.md` name; content is v1.32 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.35 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,47 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.35 (2026-09-09)
+
+_Code-only. No migration - every fact needed was already in the viewer's registration state, plus one
+extra indexed read for the tournament card._
+
+- **A provisional entry no longer looks like a finished one (master_plan §2G).** Jasper watched real
+  applicants read the app as "I'm in, nothing more to do" while they had not paid, their partner had
+  not confirmed, or the organizer had not verified the receipt. The offender was a green **"Registered"**
+  shown the moment a viewer held any entry in a division, unpaid ones included. In production at the
+  time, **1 entry was confirmed and 20 were provisional** (11 payment_submitted, 9 payment_pending) -
+  twenty people being told they were registered when they were not.
+- **The rule, stated once and enforced in one place.** Only a `confirmed` registration is SECURED;
+  every other active state - payment_pending, payment_submitted, under_review, waitlisted - is
+  PROVISIONAL and the applicant's own view of it must say so and say what is still outstanding. This
+  is a single pure function, `lib/tournaments/registration-status.ts` (`describeRegistrationStatus`),
+  12 unit tests, so the division-browser chip, the My-registrations notice and the tournament-card
+  badge cannot describe the same entry three different ways.
+- **The division browser** shows the real state - **Payment pending** (amber), **Under review**,
+  **Partner not confirmed**, **Waitlisted**, or **Confirmed** (green, and only then) - never a blanket
+  "Registered". The line beneath names the slot's safety directly: "Your slot is not secured yet ..."
+  for anything provisional, "You're in" only when confirmed.
+- **My registrations** leads each provisional entry with an unmissable notice - a heading that the slot
+  is **not secured yet** and a short plain-language checklist of what remains (pay and upload the
+  receipt, wait for the organizer to verify it, have the partner confirm) - amber when the applicant
+  can act now, muted when they are waiting on someone else. The Pay control sits in the same card.
+- **The tournament card** shows the green-ticked **"You're in"** only for a confirmed entry; a
+  provisional entry reads **"Not secured yet"** in amber, never a green tick and never "joining". The
+  card learns which entries are confirmed from one indexed read on the list page (team_members ->
+  teams -> registrations, the same path the detail page uses - NOT `registrations.player_id`, which
+  does not exist and is the unchecked-select trap v1.31 shipped). The public aggregate counts ("N
+  interested", "N joining") are unchanged: they are a planning signal about the event, not a claim
+  about the viewer.
+- **The capacity mechanic is deliberately NOT changed.** Jasper also asked that a provisional entry
+  "not have a reserved slot". As the applicant's *perception*, that is delivered in full - nothing in
+  their view now implies a held place. As the *capacity count* (stopping pending entries from
+  occupying a slot), it is held for an explicit decision, because §1U deliberately reserves a slot on
+  receipt to protect people who have *paid*, the hold-expiry cron that would release unpaid holds is
+  still deferred, and it is a fairness-and-money change on a live window with 205 registrants mid-flow.
+  The safe version - stop counting *unpaid* holds once hold-expiry exists to release them, while still
+  protecting *paid* entries - is a focused follow-up for Jasper's sign-off, recorded in §2G so the
+  decision is his, not one made by omission.
 ## v1.34 (2026-09-09)
 
 _Corrects the skill half of v1.33. Migration 0030 is written and NOT yet applied; the code ships

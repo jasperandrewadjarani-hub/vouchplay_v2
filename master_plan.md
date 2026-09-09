@@ -1734,6 +1734,88 @@ match your profile"* - so the control says what it will do before it is touched.
 The browser becomes a Client Component to hold that one piece of state. Every prop it takes was
 already serialisable.
 
+## 2G. A provisional entry must never look like a finished one (2026-09-09, post-launch)
+
+Jasper watched real applicants read the app as "I'm in, nothing more to do" when in fact they had not
+paid, or their partner had not confirmed, or the organizer had not verified the receipt. The word that
+did the damage was **"Registered"**, in green, on a division the viewer had only an unpaid hold in.
+
+The whole point of the pay-first flow (§1U) is that paying is what secures a place. If the app then
+tells the applicant they are "Registered" before any of that happens, it removes the very urgency the
+flow depends on. Under-communicating here does not just look untidy - it loses the organizer money and
+leaves people surprised at the venue.
+
+### What was actually misleading
+
+Three surfaces treated "has an active entry" as "is registered", when the honest fact is that an entry
+is only **secured once the organizer confirms it** (which the organizer only does after the payment is
+verified and, for doubles, the partner has confirmed):
+
+- **The division browser** printed a green **"Registered"** the moment the viewer held any entry in a
+  division, `payment_pending` included, next to the neutral line "You have an entry here."
+- **My registrations** showed the raw status ("payment submitted") with no statement of whether the
+  slot was actually safe, and no single clear "you are not done yet" notice.
+- **The tournament card** showed a green-ticked **"You're joining"** for an unpaid entry, which reads
+  as a completed action.
+
+### The rule, stated once
+
+**Only a `confirmed` registration is "secured".** Every other active state - `payment_pending`,
+`payment_submitted`, `under_review`, `waitlisted` - is **provisional**, and the applicant's own view of
+it must say so plainly and say what is still outstanding. This is now a single pure function,
+`lib/tournaments/registration-status.ts` (`describeRegistrationStatus`), unit-tested, so the chip in
+the division browser, the notice on the My-registrations card, and the badge on the tournament card
+cannot describe the same entry three different ways. It returns the honest short label, the tone
+(action / waiting / done), whether the slot is secured, and the outstanding steps in plain language.
+
+### What each surface says now
+
+- **The division browser chip** is the real state, not "Registered": **Payment pending** (amber, when
+  a fee is owed), **Under review** (the receipt is in, the organizer has not verified it),
+  **Partner not confirmed**, **Waitlisted**, or **Confirmed** (green, and only then). The line beneath
+  it names the slot's safety directly - "Your slot is not secured yet" for anything provisional,
+  "You're in" only when confirmed.
+- **My registrations** leads each provisional entry with an unmissable notice: a heading that says the
+  slot is **not secured yet** and a short checklist of what remains - pay and upload the receipt, wait
+  for the organizer to verify it, have the partner confirm. The one action the applicant can take
+  (pay) is right there in the same card.
+- **The tournament card** shows **"You're in"** (green tick) only for a confirmed entry; a provisional
+  entry reads **"Not secured yet"** in amber with a clock, never a green tick and never "joining". The
+  card learns which entries are confirmed from one extra indexed read on the list page (the ids the
+  viewer holds a confirmed registration in), so this needs **no migration**. The public aggregate
+  counts ("N interested", "N joining") are left as they are: they are a planning signal about the
+  event, not a claim about the viewer, and "joining" honestly describes people in the process of
+  joining.
+
+### The capacity question is deliberately NOT changed here, and here is why
+
+Jasper also asked that a provisional entry "not have a reserved slot". Taken as the applicant's
+*perception*, that is exactly what this slice delivers: nothing in their view now implies a held or
+guaranteed place. Taken as the *capacity mechanic* - stopping `payment_pending` and `payment_submitted`
+entries from occupying a slot in the count that drives "Full" and the waitlist - it is a different and
+riskier change, and it is **held for an explicit decision** rather than made silently on a live money
+path, for three reasons:
+
+1. **§1U deliberately reserves a slot the moment a receipt is submitted**, precisely so a player who
+   has *paid* is not punished while waiting for a slow partner or a slow organizer. Un-reserving
+   `payment_submitted` would take a slot away from someone who has already paid - the opposite of
+   protecting them - and it would reverse a decision Jasper approved days ago.
+2. **The hold-expiry / waitlist-promotion cron is still deferred** (see the pilot-prep carry-over), so
+   there is no mechanism today that would re-count or promote correctly if unpaid holds stopped
+   occupying slots. Changing the count without it would strand the waitlist.
+3. It is a **fairness and money change on a live window with 205 registrants mid-flow**, where getting
+   it wrong tells a real person their slot is gone.
+
+The safe, useful version - stop counting *unpaid* (`payment_pending`) holds toward capacity while
+still protecting *paid* (`payment_submitted`) entries, once hold-expiry exists to release them - is a
+focused follow-up to run with Jasper's sign-off, not part of this communication fix. The recommendation
+is on record here so the decision is his, not one made by omission.
+
+### No migration
+
+Every fact this needs - registration status, payment status, whether a named partner has confirmed - is
+already in the viewer's registration state and, for the card, one extra confirmed-ids read. Nothing in
+the schema changes.
 ## 1. Prompt Contract
 
 ### In scope

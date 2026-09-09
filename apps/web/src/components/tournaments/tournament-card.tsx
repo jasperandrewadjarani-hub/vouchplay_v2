@@ -1,5 +1,13 @@
 import Link from 'next/link';
-import { Trophy, MapPin, CalendarDays, Heart, TicketCheck, CheckCircle2 } from 'lucide-react';
+import {
+  Trophy,
+  MapPin,
+  CalendarDays,
+  Heart,
+  TicketCheck,
+  CheckCircle2,
+  Clock,
+} from 'lucide-react';
 import type { TournamentCardDTO } from '@/lib/tournaments/dto';
 import { TournamentStatusPill } from './status-pill';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -75,11 +83,26 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
               <TicketCheck size={12} aria-hidden />
               {tournament.joiningCount} joining
             </span>
-            {(tournament.viewerInterested || tournament.viewerJoining) && (
-              <span className="text-primary inline-flex items-center gap-1 font-semibold">
+            {/* A provisional entry never gets the green tick or "joining" - only a confirmed one
+                reads as done. An unpaid/under-review entry says so, to keep the urgency to pay
+                (§2G). */}
+            {tournament.viewerSecured ? (
+              <span className="text-success inline-flex items-center gap-1 font-semibold">
                 <CheckCircle2 size={12} aria-hidden />
-                {tournament.viewerJoining ? "You're joining" : "You're interested"}
+                You&rsquo;re in
               </span>
+            ) : tournament.viewerJoining ? (
+              <span className="text-warning inline-flex items-center gap-1 font-semibold">
+                <Clock size={12} aria-hidden />
+                Not secured yet
+              </span>
+            ) : (
+              tournament.viewerInterested && (
+                <span className="text-primary inline-flex items-center gap-1 font-semibold">
+                  <CheckCircle2 size={12} aria-hidden />
+                  You&rsquo;re interested
+                </span>
+              )
             )}
           </div>
         )}

@@ -176,11 +176,58 @@ export async function withTournamentCardEngagement(
         engagementAvailable: true,
       });
     }
-    return cards.map((card) => ({ ...card, ...(byId.get(card.id) ?? {}) }));
+    // Which of these does the viewer hold a CONFIRMED entry in? `viewer_joining` from the RPC is
+    // true for any active entry, unpaid ones included, so the card cannot tell secured from
+    // provisional without this. One indexed read, no migration (§2G).
+    const securedIds = await fetchViewerSecuredTournamentIds(
+      svc,
+      viewerId,
+      cards.map((c) => c.id),
+    );
+    return cards.map((card) => ({
+      ...card,
+      ...(byId.get(card.id) ?? {}),
+      viewerSecured: securedIds.has(card.id),
+    }));
   } catch {
     // Migration 0021 has not landed yet, so card discovery stays available without the aggregates.
     return cards;
   }
+}
+
+/**
+ * Tournament ids (from the given set) where this viewer has a CONFIRMED registration (§2G).
+ *
+ * `registrations` is keyed by team, not player, so the viewer's entries are reached through
+ * team_members -> teams -> registrations - the same path getViewerRegistrationState uses. Writing
+ * `.eq('player_id', ...)` on `registrations` would silently return nothing (no such column), which
+ * is exactly the unchecked-select trap v1.31 shipped, so it is deliberately not done that way.
+ */
+async function fetchViewerSecuredTournamentIds(
+  svc: ReturnType<typeof createServiceClient>,
+  viewerId: string | null,
+  tournamentIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (!viewerId || tournamentIds.length === 0) return out;
+
+  const { data: memberRows } = await svc
+    .from('team_members')
+    .select('team_id')
+    .eq('player_id', viewerId);
+  const teamIds = Array.from(
+    new Set(((memberRows ?? []) as { team_id: string }[]).map((m) => m.team_id)),
+  );
+  if (teamIds.length === 0) return out;
+
+  const { data } = await svc
+    .from('registrations')
+    .select('tournament_id, status, team_id')
+    .in('team_id', teamIds)
+    .eq('status', 'confirmed')
+    .in('tournament_id', tournamentIds);
+  for (const r of (data ?? []) as { tournament_id: string }[]) out.add(r.tournament_id);
+  return out;
 }
 
 async function fetchTournamentList(

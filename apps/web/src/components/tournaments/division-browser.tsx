@@ -12,6 +12,14 @@ import { PartnerInviteForm } from './partner-invite-form';
 import { quoteFee, formatFee } from '@vouchplay/core';
 import { InvitationActions } from './invitation-actions';
 import { PartnerChangeActions } from './partner-change-actions';
+import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
+
+/** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). */
+const TONE_CHIP: Record<SlotTone, string> = {
+  action: 'text-warning',
+  waiting: 'text-foreground-muted',
+  done: 'text-success',
+};
 
 export interface EarlyBirdWindow {
   startsAt: string | null;
@@ -230,13 +238,30 @@ export function DivisionBrowser({
             const isFull = capacity > 0 && d.registeredTeams >= capacity;
             const registered = registeredIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
+            // The honest state of the viewer's own entry, if they have one. "Registered" (green) is
+            // gone: an entry is only secured once confirmed, and until then this says what is
+            // actually true and what is still outstanding (§2G).
+            const reg = state?.registrationsByDivision[d.id];
+            const status = reg
+              ? describeRegistrationStatus({
+                  regStatus: reg.status,
+                  paymentStatus: reg.paymentStatus,
+                  fee: d.feeAmount,
+                  partnerUnconfirmed: Boolean(team?.pendingPartner),
+                  seatVacantAfterDecline: Boolean(team?.seatVacantAfterDecline),
+                })
+              : null;
             return (
               <li key={d.id}>
                 <details>
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4">
                     <span className="text-foreground text-sm font-semibold">{d.name}</span>
                     <span className="text-foreground-muted flex items-center gap-2 text-xs">
-                      {registered && <span className="text-success font-medium">Registered</span>}
+                      {status && (
+                        <span className={`${TONE_CHIP[status.tone]} font-medium`}>
+                          {status.shortLabel}
+                        </span>
+                      )}
                       <ChevronDown size={16} aria-hidden />
                     </span>
                   </summary>
@@ -258,10 +283,22 @@ export function DivisionBrowser({
                       )}
                     </div>
 
-                    {registered ? (
-                      <p className="text-foreground-muted text-xs">
-                        You have an entry here. Manage it in My registrations above.
-                      </p>
+                    {registered && status ? (
+                      // Name the slot's safety directly, not just "you have an entry" (§2G).
+                      status.secured ? (
+                        <p className="text-foreground-muted text-xs">
+                          You&rsquo;re in. Manage your entry in My registrations above.
+                        </p>
+                      ) : (
+                        <p
+                          className={`flex items-start gap-1.5 text-xs font-medium ${
+                            status.tone === 'action' ? 'text-warning' : 'text-foreground-muted'
+                          }`}
+                        >
+                          <AlertCircle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                          <span>{status.assurance} Manage it in My registrations above.</span>
+                        </p>
+                      )
                     ) : fitMessage ? (
                       /* One clear sentence and no control. Offering a button that the server will
                          refuse teaches people the app is broken (§2D). */

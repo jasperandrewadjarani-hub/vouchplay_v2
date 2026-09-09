@@ -31,6 +31,12 @@ export interface TournamentCardDTO {
   joiningCount: number;
   viewerInterested: boolean;
   viewerJoining: boolean;
+  /**
+   * True only when the viewer holds a CONFIRMED entry in this tournament. `viewerJoining` is true
+   * for any active entry including an unpaid one, so the card must not read a provisional entry as
+   * done - only a secured one gets the green "You're in" (§2G).
+   */
+  viewerSecured: boolean;
   engagementAvailable: boolean;
 }
 
@@ -200,6 +206,7 @@ export function toTournamentCardDTO(
       | 'joiningCount'
       | 'viewerInterested'
       | 'viewerJoining'
+      | 'viewerSecured'
       | 'engagementAvailable'
     >
   >,
@@ -218,6 +225,7 @@ export function toTournamentCardDTO(
     joiningCount: engagement?.joiningCount ?? 0,
     viewerInterested: engagement?.viewerInterested ?? false,
     viewerJoining: engagement?.viewerJoining ?? false,
+    viewerSecured: engagement?.viewerSecured ?? false,
     engagementAvailable: engagement?.engagementAvailable ?? false,
   };
 }
