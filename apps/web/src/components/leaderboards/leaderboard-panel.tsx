@@ -6,7 +6,7 @@ import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ButtonLink } from '@/components/ui/button';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { formatDate } from '@/lib/format-date';
-import { boardMeta, podiumStyle } from '@/lib/leaderboards/board-meta';
+import { boardMeta, hasCompetitiveEvidence, podiumStyle } from '@/lib/leaderboards/board-meta';
 
 function subjectHref(entry: LeaderboardDTO['entries'][number]): string {
   return `/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`;
@@ -61,6 +61,8 @@ export function LeaderboardPanel({
       </section>
     );
   }
+  // Withheld rather than empty: the board has rows, but none of them mean what the heading claims.
+  const awaitingResults = !hasCompetitiveEvidence(board.category, board.entries);
   const podium = board.entries.slice(0, 3);
   const rest = board.entries.slice(3, compact ? 10 : board.entries.length);
   return (
@@ -100,7 +102,22 @@ export function LeaderboardPanel({
           )}
         </span>
       </header>
-      {board.entries.length === 0 ? (
+      {awaitingResults ? (
+        <div className="p-5" role="status">
+          <p className="text-foreground text-sm font-semibold">
+            This board opens when tournament results start coming in.
+          </p>
+          <p className="text-foreground-muted mt-1 text-sm">
+            Nobody has a verified tournament placement yet, so every player would be tied. Rather
+            than show a ranking that does not mean anything, we are holding this board until
+            organizers start awarding results. It fills in on its own from the next update after
+            that.
+          </p>
+          <ButtonLink href="/tournaments" variant="secondary" className="mt-4">
+            See upcoming tournaments
+          </ButtonLink>
+        </div>
+      ) : board.entries.length === 0 ? (
         <div className="p-5">
           <p className="text-foreground-muted text-sm">
             {board.category === 'community'
@@ -180,26 +197,30 @@ export function LeaderboardPanel({
           )}
         </>
       )}
-      <footer className="border-border bg-surface-muted flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs">
-        <span className="text-foreground-muted">Published {formatDate(board.publishedAt)}</span>
-        <span className="flex flex-wrap items-center gap-3">
-          <Link
-            href={meta.cta.href}
-            className="text-foreground inline-flex items-center gap-1 font-semibold"
-          >
-            {meta.cta.label}
-            <LinkSpinner />
-          </Link>
-          {compact && (
+      {/* No footer while the board is withheld: a publish date and a second link to the same
+          tournaments page only muddle a panel whose whole message is "not yet". */}
+      {!awaitingResults && (
+        <footer className="border-border bg-surface-muted flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs">
+          <span className="text-foreground-muted">Published {formatDate(board.publishedAt)}</span>
+          <span className="flex flex-wrap items-center gap-3">
             <Link
-              href={`/leaderboards?category=${board.category}`}
-              className="text-primary inline-flex items-center gap-1 font-semibold"
+              href={meta.cta.href}
+              className="text-foreground inline-flex items-center gap-1 font-semibold"
             >
-              View full leaderboard <LinkSpinner />
+              {meta.cta.label}
+              <LinkSpinner />
             </Link>
-          )}
-        </span>
-      </footer>
+            {compact && (
+              <Link
+                href={`/leaderboards?category=${board.category}`}
+                className="text-primary inline-flex items-center gap-1 font-semibold"
+              >
+                View full leaderboard <LinkSpinner />
+              </Link>
+            )}
+          </span>
+        </footer>
+      )}
     </section>
   );
 }

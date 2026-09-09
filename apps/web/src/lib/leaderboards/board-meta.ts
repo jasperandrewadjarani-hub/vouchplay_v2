@@ -78,3 +78,27 @@ export const PODIUM = [
 export function podiumStyle(rank: number) {
   return PODIUM.find((p) => p.rank === rank) ?? null;
 }
+
+/**
+ * Does this board have anything real to rank yet?
+ *
+ * The Players board scores `participation`, `placement`, `profile` and `skillVerified`. Before any
+ * tournament results exist the first two are zero for everyone, so the ranking collapses onto profile
+ * completeness while the heading promises "verified tournament play and official placements". That is
+ * a ranking making an untrue statement about real people, so the board withholds its list until at
+ * least one entry has competitive evidence.
+ *
+ * The test runs on the published snapshot rather than on a flag, so the board opens by itself on the
+ * first snapshot after an organizer awards a placement. Nobody has to remember to switch it on.
+ *
+ * Community and Clubs are unaffected: contribution and representation are earned from the first row.
+ */
+export function hasCompetitiveEvidence(
+  category: LeaderboardCategory,
+  entries: readonly { components: Record<string, number> }[],
+): boolean {
+  if (category !== 'players') return true;
+  return entries.some(
+    (entry) => (entry.components.participation ?? 0) > 0 || (entry.components.placement ?? 0) > 0,
+  );
+}

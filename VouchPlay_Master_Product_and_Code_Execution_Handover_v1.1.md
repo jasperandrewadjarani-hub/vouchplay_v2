@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.24
+# VouchPlay Master Product & Code Execution Handover v1.25
 
-_(File retains its `…v1.1.md` name; content is v1.24 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.25 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,58 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.25 (2026-09-09)
+
+_No migration. One Admin settings change is required and is listed at the end of this entry._
+
+- **Top Players stays closed until tournament results exist, because it was ranking something it did
+  not claim to rank.** Every one of the 31 ranked players carried `participation: 0` and
+  `placement: 0`; the board was ordering people by profile completeness and the Skill Verified flag
+  while its own heading promised "verified tournament play and official placements", with ten players
+  tied on 2.0 points and separated by nothing a reader could see. In production, during a live
+  registration window, that is a ranking making an untrue statement about real people. The board now
+  renders an explanatory panel instead of a list until at least one ranked entry has a verified
+  tournament or an official placement. **The test runs on the published data, not on a flag**, so the
+  board opens by itself on the first snapshot after an organizer awards a placement and nobody has to
+  remember to switch it on. **Pausing the category would have been the wrong tool:** a pause is an
+  operator saying "stop publishing", which shows a warning chip and leaves the misleading list on
+  screen, whereas this is the product saying "there is nothing to rank yet". The empty state names
+  what will fill it and links to the tournaments, so it reads as a countdown rather than a failure.
+- **`/leaderboards` opens on Top Contributors.** Landing on Players meant landing on the emptiest
+  board. Contributors is the only board with real earned separation today: 25 ranked people, 87.7
+  points down to single figures, every point traceable to a vouch somebody actually gave. **Tab order
+  is unchanged** - Players stays first because that is the canonical product order, and reordering
+  tabs under people who have already learned the page costs more than one tab that explains itself.
+- **The page now leads with the choice rather than the chrome.** The tab strip is the first thing
+  below the heading, because choosing a board is the only decision most people come here to make.
+  "Next update" became one small line under the heading instead of a tile: worth saying, since a daily
+  drop is only motivating when people know when it lands, but not worth a third of the first screen.
+  "Your position", "Ranked here" and "Your momentum" collapsed into a single thin row that is closed
+  by default - two of those were **the same number shown twice**, as the momentum card and the
+  position tile both read `#26`. **The closed summary still states both numbers**, so nobody has to
+  open anything to learn where they stand; expanding adds the points, the private-snapshot caveat and
+  the next action. That is progressive disclosure, not hiding. The Players entry card was cut roughly
+  in half: it keeps what earns the tap (the leader's name, the top-three faces, an explicit "View
+  leaderboards") and drops the paragraph that repeated the tab labels on the very next screen. The
+  Players tab exists to browse players, and the card is a doorway, not a display.
+- **Top Clubs is ranked on what its members contribute, and it took no code.** Cumulative member
+  contribution was already in club scoring and already about 80% of the leading club's score (17.97
+  of 22.44), but it was not reliably decisive: with `leaderboard_club_contribution_weight` at 1
+  against `leaderboard_club_active_members_weight` at 2, second and third place sat 0.33 apart, so a
+  club could pass another on member count alone. All five club component weights are `system_settings`
+  rows exactly as §35 requires, so this is an Admin edit with no deploy, no migration and a one-click
+  reversal. The `sqrt` dampening on the contribution total stays: it is monotonic, so it never changes
+  the order of clubs by cumulative contribution and only stops one very large club from dwarfing the
+  scale. **A member active in more than one club counts in full for each of them** (Jasper's call,
+  2026-09-09; three members are currently in two clubs each). Splitting their points would conserve
+  the community total, but telling a player their contribution counts for half is a worse thing to
+  explain than mild inflation where clubs share members. "Your clubs each get what you contribute" is
+  a rule a player hears once and remembers.
+
+**Admin settings change required for the club board (Admin → System settings):**
+`leaderboard_club_contribution_weight` 1 → **6**, `leaderboard_club_active_members_weight` 2 → **1**.
+Then rebuild at Admin → Leaderboards. Nothing else in this release needs an operator action.
 
 ## v1.24 (2026-09-09)
 

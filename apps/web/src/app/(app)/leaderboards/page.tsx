@@ -1,16 +1,14 @@
 import type { Metadata } from 'next';
+import { CalendarClock } from 'lucide-react';
 import type { LeaderboardCategory } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
 import { getLeaderboardSettings } from '@/lib/settings';
 import { getLeaderboard, getMyMomentum } from '@/lib/leaderboards/queries';
 import type { LeaderboardPeriod, LeaderboardScope } from '@/lib/leaderboards/types';
-import { boardMeta } from '@/lib/leaderboards/board-meta';
+import { boardMeta, hasCompetitiveEvidence } from '@/lib/leaderboards/board-meta';
 import { nextPublishingRunAfter } from '@/lib/leaderboards/cron-schedule';
-import {
-  LeaderboardPanel,
-  MomentumCard,
-  RankingsExplanation,
-} from '@/components/leaderboards/leaderboard-panel';
+import { formatDateTime } from '@/lib/format-date';
+import { LeaderboardPanel, RankingsExplanation } from '@/components/leaderboards/leaderboard-panel';
 import { BoardTabs } from '@/components/leaderboards/board-tabs';
 import { BoardStats } from '@/components/leaderboards/board-stats';
 import { LeaderboardFilters } from '@/components/leaderboards/filters';
@@ -26,8 +24,10 @@ const one = (value: string | string[] | undefined) => (Array.isArray(value) ? va
 export default async function LeaderboardsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const categoryRaw = one(sp.category);
+  // Contributors is the default board: it is the only one with real earned separation today, so
+  // landing anywhere else means landing on an emptier page (§1Q).
   const category: LeaderboardCategory =
-    categoryRaw === 'community' || categoryRaw === 'clubs' ? categoryRaw : 'players';
+    categoryRaw === 'players' || categoryRaw === 'clubs' ? categoryRaw : 'community';
   const scopeRaw = one(sp.scope);
   const scope: LeaderboardScope =
     scopeRaw === 'city' || scopeRaw === 'region' ? scopeRaw : 'global';
@@ -60,11 +60,16 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   });
 
   const meta = boardMeta(category);
-  // The viewer's own position on this board's category. Clubs have no per-player momentum row, so
-  // the tile falls back to the invitation rather than showing a rank that does not exist.
-  const myRank =
-    momentum.find((row) => row.category === (category === 'clubs' ? 'players' : category))
-      ?.privateRank ?? null;
+  // Clubs have no per-player momentum row, so the personal box falls back to the invitation rather
+  // than showing a rank that does not exist for that board.
+  const myRow =
+    category === 'clubs'
+      ? undefined
+      : (momentum.find((row) => row.category === category) ??
+        (category === 'players' ? undefined : momentum[0]));
+  // A board that is withholding its list has nothing ranked to count.
+  const awaitingResults = board ? !hasCompetitiveEvidence(category, board.entries) : false;
+  const rankedCount = awaitingResults ? 0 : (board?.entries.length ?? 0);
   // Same pure prediction the Admin nightly-rebuild panel uses, so the public promise and the
   // operator view cannot disagree (§1O).
   const nextPublishAt = nextPublishingRunAfter({
@@ -76,26 +81,37 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
   });
 
   return (
-    <div className="space-y-5">
-      <header className="vp-in space-y-1">
+    <div className="space-y-3">
+      <header className="vp-in">
         <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
           <span className="vp-gradient-text">Leaderboards</span>
         </h1>
-        <p className="text-foreground-muted text-sm">
-          Who is leading VouchPlay right now. Rankings publish once a day.
+        <p className="text-foreground-muted mt-1 text-sm">Who is leading VouchPlay right now.</p>
+        {/* Worth saying, because a daily drop is only motivating when people know when it lands.
+            Not worth a tile: it was taking a third of the first screen (§1Q). */}
+        <p className="text-foreground-muted mt-1 flex items-center gap-1.5 text-xs">
+          <CalendarClock size={13} className="text-accent-lime shrink-0" aria-hidden />
+          {nextPublishAt
+            ? `Rankings update once a day. Next update ${formatDateTime(nextPublishAt.toISOString())}.`
+            : 'Rankings publishing is on hold.'}
         </p>
       </header>
 
+      {/* The tab strip leads the page: choosing a board is the only decision most people come here
+          to make, so nothing outranks it. */}
+      <BoardTabs active={category} />
+
       <BoardStats
-        myRank={category === 'clubs' ? null : myRank}
+        myRank={myRow?.privateRank ?? null}
+        myScore={myRow?.score ?? null}
+        eligiblePublic={myRow?.eligiblePublic ?? true}
+        exclusionCode={myRow?.exclusionCode ?? null}
+        ctaKey={myRow?.ctaKey ?? null}
         signedIn={Boolean(user)}
-        rankedCount={board?.entries.length ?? 0}
+        rankedCount={rankedCount}
         unit={meta.unit}
-        nextPublishAt={nextPublishAt ? nextPublishAt.toISOString() : null}
         hook={meta.hook}
       />
-
-      <BoardTabs active={category} />
 
       <LeaderboardFilters
         category={category}
@@ -103,8 +119,6 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
         scopeValue={scopeValue}
         period={period}
       />
-
-      {user && <MomentumCard rows={momentum} />}
 
       {!settings.enabled ? (
         <p

@@ -48,6 +48,10 @@ Shipped in the last session and verified live on both production domains
 - Every displayed date in the app comes from one Philippine-time formatter (handover v1.23).
 - Community leaderboards are one tap from the Players tab, with clickable board tabs, a crowned
   podium, a "You" highlight, and a next-update countdown (handover v1.24).
+- The leaderboards page leads with its tabs, opens on Top Contributors, and collapses the personal
+  stats into one thin row. **Top Players withholds its list until a real tournament placement
+  exists**, because it was ranking profile completeness under a play-and-placements heading
+  (handover v1.25).
 
 ## Open items, highest value first
 

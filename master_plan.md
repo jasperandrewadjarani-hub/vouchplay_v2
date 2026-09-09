@@ -566,6 +566,78 @@ below is a hook with a reason, not decoration:
 - The private momentum card stays private. Nothing on the public boards exposes a rank, score or
   exclusion reason for anybody but the viewer themselves.
 
+## 1Q. Leaderboards, condensed and honest (2026-09-09, post-launch)
+
+§1P put the boards one tap from Players. Seeing them live on a phone showed the page still spent its
+best real estate on the wrong things, and that one of the three boards was ranking something it did
+not claim to rank.
+
+### The page now leads with the choice, not the chrome
+
+- **The tab strip is the first thing on the page.** Choosing a board is the only decision most people
+  come here to make, so nothing outranks it.
+- **Next update is one small line under the heading**, not a tile. It is worth saying (a daily drop is
+  only motivating if people know when it lands, §1O) but it is not worth a third of the first screen.
+- **"Your position", "Ranked here" and "Your momentum" collapsed into one thin row, closed by
+  default.** Two of those were the same number shown twice: the momentum card and the position tile
+  both read `#26`. They are now one box, with the ranked count beside it.
+- **The collapsed summary still states both numbers**, so nobody has to open anything to learn where
+  they stand. Expanding adds the points, the private-snapshot caveat and the next action. Progressive
+  disclosure, not hiding: the closed state is informative on its own.
+- The Players entry card was cut roughly in half. It keeps what earns the tap (the leader's name, the
+  top-three faces, an explicit "View leaderboards") and drops the paragraph that repeated the tabs on
+  the next screen. The Players tab exists to browse players; the card is a doorway, not a display.
+
+### Top Players stays closed until results exist
+
+- **Every one of the 31 ranked players had `participation: 0` and `placement: 0`.** The board was
+  ordering people by profile completeness and the Skill Verified flag, then presenting it under a
+  heading that promises "verified tournament play and official placements". Ten players tied on 2.0
+  points and were separated by nothing a reader could see. That is not a soft edge case; it is a
+  ranking that says something untrue about real people, in production, during a registration window.
+- The board now renders an explanatory panel instead of a list until at least one ranked entry has a
+  verified tournament or an official placement. **The test is on the published data, not on a flag**,
+  so it opens by itself on the first snapshot after an organizer awards a placement. Nobody has to
+  remember to switch it on, and it closes again correctly if a season is ever rebuilt from scratch.
+- **Pausing the category would have been the wrong tool.** A pause is an operator saying "stop
+  publishing"; it shows a warning chip and leaves the misleading list on screen. This is the product
+  saying "there is nothing to rank yet", which is a different statement and needs different copy.
+- The empty state names what will fill it and links to the tournaments, so it reads as a countdown
+  rather than a failure.
+
+### Top Clubs is ranked on what its members contribute
+
+- Club scoring already includes cumulative member contribution, and on live data it is already about
+  80% of the leading club's score (17.97 of 22.44). What it is **not** is reliably decisive: with
+  `leaderboard_club_contribution_weight` at 1 against `leaderboard_club_active_members_weight` at 2,
+  the second and third clubs sat 0.33 points apart, so a club could pass another on member count
+  alone.
+- **This is a settings change, not a code change.** All five club component weights are
+  `system_settings` rows, exactly as §35 requires, so raising contribution is an Admin edit with no
+  deploy, no migration, and a one-click reversal.
+- The `sqrt` dampening on the contribution total stays. It is monotonic, so it never changes the
+  order of clubs by cumulative contribution; it only stops one very large club from dwarfing the rest
+  of the scale.
+
+- **A member in more than one club counts in full for each of them** (Jasper, 2026-09-09). Three
+  members are currently active in two clubs each. Splitting their points would conserve the community
+  total but would mean telling a player their contribution counts for half, which is a worse thing to
+  explain than a little inflation where clubs share members. "Your clubs each get what you contribute"
+  is a rule a player can hear once and remember.
+- Applied values: `leaderboard_club_contribution_weight` 1 -> **6** (matching placement, the previous
+  top weight) and `leaderboard_club_active_members_weight` 2 -> **1**. Contribution decides the order
+  now, and tournament results still matter once they exist.
+
+### Contributors is the board people land on
+
+Landing on Players meant landing on the emptiest board. `/leaderboards` with no category now opens
+**Top Contributors**, the only board with real, earned separation today: 25 ranked people, scores from
+87.7 down to single figures, every point traceable to a vouch someone actually gave.
+
+**The tab order does not change.** Players stays first because that is the product's canonical order
+and reordering tabs under people who have already learned the page is a worse cost than one tab that
+currently explains itself. The active tab is unmistakable, so nobody has to guess where they landed.
+
 ## 1. Prompt Contract
 
 ### In scope

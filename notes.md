@@ -1739,3 +1739,30 @@ Open items, highest value first:
   migration; **15B** day-of check-in: one organizer screen, one field, one-handed on a phone at a
   venue with poor signal. Needed only on the day. Sequence 15A, then 15C, then 15B. Decide whether
   draws and scoring belong in VouchPlay at all after Oct 18, with real observed pain.
+
+- **2026-09-09** - **Leaderboards condensed, and Top Players closed until results exist.** Six UI
+  changes plus one honesty fix and one settings change. See master_plan §1Q, handover v1.25.
+  The tab strip is now the first thing on the page; "next update" became one small line under the
+  heading instead of a tile; "Your position", "Ranked here" and "Your momentum" collapsed into a
+  single thin row, closed by default, whose **closed summary still states both numbers** so nobody
+  has to open it (two of those tiles were literally the same number twice - the momentum card and the
+  position tile both read `#26`); `/leaderboards` now opens on **Top Contributors**, the only board
+  with real earned separation today; and the Players entry card was cut to roughly a third of its
+  original height.
+  **The honesty fix:** all 31 ranked players had `participation: 0` and `placement: 0`, so the Top
+  Players board was ordering people by profile completeness and the Skill Verified flag under a
+  heading promising "verified tournament play and official placements", with ten tied on 2.0 points.
+  It now shows an explanatory panel instead of a list until at least one entry has a verified
+  tournament or an official placement. The test runs on the **published data, not a flag**
+  (`hasCompetitiveEvidence` in `lib/leaderboards/board-meta.ts`, unit-tested), so the board opens by
+  itself on the first snapshot after an organizer awards a placement. Pausing the category would have
+  been wrong: a pause shows a warning chip and leaves the misleading list on screen.
+  **Top Clubs needed no code.** Cumulative member contribution was already ~80% of the leading club's
+  score but not reliably decisive. All five club weights are `system_settings` rows, so this is an
+  Admin edit. Jasper's calls: a member active in more than one club **counts in full for each**
+  (3 members are currently in two clubs each; splitting would conserve the total but means telling a
+  player their contribution counts for half), and the weights become
+  `leaderboard_club_contribution_weight` 1 -> 6, `leaderboard_club_active_members_weight` 2 -> 1.
+  **ACTION FOR JASPER: make those two edits in Admin -> System settings, then rebuild at
+  Admin -> Leaderboards.** Nothing else in this release needs an operator action, and there is no
+  migration.
