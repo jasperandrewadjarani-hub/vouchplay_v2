@@ -2225,3 +2225,22 @@ it done. Several fixes in this session were found only that way.
   it on the Admin screen after "Reason:". **ACTION FOR JASPER: once deployed, click "Queue and build"
   once - it will now name the exact failing record/constraint - and paste me the Reason line so I can
   fix the root cause.**
+
+- **2026-09-09** - **Leaderboard rebuild fixed: it was a 1,000-row response cap (master_plan §2I,
+  handover v1.37).** §2H's diagnostics named it on the first click: `contribution_source_truncated`.
+  PostgREST caps a response at ~1,000 rows and clamps `.limit()` to do it (proven: `.limit(5000)` on
+  active vouches returned `content-range: 0-999/1475`). The builder read each source with one
+  `.limit(bound)` and threw if fewer rows came back than the exact count - which fired the moment
+  active vouches crossed 1,000 during the sign-up surge. `recomputeAllContributions` runs first, so
+  every rebuild died in ~1s; the 5:34 PM publish held because vouches were still under 1,000 then.
+  Fixed by replacing `.limit()` with real `.range()` pagination (new helper
+  `lib/supabase/fetch-all.ts`), applied to the vouch + fraud reads in `recomputeAllContributions` and
+  all twelve `loadSources` reads (same latent bug; profiles were next to cross 1,000). Proven against
+  production: all 1,475 active vouches page back with no duplicates or skips. At today's scale each
+  read is one page, so behaviour is unchanged until a table crosses 1,000. No migration. Standing
+  lesson recorded: `.limit(n)` in Supabase is "1,000, quietly" past the cap - full-table reads must
+  page with `.range()`.
+  **ACTION FOR JASPER: once v1.37 deploys, click "Queue and build" - it should now succeed and
+  publish fresh rankings.** (`recomputePlayerContribution`, which runs on each vouch submit, still
+  uses `.limit()` but its per-player reads are far under 1,000; noted as a latent follow-up, not
+  currently failing.)

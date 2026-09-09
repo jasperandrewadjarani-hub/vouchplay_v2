@@ -1854,6 +1854,47 @@ Diagnostic only; no behaviour changes on a successful build, and no migration.
 The "failed safely" guarantee is unchanged: a failed publish RPC rolls back its own transaction, so
 the previously active snapshot stays active. Once the next attempt prints the real cause, the
 root-cause fix follows.
+## 2I. The rebuild's real bug: a 1,000-row response cap (2026-09-09, post-launch)
+
+Once §2H made the rebuild report its reason, one click named it: **`contribution_source_truncated`**.
+
+### What it actually was
+
+PostgREST returns at most ~1,000 rows per response, and it clamps `.limit()` silently to do it -
+proven against production, where a `.limit(5000)` on the active vouches returned
+`content-range: 0-999/1475`. The builder read its sources with a single `.limit(bound)` and then
+checked "did we get fewer rows than the exact count?", treating any shortfall as corruption and
+throwing. That guard was written to catch truncation - and it worked exactly as designed. The moment
+**active vouches crossed 1,000** during the day's sign-up surge, `recomputeAllContributions` fetched
+1,000 of 1,475, saw 1,000 < 1,475, and threw. It runs first in the rebuild, which is why every
+attempt died in about a second, and why the last good publish stayed at 5:34 PM (when active vouches
+were still under 1,000). Nothing was wrong with the data or the scores - the reader simply could not
+see all its rows.
+
+### The fix
+
+`.limit()` is replaced by **real pagination**. A small helper, `lib/supabase/fetch-all.ts`
+(`fetchAllRows`), pages with `.range()` in 1,000-row windows until every row is in hand, and only
+flags a genuine overload past the configured cap. It is applied to every read that can outgrow 1,000
+rows:
+
+- **`recomputeAllContributions`** - the active-vouches read (the one that failed) and the fraud-flag
+  read. The `(voucher_id, target_id)` pair is unique among active vouches, so `created_at` plus that
+  pair is a stable total order and pages never skip or repeat. Verified against production: all 1,475
+  active vouches come back across two pages, unique pairs equal the count, zero duplicates.
+- **`loadSources`** - all twelve builder source reads, each with a stable order. This one had the
+  identical latent bug: profiles are already at ~270 and climbing during the event, and the rebuild
+  would have failed again the moment that table (or any other) crossed 1,000. Fixing only the vouches
+  read would have bought a day.
+
+At today's scale the paginated reads return a single page, so behaviour is identical to before until
+a table actually crosses 1,000 - the change is inert now and correct later. No migration.
+
+### The standing lesson
+
+`.limit(n)` in Supabase is not "give me up to n rows" - past ~1,000 it is "give me 1,000, quietly".
+Any full-table read that could grow must page with `.range()`, never trust `.limit()`. §2H is what
+made this findable in one click instead of a night of guessing; §2H and §2I ship together.
 ## 1. Prompt Contract
 
 ### In scope

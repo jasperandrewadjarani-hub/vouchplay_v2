@@ -12,6 +12,7 @@ import {
   type RankedLeaderboardRow,
 } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
+import { fetchAllRows } from '@/lib/supabase/fetch-all';
 import { getLeaderboardSettings } from '@/lib/settings';
 import { recomputeAllContributions } from '@/lib/contribution/recompute';
 import { notifyMany } from '@/lib/notifications/create';
@@ -115,115 +116,206 @@ function exclusionFor(
 async function loadSources(max: number): Promise<SourceBundle> {
   const db = createServiceClient();
   const limit = Math.max(100, max);
-  const results = await Promise.all([
-    db
-      .from('profiles')
-      .select(
-        'id, first_name, last_name, nickname, slug, city, date_of_birth, avatar_path, bio, facebook_url, self_rated_skill, profile_visibility, account_status, deleted_at',
-        { count: 'exact' },
-      )
-      .limit(limit),
-    db
-      .from('clubs')
-      .select('id, name, slug, city, logo_path, verification_status, activity_status, deleted_at', {
-        count: 'exact',
-      })
-      .limit(limit),
-    db
-      .from('player_contributions')
-      .select(
-        'player_id, algorithm_version, score, distinct_players_helped, newcomer_players_helped, current_streak_weeks',
-        { count: 'exact' },
-      )
-      .limit(limit),
-    db
-      .from('player_skill_profiles')
-      .select('player_id, skill_verified', { count: 'exact' })
-      .limit(limit),
-    db
-      .from('registrations')
-      .select('id, tournament_id, team_id, status, confirmed_at, created_at', { count: 'exact' })
-      .eq('status', 'confirmed')
-      .limit(limit * 4),
-    db
-      .from('team_members')
-      .select('team_id, player_id', { count: 'exact' })
-      .limit(limit * 4),
-    db
-      .from('tournament_player_club_representations')
-      .select(
-        'tournament_id, player_id, club_id, membership_verified_at_selection, organizer_override, created_at',
-        { count: 'exact' },
-      )
-      .limit(limit * 4),
-    db
-      .from('club_memberships')
-      .select('club_id, user_id, role, status', { count: 'exact' })
-      .eq('status', 'active')
-      .limit(limit * 4),
-    db
-      .from('achievements')
-      .select('id, tournament_id, issued_at, type, verification_status', { count: 'exact' })
-      .eq('type', 'official')
-      .eq('verification_status', 'verified')
-      .limit(limit * 4),
-    db
-      .from('player_achievements')
-      .select('player_id, achievement_id, placement', { count: 'exact' })
-      .limit(limit * 4),
-    db
-      .from('leaderboard_exclusions')
-      .select('entity_type, entity_id, category, active', { count: 'exact' })
-      .eq('active', true)
-      .limit(limit),
-    db
-      .from('fraud_flags')
-      .select('subject_type, subject_id, severity, status', { count: 'exact' })
-      .in('status', ['open', 'reviewing'])
-      .in('severity', ['high', 'critical'])
-      .limit(limit),
+  const wide = limit * 4;
+  // Every source is PAGED past PostgREST's ~1000-row response cap, not read with a single
+  // `.limit()`. A lone `.limit(bound)` is silently clamped to 1000 rows, and the old truncation
+  // guard then killed the whole rebuild the moment a table crossed 1,000 (master_plan §2I). Each
+  // read carries a stable total order so pages never skip or repeat a row.
+  const [
+    profiles,
+    clubs,
+    contributions,
+    skillProfiles,
+    registrations,
+    members,
+    representations,
+    memberships,
+    achievements,
+    playerAchievements,
+    exclusions,
+    fraudFlags,
+  ] = await Promise.all([
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('profiles')
+          .select(
+            'id, first_name, last_name, nickname, slug, city, date_of_birth, avatar_path, bio, facebook_url, self_rated_skill, profile_visibility, account_status, deleted_at',
+            { count: 'exact' },
+          )
+          .order('id', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_profiles',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('clubs')
+          .select(
+            'id, name, slug, city, logo_path, verification_status, activity_status, deleted_at',
+            { count: 'exact' },
+          )
+          .order('id', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_clubs',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('player_contributions')
+          .select(
+            'player_id, algorithm_version, score, distinct_players_helped, newcomer_players_helped, current_streak_weeks',
+            { count: 'exact' },
+          )
+          .order('player_id', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_contributions',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('player_skill_profiles')
+          .select('player_id, skill_verified', { count: 'exact' })
+          .order('player_id', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_skill_profiles',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('registrations')
+          .select('id, tournament_id, team_id, status, confirmed_at, created_at', {
+            count: 'exact',
+          })
+          .eq('status', 'confirmed')
+          .order('id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_registrations',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('team_members')
+          .select('team_id, player_id', { count: 'exact' })
+          .order('team_id', { ascending: true })
+          .order('player_id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_team_members',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('tournament_player_club_representations')
+          .select(
+            'tournament_id, player_id, club_id, membership_verified_at_selection, organizer_override, created_at',
+            { count: 'exact' },
+          )
+          .order('tournament_id', { ascending: true })
+          .order('player_id', { ascending: true })
+          .order('club_id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_representations',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('club_memberships')
+          .select('club_id, user_id, role, status', { count: 'exact' })
+          .eq('status', 'active')
+          .order('club_id', { ascending: true })
+          .order('user_id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_club_memberships',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('achievements')
+          .select('id, tournament_id, issued_at, type, verification_status', { count: 'exact' })
+          .eq('type', 'official')
+          .eq('verification_status', 'verified')
+          .order('id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_achievements',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('player_achievements')
+          .select('player_id, achievement_id, placement', { count: 'exact' })
+          .order('player_id', { ascending: true })
+          .order('achievement_id', { ascending: true })
+          .range(from, to),
+      wide,
+      'leaderboard_player_achievements',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('leaderboard_exclusions')
+          .select('entity_type, entity_id, category, active', { count: 'exact' })
+          .eq('active', true)
+          .order('entity_type', { ascending: true })
+          .order('entity_id', { ascending: true })
+          .order('category', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_exclusions',
+    ),
+    fetchAllRows<Row>(
+      (from, to) =>
+        db
+          .from('fraud_flags')
+          .select('subject_type, subject_id, severity, status', { count: 'exact' })
+          .in('status', ['open', 'reviewing'])
+          .in('severity', ['high', 'critical'])
+          .order('subject_id', { ascending: true })
+          .order('subject_type', { ascending: true })
+          .range(from, to),
+      limit,
+      'leaderboard_fraud_flags',
+    ),
   ]);
-  const bounds = [
-    limit,
-    limit,
-    limit,
-    limit,
-    limit * 4,
-    limit * 4,
-    limit * 4,
-    limit * 4,
-    limit * 4,
-    limit * 4,
-    limit,
-    limit,
-  ];
-  // Name the table and carry the Postgres detail, so a swallowed failure can still be diagnosed
-  // (master_plan §2H). Bare 'leaderboard_source_read_failed' told the operator nothing.
-  const failedRead = results.findIndex((result) => result.error);
-  if (failedRead !== -1) {
-    const err = results[failedRead]!.error;
-    throw new Error(
-      `leaderboard_source_read_failed at source #${failedRead}: ${err?.message ?? 'unknown'}` +
-        `${err?.code ? ` [${err.code}]` : ''}${err?.details ? ` - ${err.details}` : ''}`,
-    );
-  }
-  if (results.some((result, index) => (result.count ?? 0) > bounds[index]!))
+  // A source that genuinely holds more than its bound is a real overload, not ordinary growth.
+  if (
+    [
+      profiles,
+      clubs,
+      contributions,
+      skillProfiles,
+      registrations,
+      members,
+      representations,
+      memberships,
+      achievements,
+      playerAchievements,
+      exclusions,
+      fraudFlags,
+    ].some((source) => source.capped)
+  )
     throw new Error('leaderboard_source_bound_exceeded');
-  if (results.some((result) => result.count !== null && (result.data?.length ?? 0) < result.count))
-    throw new Error('leaderboard_source_truncated');
   return {
-    profiles: (results[0].data ?? []) as Row[],
-    clubs: (results[1].data ?? []) as Row[],
-    contributions: (results[2].data ?? []) as Row[],
-    skillProfiles: (results[3].data ?? []) as Row[],
-    registrations: (results[4].data ?? []) as Row[],
-    members: (results[5].data ?? []) as Row[],
-    representations: (results[6].data ?? []) as Row[],
-    memberships: (results[7].data ?? []) as Row[],
-    achievements: (results[8].data ?? []) as Row[],
-    playerAchievements: (results[9].data ?? []) as Row[],
-    exclusions: (results[10].data ?? []) as Row[],
-    fraudFlags: (results[11].data ?? []) as Row[],
+    profiles: profiles.rows,
+    clubs: clubs.rows,
+    contributions: contributions.rows,
+    skillProfiles: skillProfiles.rows,
+    registrations: registrations.rows,
+    members: members.rows,
+    representations: representations.rows,
+    memberships: memberships.rows,
+    achievements: achievements.rows,
+    playerAchievements: playerAchievements.rows,
+    exclusions: exclusions.rows,
+    fraudFlags: fraudFlags.rows,
   };
 }
 

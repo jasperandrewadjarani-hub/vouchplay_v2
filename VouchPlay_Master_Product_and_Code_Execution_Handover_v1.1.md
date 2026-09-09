@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.36
+# VouchPlay Master Product & Code Execution Handover v1.37
 
-_(File retains its `…v1.1.md` name; content is v1.36 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.37 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,26 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.37 (2026-09-09)
+
+_The root-cause fix for the leaderboard rebuild. No migration._
+
+- **The rebuild failed because of a 1,000-row response cap, now fixed with pagination (master_plan
+  §2I).** With §2H reporting the reason, one click named it: `contribution_source_truncated`.
+  PostgREST returns at most ~1,000 rows per response and clamps `.limit()` to do it (proven in
+  production: `.limit(5000)` on the active vouches returned `content-range: 0-999/1475`). The builder
+  read each source with one `.limit(bound)` and threw if it got fewer rows than the exact count - a
+  guard that fired exactly as designed the moment **active vouches crossed 1,000** during the day's
+  sign-up surge. `recomputeAllContributions` runs first, so every rebuild died in ~1s and the last
+  good publish stayed at 5:34 PM. The data and scores were never wrong; the reader could not see all
+  its rows. Fixed by replacing `.limit()` with real `.range()` pagination via a new helper
+  (`lib/supabase/fetch-all.ts`), applied to the active-vouch and fraud reads in
+  `recomputeAllContributions` and to all twelve `loadSources` reads (the identical latent bug -
+  profiles were already climbing and would have tripped it next). Each read carries a stable total
+  order; verified against production that all 1,475 vouches page back with no duplicates or skips. At
+  today's scale each read is a single page, so behaviour is unchanged until a table crosses 1,000.
+  **Standing lesson: `.limit(n)` in Supabase is "give me 1,000, quietly" past the cap - any full-table
+  read that can grow must page with `.range()`.**
 ## v1.36 (2026-09-09)
 
 _Diagnostic only. No migration, no behaviour change on a successful build._
