@@ -52,6 +52,11 @@ export interface PlayerCardDTO {
   selfRatedSkill: SkillBand | null;
   /** Skill-Trust Score 0–5 (Phase 3). Null until computed. Never used to rank the directory. */
   sts: number | null;
+  /**
+   * Unique active vouchers. STS saturates by design, so this is the number that keeps growing and
+   * it belongs beside the score wherever the score appears (master_plan §1W).
+   */
+  uniqueVoucherCount: number;
   skillVerified: boolean;
   identityVerified: boolean;
   isCoach: boolean;
@@ -74,7 +79,6 @@ export interface PlayerProfileDTO extends PlayerCardDTO {
   isOwnProfile: boolean;
   /** Vouch distribution by band ordinal (0..6 → count) and total unique vouchers (§9.2). */
   distribution: Record<string, number>;
-  uniqueVoucherCount: number;
 }
 
 function fullName(row: ProfileRow): string {
@@ -144,6 +148,7 @@ export function toPlayerCardDTO(
     communitySkill: bandFromOrdinal(extras.skill?.communitySkillLevel ?? null),
     selfRatedSkill: bandFromOrdinal(row.self_rated_skill),
     sts: extras.skill?.sts ?? null,
+    uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
     skillVerified: extras.skill?.skillVerified ?? false,
     identityVerified: extras.identityVerified,
     isCoach: extras.roles.includes('coach'),

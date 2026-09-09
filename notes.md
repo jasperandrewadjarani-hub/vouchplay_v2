@@ -1931,3 +1931,16 @@ Open items, highest value first:
   unbounded number that already existed - `unique_voucher_count` - as **"STS 4.8 · 23 vouches"**, plus
   an explainer line saying STS tops out but vouch count keeps growing. **Uncapping remains Jasper's
   call**; the change is small and the consequences are listed. See handover v1.30.
+
+- **2026-09-09** - **The vouch count now appears on the player cards, not only the profile.** Jasper
+  checked the cards and could not find it - correctly, because `uniqueVoucherCount` lived only on
+  `PlayerProfileDTO`. The data was already being fetched in bulk for cards (`extras.skill`), it was
+  simply never mapped onto `PlayerCardDTO`. Now shown in three places: the profile and the detailed
+  card as "STS 4.8 · 23 vouches", and the compact row as the terse "STS 4.8 · 23" because that column
+  is fixed width.
+  **Widening that column re-broke the skill pills** for the third time - "Low Intermediate ·
+  Community" wrapped onto two lines. The real cause was never the column: `SkillPill` was a
+  shrinkable flex item, so squeezing it made its own text wrap. It now carries `shrink-0` and
+  `whitespace-nowrap`, so it keeps its natural width and the row clips instead of going ragged.
+  Verified by measuring the live DOM at 375px rather than by eye: 24 rows, **0 pills wrapped**, max
+  pill height 20px, row height unchanged at 71px.

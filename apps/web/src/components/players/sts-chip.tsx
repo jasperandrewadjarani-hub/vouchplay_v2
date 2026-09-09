@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/modal';
 export function StsChip({
   sts,
   voucherCount,
+  terse = false,
   interactive = true,
 }: {
   sts: number | null;
@@ -27,6 +28,8 @@ export function StsChip({
    * (master_plan §1W).
    */
   voucherCount?: number | null;
+  /** Number only, no word: for the fixed-width directory column where the label will not fit. */
+  terse?: boolean;
   /**
    * Set false when the chip sits inside a link or other interactive element. A button nested in an
    * anchor is invalid HTML and would both open this dialog and follow the link on one tap, so those
@@ -61,7 +64,9 @@ export function StsChip({
         STS {sts.toFixed(1)}
         {voucherCount != null && voucherCount > 0 && (
           <span className="opacity-70">
-            · {voucherCount} vouch{voucherCount === 1 ? '' : 'es'}
+            {terse
+              ? ` · ${voucherCount}`
+              : ` · ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}`}
           </span>
         )}
         <HelpCircle size={11} aria-hidden />

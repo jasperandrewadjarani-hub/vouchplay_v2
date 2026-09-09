@@ -25,7 +25,9 @@ export function SkillPill({
   const dot = size === 'sm' ? 6 : 7;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${pad}`}
+      // whitespace-nowrap + shrink-0: the pill keeps its natural width instead of being squeezed
+      // until its own text wraps, which is what leaves a compact list ragged (§1H, §1T, §1W).
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full font-semibold whitespace-nowrap ${pad}`}
       style={{ backgroundColor: `${band.color}22`, color: band.color }}
       title={`${source === 'community' ? 'Community skill' : 'Self-rated'}: ${band.label}`}
     >

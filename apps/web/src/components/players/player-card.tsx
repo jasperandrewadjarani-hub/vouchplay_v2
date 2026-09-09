@@ -93,8 +93,8 @@ export function PlayerCard({
           )}
         </span>
         {/* Raised above the row overlay so both controls are independently tappable. */}
-        <span className="relative z-10 flex w-[76px] shrink-0 flex-col items-end gap-1.5">
-          <StsChip sts={player.sts} />
+        <span className="relative z-10 flex w-[92px] shrink-0 flex-col items-end gap-1.5">
+          <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} terse />
           <VouchButton
             slug={player.slug}
             targetName={player.displayName}
@@ -150,7 +150,7 @@ export function PlayerCard({
       {(skill || player.sts != null) && (
         <div className="flex flex-wrap items-center gap-2">
           {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-          <StsChip sts={player.sts} />
+          <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
         </div>
       )}
 
