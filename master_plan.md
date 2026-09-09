@@ -1647,6 +1647,34 @@ A refusal that arrives on submit is a worse refusal, so the same rule runs in th
 
 The server still refuses on submit. The client copy is the courtesy; it is never the gate.
 
+## 2E. The front door is the tournament list (2026-09-09, post-launch)
+
+Registration for B-Steel Hermosa 2026 is live, and the app link is being handed out to players whose
+only reason for opening it is to enter. They were landing on the Home tab - hero, leaderboards,
+momentum - and had to find the Tournaments tab themselves. Every tap between the link and the entry
+form is a tap some people do not take.
+
+`/` now redirects to `/tournaments`, and the Home surface moves to `/home`.
+
+**Redirect rather than re-render.** Serving the tournament list *at* `/` would have left the nav
+highlighting Home while showing tournaments, and given the same page two URLs. Redirecting keeps one
+canonical address per surface, and the Tournaments tab lights up on arrival because the URL really is
+`/tournaments`. It lives in `next.config.ts` rather than a page component, so it costs no render at
+all - nothing in the layout tree runs before the browser is sent on.
+
+**`permanent: false` is deliberate.** A 308 is cached by browsers more or less forever, which is a
+poor trade for a default that has an end date. When the tournament is over, delete the rule and point
+the Home nav item back at `/`; that is the whole revert.
+
+**Nothing is lost.** Home is unchanged and still its own tab, now at `/home` - the nav item points
+there directly rather than bouncing every tap through the redirect. The header logo still points at
+`/`, which is what makes "the link of the app" and "the logo" mean the same thing.
+
+Verified in a browser rather than reasoned about: opening `/` lands on `/tournaments` with the
+Tournaments tab marked `aria-current="page"`, `/home` renders the hero and leaderboards with the Home
+tab current, and a signed-out visitor sees the B-Steel card with its registration-open badge without
+signing in.
+
 ## 1. Prompt Contract
 
 ### In scope

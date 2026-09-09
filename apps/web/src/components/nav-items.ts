@@ -9,7 +9,9 @@ export interface NavItem {
 }
 
 export const PRIMARY_NAV: NavItem[] = [
-  { href: '/', label: 'Home', icon: Home },
+  // Home lives at /home, not /, because / redirects to the tournament list while registration is
+  // open (§2E). Pointing this tab at '/' would bounce every tap through that redirect.
+  { href: '/home', label: 'Home', icon: Home },
   { href: '/players', label: 'Players', icon: Users },
   { href: '/clubs', label: 'Clubs', icon: Shield },
   { href: '/tournaments', label: 'Tournaments', icon: Trophy },

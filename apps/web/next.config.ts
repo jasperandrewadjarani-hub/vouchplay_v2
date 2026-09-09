@@ -24,6 +24,22 @@ const nextConfig: NextConfig = {
     imageSizes: [48, 96, 200],
     formats: ['image/avif', 'image/webp'],
   },
+  async redirects() {
+    return [
+      {
+        // Registration for B-Steel Hermosa 2026 is open, so the front door is the tournament list,
+        // not the leaderboards (master_plan §2E). Everyone who opens the app link lands one tap
+        // from entering. The Home surface is unchanged and still its own tab, at /home.
+        //
+        // `permanent: false` on purpose: this is a campaign default with an end date, and a 308
+        // would be cached by browsers long after the event. To revert, delete this rule and point
+        // the Home nav item back at '/'.
+        source: '/',
+        destination: '/tournaments',
+        permanent: false,
+      },
+    ];
+  },
   async headers() {
     return [
       {

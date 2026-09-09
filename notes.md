@@ -1569,7 +1569,7 @@ before shipping anything that needs a migration.
 
 **Migrations through 0028 are applied. 0029 is written and waiting** (`scripts/apply-0029.sql`).
 
-Handover content is **v1.33**. master_plan decision records run to **§2D**.
+Handover content is **v1.33**. master_plan decision records run to **§2E**.
 
 #### What this session changed
 
@@ -1583,6 +1583,10 @@ Registration was reshaped end to end, then debugged against a real run:
 - **The organizer's Manage screen is a list of rows plus a detail sheet, with queue chips (§1Z).**
 - **Partner change after paying (§2A, migration 0027)**, gated on the division's own skill and sex
   rules, enforced in SQL.
+
+**While registration is open, `/` redirects to `/tournaments`** and Home lives at `/home` (§2E).
+To revert after the event: delete the `redirects()` rule in `apps/web/next.config.ts` and point the
+Home nav item in `nav-items.ts` back at `/`.
 
 #### Open items, highest value first
 
