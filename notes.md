@@ -1567,9 +1567,9 @@ opened **Sep 9, 2026, 5:00 PM Manila**. Treat production as hot: every change la
 registrants, so prefer small reversible slices and read the release-order rule in handover v1.22
 before shipping anything that needs a migration.
 
-**All migrations through 0027 are applied and verified.** Nothing is pending in Supabase.
+**Migrations through 0028 are applied. 0029 is written and waiting** (`scripts/apply-0029.sql`).
 
-Handover content is **v1.31**. master_plan decision records run to **§2A**.
+Handover content is **v1.33**. master_plan decision records run to **§2D**.
 
 #### What this session changed
 
@@ -1586,21 +1586,30 @@ Registration was reshaped end to end, then debugged against a real run:
 
 #### Open items, highest value first
 
-1. **Nothing is blocked on Jasper.** Every migration is applied and every settings change he was asked
-   for is done.
-2. **The full end-to-end registration walkthrough is still unfinished.** Jasper got as far as payment
-   before this session's fixes landed. The remaining path to prove: pay -> partner confirms ->
-   organizer verifies -> both notified -> confirmed. Also worth exercising the decline path, the
-   replacement path, Request to cancel, and partner change after paying.
-3. **Two dialogs still use the old inline pattern** (`vouch-form`, `request-vouch-form`). Neither is
+1. **Migration 0029 is waiting on Jasper** (`scripts/apply-0029.sql`). It adds
+   `divisions.display_order` for hand-arranged division order. Nothing else is blocked: the canonical
+   default order already ships without it, and the code that READS `display_order` is deliberately
+   not deployed until 0029 is applied.
+2. **The full end-to-end registration walkthrough is still unfinished.** The remaining path to prove:
+   pay -> partner confirms -> organizer verifies -> both notified -> confirmed. Also worth exercising
+   the decline path, the replacement path, Request to cancel, and partner change after paying - and
+   now the new division-rule refusals (§2D), which are auth-gated and could not be verified from
+   outside production.
+3. **The organizer setting "Only allow players at each division's level or higher" is now redundant
+   for banded divisions** (§2D enforces the band in both directions, unconditionally). It should be
+   relabelled or retired rather than left implying a choice that no longer exists.
+4. **31 of 198 profiles have no gender recorded.** They cannot enter any Men's or Women's division
+   until they add it. The app now tells them exactly that and points at their profile, but it is
+   worth a nudge on the profile screen or a one-off message, because it is a third of the base.
+5. **Two dialogs still use the old inline pattern** (`vouch-form`, `request-vouch-form`). Neither is
    opened from inside a stacking context so neither is broken, but they should move onto the shared
    `Modal` (which now portals) when the registration path is quiet.
-4. **`supabase gen types` is still not wired into `packages/db`.** The types are hand-synced, and that
+6. **`supabase gen types` is still not wired into `packages/db`.** The types are hand-synced, and that
    is exactly what let migration 0026's `onboarding_completed_at` typo through five green gates and
-   break the whole doubles path. **This is now the highest-value piece of engineering hygiene left.**
-5. **Phase 15 - run the event** (see the phase note below). Oct 17-18 is the deadline that does not
+   break the whole doubles path. **This is still the highest-value piece of engineering hygiene left.**
+7. **Phase 15 - run the event** (see the phase note below). Oct 17-18 is the deadline that does not
    move.
-6. Carry-over ops: Supabase org over-quota before 21 Sep 2026; Gmail SMTP -> dedicated provider before
+8. Carry-over ops: Supabase org over-quota before 21 Sep 2026; Gmail SMTP -> dedicated provider before
    public scale.
 
 #### The lesson this session kept teaching
@@ -2079,3 +2088,75 @@ it done. Several fixes in this session were found only that way.
   the swap permissible rather than a hole in the rule.
   The §1Y sentence promising this was previously written and pulled; it is restored now that it is
   true. **Copy and capability ship together or not at all.** See master_plan §2A.
+
+- **2026-09-09** - **Uniform STS, a directory you can actually filter, and comments that stand on
+  their own** (master_plan §2B). Two slices ship without a migration; the third waits on 0028.
+
+  **Every player now shows an STS, including 0.0.** The chip returned `null` when a player had no
+  `player_skill_profiles` row, so anybody nobody had vouched for had a visible gap where everyone
+  else had a chip - which reads as a rendering fault rather than as information. No vouches is not
+  missing data: it is zero confidence, and zero confidence is 0.0. The DTO still keeps `null` and
+  `0` apart, because the database does; only the display collapses them. Verified in the
+  server-rendered HTML of both directory views and of a real zero-vouch profile
+  (`aria-label="Skill-Trust Score 0.0 out of 5"`).
+
+  **The filters are the ones that were asked for.** Gone: "Minimum self-rated skill", the one number
+  on a profile nobody else has attested to. Added: skill level, minimum STS, club, and a city list
+  that is actually usable. **Filtering by STS is not ranking by STS** - §8.4 forbids ordering the
+  directory by STS and the sort is untouched.
+  **Skill follows the app-wide precedence** (community rating if the community has rated them,
+  otherwise self-rating), the same order `player_fits_division()` uses. It matters: 140 of 164
+  directory profiles have a community skill level, so a strict community-only filter would have made
+  the other 24 invisible the moment anybody touched the control.
+  **Controls are chosen per data type**: named discrete values get chips (7 skill bands, multi-select
+  - a two-thumb range slider is the classic choice and the wrong one on touch and with a screen
+  reader), a genuinely continuous number gets a single-thumb slider (STS, 0-5 in half steps, "Any" at
+  zero), three options get a segmented control (sex), and the four booleans get 44px toggle pills
+  rather than 13px checkboxes. Every applied filter is a removable chip, and the Filters button
+  carries a count - a filter you cannot see is a filter you cannot undo.
+  **The city list collapses the spellings.** The directory holds 8 distinct city strings that are
+  really 3 places: `Zamboanga`, `Zamboanga City`, `Zamboanga city`, `zamboanga city`, `zamboanga` and
+  `City of Zamboanga` are one city typed six ways. The dropdown now reads "Zamboanga City (161),
+  Isabela City (1), Valenzuela (1)".
+  Parsing, normalising, matching and counting all live in one pure module,
+  `lib/players/filters.ts`, with **51 unit tests**, so the URL, the chips, the button count and the
+  rows returned cannot disagree. Old `?minSkill=` links still work.
+
+  **Verified against production numbers, not by eye.** Every count the app returned was checked
+  against the same computation run directly on the database: skill Novice **61 = 61**; minimum STS
+  3.0 **103 = 103**; Novice AND STS 3.0 **32 = 32** (so the filters intersect rather than union);
+  legacy `?minSkill=4` and explicit `?skill=4,5,6` both **30**, matching 20+9+1; clubs **1, 36, 20**
+  against their real membership counts. Pagination links carry every filter and the view.
+  **Two things looked like bugs and were not.** The unfiltered total read 163 while the database said
+  164 - a real player onboarded at 10:32 UTC in the middle of the check. And `?club=dink-deepers`
+  returned nobody because I invented that slug from the display name; the real one is
+  `dink-deepers-54a808`, which returns its 1 member.
+  **One real defect was found only by measuring.** The STS slider was `h-11`, which is **38.5px**
+  under the app's 14px root font, below the touch minimum. It is `h-[44px]` now. Five green gates
+  said nothing about it.
+
+  **Comments no longer need a rating, and can be edited or deleted (HELD - needs migration 0028).**
+  A comment could only be written as a field on the vouch form, so saying anything about a player
+  required also asserting a skill level for them, and once written it was permanent - there was no
+  edit and no delete anywhere in the product. `vouch_comments.vouch_id` becomes nullable; a comment
+  by somebody who does have an active vouch is still linked to it. **One active comment per author
+  per player, editable**, which mirrors the one-active-vouch rule and matches the data exactly:
+  **0 of the 44 active comments in production are a second comment from the same author about the
+  same player.** Delete is a soft delete to `status = 'removed'`, a value the enum has always had
+  (verified against production) - it leaves every public read at once, and the row survives for
+  moderation. The same gates as vouching apply, plus a `player_comments_per_24h` setting, because a
+  standalone comment is a new way to write on a stranger's profile. The unused
+  `vouch_comment_received` notification is finally used, with copy that is true when there is no
+  vouch attached.
+  **ACTION FOR JASPER: run `scripts/apply-0028.sql`** and return `vouch_id_nullable=1`,
+  `author_target_index=1`, `author_write_policies=2`, plus the informational `active_comments` and
+  `standalone_comments`. **No comment code ships until those come back** - without 0028 the "Add a
+  comment" button is a visible control that throws a not-null violation at a real person, which is
+  exactly the case the v1.22 rule reserves for migrating first.
+
+  **NOT COMMITTED, and here is why.** A second Claude session was writing to this same working tree
+  while this slice was being built - migration 0029, `master_plan` §2C (division display order),
+  and edits to `registration-queries.ts`, `actions/registration.ts`, `actions/tournament.ts` and
+  `packages/core`. Both §2B and §2C are present in `master_plan.md` and nothing was clobbered, but
+  committing would have swept an unfinished feature into a release to a live site. **Two sessions,
+  one tree, one hot production deployment is the hazard here** - the sequencing is Jasper's call.
