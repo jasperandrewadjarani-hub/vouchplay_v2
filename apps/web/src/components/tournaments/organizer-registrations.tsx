@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { Receipt } from 'lucide-react';
 import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
 import {
   ELIGIBILITY_RESULT_LABELS,
@@ -84,8 +85,34 @@ export function OrganizerRegistrations({
   const sel =
     'border-border bg-background rounded-lg border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2';
 
+  // Receipts arrive faster than anyone can scroll for them. This is the queue an organizer lives in
+  // once payments start landing: one tap, with a live count, onto exactly the entries that need a
+  // human decision (master_plan §1U).
+  const awaitingReview = registrations.filter((r) => r.paymentStatus === 'submitted').length;
+  const reviewing = payment === 'submitted';
+
   return (
     <div className="space-y-4">
+      {awaitingReview > 0 && (
+        <button
+          type="button"
+          aria-pressed={reviewing}
+          onClick={() => {
+            setPayment(reviewing ? 'all' : 'submitted');
+            if (!reviewing) setStatus('all');
+          }}
+          className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border px-4 text-sm font-semibold transition-colors ${
+            reviewing
+              ? 'vp-gradient border-transparent text-white'
+              : 'border-warning/40 bg-warning/10 text-foreground hover:border-warning'
+          }`}
+        >
+          <Receipt size={16} aria-hidden />
+          {reviewing
+            ? `Showing ${awaitingReview} awaiting payment review - tap to show all`
+            : `${awaitingReview} payment${awaitingReview === 1 ? '' : 's'} awaiting your review`}
+        </button>
+      )}
       {/* Filters (§26.4) */}
       <div className="flex flex-wrap items-center gap-1.5">
         <select value={division} onChange={(e) => setDivision(e.target.value)} className={sel}>

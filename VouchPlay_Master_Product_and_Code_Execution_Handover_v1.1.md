@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.27
+# VouchPlay Master Product & Code Execution Handover v1.28
 
-_(File retains its `…v1.1.md` name; content is v1.27 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.28 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,68 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.28 (2026-09-09)
+
+_Migration 0025 applied and verified before any of this deployed (`invitation_team_id_column=1`,
+`new_rpcs=3`, `accept_rpc=1`, `invitation_team_index=1`, `legacy_open_invitations=0`)._
+
+- **A doubles entry is now one sitting instead of four.** The old path was blocked by structure, not
+  polish: `accept_partner_invitation` is what **created** the `teams` row, so until a partner opened
+  the app and tapped accept there was no team to register and nothing to pay for. Naming a partner
+  now creates the team immediately with the inviter confirmed and the partner **unconfirmed**, and
+  the player goes straight to the QR and the receipt. The partner confirms afterwards.
+  `team_members.confirmed_at` has always been nullable and always been set eagerly; this is the first
+  use of what the column was for. **Two things meant this needed far less than it looked like:**
+  `register_team` only ever required the actor to be a team member, never that the partner had
+  accepted, and the capacity count already treats a submitted receipt as occupying a slot - so "the
+  receipt reserves the slot" changed nothing about capacity or the waitlist. **And no RLS changes at
+  all**, because `is_team_member()` tests membership rather than confirmation, so a pending partner
+  could already read the team and registration. `accept_partner_invitation` was extended rather than
+  replaced: a NULL `team_id` keeps the original behaviour, so every invitation already in somebody's
+  inbox kept working. `legacy_open_invitations = 0` at apply time confirmed none were mid-flight,
+  which made this the safest possible moment to ship it.
+- **Paying on somebody else's behalf gets a deliberate stop.** Step two of the partner picker names
+  the partner, states plainly that **they have not confirmed yet**, says only to continue if the two
+  of you have already agreed, and says what happens if they decline - **the slot and the payment stay
+  yours and you can name someone else**. It requires an explicit tick before the button enables,
+  because a warning nobody has to touch is a warning nobody reads, and a player who does not know the
+  money is safe will not risk paying.
+- **If the partner declines, nothing is lost.** The entry is not cancelled and the slot is not
+  released - the money is in and the organizer has a receipt to rule on. The payer is notified and can
+  name a replacement, keeping slot, payment and waitlist position. **Replacement is permitted only
+  when the named partner actively declined or their invitation expired**, enforced in SQL
+  (`seat_not_vacant`, `no_declined_invitation`). **This is a deliberate, narrow carve-out from
+  v1.20's rule** that a partner cannot be replaced unilaterally: that rule exists so nobody is
+  displaced without their knowledge, and it is untouched - a partner who accepted, or who is still
+  deciding, can never be swapped out. Someone who said no has not been displaced; they created a
+  vacancy.
+- **The person being asked to confirm is told the fee is already paid.** A prepaid invitation gets a
+  full-width card rather than two small buttons: who entered them, that **confirming asks them for
+  nothing**, and that **declining is free**. The two choices carry equal visual weight, because a
+  player pressured into a tournament they cannot play is worse for everyone. Declining is one obvious
+  tap, which matters more than usual here: being named makes someone a real team member immediately,
+  so until they answer they cannot enter that division with anybody else.
+- **Two of the three notification types are critical** (`partner_named_paid`, `partner_declined`).
+  Being named on a paid entry is money-adjacent and it blocks the recipient, so it must not be
+  mutable; the same is true of learning that your paid entry has lost its partner.
+- **Organizers get a payments queue, not another filter.** A payment-status filter already existed,
+  but receipts arrive faster than anyone can scroll for them. Manage → Registrations now leads with a
+  one-tap **"N payments awaiting your review"** banner carrying a live count, which jumps straight to
+  the submitted, unverified receipts and back again.
+- **Where the receipts live, stated for the record:** the private `payment-proofs` bucket, at
+  `{registration_id}/proof-{timestamp}-{random}.{ext}`, `public = false` and no public policy, so no
+  file is reachable by URL. Organizers open them through a **60-second signed URL** minted
+  server-side after an authorization check. **There is deliberately no browsable master folder** - it
+  would be a folder of other people's names, reference numbers and bank screenshots. Verify, reject
+  and **refund** controls were all already present, so "refunds are the organizer's call, case by
+  case" needed no new code.
+- **Open trade-off, recorded rather than hidden.** There is **no automatic deadline** on a pending
+  partner: only an explicit decline frees the seat. A partner who never opens the app therefore leaves
+  a paid entry holding a seat nobody can fill, and being named blocks that person from entering the
+  division with anyone else until they answer. The escape hatches are the payer cancelling before a
+  receipt is submitted, and the organizer resolving it afterwards. If either cost shows up in
+  practice, a deadline is a `system_settings` value and needs no deploy.
 
 ## v1.27 (2026-09-09)
 

@@ -2,16 +2,25 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { AlertTriangle, ArrowLeft, Loader2 } from 'lucide-react';
 import {
-  invitePartner,
+  enterWithPendingPartner,
   searchInvitablePlayers,
   type PlayerSearchResult,
 } from '@/lib/actions/registration';
 import { Input } from '@/components/ui/field';
 
 /**
- * Invite a partner to a doubles division (handover §20.1-§20.2). Type to search active players by
- * name; pick one to send the invite. Debounced query; no need to know their exact handle.
+ * Enter a doubles division with a partner, in one sitting (handover §20.1-§20.2, master_plan §1U).
+ *
+ * The old form sent an invite and stopped: no team existed until the partner accepted, so there was
+ * nothing to register and nothing to pay for, and the player had to come back later. Now naming a
+ * partner creates the team and the registration immediately, and the player goes straight to
+ * payment. The partner confirms afterwards.
+ *
+ * Because that means paying on somebody else's behalf, step two is a deliberate stop: it names the
+ * partner, says plainly that they have not confirmed, says what happens if they decline, and asks
+ * for an explicit tick. A warning nobody has to touch is a warning nobody reads.
  */
 export function PartnerInviteForm({
   tournamentId,
@@ -23,7 +32,10 @@ export function PartnerInviteForm({
   const router = useRouter();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
+  const [chosen, setChosen] = useState<PlayerSearchResult | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const [pending, start] = useTransition();
   const [searching, setSearching] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -54,22 +66,97 @@ export function PartnerInviteForm({
     }
   }
 
-  function invite(slug: string, name: string) {
+  function submit() {
+    if (!chosen) return;
     setMsg(null);
+    setIsError(false);
     const fd = new FormData();
     fd.set('divisionId', divisionId);
-    fd.set('inviteeSlug', slug);
+    fd.set('inviteeSlug', chosen.slug);
+    fd.set('acknowledged', acknowledged ? 'on' : '');
     start(async () => {
-      const res = await invitePartner(tournamentId, {}, fd);
+      const res = await enterWithPendingPartner(tournamentId, {}, fd);
       if (res.ok) {
-        setMsg(`Invite sent to ${name}.`);
+        setMsg(res.message ?? 'Entered.');
+        setIsError(false);
+        setChosen(null);
+        setAcknowledged(false);
         setQ('');
         setResults([]);
         router.refresh();
       } else {
-        setMsg(res.error ?? 'Could not send the invite.');
+        setMsg(res.error ?? 'Could not enter. Please try again.');
+        setIsError(true);
       }
     });
+  }
+
+  if (chosen) {
+    return (
+      <div className="border-border bg-surface space-y-3 rounded-xl border p-3">
+        <button
+          type="button"
+          onClick={() => {
+            setChosen(null);
+            setAcknowledged(false);
+          }}
+          className="text-foreground-muted hover:text-foreground inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium"
+        >
+          <ArrowLeft size={15} aria-hidden />
+          Choose someone else
+        </button>
+
+        <div>
+          <p className="text-foreground-muted text-xs">Playing with</p>
+          <p className="text-foreground text-base font-bold">{chosen.name}</p>
+        </div>
+
+        <div className="border-warning/40 bg-warning/10 flex gap-2.5 rounded-xl border p-3">
+          <AlertTriangle className="text-warning mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div className="text-foreground space-y-1.5 text-sm">
+            <p className="font-semibold">{chosen.name} has not confirmed yet.</p>
+            <p>
+              Only do this if you have already agreed to play together. You are about to pay for
+              both of you.
+            </p>
+            <p className="text-foreground-muted">
+              If they say no, your slot and your payment stay yours and you can name someone else.
+            </p>
+          </div>
+        </div>
+
+        <label className="border-border flex min-h-[44px] cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-sm">
+          <input
+            type="checkbox"
+            checked={acknowledged}
+            onChange={(e) => setAcknowledged(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span className="text-foreground">
+            I have already agreed with {chosen.name} that we are playing together.
+          </span>
+        </label>
+
+        <button
+          type="button"
+          disabled={pending || !acknowledged}
+          onClick={submit}
+          className="vp-gradient inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {pending && <Loader2 size={16} className="animate-spin" aria-hidden />}
+          {pending ? 'Reserving your slot…' : 'Enter and pay'}
+        </button>
+
+        {msg && (
+          <p
+            className={`text-sm ${isError ? 'text-danger' : 'text-foreground-muted'}`}
+            role="status"
+          >
+            {msg}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -78,7 +165,7 @@ export function PartnerInviteForm({
         value={q}
         onChange={(e) => updateQuery(e.target.value)}
         placeholder="Search players by name"
-        aria-label="Search players to invite"
+        aria-label="Search for your partner"
       />
       {searching && <p className="text-foreground-muted text-xs">Searching...</p>}
       {results.length > 0 && (
@@ -91,20 +178,29 @@ export function PartnerInviteForm({
               </span>
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => invite(p.slug, p.name)}
-                className="vp-gradient shrink-0 rounded-lg px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                onClick={() => {
+                  setChosen(p);
+                  setMsg(null);
+                  setIsError(false);
+                }}
+                className="vp-gradient min-h-[44px] shrink-0 rounded-lg px-3 text-xs font-semibold text-white"
               >
-                Invite
+                Choose
               </button>
             </li>
           ))}
         </ul>
       )}
       {q.trim().length >= 2 && !searching && results.length === 0 && (
-        <p className="text-foreground-muted text-xs">No players found.</p>
+        <p className="text-foreground-muted text-xs">
+          No players found. Your partner needs a VouchPlay account before you can enter them.
+        </p>
       )}
-      {msg && <p className="text-foreground-muted text-xs">{msg}</p>}
+      {msg && (
+        <p className={`text-xs ${isError ? 'text-danger' : 'text-foreground-muted'}`} role="status">
+          {msg}
+        </p>
+      )}
     </div>
   );
 }

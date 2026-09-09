@@ -65,6 +65,8 @@ export interface ViewerInvitation {
   otherName: string;
   otherSlug: string | null;
   message: string | null;
+  /** The inviter already paid for this entry, so confirming costs the invitee nothing (§1U). */
+  prepaid: boolean;
 }
 export interface ClubRep {
   clubId: string;
@@ -260,7 +262,7 @@ export async function getViewerRegistrationState(
   // Pending invitations for this tournament (incoming + outgoing).
   const { data: invRows } = await svc
     .from('partner_invitations')
-    .select('id, division_id, inviter_id, invitee_id, message, status')
+    .select('id, division_id, inviter_id, invitee_id, message, status, team_id')
     .eq('tournament_id', tournamentId)
     .eq('status', 'sent')
     .or(`inviter_id.eq.${userId},invitee_id.eq.${userId}`);
@@ -270,7 +272,35 @@ export async function getViewerRegistrationState(
     inviter_id: string;
     invitee_id: string;
     message: string | null;
+    team_id: string | null;
   }[];
+
+  // An invitation whose team already carries a submitted or verified receipt is prepaid: the person
+  // being asked to confirm is not being asked for money (§1U).
+  const invTeamIds = inv.map((i) => i.team_id).filter((t): t is string => Boolean(t));
+  const prepaidTeams = new Set<string>();
+  if (invTeamIds.length) {
+    const { data: regRows } = await svc
+      .from('registrations')
+      .select('id, team_id')
+      .in('team_id', invTeamIds)
+      .not('status', 'in', '(withdrawn,cancelled,rejected)');
+    const regs = (regRows ?? []) as { id: string; team_id: string }[];
+    if (regs.length) {
+      const { data: payRows } = await svc
+        .from('payments')
+        .select('registration_id, status')
+        .in(
+          'registration_id',
+          regs.map((r) => r.id),
+        )
+        .in('status', ['submitted', 'verified']);
+      const paidRegIds = new Set(
+        ((payRows ?? []) as { registration_id: string }[]).map((r) => r.registration_id),
+      );
+      for (const r of regs) if (paidRegIds.has(r.id)) prepaidTeams.add(r.team_id);
+    }
+  }
   const otherIds = inv.map((i) => (i.inviter_id === userId ? i.invitee_id : i.inviter_id));
   const otherProfiles = await resolve(otherIds);
   const invitations: ViewerInvitation[] = inv.map((i) => {
@@ -284,6 +314,7 @@ export async function getViewerRegistrationState(
       otherName: p?.name ?? 'player',
       otherSlug: p?.slug ?? null,
       message: i.message,
+      prepaid: Boolean(i.team_id && prepaidTeams.has(i.team_id)),
     };
   });
 

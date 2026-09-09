@@ -76,6 +76,28 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} accepted your partner invite`,
     (p) => `Your team is formed for ${tour(p)}.`,
   ),
+  // A partner was named on a PAID entry, so this is not a casual invite: the fee is already in,
+  // and until they answer they cannot enter that division with anybody else (master_plan §1U).
+  // Critical: it is money-adjacent and it blocks the recipient, so it must not be mutable.
+  partner_named_paid: t(
+    'partners',
+    true,
+    (p) => `${who(p)} entered you as their partner`,
+    (p) =>
+      `They have already paid for ${p.divisionName ?? 'your division'} in ${tour(p)}. Confirm or decline - either is free.`,
+  ),
+  partner_declined: t(
+    'partners',
+    true,
+    (p) => `${who(p)} cannot partner with you`,
+    (p) => `Your slot and payment for ${tour(p)} are safe. You can name someone else.`,
+  ),
+  partner_confirmed_paid: t(
+    'partners',
+    false,
+    (p) => `${who(p)} confirmed as your partner`,
+    (p) => `Your team is complete for ${tour(p)}.`,
+  ),
   partner_team_left: t(
     'partners',
     false,

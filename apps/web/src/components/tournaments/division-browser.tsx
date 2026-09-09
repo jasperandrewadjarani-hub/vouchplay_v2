@@ -74,7 +74,11 @@ export function DivisionBrowser({
             {invitations.map((i) => (
               <li
                 key={i.id}
-                className="border-border bg-surface-muted flex items-center justify-between gap-2 rounded-xl border p-2.5"
+                className={`border-border bg-surface-muted gap-2 rounded-xl border p-2.5 ${
+                  i.prepaid && i.direction === 'incoming'
+                    ? 'flex flex-col items-start'
+                    : 'flex items-center justify-between'
+                }`}
               >
                 <span className="text-foreground text-sm">
                   {i.direction === 'incoming' ? 'From ' : 'To '}
@@ -86,7 +90,12 @@ export function DivisionBrowser({
                     <span className="font-medium">{i.otherName}</span>
                   )}
                 </span>
-                <InvitationActions invitationId={i.id} direction={i.direction} />
+                <InvitationActions
+                  invitationId={i.id}
+                  direction={i.direction}
+                  prepaid={i.prepaid}
+                  partnerName={i.otherName}
+                />
               </li>
             ))}
           </ul>

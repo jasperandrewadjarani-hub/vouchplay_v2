@@ -204,6 +204,194 @@ export async function invitePartner(
   return { ok: true, message: 'Partner invite sent.' };
 }
 
+// ---------------------------------------------------------------------------
+// Enter with a partner who has not confirmed yet (master_plan §1U)
+// ---------------------------------------------------------------------------
+
+/**
+ * Create the team, name the partner, and register - in one step, so the player goes straight to
+ * payment instead of waiting for somebody else to open the app.
+ *
+ * The partner is added UNCONFIRMED. `register_team` has always permitted this (it only ever required
+ * the actor to be a team member), and the capacity count already treats a submitted receipt as
+ * occupying the slot, so nothing about capacity or the waitlist changes.
+ *
+ * The caller must have acknowledged the warning: they are about to pay on someone else's behalf.
+ */
+export async function enterWithPendingPartner(
+  tournamentId: string,
+  _prev: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (formData.get('acknowledged') !== 'on')
+    return { error: 'Please confirm you have already agreed with your partner.' };
+  const parsed = partnerInviteSchema.safeParse({
+    divisionId: formData.get('divisionId'),
+    inviteeSlug: formData.get('inviteeSlug') ?? '',
+    message: formData.get('message') ?? '',
+  });
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
+  const v = parsed.data;
+
+  const statusErr = await checkActorCanInteract(user.id);
+  if (statusErr) return { error: statusErr };
+
+  const svc = createServiceClient();
+  try {
+    const [{ data: division }, { data: invitee }] = await Promise.all([
+      svc
+        .from('divisions')
+        .select('id, tournament_id, format, status')
+        .eq('id', v.divisionId)
+        .maybeSingle(),
+      svc
+        .from('profiles')
+        .select('id, account_status, onboarding_completed_at')
+        .eq('slug', v.inviteeSlug)
+        .maybeSingle(),
+    ]);
+    const div = division as { tournament_id: string; format: string; status: string } | null;
+    const inv = invitee as {
+      id: string;
+      account_status: string;
+      onboarding_completed_at: string | null;
+    } | null;
+    if (!div || div.tournament_id !== tournamentId) return { error: 'Division not found.' };
+    if (div.format !== 'doubles') return { error: 'Partner entry is only for doubles divisions.' };
+    if (!inv) return { error: 'No player found with that handle.' };
+    if (inv.id === user.id) return { error: 'You cannot enter yourself as your own partner.' };
+    if (inv.account_status !== 'active' || !inv.onboarding_completed_at)
+      return {
+        error: 'That player cannot be entered yet. Ask them to finish their profile first.',
+      };
+    if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
+
+    // Both players are checked against the division's skill floor before anyone pays.
+    const floorError = await skillFloorError(svc, tournamentId, v.divisionId, [user.id, inv.id]);
+    if (floorError) return { error: floorError };
+
+    const { data: created, error: teamError } = await svc.rpc('create_team_with_pending_partner', {
+      p_tournament_id: tournamentId,
+      p_division_id: v.divisionId,
+      p_inviter: user.id,
+      p_invitee: inv.id,
+      p_message: v.message ? v.message.trim() : null,
+      p_expires_at: null,
+    });
+    if (teamError) return { error: friendly(teamError.message) };
+    const teamId = (created as { team_id?: string } | null)?.team_id;
+    if (!teamId) return { error: 'Could not start your entry. Please try again.' };
+
+    const { data: reg, error: regError } = await svc.rpc('register_team', {
+      p_team_id: teamId,
+      p_actor: user.id,
+    });
+    if (regError) return { error: friendly(regError.message) };
+    const regId = (reg as { registration_id?: string } | null)?.registration_id;
+    const status = (reg as { status?: string } | null)?.status;
+    if (regId) await computeRegistrationEligibility(regId);
+
+    const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
+    await notify({
+      recipientId: inv.id,
+      type: 'partner_named_paid',
+      actorId: user.id,
+      params: { actorName: me.name, tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+    await revalTournament(tournamentId);
+    return {
+      ok: true,
+      message:
+        status === 'waitlisted'
+          ? 'This division is full, so your team joined the waitlist. Your partner has been notified.'
+          : 'Your slot is held. Pay now to reserve it - your partner has been notified and can confirm any time.',
+    };
+  } catch {
+    return { error: 'Registration is temporarily unavailable. Please try again shortly.' };
+  }
+}
+
+/**
+ * Name a different partner after the last one declined.
+ *
+ * Keeps the slot, the payment and the waitlist position. The RPC refuses unless the seat is actually
+ * vacant AND the previous invitee declined or expired, so a partner who accepted - or who is still
+ * deciding - can never be swapped out (§1D).
+ */
+export async function replacePendingPartner(
+  tournamentId: string,
+  _prev: RegistrationActionState,
+  formData: FormData,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const teamId = String(formData.get('teamId') ?? '');
+  const parsed = partnerInviteSchema.safeParse({
+    divisionId: formData.get('divisionId'),
+    inviteeSlug: formData.get('inviteeSlug') ?? '',
+    message: formData.get('message') ?? '',
+  });
+  if (!parsed.success)
+    return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
+  const v = parsed.data;
+  const statusErr = await checkActorCanInteract(user.id);
+  if (statusErr) return { error: statusErr };
+
+  const svc = createServiceClient();
+  try {
+    const { data: invitee } = await svc
+      .from('profiles')
+      .select('id, account_status, onboarding_completed_at')
+      .eq('slug', v.inviteeSlug)
+      .maybeSingle();
+    const inv = invitee as {
+      id: string;
+      account_status: string;
+      onboarding_completed_at: string | null;
+    } | null;
+    if (!inv) return { error: 'No player found with that handle.' };
+    if (inv.id === user.id) return { error: 'You cannot enter yourself as your own partner.' };
+    if (inv.account_status !== 'active' || !inv.onboarding_completed_at)
+      return {
+        error: 'That player cannot be entered yet. Ask them to finish their profile first.',
+      };
+    if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
+
+    const floorError = await skillFloorError(svc, tournamentId, v.divisionId, [user.id, inv.id]);
+    if (floorError) return { error: floorError };
+
+    const { error } = await svc.rpc('replace_pending_partner', {
+      p_team_id: teamId,
+      p_actor: user.id,
+      p_new_invitee: inv.id,
+      p_message: v.message ? v.message.trim() : null,
+      p_expires_at: null,
+    });
+    if (error) return { error: friendly(error.message) };
+
+    const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
+    await notify({
+      recipientId: inv.id,
+      type: 'partner_named_paid',
+      actorId: user.id,
+      params: { actorName: me.name, tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+      entityType: 'tournament',
+      entityId: tournamentId,
+    });
+    await revalTournament(tournamentId);
+    return { ok: true, message: 'New partner named. Your slot and payment are unchanged.' };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
 export interface PlayerSearchResult {
   slug: string;
   name: string;
@@ -289,7 +477,27 @@ export async function respondInvitation(
         entityId: row.tournament_id,
       });
     } else {
-      await svc.from('partner_invitations').update({ status: 'declined' }).eq('id', invitationId);
+      // Frees the seat without cancelling the entry or releasing the slot: the fee is already paid
+      // and the organizer has a receipt to rule on (§1U). Only ever removes an UNCONFIRMED
+      // membership, so a partner who already accepted is never dropped by this path.
+      const { error } = await svc.rpc('decline_partner_invitation', {
+        p_invitation_id: invitationId,
+        p_actor: user.id,
+      });
+      if (error) return { error: friendly(error.message) };
+      const [me, tm] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(row.tournament_id),
+      ]);
+      await notify({
+        recipientId: row.inviter_id,
+        type: 'partner_declined',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: row.tournament_id,
+      });
     }
     await revalTournament(row.tournament_id);
   } catch {

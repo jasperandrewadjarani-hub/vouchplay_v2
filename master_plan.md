@@ -810,11 +810,11 @@ the disclosure, which is the same pattern the leaderboards page uses for its own
 below the boards is also the more honest order: you see where the community stands, then where you
 stand in it.
 
-## 1U. Pay first, confirm the partner after (DESIGN, 2026-09-09) - NOT YET IMPLEMENTED
+## 1U. Pay first, confirm the partner after (2026-09-09, post-launch)
 
-**Status: design only.** Nothing in this section has shipped. It changes the live payment path during
-an open registration window, so it needs Jasper's go-ahead and migration 0025 applied before any code
-is deployed.
+**Status: shipped.** Migration 0025 applied and verified 2026-09-09 (`invitation_team_id_column=1`,
+`new_rpcs=3`, `accept_rpc=1`, `invitation_team_index=1`, `legacy_open_invitations=0`), then the code
+deployed behind it, in that order.
 
 ### What the flow costs a player today
 
@@ -967,6 +967,48 @@ would error, not a silent read, and it sits on the payment path during a live re
 2. Then the server actions (create team with a pending partner, decline, replace), the payer's
    warning-and-acknowledge step, the partner's confirm/decline surface, the notifications on both
    sides, and the organizer's review filter and refund control.
+
+### Shipped 2026-09-09 (migration 0025 verified)
+
+Migration 0025 was applied and verified: `invitation_team_id_column=1`, `new_rpcs=3`, `accept_rpc=1`,
+`invitation_team_index=1`, `legacy_open_invitations=0`. That last value made this the safest possible
+moment to ship - no invitation was mid-flight, so the backward-compatible branch had no live cases to
+carry.
+
+**Two of the three decisions needed no new code.** The organizer already had `verifyPayment`,
+`rejectPayment` and **`markRefunded`** wired into Manage → Registrations, so "refunds are the
+organizer's call" was already buildable on day one. The payment-status filter also already existed;
+what was missing was not a filter but a *queue*, so the slice added a one-tap
+**"N payments awaiting your review"** banner with a live count that jumps straight to the submitted,
+unverified receipts. Receipts arrive faster than anyone can scroll for them.
+
+What shipped:
+
+- `enterWithPendingPartner` creates the team, names the partner unconfirmed, and registers, in one
+  action, so the player lands on payment immediately.
+- The partner picker became two steps. Step two names the partner, states that they **have not
+  confirmed**, says the slot and payment survive a decline, and requires an explicit tick before the
+  button enables. A warning nobody has to touch is a warning nobody reads.
+- Declining now goes through `decline_partner_invitation`, which frees the seat without cancelling
+  the entry or releasing the slot, and only ever removes an **unconfirmed** membership.
+- `replacePendingPartner` names a replacement, keeping slot, payment and waitlist position.
+- Three notification types, two of them **critical** (`partner_named_paid`, `partner_declined`):
+  being named on a paid entry is money-adjacent and it blocks the recipient from entering that
+  division with anyone else, so it must not be mutable.
+- The person being asked to confirm gets a full-width card saying **the fee is already paid**, that
+  confirming asks them for nothing, and that declining is free - with two equal-weight choices,
+  because a player pressured into a tournament they cannot play is worse for everyone.
+
+### Correction to an earlier claim in these notes
+
+An earlier entry stated that `issueOfficialAchievement` "exists with zero call sites" and that there
+was "no UI for it", and a Phase 15 recommendation was built partly on that. **That was wrong.** It is
+wired into Manage → Registrations: every registration row carries a dropdown of the six official
+awards and an Issue button (`organizer-registrations.tsx`). The organizer can already award Champion,
+Runner-up, Bronze, MVP, Sportsmanship and Participant today. The Phase 15 "results in, achievements
+out" slice is therefore mostly **already built**, and what remains there is much smaller than
+described.
+
 
 ## 1. Prompt Contract
 

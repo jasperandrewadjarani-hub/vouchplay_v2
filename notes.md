@@ -1851,3 +1851,23 @@ Open items, highest value first:
   there is **no automatic deadline** (only an explicit decline frees the seat, with the squatting and
   never-responds trade-offs written down), and the organizer gets a "payments awaiting review" filter
   in this slice.
+
+- **2026-09-09** - **Pay-first registration SHIPPED.** Migration 0025 verified by Jasper
+  (`invitation_team_id_column=1`, `new_rpcs=3`, `accept_rpc=1`, `invitation_team_index=1`,
+  `legacy_open_invitations=0`) and independently probed here before any code went out - all four RPCs
+  present and refusing safely with their guard clauses. `legacy_open_invitations = 0` meant no
+  invitation was mid-flight, the safest possible moment to ship. Migrate-then-deploy order was kept.
+  Naming a partner now creates the team (inviter confirmed, partner unconfirmed) and registers in one
+  action, so the player goes straight to QR and receipt; the partner confirms after. Step two of the
+  picker is a deliberate stop with an explicit tick. Declining frees the seat without cancelling the
+  entry or releasing the slot; the payer can name a replacement keeping slot, payment and position.
+  The person being asked to confirm gets a full-width card saying the fee is already paid and that
+  declining is free. Organizers got a one-tap "N payments awaiting your review" queue.
+  **Two of the three decisions needed no code at all:** `markRefunded` and the payment-status filter
+  already existed, so "refunds are the organizer's call" was already buildable.
+  **CORRECTION to an earlier entry in this file:** I wrote that `issueOfficialAchievement` had "zero
+  call sites" and "no UI", and built part of the Phase 15 recommendation on it. That was wrong - it is
+  wired into Manage -> Registrations with a dropdown of the six official awards and an Issue button.
+  Organizers can already award Champion, Runner-up, Bronze, MVP, Sportsmanship and Participant today,
+  so the Phase 15 "results in, achievements out" slice is mostly already built.
+  See master_plan §1U, handover v1.28.
