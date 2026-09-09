@@ -61,7 +61,14 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} asked you to vouch`,
     (p) => p.reason,
   ),
-  vouch_comment_received: t('vouches', false, (p) => `${who(p)} left a comment with their vouch`),
+  // A comment no longer has to arrive attached to a rating (master_plan §2B), so the copy can no
+  // longer say "with their vouch" - it would be false half the time.
+  vouch_comment_received: t(
+    'vouches',
+    false,
+    (p) => `${who(p)} commented on your profile`,
+    () => 'Tap to read it.',
+  ),
 
   // --- Partners (§27.1) ---
   partner_invite_received: t(

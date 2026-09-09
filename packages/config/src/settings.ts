@@ -15,6 +15,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   coach_vouch_weight_enabled: true,
   vouch_requests_per_24h: 10,
   vouch_update_cooldown_days: 1,
+  // A comment can now be written without a rating attached (master_plan §2B), which is a new way to
+  // write on a stranger's profile, so it gets its own rolling cap. 10/day is generous for a real
+  // player and cheap to lower. 0 = unlimited; the one-active-comment-per-pair rule still applies.
+  player_comments_per_24h: 10,
 
   // Vouch weight model (handover §10.5). Skill-Verified status and Facebook do NOT affect weight.
   weight_normal: 1.0,

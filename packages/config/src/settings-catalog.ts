@@ -159,6 +159,15 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     min: 0,
     max: 365,
   },
+  {
+    key: 'player_comments_per_24h',
+    label: 'Profile comments / 24h',
+    group: 'vouch_limits',
+    kind: 'int',
+    min: 0,
+    max: 1000,
+    help: 'A comment no longer needs a rating attached. 0 = unlimited.',
+  },
 
   // Vouch weights
   {

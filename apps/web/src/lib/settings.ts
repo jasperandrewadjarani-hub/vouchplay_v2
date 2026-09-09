@@ -48,6 +48,7 @@ export interface VouchSettings {
     coachPer24h: number;
     requestsPer24h: number;
     updateCooldownDays: number;
+    commentsPer24h: number;
   };
   skillVerified: { minSts: number; minUniqueVouchers: number };
   stsConstants: {
@@ -146,6 +147,7 @@ export async function getVouchSettings(): Promise<VouchSettings> {
       playerPer24h: num(m, 'player_vouches_per_24h'),
       coachPer24h: num(m, 'coach_vouches_per_24h'),
       requestsPer24h: num(m, 'vouch_requests_per_24h'),
+      commentsPer24h: num(m, 'player_comments_per_24h'),
       updateCooldownDays: num(m, 'vouch_update_cooldown_days'),
     },
     skillVerified: {

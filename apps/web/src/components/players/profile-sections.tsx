@@ -1,30 +1,10 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { SKILL_BANDS } from '@vouchplay/config';
-import { PlayerAvatar } from './player-avatar';
-import { CommentReportButton } from '@/components/safety/comment-report-button';
-import { formatDate, formatShortMonthYear } from '@/lib/format-date';
+import { formatShortMonthYear } from '@/lib/format-date';
+import { SectionCard } from './section-card';
 
-/** Titled card wrapper for profile sections (handover §9). */
-export function SectionCard({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-border bg-surface rounded-2xl border p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-foreground text-base font-semibold">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
+export { SectionCard };
 
 function EmptyNote({ children }: { children: ReactNode }) {
   return <p className="text-foreground-muted text-sm">{children}</p>;
@@ -136,75 +116,6 @@ export function ContributionProgress({
           </p>
         </div>
       )}
-    </SectionCard>
-  );
-}
-
-export interface CommentView {
-  id: string;
-  authorName: string;
-  authorSlug: string | null;
-  authorInitials: string;
-  authorAvatarUrl: string | null;
-  date: string;
-  body: string;
-}
-
-export function VouchComments({
-  comments,
-  authed = false,
-}: {
-  comments: CommentView[];
-  authed?: boolean;
-}) {
-  if (comments.length === 0) {
-    return (
-      <SectionCard title="Vouch comments">
-        <EmptyNote>
-          No comments yet. Vouch comments are always attributed to their author, even when the skill
-          rating itself is anonymous.
-        </EmptyNote>
-      </SectionCard>
-    );
-  }
-  return (
-    <SectionCard title={`Vouch comments (${comments.length})`}>
-      <ul className="space-y-3">
-        {comments.map((c) => (
-          <li
-            key={c.id}
-            className="border-border flex gap-3 border-b pb-3 last:border-b-0 last:pb-0"
-          >
-            <PlayerAvatar
-              url={c.authorAvatarUrl}
-              initials={c.authorInitials}
-              name={c.authorName}
-              size="sm"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                {c.authorSlug ? (
-                  <Link
-                    href={`/players/${c.authorSlug}`}
-                    className="hover:text-primary text-sm font-medium"
-                  >
-                    {c.authorName}
-                  </Link>
-                ) : (
-                  <span className="text-sm font-medium">{c.authorName}</span>
-                )}
-                <time className="text-foreground-muted text-xs">{formatDate(c.date)}</time>
-              </div>
-              <p className="text-foreground mt-0.5 text-sm">{c.body}</p>
-              {authed && (
-                <div className="mt-1">
-                  <CommentReportButton commentId={c.id} authorName={c.authorName} />
-                </div>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
     </SectionCard>
   );
 }

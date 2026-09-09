@@ -24,10 +24,10 @@ import {
 } from '@/components/players/badges';
 import {
   SkillDistribution,
-  VouchComments,
   PlayingHistory,
   ContributionProgress,
 } from '@/components/players/profile-sections';
+import { VouchComments } from '@/components/players/vouch-comments';
 import { AchievementsPanel } from '@/components/players/achievements-panel';
 import { SkillTagsPanel } from '@/components/players/skill-tags-panel';
 import {
@@ -226,7 +226,15 @@ export default async function PlayerProfilePage({ params }: Params) {
         tags={skillTags}
       />
       <PlayingHistory history={history} />
-      <VouchComments comments={comments} authed={authed} />
+      <VouchComments
+        comments={comments}
+        authed={authed}
+        viewerId={viewer.viewerId}
+        isOwnProfile={player.isOwnProfile}
+        targetId={player.id}
+        targetName={player.displayName.split(' ')[0] || player.displayName}
+        slug={slug}
+      />
     </div>
   );
 }

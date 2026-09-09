@@ -25,3 +25,28 @@ export const vouchRequestSchema = z.object({
   message: z.string().trim().max(500, 'Message is too long').optional().or(z.literal('')),
 });
 export type VouchRequestInput = z.infer<typeof vouchRequestSchema>;
+
+/**
+ * A comment on a player's profile, written with or without a rating (master_plan §2B). The body
+ * bounds match the `vouch_comments.body` CHECK (1..1000) exactly, so the form refuses what the
+ * database would refuse rather than surfacing a constraint violation to a real person.
+ */
+export const profileCommentSchema = z.object({
+  targetId: z.string().uuid('Invalid player'),
+  body: z
+    .string()
+    .trim()
+    .min(1, 'Write something first')
+    .max(1000, 'Comment is too long (1000 characters max)'),
+});
+export type ProfileCommentInput = z.infer<typeof profileCommentSchema>;
+
+export const profileCommentEditSchema = z.object({
+  commentId: z.string().uuid('Invalid comment'),
+  body: z
+    .string()
+    .trim()
+    .min(1, 'Write something first')
+    .max(1000, 'Comment is too long (1000 characters max)'),
+});
+export type ProfileCommentEditInput = z.infer<typeof profileCommentEditSchema>;
