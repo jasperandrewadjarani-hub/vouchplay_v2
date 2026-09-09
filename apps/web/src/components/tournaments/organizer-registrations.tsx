@@ -2,7 +2,7 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Receipt } from 'lucide-react';
+import { ChevronRight, Clock, Receipt, Search, TriangleAlert } from 'lucide-react';
 import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
 import {
   ELIGIBILITY_RESULT_LABELS,
@@ -25,6 +25,19 @@ import {
   getProofSignedUrl,
 } from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
+import {
+  amountLabel,
+  countEntries,
+  DEFAULT_FILTERS,
+  filterEntries,
+  hasUnconfirmedPartner,
+  sortEntries,
+  statusChip,
+  teamLabel,
+  type EntryFilters,
+  type StatusChip,
+} from '@/lib/tournaments/entry-view';
+import { Modal } from '@/components/ui/modal';
 
 export interface EligibilityDivisionOption {
   id: string;
@@ -35,14 +48,18 @@ export interface EligibilityDivisionOption {
 
 type ActionResult = { ok?: boolean; error?: string; message?: string };
 
-const ELIG_FILTER_LABELS: Record<string, string> = {
-  eligible: 'Eligible',
-  review: 'Needs review',
-  skill_mismatch: 'Potential skill mismatch',
-  ineligible_hard_rule: 'Does not meet a rule',
-};
-
-/** Organizer registrations dashboard (handover §26.4) with filters + the §25.5 eligibility support. */
+/**
+ * Organizer registrations (handover §26.4, master_plan §1Z).
+ *
+ * Rebuilt as a list of rows plus a detail sheet, the shape a form-response tool uses, because the
+ * previous screen expanded every entry inline: withdrawn entries filled the page by default, the
+ * people in a team were buried under controls, and there was no way to see the applicants at a
+ * glance or to find the ones that needed a decision.
+ *
+ * The organising principle is: the list answers "who is here and what needs me?", and the sheet
+ * answers "everything about this one entry". Nothing that needs a decision is more than two taps
+ * away, and nothing that does not need a decision takes up space.
+ */
 export function OrganizerRegistrations({
   tournamentId,
   registrations,
@@ -52,70 +69,74 @@ export function OrganizerRegistrations({
   registrations: OrganizerRegistration[];
   divisions: EligibilityDivisionOption[];
 }) {
-  const [division, setDivision] = useState('all');
-  const [status, setStatus] = useState('all');
-  const [eligibility, setEligibility] = useState('all');
-  const [payment, setPayment] = useState('all');
+  const [filters, setFilters] = useState<EntryFilters>(DEFAULT_FILTERS);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   if (registrations.length === 0) {
     return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
   }
 
-  const statusOptions = Array.from(new Set(registrations.map((r) => r.status))).sort();
-  const paymentOptions = Array.from(
-    new Set(registrations.map((r) => r.paymentStatus).filter((p): p is string => !!p)),
-  ).sort();
-  const eligibilityOptions = Array.from(new Set(registrations.map((r) => r.eligibilityStatus)));
+  const counts = countEntries(registrations);
+  const visible = sortEntries(filterEntries(registrations, filters));
+  const selected = registrations.find((r) => r.id === openId) ?? null;
 
-  const filtered = registrations.filter(
-    (r) =>
-      (division === 'all' || r.divisionName === division) &&
-      (status === 'all' || r.status === status) &&
-      (eligibility === 'all' || r.eligibilityStatus === eligibility) &&
-      (payment === 'all' || (r.paymentStatus ?? '') === payment),
-  );
-
-  const byDivision = new Map<string, OrganizerRegistration[]>();
-  for (const r of filtered) {
-    const arr = byDivision.get(r.divisionName) ?? [];
-    arr.push(r);
-    byDivision.set(r.divisionName, arr);
-  }
-
-  const sel =
-    'border-border bg-background rounded-lg border px-2 py-1 text-xs focus-visible:outline-2 focus-visible:outline-offset-2';
-
-  // Receipts arrive faster than anyone can scroll for them. This is the queue an organizer lives in
-  // once payments start landing: one tap, with a live count, onto exactly the entries that need a
-  // human decision (master_plan §1U).
-  const awaitingReview = registrations.filter((r) => r.paymentStatus === 'submitted').length;
-  const reviewing = payment === 'submitted';
+  // Queues, not statuses. A status list makes an organizer translate database words into decisions;
+  // these are the decisions, each with a live count so an empty queue is visibly empty.
+  const queues: { key: EntryFilters['queue']; label: string; count: number }[] = [
+    { key: 'all', label: 'All open', count: counts.open },
+    { key: 'needs_payment_review', label: 'Check payment', count: counts.needsPaymentReview },
+    { key: 'cancellation_requested', label: 'Cancellations', count: counts.cancellationRequested },
+    { key: 'needs_eligibility_review', label: 'Eligibility', count: counts.needsEligibilityReview },
+  ];
 
   return (
-    <div className="space-y-4">
-      {awaitingReview > 0 && (
-        <button
-          type="button"
-          aria-pressed={reviewing}
-          onClick={() => {
-            setPayment(reviewing ? 'all' : 'submitted');
-            if (!reviewing) setStatus('all');
-          }}
-          className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-xl border px-4 text-sm font-semibold transition-colors ${
-            reviewing
-              ? 'vp-gradient border-transparent text-white'
-              : 'border-warning/40 bg-warning/10 text-foreground hover:border-warning'
-          }`}
+    <div className="space-y-3">
+      <div className="relative">
+        <Search
+          size={15}
+          className="text-foreground-muted pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
+          aria-hidden
+        />
+        <input
+          value={filters.search}
+          onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+          placeholder="Search a player or team"
+          aria-label="Search registrations by player name"
+          className="border-border bg-background text-foreground placeholder:text-foreground-muted min-h-[44px] w-full rounded-xl border pr-3 pl-9 text-sm"
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {queues.map((q) => {
+          const active = filters.queue === q.key;
+          const urgent = q.key !== 'all' && q.count > 0;
+          return (
+            <button
+              key={q.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setFilters({ ...filters, queue: q.key })}
+              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors ${
+                active
+                  ? 'vp-gradient border-transparent text-white'
+                  : urgent
+                    ? 'border-warning/40 bg-warning/10 text-foreground'
+                    : 'border-border text-foreground-muted'
+              }`}
+            >
+              {q.label}
+              <span className={active ? 'text-white/80' : 'text-foreground-muted'}>{q.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={filters.divisionName}
+          onChange={(e) => setFilters({ ...filters, divisionName: e.target.value })}
+          className="border-border bg-background text-foreground min-h-[44px] rounded-xl border px-3 text-xs"
         >
-          <Receipt size={16} aria-hidden />
-          {reviewing
-            ? `Showing ${awaitingReview} awaiting payment review - tap to show all`
-            : `${awaitingReview} payment${awaitingReview === 1 ? '' : 's'} awaiting your review`}
-        </button>
-      )}
-      {/* Filters (§26.4) */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <select value={division} onChange={(e) => setDivision(e.target.value)} className={sel}>
           <option value="all">All divisions</option>
           {divisions.map((d) => (
             <option key={d.id} value={d.name}>
@@ -123,56 +144,105 @@ export function OrganizerRegistrations({
             </option>
           ))}
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className={sel}>
-          <option value="all">Any status</option>
-          {statusOptions.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, ' ')}
-            </option>
-          ))}
-        </select>
-        <select
-          value={eligibility}
-          onChange={(e) => setEligibility(e.target.value)}
-          className={sel}
-        >
-          <option value="all">Any eligibility</option>
-          {eligibilityOptions.map((s) => (
-            <option key={s} value={s}>
-              {ELIG_FILTER_LABELS[s] ?? s}
-            </option>
-          ))}
-        </select>
-        {paymentOptions.length > 0 && (
-          <select value={payment} onChange={(e) => setPayment(e.target.value)} className={sel}>
-            <option value="all">Any payment</option>
-            {paymentOptions.map((s) => (
-              <option key={s} value={s}>
-                {s.replace(/_/g, ' ')}
-              </option>
-            ))}
-          </select>
-        )}
-        <span className="text-foreground-muted text-xs">
-          {filtered.length} of {registrations.length}
-        </span>
+        {/* Closed entries are history, not work, so they are out of the way until asked for. */}
+        <label className="text-foreground-muted flex min-h-[44px] cursor-pointer items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={filters.includeClosed}
+            onChange={(e) => setFilters({ ...filters, includeClosed: e.target.checked })}
+            className="h-4 w-4"
+          />
+          Show cancelled and withdrawn ({counts.closed})
+        </label>
+        <span className="text-foreground-muted ml-auto text-xs">{visible.length} shown</span>
       </div>
 
-      {filtered.length === 0 ? (
-        <p className="text-foreground-muted text-sm">No registrations match these filters.</p>
+      {visible.length === 0 ? (
+        <p className="text-foreground-muted text-sm">
+          Nothing here.{' '}
+          {filters.queue !== 'all' ? 'That queue is clear.' : 'Try a different filter.'}
+        </p>
       ) : (
-        [...byDivision.entries()].map(([divisionName, regs]) => (
-          <div key={divisionName}>
-            <h3 className="text-foreground mb-2 text-sm font-semibold">{divisionName}</h3>
-            <ul className="space-y-2">
-              {regs.map((r) => (
-                <RegRow key={r.id} tournamentId={tournamentId} reg={r} divisions={divisions} />
-              ))}
-            </ul>
-          </div>
-        ))
+        <ul className="border-border divide-border divide-y overflow-hidden rounded-2xl border">
+          {visible.map((r) => (
+            <EntryRow key={r.id} entry={r} onOpen={() => setOpenId(r.id)} />
+          ))}
+        </ul>
+      )}
+
+      {selected && (
+        <Modal
+          title={teamLabel(selected)}
+          subtitle={selected.divisionName}
+          onClose={() => setOpenId(null)}
+          align="center"
+        >
+          <RegRow tournamentId={tournamentId} reg={selected} divisions={divisions} />
+        </Modal>
       )}
     </div>
+  );
+}
+
+const TONE_STYLES: Record<StatusChip['tone'], string> = {
+  action: 'border-warning/40 bg-warning/10 text-warning',
+  waiting: 'border-border text-foreground-muted',
+  done: 'border-success/30 bg-success/10 text-success',
+  closed: 'border-border text-foreground-muted opacity-70',
+};
+
+/**
+ * One entry, scannable in a glance: who, which division, what it needs, how much. The whole row is
+ * the control - a small "Manage" link beside a tall row is a smaller target than the row itself.
+ */
+function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () => void }) {
+  const chip = statusChip(entry);
+  const amount = amountLabel(entry);
+  const unconfirmed = hasUnconfirmedPartner(entry);
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="hover:bg-surface-muted flex w-full items-center gap-3 px-3 py-3 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="text-foreground block truncate text-sm font-semibold">
+            {teamLabel(entry)}
+          </span>
+          <span className="text-foreground-muted mt-0.5 block truncate text-xs">
+            {entry.divisionName}
+            {amount ? ` · ${amount}` : ''}
+          </span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TONE_STYLES[chip.tone]}`}
+            >
+              {chip.label}
+            </span>
+            {unconfirmed && (
+              <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+                <Clock size={10} aria-hidden />
+                Partner not confirmed
+              </span>
+            )}
+            {entry.eligibilityStatus !== 'eligible' && (
+              <span className="border-warning/40 bg-warning/10 text-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+                <TriangleAlert size={10} aria-hidden />
+                {statusToLabel(entry.eligibilityStatus)}
+              </span>
+            )}
+            {entry.hasProof && (
+              <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+                <Receipt size={10} aria-hidden />
+                Receipt
+              </span>
+            )}
+          </span>
+        </span>
+        <ChevronRight size={16} className="text-foreground-muted shrink-0" aria-hidden />
+      </button>
+    </li>
   );
 }
 
@@ -233,7 +303,7 @@ function RegRow({
   const nameById = new Map(reg.members.map((m) => [m.id, m.name]));
 
   return (
-    <li className="border-border rounded-xl border p-2.5">
+    <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-foreground text-sm">
           {reg.members.map((m) => m.name).join(' & ') || 'Team'}
@@ -395,7 +465,7 @@ function RegRow({
       )}
 
       {msg && <p className="text-foreground-muted mt-1 text-xs">{msg}</p>}
-    </li>
+    </div>
   );
 }
 

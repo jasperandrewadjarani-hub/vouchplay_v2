@@ -2006,3 +2006,24 @@ Open items, highest value first:
   written, then pulled - it needs a transactional RPC (migration 0027) to swap a confirmed member
   atomically on a payment-bearing entry, and shipping copy that promises a capability the app does not
   have is worse than shipping no copy. That is the next slice.
+
+- **2026-09-09** - **The organizer's Manage screen is now a list of rows plus a detail sheet**
+  (master_plan §1Z). It used to expand every registration inline, so on a phone withdrawn entries
+  filled the page by default, the players in a team were buried under their own controls, there was
+  no glanceable view of applicants, and no way to find the entries needing a decision.
+  **Closed entries are hidden by default** behind a checkbox carrying its own count - they were the
+  biggest source of noise. **Entries needing a decision sort to the top.** **Search matches player
+  names**, because "did Maria get in?" is the question organizers are actually asked and no status
+  filter answers it. The whole row is the tap target, not a small Manage link beside it.
+  **Four filter dropdowns of database enums became four queue chips that are the decisions** - All
+  open / Check payment / Cancellations / Eligibility - each with a live count. An entry can be in more
+  than one queue (a paid entry whose player asked to cancel needs two decisions), and a **closed entry
+  is never in any queue**, whatever else is true of it.
+  **Cancellation requests are finally visible.** §1Y wrote them to `registration_events` but nothing
+  surfaced them; the organizer query now reads the newest open request per registration and it has its
+  own row flag, queue and count. A request nobody can find is not a request.
+  Rows also flag **partner not confirmed** (an entry can be paid while a named player has not
+  answered, under §1U) and the **eligibility verdict in plain words**, which is the skill-match signal
+  at a glance. All of it - queue membership, chip, team label, filtering, sorting, counts - lives in
+  one pure module `lib/tournaments/entry-view.ts` with **19 unit tests**, so the row, the sheet and the
+  counts cannot disagree. No migration.

@@ -1279,6 +1279,64 @@ inert and the only way to learn it had worked was to reload. It now disables wit
 request is in flight and confirms in place when it completes. Same rule as §1N: an action with no
 feedback reads as an action that failed.
 
+## 1Z. The organizer's list becomes a list (2026-09-09, post-launch)
+
+The Manage screen expanded every registration inline. On a phone that meant withdrawn entries filling
+the page by default, the people in a team buried under their own controls, no way to see the
+applicants at a glance, and no way to find the entries that needed a decision. It was a page of
+records where an organizer needed a queue of work.
+
+Rebuilt as **rows plus a detail sheet**, the shape a form-response tool uses, on one principle: the
+list answers *who is here and what needs me*, the sheet answers *everything about this one entry*.
+
+### The list
+
+- **One row per entry**, showing what an organizer actually scans for: the players by name, the
+  division, the amount, and a status chip. Never an id.
+- **The whole row is the control.** A small "Manage" link beside a tall row is a smaller target than
+  the row itself, which matters most for the people least comfortable with a phone.
+- **Closed entries are hidden by default**, behind a checkbox that carries its own count. Withdrawn
+  and cancelled entries are history, not work, and they were the single biggest source of noise.
+- **Entries needing a decision sort to the top**, newest first within each group, so opening the
+  screen lands on work rather than on a chronological archive.
+- **Search matches player names**, because "did Maria get in?" is the question an organizer is
+  actually asked, and no status filter can answer it.
+
+### Queues, not statuses
+
+The four filter dropdowns were a list of database enums an organizer had to translate into decisions.
+They are replaced by four chips that *are* the decisions, each with a live count: **All open**,
+**Check payment**, **Cancellations**, **Eligibility**.
+
+- An entry can sit in **more than one queue** - a paid entry whose player has asked to cancel needs
+  two decisions - so membership is a set, not a bucket.
+- **A closed entry is never in any queue**, whatever else is true of it. A queue that shows resolved
+  work is a queue that stops being trusted.
+- The status chip is chosen by **what the organizer must do next**, not by the raw column: a
+  cancellation request outranks a payment, and a payment outranks anything routine.
+
+### The row carries the flags that change the meaning of an entry
+
+- **Partner not confirmed**, because under pay-first (§1U) an entry can be paid while one named
+  player has still not answered, and that is not the same entry as a settled one.
+- **Receipt**, so a paid entry is visible before opening it.
+- **The eligibility verdict in plain words** when it is anything but eligible, which is the
+  skill-match signal at a glance rather than three taps down.
+
+### Cancellation requests are now visible
+
+§1Y let a player ask the organizer to cancel a paid entry and wrote it to `registration_events`, but
+nothing surfaced it. The organizer query now reads the newest open request per registration, the row
+shows it, the sheet shows the player's reason, and it has its own queue and count. **A request nobody
+can find is not a request.**
+
+### Everything lives in one pure module
+
+`lib/tournaments/entry-view.ts` owns queue membership, the status chip, the team label, filtering,
+sorting and the counts, with 19 unit tests. The row, the sheet and the queue counts all read from it,
+so they cannot disagree about what state an entry is in - which is exactly the class of bug that makes
+a dashboard untrustworthy.
+
 ## 1. Prompt Contract
 
 ### In scope

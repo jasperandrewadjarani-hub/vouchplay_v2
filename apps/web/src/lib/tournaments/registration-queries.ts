@@ -402,6 +402,10 @@ export interface OrganizerRegistration {
   slotHoldExpiresAt: string | null;
   createdAt: string;
   members: Mini[];
+  /** Player ids whose team membership is still unconfirmed (pay-first, §1U). */
+  unconfirmedMemberIds: string[];
+  /** An open player request for the organizer to cancel this entry (§1Y), newest first. */
+  cancellationRequest: { reason: string; requestedAt: string } | null;
   paymentId: string | null;
   paymentStatus: string | null;
   amountDue: number | null;
@@ -448,13 +452,37 @@ export async function getOrganizerRegistrations(
   const teamIds = regRows.map((r) => r.team_id);
   const { data: memberRows } = await svc
     .from('team_members')
-    .select('team_id, player_id, member_order')
+    .select('team_id, player_id, member_order, confirmed_at')
     .in('team_id', teamIds);
   const members = (memberRows ?? []) as {
     team_id: string;
     player_id: string;
     member_order: number;
+    confirmed_at: string | null;
   }[];
+
+  // Open cancellation requests, so the organizer can find and answer them (§1Z).
+  const { data: cancelRows } = await svc
+    .from('registration_events')
+    .select('registration_id, metadata, created_at')
+    .in(
+      'registration_id',
+      regRows.map((r) => r.id),
+    )
+    .eq('event_type', 'cancellation_requested')
+    .order('created_at', { ascending: false });
+  const cancelByReg = new Map<string, { reason: string; requestedAt: string }>();
+  for (const c of (cancelRows ?? []) as {
+    registration_id: string;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+  }[]) {
+    if (cancelByReg.has(c.registration_id)) continue;
+    cancelByReg.set(c.registration_id, {
+      reason: String(c.metadata?.reason ?? ''),
+      requestedAt: c.created_at,
+    });
+  }
   const profiles = await resolve(members.map((m) => m.player_id));
 
   // Payments for these registrations.
@@ -503,6 +531,10 @@ export async function getOrganizerRegistrations(
         .sort((a, b) => a.member_order - b.member_order)
         .map((m) => profiles.get(m.player_id))
         .filter((x): x is Mini => !!x),
+      unconfirmedMemberIds: members
+        .filter((m) => m.team_id === r.team_id && !m.confirmed_at)
+        .map((m) => m.player_id),
+      cancellationRequest: cancelByReg.get(r.id) ?? null,
       paymentId: pay?.id ?? null,
       paymentStatus: pay?.status ?? null,
       amountDue: pay ? Number(pay.amount_due) : null,
