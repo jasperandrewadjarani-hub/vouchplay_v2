@@ -106,6 +106,15 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
   ),
 
   // --- Registrations (§27.1 / §27.3) ---
+  // Critical: a player has asked to undo a payment that reached the organizer directly, so it must
+  // not be mutable and must be able to reach them by email (master_plan §1Y).
+  registration_cancellation_requested: t(
+    'registrations',
+    true,
+    (p) => `${who(p)} asked to cancel their entry`,
+    (p) => `${tour(p)}. Reason: ${p.reason ?? 'not given'}`,
+  ),
+
   registration_submitted: t(
     'registrations',
     false,

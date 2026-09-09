@@ -1,10 +1,12 @@
 'use client';
 
 import { useActionState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { submitPayment, type PaymentActionState } from '@/lib/actions/payment';
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
+import { PaidEntryActions } from './paid-entry-actions';
 
 const empty: PaymentActionState = {};
 
@@ -49,11 +51,7 @@ export function PaymentForm({
   }, [state.ok, router]);
 
   if (paymentStatus === 'submitted') {
-    return (
-      <p className="text-foreground-muted mt-2 text-xs">
-        Payment proof submitted - awaiting organizer review.
-      </p>
-    );
+    return <PaidEntryActions registrationId={registrationId} tournamentId={tournamentId} />;
   }
   if (paymentStatus === 'verified') return null;
 
@@ -75,15 +73,30 @@ export function PaymentForm({
       )}
       {methods && <p className="text-foreground-muted mt-1 text-xs">Accepted: {methods}</p>}
       {paymentQrUrl && (
-        <div className="mt-2">
-          <p className="text-foreground-muted mb-1 text-xs">Scan to pay</p>
-          {/* A signed Storage URL is required for this private organizer-uploaded QR. */}
+        <div className="mt-3">
+          <p className="text-foreground-muted mb-1.5 text-xs">Scan to pay</p>
+          {/* A signed Storage URL is required for this private organizer-uploaded QR. Rendered
+              larger than before and never squashed: a QR squeezed into a small box is a QR that
+              will not scan. `object-contain` keeps whatever aspect ratio the organizer uploaded. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={paymentQrUrl}
             alt="Payment QR code"
-            className="h-40 w-40 rounded-lg bg-white p-2"
+            className="h-56 w-56 rounded-xl bg-white object-contain p-3"
           />
+          {/* Most people pay from the same phone they are reading this on, and you cannot scan a
+             code with the device displaying it. Saving the original file lets them open it in a
+             gallery and scan it from their banking app (§1Y). */}
+          <a
+            href={paymentQrUrl}
+            download="vouchplay-payment-qr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="border-border text-foreground mt-2 inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 text-sm font-semibold"
+          >
+            <Download size={16} aria-hidden />
+            Save QR to your phone
+          </a>
         </div>
       )}
       {paymentStatus === 'rejected' && rejectionReason && (

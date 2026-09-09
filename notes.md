@@ -1980,3 +1980,29 @@ Open items, highest value first:
   **Class fix applied as well:** both lookups now inspect the PostgREST `error` and return "Could not
   look up that player" instead of letting a failed QUERY wear the "missing PLAYER" message. That
   mislabelling is what sent a real end-to-end test hunting for a bad handle.
+
+- **2026-09-09** - **Six fixes from Jasper's first real end-to-end run** (master_plan §1Y).
+  (1) The partner search flashed **"No players found"** before every result: `searching` was set
+  *inside* the 300ms debounce, leaving a window where the component was not searching, had no results
+  and had a long enough query - exactly the combination that renders the empty state. It is now set
+  before the debounce is armed. **Rule: a "nothing found" state must be reachable only from a
+  completed lookup, never a pending one.**
+  (2) **Enter and pay is now continuous**: the action returns the new `registrationId`, the form
+  navigates to `?entered=<id>#my-registrations`, and the panel opens on that entry. The anchor scrolls
+  natively, so this needed no client JavaScript.
+  (3) **The QR is bigger, `object-contain` (never squashed), and downloadable** via the existing
+  short-lived signed URL. Most people pay from the same phone they are reading on and cannot scan a
+  code with the device displaying it.
+  (4) **The refund copy is gone.** The submitted state now says "Payment submitted. This entry cannot
+  be changed while the organizer reviews it." plus a **Request to cancel** control with a reason.
+  It does not cancel anything and says so before it is pressed - once a receipt exists the money went
+  straight to the organizer. Stored as a `cancellation_requested` row in `registration_events`, which
+  is already the immutable per-registration history organizers read, so **no migration**. One open
+  request per entry. Organizers get a critical notification.
+  (5) **Cancelling an invitation shows a spinner and confirms in place** instead of needing a reload.
+  (6) Removed the stale "cancel, dissolve, re-invite" disclosure, which described a flow that has not
+  existed since pay-first.
+  **NOT shipped, deliberately: post-payment partner change.** Jasper asked for it and the copy was
+  written, then pulled - it needs a transactional RPC (migration 0027) to swap a confirmed member
+  atomically on a payment-bearing entry, and shipping copy that promises a capability the app does not
+  have is worse than shipping no copy. That is the next slice.

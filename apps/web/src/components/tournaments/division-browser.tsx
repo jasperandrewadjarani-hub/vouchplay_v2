@@ -3,7 +3,6 @@ import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-reac
 import { evaluateSkillFloor, effectivePlayerSkill } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { InfoDisclosure } from '@/components/ui/info-disclosure';
 import { RegisterActions } from './register-actions';
 import { PartnerInviteForm } from './partner-invite-form';
 import { quoteFee, formatFee } from '@vouchplay/core';

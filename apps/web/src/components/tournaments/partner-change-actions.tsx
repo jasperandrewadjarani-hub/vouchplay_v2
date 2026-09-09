@@ -50,10 +50,15 @@ export function PartnerChangeActions({
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     if (q.trim().length < 2) {
+      setSearching(false);
       setResults([]);
       return;
     }
+    // Set BEFORE the debounce is armed. Setting it inside the timer left a 300ms window where the
+    // component was not searching, had no results, and had a long enough query - the exact
+    // combination that renders "No players found", so every search flashed a failure first (§1Y).
     setSearching(true);
+    setResults([]);
     timer.current = setTimeout(async () => {
       setResults(await searchInvitablePlayers(q));
       setSearching(false);

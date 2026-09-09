@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { respondInvitation, cancelInvitation } from '@/lib/actions/registration';
 
 /** Accept/decline (incoming) or cancel (outgoing) a partner invitation (handover §20.2). */
@@ -19,14 +20,24 @@ export function InvitationActions({
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function run(fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>) {
+  // Confirm in place rather than relying on a refresh: an action with no feedback reads as an
+  // action that failed, and the only way to learn Cancel had worked was to reload (§1N, §1Y).
+  function run(
+    fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>,
+    successText: string,
+  ) {
     setMsg(null);
+    setDone(null);
     start(async () => {
       const res = await fn();
       setMsg(res.error ?? null);
-      if (res.ok) router.refresh();
+      if (res.ok) {
+        setDone(res.message ?? successText);
+        router.refresh();
+      }
     });
   }
 
@@ -50,7 +61,7 @@ export function InvitationActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => respondInvitation(invitationId, true))}
+            onClick={() => run(() => respondInvitation(invitationId, true), 'Confirmed.')}
             className="vp-gradient min-h-[44px] flex-1 rounded-xl px-4 text-sm font-semibold text-white disabled:opacity-50"
           >
             Yes, I am playing
@@ -58,13 +69,18 @@ export function InvitationActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => respondInvitation(invitationId, false))}
+            onClick={() => run(() => respondInvitation(invitationId, false), 'Declined.')}
             className="border-border text-foreground min-h-[44px] flex-1 rounded-xl border px-4 text-sm font-semibold disabled:opacity-50"
           >
             No, I cannot play
           </button>
         </div>
         {msg && <p className="text-danger text-xs">{msg}</p>}
+        {done && !msg && (
+          <p className="text-foreground-muted text-xs" role="status">
+            {done}
+          </p>
+        )}
       </div>
     );
   }
@@ -76,7 +92,7 @@ export function InvitationActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => respondInvitation(invitationId, true))}
+            onClick={() => run(() => respondInvitation(invitationId, true), 'Confirmed.')}
             className={`${btn} vp-gradient text-white`}
           >
             Accept
@@ -84,7 +100,7 @@ export function InvitationActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => run(() => respondInvitation(invitationId, false))}
+            onClick={() => run(() => respondInvitation(invitationId, false), 'Declined.')}
             className={`${btn} border-border text-foreground border`}
           >
             Decline
@@ -93,14 +109,20 @@ export function InvitationActions({
       ) : (
         <button
           type="button"
-          disabled={pending}
-          onClick={() => run(() => cancelInvitation(invitationId))}
-          className={`${btn} border-border text-foreground border`}
+          disabled={pending || Boolean(done)}
+          onClick={() => run(() => cancelInvitation(invitationId), 'Invitation cancelled.')}
+          className={`${btn} border-border text-foreground inline-flex min-h-[44px] items-center gap-1.5 border disabled:opacity-60`}
         >
-          Cancel
+          {pending && <Loader2 size={13} className="animate-spin" aria-hidden />}
+          {pending ? 'Cancelling…' : done ? 'Cancelled' : 'Cancel'}
         </button>
       )}
       {msg && <span className="text-danger text-xs">{msg}</span>}
+      {done && !msg && (
+        <span className="text-foreground-muted text-xs" role="status">
+          {done}
+        </span>
+      )}
     </div>
   );
 }

@@ -1213,6 +1213,72 @@ score of exactly 1.0, qualifying purely on the member count against a minimum of
 lists clubs which have done nothing cheapens the ones that have. The default is now 5, which excludes
 empty clubs without touching anyone real - fifth place scores 41.
 
+## 1Y. One continuous path from partner to paid (2026-09-09, post-launch)
+
+Findings from Jasper's first real end-to-end run. Most are small; two are not.
+
+### The search said "No players found" before it had looked
+
+`searching` was set **inside** the 300ms debounce timer, so between the keystroke and the timer firing
+the component was in a state it should never have had: not searching, no results, query long enough.
+That combination renders the empty message, so every search flashed "No players found" and then
+produced players. It reads as a failure that corrected itself, which is worse than a slow answer.
+
+`searching` is now set the moment the query is long enough, before the debounce is armed, so the
+empty message can only appear after a search has actually returned nothing. **Rule: a "nothing found"
+state must be reachable only from a completed lookup, never from a pending one.**
+
+### Entering and paying is now one screen, not a hunt
+
+"Enter and pay" created the entry and then dropped the player back on the division list to find their
+own way to the payment form. The button promised two things and delivered one.
+
+The payment step now opens **in place, immediately**, in the same panel: on success the form swaps to
+the payment view for the new registration rather than refreshing the page. Nothing to scroll for and
+nothing to re-open, which matters most for the people who would give up at that point.
+
+### The QR is downloadable, because scanning a screenshot of a screen does not work
+
+The organizer's QR was rendered into a 160px box, so a player either scanned a distorted image or
+gave up. It is now shown larger with a **Save QR** control that downloads the original uploaded file
+untouched, so it can be opened in a gallery and scanned by a banking app on the same phone - which is
+how people actually pay.
+
+The download goes through the existing short-lived signed URL: the file stays private, and nothing
+about who may see it changes.
+
+### After submitting, say what is true and offer the one action that exists
+
+The old line - message the organizer for a refund - invited a conversation about money that VouchPlay
+does not process, and it was the wrong first thought after a successful payment.
+
+The state now reads plainly: **Payment submitted. This entry cannot be changed while it is reviewed.**
+Under it sit the two things a player can genuinely do:
+
+- **Request to cancel**, with a reason. This does not cancel anything: it records the request against
+  the entry and tells the organizer, and the copy says so. A button that pretends to cancel and then
+  does not is worse than no button.
+- **Change partner**, allowed after payment when the replacement fits the same division: same skill
+  band and the same sex classification. The fee, slot and waitlist position are untouched.
+
+**Cancellation requests need no new table.** They are written to `registration_events`, which is
+already the immutable per-registration history the organizer reads, with the reason in metadata.
+Inventing a table for a note that belongs on a timeline would be the wrong shape.
+
+**On replacing a partner who has already accepted.** §1D forbids a silent swap so that a teammate
+cannot be displaced without their knowledge, and that concern is real here. The rule kept is: the
+change is allowed, and **the removed partner is always notified**. Displacement without knowledge is
+the harm; displacement they are told about is a disagreement between two people, which is theirs to
+have. The eligibility constraint is enforced server-side, not merely described, so a player cannot
+route around a division's skill or sex rules by swapping partners after paying.
+
+### Cancelling an invitation now says it is working
+
+The Cancel control on an outgoing invitation had no pending state and no confirmation, so it looked
+inert and the only way to learn it had worked was to reload. It now disables with a spinner while the
+request is in flight and confirms in place when it completes. Same rule as §1N: an action with no
+feedback reads as an action that failed.
+
 ## 1. Prompt Contract
 
 ### In scope

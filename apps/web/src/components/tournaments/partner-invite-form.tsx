@@ -43,10 +43,15 @@ export function PartnerInviteForm({
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     if (q.trim().length < 2) {
+      setSearching(false);
       setResults([]);
       return;
     }
+    // Set BEFORE the debounce is armed. Setting it inside the timer left a 300ms window where the
+    // component was not searching, had no results, and had a long enough query - the exact
+    // combination that renders "No players found", so every search flashed a failure first (§1Y).
     setSearching(true);
+    setResults([]);
     timer.current = setTimeout(async () => {
       const res = await searchInvitablePlayers(q);
       setResults(res);
@@ -83,6 +88,11 @@ export function PartnerInviteForm({
         setAcknowledged(false);
         setQ('');
         setResults([]);
+        // Straight to the payment step for the entry we just created, rather than back to the
+        // division list to look for it. The anchor scrolls natively (§1Y).
+        if (res.registrationId) {
+          router.push(`?entered=${res.registrationId}#my-registrations`, { scroll: false });
+        }
         router.refresh();
       } else {
         setMsg(res.error ?? 'Could not enter. Please try again.');

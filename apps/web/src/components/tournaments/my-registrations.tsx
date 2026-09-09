@@ -2,7 +2,6 @@ import { CircleCheck, CircleDollarSign, Clock, ListChecks, TriangleAlert } from 
 import { quoteFee } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { InfoDisclosure } from '@/components/ui/info-disclosure';
 import { RegisterActions } from './register-actions';
 import { PaymentForm } from './payment-form';
 
@@ -47,6 +46,7 @@ export function MyRegistrations({
   paymentInstructions,
   paymentMethods,
   earlyBird = { startsAt: null, endsAt: null },
+  enteredRegistrationId = null,
 }: {
   tournamentId: string;
   divisions: DivisionDTO[];
@@ -57,6 +57,8 @@ export function MyRegistrations({
   paymentMethods: string | null;
   /** Tournament-wide early-bird window (§1V). */
   earlyBird?: { startsAt: string | null; endsAt: string | null };
+  /** A registration just created by this visit: open the panel straight onto it (§1Y). */
+  enteredRegistrationId?: string | null;
 }) {
   // One quote per division, so the price shown and the price charged come from the same function.
   const quoteFor = (d: DivisionDTO) =>
@@ -78,8 +80,20 @@ export function MyRegistrations({
     (e) => toneFor(e.reg.status, e.reg.paymentStatus, e.division!.feeAmount) === 'action',
   ).length;
 
+  // "Enter and pay" promised two things and used to deliver one, dropping the player back on the
+  // division list to hunt for the payment form. The action now returns the new registration id, the
+  // caller puts it in the URL, and this panel opens on it. The anchor does the scrolling natively,
+  // so the continuous flow needs no client JavaScript at all (§1Y).
+  const isNew = Boolean(
+    enteredRegistrationId && entries.some((e) => e.reg.id === enteredRegistrationId),
+  );
+
   return (
-    <details className="border-primary/30 bg-primary/5 rounded-2xl border">
+    <details
+      open={isNew}
+      id="my-registrations"
+      className="border-primary/30 bg-primary/5 scroll-mt-24 rounded-2xl border"
+    >
       <summary className="text-foreground flex cursor-pointer list-none items-center gap-2 p-4 text-base font-semibold">
         <ListChecks size={18} className="text-primary" aria-hidden />
         My registrations ({entries.length})
@@ -150,15 +164,10 @@ export function MyRegistrations({
                   }))}
                 />
               </div>
-              {d.format === 'doubles' && playerChangesConfigured && (
-                <div className="mt-2">
-                  <InfoDisclosure label="Change partner?">
-                    Cancel this registration before you submit payment. Your team is dissolved, your
-                    partner is notified, and you can invite a new partner. After payment or the
-                    change lock, contact the organizer.
-                  </InfoDisclosure>
-                </div>
-              )}
+              {/* The 'cancel, dissolve, re-invite' explanation that used to live here described a
+                  flow that no longer exists: under pay-first a team always carries a registration,
+                  so that path could never run (§1V). PartnerChangeActions and PaidEntryActions now
+                  each state the one thing that is true for the state the player is actually in. */}
             </li>
           );
         })}

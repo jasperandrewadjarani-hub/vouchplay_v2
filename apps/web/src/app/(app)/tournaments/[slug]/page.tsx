@@ -22,6 +22,7 @@ import { formatDate, formatDateTime, formatMonthDay } from '@/lib/format-date';
 
 interface Params {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -58,8 +59,9 @@ function fmtDay(dt: string | null): string | null {
   return dt ? formatDate(dt) : null;
 }
 
-export default async function TournamentPage({ params }: Params) {
+export default async function TournamentPage({ params, searchParams }: Params) {
   const { slug } = await params;
+  const sp = (await searchParams) ?? {};
   const viewer = await getViewerContext();
   const t = await getTournamentBySlug(slug, { viewerId: viewer.viewerId, isStaff: viewer.isStaff });
   if (!t) notFound();
@@ -176,6 +178,7 @@ export default async function TournamentPage({ params }: Params) {
           paymentInstructions={t.paymentInstructions}
           paymentMethods={t.paymentMethods}
           earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
+          enteredRegistrationId={typeof sp.entered === 'string' ? sp.entered : null}
         />
       )}
 

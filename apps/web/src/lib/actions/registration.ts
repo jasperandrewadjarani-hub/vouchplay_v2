@@ -21,6 +21,8 @@ import {
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 
 export interface RegistrationActionState {
+  /** Set when an action creates a registration, so the UI can go straight to its payment step. */
+  registrationId?: string;
   ok?: boolean;
   error?: string;
   message?: string;
@@ -317,6 +319,7 @@ export async function enterWithPendingPartner(
     await revalTournament(tournamentId);
     return {
       ok: true,
+      registrationId: regId,
       message:
         status === 'waitlisted'
           ? 'This division is full, so your team joined the waitlist. Your partner has been notified.'
@@ -732,6 +735,97 @@ export async function registerSolo(
   } catch {
     return { error: 'Registration is temporarily unavailable.' };
   }
+}
+
+/**
+ * Ask the organizer to cancel a paid entry.
+ *
+ * This does NOT cancel anything, and the copy says so. Once a receipt exists the money is out of
+ * VouchPlay's hands - it was sent directly to the organizer - so only they can undo it. The request
+ * is recorded against the entry and the organizer is told (master_plan §1Y).
+ *
+ * No new table: `registration_events` is already the immutable per-registration history the organizer
+ * reads, and a request is exactly a note on that timeline.
+ */
+export async function requestRegistrationCancellation(
+  registrationId: string,
+  tournamentId: string,
+  reason: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const trimmed = reason.trim();
+  if (trimmed.length < 5) return { error: 'Please say briefly why you need to cancel.' };
+  if (trimmed.length > 500) return { error: 'Please keep the reason under 500 characters.' };
+
+  const svc = createServiceClient();
+  try {
+    const { data: reg, error: regError } = await svc
+      .from('registrations')
+      .select('id, team_id, tournament_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    if (regError) return { error: 'Could not load that entry. Please try again.' };
+    const row = reg as {
+      id: string;
+      team_id: string;
+      tournament_id: string;
+      status: string;
+    } | null;
+    if (!row || row.tournament_id !== tournamentId) return { error: 'Entry not found.' };
+    if (['withdrawn', 'cancelled', 'rejected'].includes(row.status))
+      return { error: 'This entry is already closed.' };
+
+    const { data: member } = await svc
+      .from('team_members')
+      .select('player_id')
+      .eq('team_id', row.team_id)
+      .eq('player_id', user.id)
+      .maybeSingle();
+    if (!member) return { error: 'You are not on this team.' };
+
+    // One open request at a time, so a frustrated tap does not spam the organizer's timeline.
+    const { data: existing } = await svc
+      .from('registration_events')
+      .select('id')
+      .eq('registration_id', registrationId)
+      .eq('event_type', 'cancellation_requested')
+      .limit(1);
+    if ((existing ?? []).length > 0)
+      return { error: 'You have already asked the organizer to cancel this entry.' };
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'cancellation_requested',
+      from_status: row.status,
+      to_status: row.status,
+      metadata: { reason: trimmed },
+    });
+
+    const [me, tm, organizerIds] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(tournamentId),
+      getTournamentOrganizerIds(tournamentId),
+    ]);
+    if (organizerIds.length) {
+      await notifyMany(organizerIds, {
+        type: 'registration_cancellation_requested',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name, reason: trimmed },
+        link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return {
+    ok: true,
+    message: 'Sent. The organizer will review your request and get back to you.',
+  };
 }
 
 export async function withdrawRegistration(

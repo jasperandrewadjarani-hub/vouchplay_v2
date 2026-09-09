@@ -92,11 +92,11 @@ export function RegisterActions({
             Cancel registration
           </button>
         )}
-        {needsOrganiserToCancel && (
+        {/* Once a receipt exists, PaidEntryActions owns this state and offers Request to cancel.
+           Two different explanations of the same situation is one too many (§1Y). */}
+        {needsOrganiserToCancel && !paymentStarted && (
           <p className="text-foreground-muted max-w-sm text-xs">
-            {paymentStarted
-              ? 'You have already paid, so cancelling has to go through the organizer. Message them and they can refund you and release your slot.'
-              : 'This entry can no longer be cancelled here. Contact the organizer for help.'}
+            This entry can no longer be cancelled here. Contact the organizer for help.
           </p>
         )}
         {canMove && (
