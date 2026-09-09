@@ -1965,3 +1965,18 @@ Open items, highest value first:
   participation stop appearing on the board on member count alone. **The DB row still pins it to 1**,
   so Jasper must change it in Admin -> System settings and rebuild; a direct write from here would
   leave the settings audit trail showing the wrong actor. See master_plan §1X.
+
+- **2026-09-09** - **BUG (mine): the entire pay-first doubles path was broken from the moment it
+  shipped.** "Enter and pay" always returned "No player found with that handle." The cause:
+  `enterWithPendingPartner` and `replacePendingPartner` selected **`onboarding_completed_at`**, a
+  column that does not exist - the real one is **`onboarded_at`**. PostgREST returned
+  `400 / 42703 column does not exist`, `data` came back null, and the code read null as "no such
+  player". Proven against production: the old select returns 400, the new one 200, and the exact
+  partner in Jasper's screenshot (`jasper-72838c`) resolves as active and onboarded.
+  **Why five green gates missed it:** the Supabase `.select()` argument is an unchecked string, and
+  the result was cast with a type *assertion* rather than validated, so TypeScript happily believed a
+  field that never existed. Type assertions on query results hide schema drift - the DB types in
+  `packages/db` are hand-synced, which is exactly the condition where this bites.
+  **Class fix applied as well:** both lookups now inspect the PostgREST `error` and return "Could not
+  look up that player" instead of letting a failed QUERY wear the "missing PLAYER" message. That
+  mislabelling is what sent a real end-to-end test hunting for a bad handle.

@@ -241,7 +241,7 @@ export async function enterWithPendingPartner(
 
   const svc = createServiceClient();
   try {
-    const [{ data: division }, { data: invitee }] = await Promise.all([
+    const [{ data: division }, { data: invitee, error: inviteeError }] = await Promise.all([
       svc
         .from('divisions')
         .select('id, tournament_id, format, status')
@@ -249,21 +249,25 @@ export async function enterWithPendingPartner(
         .maybeSingle(),
       svc
         .from('profiles')
-        .select('id, account_status, onboarding_completed_at')
+        .select('id, account_status, onboarded_at')
         .eq('slug', v.inviteeSlug)
         .maybeSingle(),
     ]);
+    // A failed QUERY is not a missing PLAYER. Reporting one as the other sent a real end-to-end test
+    // hunting for a bad handle when the column name was wrong - the lookup 400d and the null result
+    // read as 'no such player'. Never let a query failure wear that message.
+    if (inviteeError) return { error: 'Could not look up that player. Please try again.' };
     const div = division as { tournament_id: string; format: string; status: string } | null;
     const inv = invitee as {
       id: string;
       account_status: string;
-      onboarding_completed_at: string | null;
+      onboarded_at: string | null;
     } | null;
     if (!div || div.tournament_id !== tournamentId) return { error: 'Division not found.' };
     if (div.format !== 'doubles') return { error: 'Partner entry is only for doubles divisions.' };
     if (!inv) return { error: 'No player found with that handle.' };
     if (inv.id === user.id) return { error: 'You cannot enter yourself as your own partner.' };
-    if (inv.account_status !== 'active' || !inv.onboarding_completed_at)
+    if (inv.account_status !== 'active' || !inv.onboarded_at)
       return {
         error: 'That player cannot be entered yet. Ask them to finish their profile first.',
       };
@@ -351,19 +355,20 @@ export async function replacePendingPartner(
 
   const svc = createServiceClient();
   try {
-    const { data: invitee } = await svc
+    const { data: invitee, error: inviteeError } = await svc
       .from('profiles')
-      .select('id, account_status, onboarding_completed_at')
+      .select('id, account_status, onboarded_at')
       .eq('slug', v.inviteeSlug)
       .maybeSingle();
+    if (inviteeError) return { error: 'Could not look up that player. Please try again.' };
     const inv = invitee as {
       id: string;
       account_status: string;
-      onboarding_completed_at: string | null;
+      onboarded_at: string | null;
     } | null;
     if (!inv) return { error: 'No player found with that handle.' };
     if (inv.id === user.id) return { error: 'You cannot enter yourself as your own partner.' };
-    if (inv.account_status !== 'active' || !inv.onboarding_completed_at)
+    if (inv.account_status !== 'active' || !inv.onboarded_at)
       return {
         error: 'That player cannot be entered yet. Ask them to finish their profile first.',
       };
