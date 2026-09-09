@@ -14,7 +14,7 @@
  * new players out of the tournament they joined VouchPlay to enter.
  */
 
-export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_below' | 'skill_above';
+export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_too_high';
 
 export interface DivisionFitInput {
   /** 'male' | 'female' | anything else | null when the player has not said. */
@@ -25,6 +25,11 @@ export interface DivisionFitInput {
   skillPolicy: string;
   divisionMinimumSkill: number | null;
   divisionMaximumSkill: number | null;
+  /**
+   * The organizer's "Only allow players at each division's level or higher" setting. When it is
+   * off, skill never blocks at all. It is the only thing that governs the skill rule.
+   */
+  enforceSkillFloor: boolean;
 }
 
 export interface DivisionFitResult {
@@ -51,14 +56,18 @@ export function evaluateDivisionFit(input: DivisionFitInput): DivisionFitResult 
   if (sex === 'men' && input.playerSex !== 'male') return { fits: false, reason: 'sex' };
   if (sex === 'women' && input.playerSex !== 'female') return { fits: false, reason: 'sex' };
 
-  if (input.skillPolicy !== 'open' && input.effectiveSkill != null) {
-    const s = input.effectiveSkill;
-    if (input.divisionMinimumSkill != null && s < input.divisionMinimumSkill) {
-      return { fits: false, reason: 'skill_below' };
-    }
-    if (input.divisionMaximumSkill != null && s > input.divisionMaximumSkill) {
-      return { fits: false, reason: 'skill_above' };
-    }
+  // Playing UP is allowed, always. A Low Intermediate entering a High Intermediate division is
+  // choosing a harder game, which no rule should stand in the way of. Only playing DOWN is refused,
+  // and only when the organizer has asked for it - that is what their "level or higher" setting says
+  // in so many words, and it is the whole of the skill rule.
+  if (
+    input.enforceSkillFloor &&
+    input.skillPolicy !== 'open' &&
+    input.effectiveSkill != null &&
+    input.divisionMaximumSkill != null &&
+    input.effectiveSkill > input.divisionMaximumSkill
+  ) {
+    return { fits: false, reason: 'skill_too_high' };
   }
   return { fits: true, reason: null };
 }
@@ -105,14 +114,14 @@ export function describeDivisionFit(reason: DivisionFitReason, ctx: FitMessageCo
   }
 
   const band = ctx.bandLabel ?? 'this level';
-  const level = ctx.playerLevel ? ` ${owns} level is ${ctx.playerLevel}.` : '';
+  // Sentence-cased, because this follows a full stop. "and above. your level is" shipped once.
+  const level = ctx.playerLevel
+    ? ` ${ctx.subject === 'you' ? 'Your' : 'Their'} level is ${ctx.playerLevel}.`
+    : '';
 
-  if (reason === 'skill_below') {
-    return ctx.subject === 'you'
-      ? `${ctx.divisionName} is for ${band} players and above.${level} Try a division at your own level.`
-      : `${who} is below the level ${ctx.divisionName} is for (${band}).${level} Pick a division you can both enter.`;
-  }
+  // The only skill refusal left: the player is too strong for this division. Playing up is allowed,
+  // so there is no message for it - there is nothing to refuse.
   return ctx.subject === 'you'
-    ? `${ctx.divisionName} is for ${band} players.${level} You play above this division, so enter one at your own level.`
-    : `${who} plays above the level ${ctx.divisionName} is for (${band}).${level} Pick a division you can both enter.`;
+    ? `${ctx.divisionName} is for ${band} players.${level} You can enter any division at your level or above.`
+    : `${who} plays above ${ctx.divisionName}, which is for ${band} players.${level} Pick a division at ${owns} level or above.`;
 }

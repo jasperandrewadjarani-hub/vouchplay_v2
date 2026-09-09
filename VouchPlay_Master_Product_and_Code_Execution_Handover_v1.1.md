@@ -1,7 +1,7 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.33
+# VouchPlay Master Product & Code Execution Handover v1.34
 
 _(File retains its `…v1.1.md` name; content is v1.32 - see Changelog.)_
 
@@ -6152,6 +6152,43 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.34 (2026-09-09)
+
+_Corrects the skill half of v1.33. Migration 0030 is written and NOT yet applied; the code ships
+first because it only widens what is allowed._
+
+- **A player may always enter a division ABOVE their own level (§2F). v1.33 got this wrong and this
+  entry overrides it.** §2D read "does not meet a division rule" as the band being a fence on both
+  sides, so a Low Intermediate player was refused entry to a High Intermediate division. The
+  organizer's own setting had been stating the real rule in plain words the whole time - **"Only
+  allow players at each division's level or higher: players cannot join a division BELOW their skill
+  level"** - one direction, not two. Entering a harder division is a player choosing a harder game,
+  and nothing should stand in the way of it. There is now deliberately **no `minimum_skill` check
+  anywhere**; the ceiling check remains and is gated on `enforce_skill_floor`, so with that setting
+  off skill never blocks at all. Sex classification is untouched and stays a hard rule governed by no
+  setting. **v1.33's claim that the organizer setting had become redundant is withdrawn: it is the
+  entire skill rule**, means exactly what its label says, and must not be relabelled or retired -
+  that claim was a second consequence of the same mistake. The reason enum drops `skill_below` and
+  renames `skill_above` to **`skill_too_high`**, because "above" and "below" never said whether they
+  described the player or the division, and that ambiguity is what produced the bug. Migration 0030
+  brings the SQL twin into line; it only widens what is accepted, so it cannot invalidate an existing
+  entry, and until it is applied a partner CHANGE can still refuse a legitimate playing-up swap even
+  though registering no longer does.
+- **A sentence started with a lowercase word in production.** The refusal read *"is for High
+  Intermediate players and above. your level is Low Intermediate"* - the clause was built from a
+  possessive (`your`/`their`) that reads correctly mid-sentence and wrong at the start of one. Copy
+  assembled from fragments needs to know where the sentence boundaries are.
+- **Players can filter to the divisions they can actually enter (§2F).** Sixteen divisions, of which
+  any one player can enter a handful. **Only show divisions I can join** is a plain labelled switch
+  under the Divisions header, carrying its own count - *"6 of 16 match your profile"* - so the control
+  says what it will do before it is touched. **Off by default**, because a list that silently hides
+  most of itself invites "where did the rest go?", and the count advertises the filter without hiding
+  anything first. It appears **only when it would hide something**: a player who fits every division
+  never sees it, since a control that changes nothing is one more thing to read past. Fit is computed
+  once per division and reused for the row's reason, the count and the filter, so the three cannot
+  disagree. When the filter empties the list it says so and points back at the way out, rather than
+  showing an empty box.
 
 ## v1.33 (2026-09-09)
 

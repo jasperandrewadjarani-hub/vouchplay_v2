@@ -10,7 +10,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
-import { TOURNAMENTS_LIST_TAG, tournamentTag } from '@/lib/tournaments/queries';
+import { TOURNAMENTS_LIST_TAG, tournamentTag, getTournamentRules } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 import { checkDivisionFit } from '@/lib/tournaments/division-fit-check';
 import { notify, notifyMany } from '@/lib/notifications/create';
@@ -534,6 +534,7 @@ export interface PlayerSearchResult {
 /** The division columns the fit rule needs. Kept here so the shape is checked in one place. */
 interface DivisionRuleShape {
   id: string;
+  tournament_id: string;
   name_override: string | null;
   skill_policy: string;
   minimum_skill: number | null;
@@ -596,7 +597,7 @@ export async function searchInvitablePlayers(
       svc
         .from('divisions')
         .select(
-          'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+          'id, tournament_id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
         )
         .eq('id', divisionId)
         .maybeSingle(),
@@ -610,6 +611,7 @@ export async function searchInvitablePlayers(
     ]);
     const div = divRow as DivisionRuleShape | null;
     if (div) {
+      const { enforceSkillFloor } = await getTournamentRules(div.tournament_id);
       const community = new Map(
         ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
           (r) => [r.player_id, r.community_skill_level],
@@ -633,6 +635,7 @@ export async function searchInvitablePlayers(
           skillPolicy: div.skill_policy,
           divisionMinimumSkill: div.minimum_skill,
           divisionMaximumSkill: div.maximum_skill,
+          enforceSkillFloor,
         });
         if (!verdict.fits && verdict.reason) {
           reasons.set(

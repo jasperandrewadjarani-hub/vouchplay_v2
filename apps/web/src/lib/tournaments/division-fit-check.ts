@@ -2,6 +2,7 @@ import 'server-only';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { describeDivisionFit, evaluateDivisionFit } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
+import { getTournamentRules } from './queries';
 import { divisionName } from './dto';
 
 /**
@@ -17,6 +18,7 @@ import { divisionName } from './dto';
 
 interface DivisionRuleRow {
   id: string;
+  tournament_id: string;
   name_override: string | null;
   skill_policy: string;
   minimum_skill: number | null;
@@ -67,7 +69,7 @@ export async function checkDivisionFit(
   const { data: divRow, error: divError } = await svc
     .from('divisions')
     .select(
-      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+      'id, tournament_id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
     )
     .eq('id', divisionId)
     .maybeSingle();
@@ -97,6 +99,10 @@ export async function checkDivisionFit(
     ),
   );
 
+  // The skill rule is the organizer's to switch on: "Only allow players at each division's level
+  // or higher". Off means skill never blocks (§2F).
+  const { enforceSkillFloor } = await getTournamentRules(div.tournament_id);
+
   const name = divisionName(div as Parameters<typeof divisionName>[0]);
   const band = bandLabel(div);
 
@@ -111,6 +117,7 @@ export async function checkDivisionFit(
       skillPolicy: div.skill_policy,
       divisionMinimumSkill: div.minimum_skill,
       divisionMaximumSkill: div.maximum_skill,
+      enforceSkillFloor,
     });
     if (!verdict.fits && verdict.reason) {
       return describeDivisionFit(verdict.reason, {

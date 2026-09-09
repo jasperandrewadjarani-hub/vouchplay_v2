@@ -192,6 +192,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           authed={authed}
           signInHref={loginToRegister}
           requireSkillVerified={t.requireSkillVerified}
+          enforceSkillFloor={t.enforceSkillFloor}
           earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
         />
       </div>

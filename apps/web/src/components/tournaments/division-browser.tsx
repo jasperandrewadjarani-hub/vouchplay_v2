@@ -1,3 +1,6 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
 import { describeDivisionFit, effectivePlayerSkill, evaluateDivisionFit } from '@vouchplay/core';
@@ -67,6 +70,7 @@ export function DivisionBrowser({
   authed,
   signInHref,
   requireSkillVerified,
+  enforceSkillFloor,
   earlyBird = { startsAt: null, endsAt: null },
 }: {
   tournamentId: string;
@@ -78,6 +82,8 @@ export function DivisionBrowser({
   /** Tournament-wide early-bird window; every division shares it (§1V). */
   earlyBird?: EarlyBirdWindow;
   requireSkillVerified: boolean;
+  /** Organizer setting: players may not enter a division below their own level (§2F). */
+  enforceSkillFloor: boolean;
 }) {
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
   const registeredIds = new Set(state ? Object.keys(state.registrationsByDivision) : []);
@@ -88,6 +94,41 @@ export function DivisionBrowser({
         state.viewerSkill.selfRatedSkillLevel,
       )
     : null;
+  const [onlyJoinable, setOnlyJoinable] = useState(false);
+
+  // Fit is computed once for every division, up front, because it is needed twice: to render the
+  // reason on a row, and to count and filter the ones this player can actually enter (§2F).
+  const rows = visible.map((d) => {
+    const fit = state
+      ? evaluateDivisionFit({
+          playerSex: state.viewerSkill.sex,
+          effectiveSkill,
+          sexClassification: d.sexClassification,
+          skillPolicy: d.skillPolicy,
+          divisionMinimumSkill: d.minimumSkill,
+          divisionMaximumSkill: d.maximumSkill,
+          enforceSkillFloor,
+        })
+      : { fits: true, reason: null };
+    return {
+      d,
+      fit,
+      fitMessage:
+        !fit.fits && fit.reason
+          ? describeDivisionFit(fit.reason, {
+              subject: 'you',
+              divisionName: d.name,
+              bandLabel: bandLabelFor(d),
+              playerLevel: skillLabelFor(effectiveSkill),
+            })
+          : null,
+    };
+  });
+  const joinable = rows.filter((r) => r.fit.fits).length;
+  // Worth offering only when it would actually hide something. A filter that changes nothing is
+  // one more control to read past.
+  const canFilter = authed && joinable < rows.length;
+  const shown = onlyJoinable && canFilter ? rows.filter((r) => r.fit.fits) : rows;
 
   return (
     <details className="border-border bg-surface rounded-2xl border">
@@ -103,6 +144,39 @@ export function DivisionBrowser({
           <ShieldCheck size={14} aria-hidden />
           This tournament requires Skill Verified players in every division.
         </p>
+      )}
+
+      {canFilter && (
+        <div className="border-border border-t px-4 py-3">
+          {/* A plain labelled switch, not an icon. The whole row is the target and the count is in
+              the label, so the control says what it will do before it is touched (§2F). */}
+          <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-3">
+            <span className="min-w-0">
+              <span className="text-foreground block text-sm font-medium">
+                Only show divisions I can join
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                {joinable} of {rows.length} match your profile
+              </span>
+            </span>
+            <span className="relative shrink-0">
+              <input
+                type="checkbox"
+                checked={onlyJoinable}
+                onChange={(e) => setOnlyJoinable(e.target.checked)}
+                className="peer sr-only"
+              />
+              <span
+                aria-hidden
+                className="border-border bg-surface-muted peer-checked:bg-primary peer-checked:border-primary peer-focus-visible:ring-primary/50 block h-6 w-11 rounded-full border transition-colors peer-focus-visible:ring-2"
+              />
+              <span
+                aria-hidden
+                className="absolute top-0.5 left-0.5 block h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"
+              />
+            </span>
+          </label>
+        </div>
       )}
 
       {invitations.length > 0 && (
@@ -144,35 +218,18 @@ export function DivisionBrowser({
         <p className="text-foreground-muted border-border border-t p-4 text-sm">
           No divisions published yet.
         </p>
+      ) : shown.length === 0 ? (
+        <p className="text-foreground-muted border-border border-t p-4 text-sm">
+          None of the divisions in this tournament match your profile. Turn the filter off to see
+          them all and why.
+        </p>
       ) : (
         <ul className="border-border divide-border divide-y border-t">
-          {visible.map((d) => {
+          {shown.map(({ d, fitMessage }) => {
             const capacity = Math.max(0, d.capacityTeams);
             const isFull = capacity > 0 && d.registeredTeams >= capacity;
             const registered = registeredIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
-            // The division's own rules, evaluated exactly as the server evaluates them (§2D). The
-            // list used to warn "You can still register" and then let the entry be refused; a
-            // division a player cannot enter now says so in place of the control.
-            const fit = state
-              ? evaluateDivisionFit({
-                  playerSex: state.viewerSkill.sex,
-                  effectiveSkill,
-                  sexClassification: d.sexClassification,
-                  skillPolicy: d.skillPolicy,
-                  divisionMinimumSkill: d.minimumSkill,
-                  divisionMaximumSkill: d.maximumSkill,
-                })
-              : { fits: true, reason: null };
-            const fitMessage =
-              !fit.fits && fit.reason
-                ? describeDivisionFit(fit.reason, {
-                    subject: 'you',
-                    divisionName: d.name,
-                    bandLabel: bandLabelFor(d),
-                    playerLevel: skillLabelFor(effectiveSkill),
-                  })
-                : null;
             return (
               <li key={d.id}>
                 <details>

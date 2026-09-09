@@ -1569,7 +1569,7 @@ before shipping anything that needs a migration.
 
 **Migrations through 0028 are applied. 0029 is written and waiting** (`scripts/apply-0029.sql`).
 
-Handover content is **v1.33**. master_plan decision records run to **§2E**.
+Handover content is **v1.34**. master_plan decision records run to **§2F**.
 
 #### What this session changed
 
@@ -1590,18 +1590,21 @@ Home nav item in `nav-items.ts` back at `/`.
 
 #### Open items, highest value first
 
-1. **Migration 0029 is waiting on Jasper** (`scripts/apply-0029.sql`). It adds
-   `divisions.display_order` for hand-arranged division order. Nothing else is blocked: the canonical
-   default order already ships without it, and the code that READS `display_order` is deliberately
-   not deployed until 0029 is applied.
+1. **Two migrations are waiting on Jasper.** `scripts/apply-0030.sql` first - it makes the SQL
+   `player_fits_division()` agree with the app that entering a division ABOVE your level is allowed
+   (§2F); until it runs, a partner CHANGE can still be refused for playing up even though
+   registering is not. `scripts/apply-0029.sql` adds `divisions.display_order` for hand-arranged
+   division order; the canonical default order already ships without it, and the code that READS
+   `display_order` is deliberately not deployed until 0029 is applied.
 2. **The full end-to-end registration walkthrough is still unfinished.** The remaining path to prove:
    pay -> partner confirms -> organizer verifies -> both notified -> confirmed. Also worth exercising
    the decline path, the replacement path, Request to cancel, and partner change after paying - and
    now the new division-rule refusals (§2D), which are auth-gated and could not be verified from
    outside production.
-3. **The organizer setting "Only allow players at each division's level or higher" is now redundant
-   for banded divisions** (§2D enforces the band in both directions, unconditionally). It should be
-   relabelled or retired rather than left implying a choice that no longer exists.
+3. **The organizer setting "Only allow players at each division's level or higher" is the whole of
+   the skill rule** and means exactly what its label says (§2F). An earlier note here called it
+   redundant, on the back of §2D blocking the band in both directions; that was wrong and both are
+   corrected. Playing UP is always allowed.
 4. **31 of 198 profiles have no gender recorded.** They cannot enter any Men's or Women's division
    until they add it. The app now tells them exactly that and points at their profile, but it is
    worth a nudge on the profile screen or a one-off message, because it is a third of the base.

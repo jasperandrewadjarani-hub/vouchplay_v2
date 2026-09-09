@@ -10,6 +10,7 @@ function input(over: Partial<DivisionFitInput> = {}): DivisionFitInput {
     skillPolicy: 'band',
     divisionMinimumSkill: 2,
     divisionMaximumSkill: 2,
+    enforceSkillFloor: true,
     ...over,
   };
 }
@@ -53,45 +54,69 @@ describe('evaluateDivisionFit - sex classification', () => {
   });
 });
 
-describe('evaluateDivisionFit - skill band', () => {
-  it('accepts a player inside the band', () => {
+describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
+  it('LETS A PLAYER ENTER A HARDER DIVISION - the rule people actually wanted', () => {
+    // Low Intermediate (3) entering a High Intermediate (4) division. Choosing a harder game is
+    // not something to refuse, and blocking it was the bug this suite exists to prevent returning.
+    const r = evaluateDivisionFit(
+      input({ effectiveSkill: 3, divisionMinimumSkill: 4, divisionMaximumSkill: 4 }),
+    );
+    expect(r).toEqual({ fits: true, reason: null });
+  });
+
+  it('lets a player enter a division far above their level', () => {
+    expect(
+      evaluateDivisionFit(
+        input({ effectiveSkill: 0, divisionMinimumSkill: 5, divisionMaximumSkill: 5 }),
+      ).fits,
+    ).toBe(true);
+  });
+
+  it('accepts a player exactly at the division level', () => {
     expect(evaluateDivisionFit(input({ effectiveSkill: 2 })).fits).toBe(true);
   });
 
-  it('blocks a player below the band', () => {
-    expect(evaluateDivisionFit(input({ effectiveSkill: 1 }))).toEqual({
+  it('blocks a player who is too strong for the division', () => {
+    expect(evaluateDivisionFit(input({ effectiveSkill: 4 }))).toEqual({
       fits: false,
-      reason: 'skill_below',
+      reason: 'skill_too_high',
     });
   });
 
-  it('blocks a player above the band', () => {
-    expect(evaluateDivisionFit(input({ effectiveSkill: 4 }))).toEqual({
-      fits: false,
-      reason: 'skill_above',
-    });
+  it('does not block a strong player when the organizer has the setting off', () => {
+    expect(evaluateDivisionFit(input({ effectiveSkill: 4, enforceSkillFloor: false })).fits).toBe(
+      true,
+    );
   });
 
   it('never blocks a player with no known skill', () => {
     expect(evaluateDivisionFit(input({ effectiveSkill: null })).fits).toBe(true);
   });
 
-  it('never applies a band to an open division', () => {
+  it('never applies a skill rule to an open division', () => {
     expect(evaluateDivisionFit(input({ skillPolicy: 'open', effectiveSkill: 6 })).fits).toBe(true);
   });
 
-  it('accepts both ends of an inclusive range', () => {
+  it('uses the division ceiling, so a wide band accepts everyone up to its top', () => {
     const wide = { divisionMinimumSkill: 2, divisionMaximumSkill: 4 };
-    expect(evaluateDivisionFit(input({ ...wide, effectiveSkill: 2 })).fits).toBe(true);
-    expect(evaluateDivisionFit(input({ ...wide, effectiveSkill: 4 })).fits).toBe(true);
-    expect(evaluateDivisionFit(input({ ...wide, effectiveSkill: 5 })).reason).toBe('skill_above');
+    for (const effectiveSkill of [0, 1, 2, 3, 4]) {
+      expect(evaluateDivisionFit(input({ ...wide, effectiveSkill })).fits).toBe(true);
+    }
+    expect(evaluateDivisionFit(input({ ...wide, effectiveSkill: 5 })).reason).toBe(
+      'skill_too_high',
+    );
   });
 
-  it('ignores an absent bound rather than treating it as zero', () => {
-    const noMin = evaluateDivisionFit(
-      input({ divisionMinimumSkill: null, divisionMaximumSkill: 4, effectiveSkill: 0 }),
+  it('ignores an absent ceiling rather than treating it as zero', () => {
+    expect(evaluateDivisionFit(input({ divisionMaximumSkill: null, effectiveSkill: 6 })).fits).toBe(
+      true,
     );
-    expect(noMin.fits).toBe(true);
+  });
+
+  it('still reports sex before skill when both are wrong', () => {
+    expect(evaluateDivisionFit(input({ playerSex: 'female', effectiveSkill: 5 })).reason).toBe(
+      'sex',
+    );
   });
 });
 
@@ -122,13 +147,13 @@ describe('describeDivisionFit', () => {
   });
 
   it('states the division band and the player level for a skill refusal', () => {
-    const msg = describeDivisionFit('skill_above', { ...base, subject: 'you' });
+    const msg = describeDivisionFit('skill_too_high', { ...base, subject: 'you' });
     expect(msg).toContain('Beginner');
     expect(msg).toContain('Novice');
   });
 
   it('omits the level clause when the player has none recorded', () => {
-    const msg = describeDivisionFit('skill_above', {
+    const msg = describeDivisionFit('skill_too_high', {
       ...base,
       subject: 'you',
       playerLevel: null,
@@ -142,17 +167,19 @@ describe('describeDivisionFit', () => {
   });
 
   it('always points somewhere: every message suggests what to do instead', () => {
-    const reasons = ['sex', 'sex_unknown', 'skill_below', 'skill_above'] as const;
+    const reasons = ['sex', 'sex_unknown', 'skill_too_high'] as const;
     for (const reason of reasons) {
       for (const subject of ['you', 'partner'] as const) {
         const msg = describeDivisionFit(reason, { ...base, subject, partnerName: 'Ana' });
-        expect(msg.toLowerCase()).toMatch(/try|pick|look for|enter one|choose|add your|add it to/);
+        expect(msg.toLowerCase()).toMatch(
+          /try|pick|look for|enter (one|any)|choose|add your|add it to/,
+        );
       }
     }
   });
 
   it('never uses jargon a player would not say out loud', () => {
-    const reasons = ['sex', 'sex_unknown', 'skill_below', 'skill_above'] as const;
+    const reasons = ['sex', 'sex_unknown', 'skill_too_high'] as const;
     for (const reason of reasons) {
       const msg = describeDivisionFit(reason, { ...base, subject: 'you' }).toLowerCase();
       for (const word of ['eligib', 'criteria', 'invalid', 'constraint', 'policy']) {

@@ -1585,6 +1585,10 @@ since selecting a column that does not exist fails the whole tournament page.
 
 ## 2D. A division's own rules become a gate, not a warning (2026-09-09, post-launch)
 
+> **Superseded in part by §2F.** The skill rule below is wrong in one direction: entering a division
+> ABOVE your own level is allowed, and the organizer setting this section calls redundant is in fact
+> the whole of the skill rule. Everything about sex classification, reach and messaging still holds.
+
 A player could register into a division they did not belong in. The list said **"It targets a higher
 skill level than yours. You can still register."** and meant it. Worse, nothing at all checked the
 sex classification on the way in: a man could enter Women's Doubles, and ELIG_V1 would flag it for
@@ -1674,6 +1678,61 @@ Verified in a browser rather than reasoned about: opening `/` lands on `/tournam
 Tournaments tab marked `aria-current="page"`, `/home` renders the hero and leaderboards with the Home
 tab current, and a signed-out visitor sees the B-Steel card with its registration-open badge without
 signing in.
+
+## 2F. Playing up is allowed - correcting §2D (2026-09-09, post-launch)
+
+**§2D got the skill rule wrong in one direction and this section overrides it.** It read "does not
+meet a division rule" as the band being a fence on both sides, so a Low Intermediate player was
+refused entry to a High Intermediate division. That is not the rule, and the organizer's own setting
+had been saying so in plain words the whole time:
+
+> **Only allow players at each division's level or higher.** Players cannot join a division **below**
+> their skill level.
+
+One direction, not two. Entering a harder division is a player choosing a harder game, and nothing
+should stand in the way of it.
+
+### The skill rule, complete
+
+- **Above your level: always allowed.** There is deliberately no `minimum_skill` check anywhere. A
+  player may enter any division at their level or above, however far above.
+- **Below your level: refused, and only when the organizer asks.** The ceiling check is gated on
+  `enforce_skill_floor`. With the setting off, skill never blocks at all.
+- **Sex classification is unchanged** - a hard rule, governed by no setting.
+- An unknown skill still never blocks.
+
+**§2D also claimed the organizer's setting was now redundant. It is not** - it is the entire skill
+rule, and that claim was a consequence of the same mistake. The setting stays, means exactly what its
+label says, and should not be relabelled or retired.
+
+The reason enum drops `skill_below` entirely and renames `skill_above` to **`skill_too_high`**,
+because "above" and "below" were ambiguous about whether they described the player or the division -
+which is the confusion that produced the bug. The name now says which.
+
+Migration 0030 makes the SQL twin agree. It only widens what is accepted, so it cannot invalidate an
+entry that already exists.
+
+The copy carried a smaller error of the same shipped-and-visible kind: *"is for High Intermediate
+players and above. your level is Low Intermediate"* - lowercase after a full stop, because the clause
+was built from a possessive that reads correctly mid-sentence and wrong at the start of one.
+
+### A filter for the divisions you can actually enter
+
+Sixteen divisions, of which a given player can enter a handful. **Only show divisions I can join** is
+a plain labelled switch under the Divisions header, with the count in its own subtitle - *"6 of 16
+match your profile"* - so the control says what it will do before it is touched.
+
+- **Off by default.** A list that silently hides most of itself invites "where did the rest go?"; the
+  count advertises the filter well enough without hiding anything first.
+- **Shown only when it would hide something.** If a player fits every division, the switch does not
+  appear. A control that changes nothing is one more thing to read past.
+- Fit is computed once per division and reused for the row's reason, the count and the filter, so the
+  three can never disagree.
+- When the filter empties the list, it says so and points back at the way out rather than showing an
+  empty box.
+
+The browser becomes a Client Component to hold that one piece of state. Every prop it takes was
+already serialisable.
 
 ## 1. Prompt Contract
 
