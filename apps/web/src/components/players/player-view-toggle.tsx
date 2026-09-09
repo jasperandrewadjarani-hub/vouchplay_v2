@@ -14,8 +14,9 @@ export function PlayerViewToggle({ compact }: { compact: boolean }) {
   function setView(nextCompact: boolean) {
     if (nextCompact === compact) return;
     const params = new URLSearchParams(searchParams.toString());
-    if (nextCompact) params.set('view', 'compact');
-    else params.delete('view');
+    // Compact is the default, so it is the absent state in the URL and detailed is explicit.
+    if (nextCompact) params.delete('view');
+    else params.set('view', 'detailed');
     const query = params.toString();
     startTransition(() => router.push(query ? `${pathname}?${query}` : pathname));
   }

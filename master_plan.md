@@ -638,6 +638,135 @@ Landing on Players meant landing on the emptiest board. `/leaderboards` with no 
 and reordering tabs under people who have already learned the page is a worse cost than one tab that
 currently explains itself. The active tab is unmistakable, so nobody has to guess where they landed.
 
+### STS above, Vouch below, both live in the row
+
+The trailing column now stacks the STS chip over a Vouch button, so the compact row offers the same
+two actions as the detailed card. Vouching is the product's core loop, and it was previously two taps
+and a page load away from the list where people actually browse. The column widened from 66px to 84px
+and both controls right-align, so they still read straight down the list.
+
+### "Submit and request a vouch back": recommended against, and not built
+
+Jasper asked for a second submit button on the vouch form that would send the vouch and request one
+back in the same tap, to encourage returning the favour, and asked whether that is good UX. **It is
+not, and the reason is not a design preference - it is that the button would manufacture exactly the
+behaviour the scoring engine is built to discount.**
+
+- `CONTRIB_V1` already dampens reciprocity and rings, and the Community Champions board says so on
+  its face: "Repeat pairs and suspicious rings do not add raw-volume credit." A one-tap
+  vouch-for-a-vouch produces reciprocal pairs by design. The product would be encouraging an action
+  and then docking people for taking it, which is incoherent and reads as a bait when their points
+  do not move.
+- **A vouch given while asking for one back is not independent evidence.** VouchPlay exists because
+  self-declared and inflated ratings cannot be trusted. Quid pro quo rebuilds that problem with extra
+  steps: at any scale it inflates CSL and STS across the board and makes the ratings mean less, which
+  is the founding problem in reverse.
+- It puts the recipient under obligation. "They vouched for me, so I owe them one" lands hardest on
+  exactly the less confident users this app is meant to be gentle with.
+
+**What was built instead.** Requesting a vouch is legitimate; *bundling* it with giving one is what
+is harmful. Requesting already exists as its own action (§12, `RequestVouchForm`, reachable from a
+player's profile), and it stays there, unbundled. The vouch form's confirmation now does the growth
+job honestly: it confirms what the vouch did for the other player and offers **"Vouch for someone
+else you have played with"**. That grows the vouch graph in the direction that makes ratings *more*
+trustworthy - more distinct vouchers - rather than pairing two people together. It is also what
+`CONTRIB_V1` actually rewards: distinct players supported, with newcomers weighted higher.
+
+If Jasper still wants the paired button after reading this, it is a small change and the decision is
+his; this section records why it was not the default.
+
+
+## 1R. Home leads to the community, not to a brochure (2026-09-09, post-launch)
+
+### "Developed by", not "Powered by"
+
+JT Consulting & Analytics built VouchPlay. "Powered by" reads like an infrastructure credit, the line
+you see under a widget somebody embedded; "Developed by" is the accurate claim and the stronger one.
+Changed in both places it appears (the header strip and the home footer) and in the §5.2.1 spec text
+that named the old wording, so the spec and the app do not disagree. Earlier changelog entries keep
+the old wording because they are a record of what shipped at the time.
+
+### Community Champions is the middle of the page
+
+Home used to spend its first two screens on a large hero and three explainer cards before any
+evidence that a community existed. That order is written for a first-time visitor who reads
+top-to-bottom once, and against everyone who comes back.
+
+The page is now hero, **highlight**, everything else:
+
+1. **A condensed hero.** Same words, less air: smaller padding, a smaller heading, tighter button
+   row. It still says what VouchPlay is in one sentence and offers two actions.
+2. **Community Champions, presented as the highlight.** It sits in the visual middle, wrapped in an
+   elevated container with the brand gradient edge and glow that the hero uses, under a "Community
+   spotlight" label. **This is the only board with real earned separation today** (§1Q), so it is the
+   only one that can carry the middle of the page honestly.
+3. **The rest of the rankings below it**, clearly secondary: Top Clubs, then Top Players, which is
+   still withholding its list until placements exist.
+4. **The three explainer cards, condensed**, after the proof rather than before it. Somebody who has
+   just seen real named people ranked by real vouches is more ready to hear "here is what you can do"
+   than somebody who has seen nothing yet.
+
+**Why the highlight goes above the explainers rather than below them.** The cards describe the
+product; the board demonstrates it. A leaderboard with faces and numbers is evidence that people are
+actually using this, which is the single most persuasive thing on the page for a newcomer and the
+main reason a returning player opens the app at all. Explaining first and proving second wastes the
+proof on people who have already scrolled past.
+
+### Condensed, not stripped
+
+- The explainer cards became compact rows: the icon sits beside the title instead of above it, so
+  three cards cost roughly half the height on a phone without dropping a single word.
+- Nothing was removed from the hero. Cutting padding and one type step is reversible and safe;
+  cutting the sentence that explains the product to a first-time visitor is not.
+- The personal momentum card stays directly above the highlight, so a signed-in player sees their own
+  position immediately before seeing whose position they are chasing.
+
+## 1S. The compact row becomes the directory (2026-09-09, post-launch)
+
+Compact is now the **default** view on Players. It was already the better list for the job - a
+directory is for scanning names, and the detailed card spends a whole screen on three players - but
+it was hidden behind a toggle most people never pressed. Detailed remains one tap away and its URL
+(`?view=detailed`) is unchanged for anyone who has bookmarked it.
+
+Making it the default meant it had to carry more, so the row is now two lines with a clear priority
+order:
+
+- **Line one: name, nickname, sex.** The name still owns the line and truncates last. The nickname is
+  how people actually recognise each other locally, and sex is a real filter in a sport with separate
+  divisions, so both belong where the eye lands first. Sex renders as its symbol alone here with a
+  screen-reader label behind it, because the word costs width the name needs and the symbol is
+  already the convention on every draw sheet.
+- **Line two: skill, then clubs.** Skill stays first because it is what a player is being scanned
+  for. Club affiliation answers "do I know these people" and is the natural second question.
+- **The trailing STS column is unchanged at 66px**, so it still reads straight down the list (§1H).
+
+### The STS chip is tappable in the list, without nesting a button in a link
+
+§1H banned interactive controls inside a row that is itself a link, because one tap would both open
+the dialog and navigate. That rule stands. What changed is the row.
+
+The row is no longer an anchor wrapping everything. It is a plain container holding **one link and
+one button, as siblings**: the player's name is the link, and it carries a stretched `::after`
+overlay that covers the whole row, so the entire row is still one big tap target. The STS chip is a
+real button raised above that overlay. No interactive element is nested inside another, one tap does
+exactly one thing, and both are reachable by keyboard in a sensible order.
+
+**Club chips in the compact row are deliberately not links.** They could be, but every extra
+interactive island inside a row makes it harder to predict what a tap will do, and the two that
+matter (open the profile, explain STS) are worth protecting. The detailed card keeps its linked club
+stack.
+
+This is the same resolution the codebase already reached for `StsChip`: an `interactive` flag on the
+shared component rather than a second copy of it, so the list and the profile cannot drift.
+
+### Why STS earns an exception and clubs do not
+
+A number nobody understands is worse than no number. STS was the single most-asked question in the
+first minutes of launch (§1G), and the compact list is now the default surface, which makes it the
+place most people meet the score. Leaving it unexplained there and saying "open the profile to find
+out" puts the answer one navigation away from the question. A club logo does not raise a question
+that urgent.
+
 ## 1. Prompt Contract
 
 ### In scope

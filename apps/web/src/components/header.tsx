@@ -25,7 +25,7 @@ export async function Header() {
 
   return (
     <header className="vp-topbar border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
-      {/* Powered-by line (top middle), links to the JT Consulting & Analytics page (§5.2.1). */}
+      {/* Developed-by line (top middle), links to the JT Consulting & Analytics page (§5.2.1). */}
       <div className="flex justify-center px-4 pt-1.5">
         <a
           href={BRAND.jtFacebookUrl}
@@ -33,7 +33,7 @@ export async function Header() {
           rel="noopener noreferrer"
           className="text-foreground-muted hover:text-foreground border-border/50 rounded-full border px-3 py-0.5 text-[10px] tracking-wide transition-colors"
         >
-          Powered by {BRAND.developer.replace(' Inc.', '')}
+          Developed by {BRAND.developer.replace(' Inc.', '')}
         </a>
       </div>
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">

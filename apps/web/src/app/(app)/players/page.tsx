@@ -54,7 +54,7 @@ function toQueryString(f: PlayerFilters, page: number, compact: boolean): string
   if (f.coach) p.set('coach', '1');
   if (f.lookingForPartner) p.set('lookingForPartner', '1');
   if (f.openForSponsorship) p.set('openForSponsorship', '1');
-  if (compact) p.set('view', 'compact');
+  if (!compact) p.set('view', 'detailed');
   if (page > 1) p.set('page', String(page));
   const qs = p.toString();
   return qs ? `?${qs}` : '';
@@ -63,7 +63,9 @@ function toQueryString(f: PlayerFilters, page: number, compact: boolean): string
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
-  const compact = one(sp.view) === 'compact';
+  // Compact is the default directory view (§1S): a directory is for scanning names, and the
+  // detailed card spends a whole screen on three players. Detailed keeps its existing URL.
+  const compact = one(sp.view) !== 'detailed';
   const viewer = await getViewerContext();
   const { players, total, page, pageCount } = await listPlayers(filters, viewer);
   // The entry card names the current leader, so it needs the board it points at. Cached read; a

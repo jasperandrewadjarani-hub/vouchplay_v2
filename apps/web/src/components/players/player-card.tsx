@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { MapPin } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
-import { CompactRowTrailing } from './compact-row-trailing';
+import { CompactRowPending } from './compact-row-pending';
 import { PlayerAvatar } from './player-avatar';
 import { ClubStack } from './club-stack';
 import { VouchButton } from './vouch-button';
@@ -40,11 +40,25 @@ export function PlayerCard({
 
   if (compact) {
     return (
-      <Link
-        href={profileHref}
-        aria-label={`View ${player.displayName}'s profile`}
-        className="border-border bg-surface hover:border-primary/40 hover:bg-surface-muted focus-visible:outline-primary flex min-h-14 items-center gap-3 rounded-xl border p-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
-      >
+      /*
+       * Links and controls are SIBLINGS, never nested (§1H, §1S). An absolutely-positioned overlay
+       * link keeps the whole row one large tap target for mouse and touch, while the named link on
+       * the player is what assistive tech and the keyboard use. The STS chip and the Vouch action
+       * are raised above the overlay with "z-10", so one tap does exactly one thing.
+       */
+      <div className="border-border bg-surface hover:border-primary/40 hover:bg-surface-muted focus-within:border-primary relative flex min-h-14 items-center gap-3 rounded-xl border p-2.5 transition-colors">
+        {/*
+          Mouse/touch overlay making the whole row one large tap target. It is hidden from assistive
+          tech and from the tab order, because the player's name below is the real, named link - so
+          the row reads as exactly one link, not two. Positioned, so it paints above the row's
+          in-flow content; the STS and Vouch controls sit above it with z-10.
+        */}
+        <Link
+          href={profileHref}
+          aria-hidden
+          tabIndex={-1}
+          className="absolute inset-0 rounded-xl"
+        />
         <PlayerAvatar
           url={player.avatarUrl}
           initials={player.initials}
@@ -52,23 +66,44 @@ export function PlayerCard({
           size="sm"
           className="ring-primary/15 shrink-0 ring-2 ring-offset-0"
         />
-        {/* Name owns the full row width and is never squeezed by the skill pill: the pill moves to its
-            own line beneath. STS then sits in a fixed-width column so it lines up down the list, and
-            keeps that width when a player has none so the column stays straight. */}
+        {/* NOT positioned: a positioned sibling after the overlay in DOM order would paint
+            above it and swallow row taps. Only the trailing controls are raised. */}
         <span className="min-w-0 flex-1">
-          <span className="text-foreground block truncate text-sm font-semibold">
-            {player.displayName}
+          {/* Line one: name, nickname, sex. The name truncates last. */}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <Link href={profileHref} className="min-w-0 shrink">
+              <span className="text-foreground block truncate text-sm font-semibold">
+                {player.displayName}
+              </span>
+              <CompactRowPending />
+            </Link>
+            {player.nickname && (
+              <span className="text-foreground-muted min-w-0 shrink-[3] truncate text-xs">
+                &ldquo;{player.nickname}&rdquo;
+              </span>
+            )}
+            <SexBadge sex={player.sex} symbolOnly />
           </span>
-          {skill && (
-            <span className="mt-1 flex min-w-0 overflow-hidden">
-              <SkillPill band={skill.band} source={skill.source} size="sm" />
+          {/* Line two: skill, then club affiliations. */}
+          {(skill || player.clubs.length > 0) && (
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+              {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+              <ClubStack clubs={player.clubs} max={2} interactive={false} size={20} />
             </span>
           )}
         </span>
-        {/* The STS slot doubles as the row's pending indicator, so tapping a row gives immediate
-            feedback without taking any width from the name and skill pill. */}
-        <CompactRowTrailing sts={player.sts} />
-      </Link>
+        {/* Raised above the row overlay so both controls are independently tappable. */}
+        <span className="relative z-10 flex w-[76px] shrink-0 flex-col items-end gap-1.5">
+          <StsChip sts={player.sts} />
+          <VouchButton
+            slug={player.slug}
+            targetName={player.displayName}
+            authed={authed}
+            size="sm"
+            mode="card"
+          />
+        </span>
+      </div>
     );
   }
 

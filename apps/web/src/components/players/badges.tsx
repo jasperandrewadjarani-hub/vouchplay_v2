@@ -109,9 +109,31 @@ export function OpenForSponsorshipBadge() {
   );
 }
 
-export function SexBadge({ sex }: { sex: 'male' | 'female' | null }) {
+export function SexBadge({
+  sex,
+  symbolOnly = false,
+}: {
+  sex: 'male' | 'female' | null;
+  /**
+   * Compact rows show the symbol alone: the word costs width the player's name needs, and the
+   * symbol is already the convention on every draw sheet. The name stays available to screen
+   * readers, so nothing is lost for anyone who cannot see the glyph.
+   */
+  symbolOnly?: boolean;
+}) {
   if (!sex) return null;
   const male = sex === 'male';
+  if (symbolOnly) {
+    return (
+      <span
+        className={male ? 'text-sky-600 dark:text-sky-400' : 'text-pink-600 dark:text-pink-400'}
+        title={male ? 'Male' : 'Female'}
+      >
+        <span aria-hidden>{male ? '♂' : '♀'}</span>
+        <span className="sr-only">{male ? 'Male' : 'Female'}</span>
+      </span>
+    );
+  }
   return (
     <span
       className={`${chip} ${male ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400' : 'bg-pink-500/15 text-pink-600 dark:text-pink-400'}`}

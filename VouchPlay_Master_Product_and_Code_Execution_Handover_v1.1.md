@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.25
+# VouchPlay Master Product & Code Execution Handover v1.26
 
-_(File retains its `…v1.1.md` name; content is v1.25 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.26 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -821,8 +821,8 @@ Profile is accessed from **Me**, not duplicated permanently in the header.
   header, sized to fit the ~56px bar (`h-9 w-auto`). Asset:
   `apps/web/public/brand/vouchplay-logo-horizontal.png` (source in `logo_/new_logos/`). Transparent
   background so it works in both themes.
-- **"Powered by" strip (top middle):** a thin, full-width strip at the very top of the header shows
-  **very small centred** microcopy **"Powered by JT Consulting & Analytics"** (~10px,
+- **"Developed by" strip (top middle):** a thin, full-width strip at the very top of the header shows
+  **very small centred** microcopy **"Developed by JT Consulting & Analytics"** (~10px,
   `text-foreground-muted`), which is a link to the JT Facebook page
   (`https://www.facebook.com/people/JT-Consulting-Analytics-Inc/61590234100280/`, from
   `BRAND.jtFacebookUrl`). This replaces the earlier "microcopy directly below the logo" idea - a
@@ -871,7 +871,7 @@ ship). `/terms` and `/privacy` remain placeholder stubs pending the Phase-14 leg
 
 Also surfaced (discoverability):
 - the **Me** list (primary home - the "Help & About" group),
-- a small **footer** on the home page (About · FAQ · Terms · Privacy · "Powered by JT Consulting &
+- a small **footer** on the home page (About · FAQ · Terms · Privacy · "Developed by JT Consulting &
   Analytics"), so signed-out visitors can read About/FAQ before signing up.
 - (A header **•••** overflow menu is not built; the Me group + home footer cover discoverability.)
 
@@ -6152,6 +6152,89 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.26 (2026-09-09)
+
+_No migration. Home-page composition and one wording change._
+
+- **"Developed by JT Consulting & Analytics", not "Powered by".** JT built VouchPlay. "Powered by"
+  reads like an infrastructure credit, the line under a widget somebody embedded; "Developed by" is
+  the accurate claim and the stronger one. Changed in both places it appears (the header strip and
+  the home footer) **and in the §5.2.1 and §29.3 spec text that named the old wording**, so the spec
+  and the app do not disagree. Earlier changelog entries keep the old wording, because they record
+  what shipped at the time.
+- **Home leads with the community instead of a brochure.** The page used to spend its first two
+  screens on a large hero and three explainer cards before showing any evidence that a community
+  existed - an order written for a first-time visitor who reads top to bottom once, and against
+  everyone who comes back. It is now hero, highlight, everything else. **Community Champions sits in
+  the visual middle as the highlight**, wrapped in an elevated container carrying the same brand
+  gradient edge and glow as the hero, under a "Community spotlight" label. It is **the only board
+  with real earned separation today** (v1.25), so it is the only one that can honestly carry the
+  middle of the page. The remaining rankings sit below it as clearly secondary content: Top Clubs,
+  then Top Players, which is still withholding its list until placements exist. The three explainer
+  cards moved **after** the proof rather than before it. **The reasoning matters more than the
+  order:** the cards describe the product, the board demonstrates it, and a leaderboard with faces
+  and numbers is evidence that real people are using this - the most persuasive thing on the page for
+  a newcomer and the main reason a returning player opens the app at all. Explaining first and proving
+  second spends the proof on people who have already scrolled past.
+- **Condensed, not stripped.** The hero keeps every word and loses only padding and one type step;
+  cutting whitespace is reversible, cutting the sentence that explains the product to a first-time
+  visitor is not. The three explainer cards became compact rows with the icon beside the title
+  instead of above it, which costs roughly half the height on a phone without dropping a word. The
+  private momentum card stays directly above the highlight, so a signed-in player sees their own
+  position immediately before seeing whose position they are chasing.
+
+- **Compact is the default view on Players, and it now carries what a directory needs.** Compact was
+  always the better list for the job - a directory is for scanning names, and the detailed card
+  spends a whole screen on three players - but it sat behind a toggle most people never pressed.
+  Detailed is still one tap away and its URL (`?view=detailed`) is unchanged for anyone who bookmarked
+  it. The row is now two lines with an explicit priority order. **Line one: name, nickname, sex.** The
+  name still owns the line and truncates last (v1.19); the nickname is how people actually recognise
+  each other locally, and sex is a real filter in a sport with separate divisions, so both belong
+  where the eye lands first. Sex renders as its **symbol alone** here with a screen-reader label
+  behind it, because the word costs width the name needs and the symbol is already the convention on
+  every draw sheet. **Line two: skill, then club affiliations** - skill first because it is what a
+  player is being scanned for, clubs second because "do I know these people" is the natural follow-up.
+  The trailing STS column stays at its shared 66px so it still reads straight down the list.
+- **The STS chip is tappable in the list, and no button is nested inside a link.** v1.19 banned
+  interactive controls inside a row that is itself a link, because one tap would both open the dialog
+  and navigate. **That rule stands; what changed is the row.** It is no longer an anchor wrapping
+  everything - it is a plain container holding **one link and one button as siblings**: the player's
+  name is the link and carries a stretched `::after` overlay covering the whole row, so the entire row
+  remains one large tap target, while the STS chip is a real button raised above that overlay. Nothing
+  interactive is nested inside anything else, one tap does exactly one thing, and both are reachable
+  by keyboard in a sensible order. **Club chips in the compact row are deliberately not links:** every
+  extra interactive island inside a row makes a tap harder to predict, and the two that matter (open
+  the profile, explain STS) are worth protecting. The detailed card keeps its linked club stack. STS
+  earns the exception because **a number nobody understands is worse than no number** - it was the
+  most-asked question in the first minutes of launch (v1.18), and compact is now the surface where
+  most people meet it, so answering "open the profile to find out" would put the answer one navigation
+  away from the question. A club logo raises no question that urgent. Implemented with the existing
+  `interactive` flag on the shared `StsChip` rather than a second copy, so the list and the profile
+  cannot drift.
+
+- **The compact row carries both actions, and "submit and request a vouch back" was recommended
+  against.** The trailing column now stacks the STS chip over a Vouch button, so a compact row offers
+  the same two actions as a detailed card; vouching is the product's core loop and it was previously
+  two taps and a page load away from the list where people actually browse. The column widened from
+  66px to 84px and both controls right-align, so they still read straight down the list. **On the
+  paired submit button, the answer is no, and the reason is not a design preference:** it would
+  manufacture exactly the behaviour the scoring engine is built to discount. `CONTRIB_V1` already
+  dampens reciprocity and rings, and the Community Champions board says so on its face - "Repeat
+  pairs and suspicious rings do not add raw-volume credit" - so a one-tap vouch-for-a-vouch would
+  have the product encouraging an action and then docking people for taking it, which reads as a bait
+  when their points do not move. More fundamentally, **a vouch given while asking for one back is not
+  independent evidence**: VouchPlay exists because self-declared and inflated ratings cannot be
+  trusted, and quid pro quo rebuilds that problem with extra steps, inflating CSL and STS across the
+  board at any real scale. It also puts the recipient under obligation, which lands hardest on the
+  least confident users. **Requesting a vouch is legitimate; bundling it with giving one is what is
+  harmful**, and requesting already exists unbundled as its own action (§12, `RequestVouchForm`, from
+  a player's profile). What shipped instead: the vouch form no longer auto-closes after 1.2 seconds
+  but shows a real confirmation that says what the vouch did for the other player and offers **"Vouch
+  for someone else you have played with"**. That grows the graph in the direction that makes ratings
+  *more* trustworthy - more distinct vouchers - which is precisely what `CONTRIB_V1` rewards, with
+  newcomers weighted higher. If Jasper still wants the paired button after reading this, it is a small
+  change and the call is his.
 
 ## v1.25 (2026-09-09)
 

@@ -1766,3 +1766,26 @@ Open items, highest value first:
   **ACTION FOR JASPER: make those two edits in Admin -> System settings, then rebuild at
   Admin -> Leaderboards.** Nothing else in this release needs an operator action, and there is no
   migration.
+
+- **2026-09-09** - **Home rearranged, compact is the default directory, and the vouch-back button was
+  recommended against.** Header and home footer now read "Developed by JT Consulting & Analytics"
+  (the §5.2.1 spec text was updated too, so spec and app agree; changelogs keep the old wording as a
+  record). Home is hero, highlight, everything else: a condensed hero, then **Community Champions as
+  the middle highlight** with the hero's gradient edge and glow, then the other boards, then the
+  three explainer cards condensed into icon-beside-title rows. The explainers moved *after* the proof
+  because the cards describe the product while the board demonstrates it. Players now defaults to
+  **compact**, and the row grew to two lines: name + nickname + sex symbol, then skill + club
+  affiliations, with STS over a Vouch button in an 84px trailing column.
+  **The §1H rule (no interactive control inside a row that is itself a link) still stands - the row
+  changed instead.** It is no longer an anchor wrapping everything: the name is the link and carries
+  a stretched `after:inset-0` overlay so the whole row is still one tap target, while STS and Vouch
+  are siblings raised above it. The §1N pending cue moved from the STS slot to an overlay on the
+  avatar, because `useLinkStatus` only reports inside the `<Link>` it sits in and the avatar is a
+  fixed 40px every row has (STS is null for many players).
+  **Recommended against "submit and request a vouch back".** It manufactures the reciprocal pairs
+  `CONTRIB_V1` explicitly discounts, so the product would encourage an action then dock people for
+  it; and a vouch given while asking for one back is not independent evidence, which is the founding
+  problem in reverse. Requesting a vouch already exists unbundled (§12). Shipped instead: the vouch
+  form no longer auto-closes, and its confirmation offers "Vouch for someone else you have played
+  with" - growth toward more distinct vouchers, which is what the scoring actually rewards.
+  **Jasper's call if he still wants the paired button.** See master_plan §1R and §1S, handover v1.26.

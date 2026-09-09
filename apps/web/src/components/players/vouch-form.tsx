@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { X } from 'lucide-react';
+import Link from 'next/link';
+import { Check, X } from 'lucide-react';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { submitVouch, type VouchActionState } from '@/lib/actions/vouch';
 import { VOUCH_INTERACTION_OPTIONS } from '@/lib/vouches/interaction';
@@ -30,15 +31,11 @@ export function VouchForm({
   const router = useRouter();
   const [state, action] = useActionState(submitVouch, empty);
 
+  // Refresh the profile behind the dialog, but do not auto-close: the confirmation is where the
+  // next useful action lives (§1S).
   useEffect(() => {
-    if (state.ok) {
-      const t = setTimeout(() => {
-        router.refresh();
-        onClose();
-      }, 1200);
-      return () => clearTimeout(t);
-    }
-  }, [state.ok, router, onClose]);
+    if (state.ok) router.refresh();
+  }, [state.ok, router]);
 
   return (
     <div
@@ -69,82 +66,124 @@ export function VouchForm({
           </button>
         </div>
 
-        <form action={action} className="space-y-4">
-          <input type="hidden" name="targetId" value={targetId} />
+        {state.ok ? (
+          /*
+           * Growth without manufacturing reciprocal pairs. A "request a vouch back" button here
+           * would produce exactly the repeat pairs CONTRIB_V1 discounts, and a vouch given while
+           * asking for one back is not independent evidence (§1S). Sending people to vouch for
+           * someone ELSE grows the graph in the direction that makes ratings more trustworthy, and
+           * is what the scoring actually rewards: distinct players supported.
+           */
+          <div className="space-y-4 text-center" role="status">
+            <span className="bg-success/15 text-success mx-auto flex h-14 w-14 items-center justify-center rounded-full">
+              <Check size={28} aria-hidden />
+            </span>
+            <div>
+              <p className="text-foreground text-lg font-bold">Thank you. Your vouch is in.</p>
+              <p className="text-foreground-muted mt-1 text-sm">
+                It strengthens {targetName}&apos;s skill level and how confident the community is
+                about it.
+              </p>
+            </div>
+            <p className="text-foreground-muted text-sm">
+              Who else have you played with? Vouching for more people you genuinely know is what
+              makes everyone&apos;s profile more trustworthy.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Link
+                href="/players"
+                onClick={onClose}
+                className="vp-gradient flex min-h-[44px] w-full items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
+              >
+                Vouch for someone else
+              </Link>
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
+              >
+                Done for now
+              </button>
+            </div>
+          </div>
+        ) : (
+          <form action={action} className="space-y-4">
+            <input type="hidden" name="targetId" value={targetId} />
 
-          <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
-          <FormError>{state.error}</FormError>
+            <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
+            <FormError>{state.error}</FormError>
 
-          <Field label="Their skill level" htmlFor="skillLevel" required>
-            <Select id="skillLevel" name="skillLevel" defaultValue="" required>
-              <option value="" disabled>
-                Select…
-              </option>
-              {SKILL_BANDS.map((b) => (
-                <option key={b.key} value={b.ordinal}>
-                  {b.label}
+            <Field label="Their skill level" htmlFor="skillLevel" required>
+              <Select id="skillLevel" name="skillLevel" defaultValue="" required>
+                <option value="" disabled>
+                  Select…
                 </option>
-              ))}
-            </Select>
-          </Field>
+                {SKILL_BANDS.map((b) => (
+                  <option key={b.key} value={b.ordinal}>
+                    {b.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-          {/* "Watched them play" lets an honest voucher say what they actually saw instead of
+            {/* "Watched them play" lets an honest voucher say what they actually saw instead of
               picking a play relationship that never happened. It is a context label only - it does
               not change vouch weight (§10.5, LOCKED). */}
-          <Field
-            label="How do you know their game?"
-            htmlFor="interactionType"
-            required
-            hint="Answer honestly. This is shown as context, and it does not change how much your vouch counts."
-          >
-            <Select id="interactionType" name="interactionType" defaultValue="with" required>
-              {VOUCH_INTERACTION_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+            <Field
+              label="How do you know their game?"
+              htmlFor="interactionType"
+              required
+              hint="Answer honestly. This is shown as context, and it does not change how much your vouch counts."
+            >
+              <Select id="interactionType" name="interactionType" defaultValue="with" required>
+                {VOUCH_INTERACTION_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
 
-          {viewerIsCoach && (
+            {viewerIsCoach && (
+              <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
+                <input type="checkbox" name="asCoach" className="mt-0.5" />
+                <span>
+                  <span className="text-foreground font-medium">Vouch as a Coach</span>
+                  <span className="text-foreground-muted block text-xs">
+                    Applies coach weight. Off by default.
+                  </span>
+                </span>
+              </label>
+            )}
+
             <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-              <input type="checkbox" name="asCoach" className="mt-0.5" />
+              <input type="checkbox" name="anonymous" defaultChecked className="mt-0.5" />
               <span>
-                <span className="text-foreground font-medium">Vouch as a Coach</span>
+                <span className="text-foreground font-medium">Keep my rating anonymous</span>
                 <span className="text-foreground-muted block text-xs">
-                  Applies coach weight. Off by default.
+                  Hides your identity on the public rating. VouchPlay admins may still inspect it
+                  for safety. Any comment you add is never anonymous.
                 </span>
               </span>
             </label>
-          )}
 
-          <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-            <input type="checkbox" name="anonymous" defaultChecked className="mt-0.5" />
-            <span>
-              <span className="text-foreground font-medium">Keep my rating anonymous</span>
-              <span className="text-foreground-muted block text-xs">
-                Hides your identity on the public rating. VouchPlay admins may still inspect it for
-                safety. Any comment you add is never anonymous.
-              </span>
-            </span>
-          </label>
+            <Field label="Comment (optional)" htmlFor="comment" hint="Always shown with your name.">
+              <textarea
+                id="comment"
+                name="comment"
+                maxLength={1000}
+                rows={3}
+                className="border-border bg-background text-foreground placeholder:text-foreground-muted w-full rounded-xl border px-3.5 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+                placeholder="e.g. Great dinking and court awareness."
+              />
+            </Field>
 
-          <Field label="Comment (optional)" htmlFor="comment" hint="Always shown with your name.">
-            <textarea
-              id="comment"
-              name="comment"
-              maxLength={1000}
-              rows={3}
-              className="border-border bg-background text-foreground placeholder:text-foreground-muted w-full rounded-xl border px-3.5 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
-              placeholder="e.g. Great dinking and court awareness."
-            />
-          </Field>
-
-          <SubmitButton pendingLabel="Saving…">Submit vouch</SubmitButton>
-          <p className="text-foreground-muted text-center text-xs">
-            One active vouch per player. Updating replaces your previous rating.
-          </p>
-        </form>
+            <SubmitButton pendingLabel="Saving…">Submit vouch</SubmitButton>
+            <p className="text-foreground-muted text-center text-xs">
+              One active vouch per player. Updating replaces your previous rating.
+            </p>
+          </form>
+        )}
       </div>
     </div>
   );

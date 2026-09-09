@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Users, ShieldCheck, Trophy, Medal } from 'lucide-react';
+import { Users, ShieldCheck, Trophy } from 'lucide-react';
 import { BRAND } from '@vouchplay/config';
 import { getOptionalUser } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui/button';
@@ -37,88 +37,59 @@ export default async function HomePage() {
       ];
 
   return (
-    <div className="space-y-8">
-      {/* Hero */}
-      <section className="border-border bg-surface vp-hero vp-in relative overflow-hidden rounded-3xl border p-7 sm:p-10">
+    <div className="space-y-6">
+      {/* Hero. Condensed to padding and one type step only: cutting whitespace is reversible,
+          cutting the sentence that explains the product to a first-time visitor is not (§1R). */}
+      <section className="border-border bg-surface vp-hero vp-in relative overflow-hidden rounded-3xl border p-5 sm:p-7">
         <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
-        <p className="vp-label text-primary mb-3">Community-verified skill</p>
-        <h1 className="text-foreground max-w-2xl text-3xl leading-tight font-extrabold tracking-tight sm:text-4xl">
+        <p className="vp-label text-primary mb-2">Community-verified skill</p>
+        <h1 className="text-foreground max-w-2xl text-2xl leading-tight font-extrabold tracking-tight sm:text-3xl">
           Your game, <span className="vp-gradient-text">vouched for</span> by the players you play
           with.
         </h1>
-        <p className="text-foreground-muted mt-3 max-w-xl text-sm sm:text-base">
+        <p className="text-foreground-muted mt-2 max-w-xl text-sm">
           Find players, build a trusted profile, climb the leaderboards, and play more.
         </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <ButtonLink href="/players" className="px-5 py-3">
-            Browse players
-          </ButtonLink>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <ButtonLink href="/players">Browse players</ButtonLink>
           {user ? (
-            <ButtonLink href="/me" variant="secondary" className="px-5 py-3">
+            <ButtonLink href="/me" variant="secondary">
               My profile
             </ButtonLink>
           ) : (
-            <ButtonLink href="/signup" variant="secondary" className="px-5 py-3">
+            <ButtonLink href="/signup" variant="secondary">
               Create your profile
             </ButtonLink>
           )}
         </div>
       </section>
 
-      {/* What you can do - lead with action, then show proof and momentum. */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <FeatureCard
-          icon={<Users size={20} aria-hidden />}
-          title="Discover players"
-          body="Find people to play with by skill, city, and role."
-        />
-        <FeatureCard
-          icon={<ShieldCheck size={20} aria-hidden />}
-          title="Build trust"
-          body="Share real vouches from players and coaches who know your game."
-        />
-        <FeatureCard
-          icon={<Trophy size={20} aria-hidden />}
-          title="Play more"
-          body="Join clubs and register for tournaments when they open."
-        />
-      </section>
-
       {settings.enabled && (
-        <section className="space-y-5" aria-labelledby="home-rankings-title">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="vp-label text-primary">Verified momentum</p>
-              <h2
-                id="home-rankings-title"
-                className="text-foreground flex items-center gap-2 text-2xl font-extrabold"
-              >
-                <Trophy className="text-primary" size={22} aria-hidden />
-                Community leaderboards
-              </h2>
-              <p className="text-foreground-muted mt-1 max-w-2xl text-sm">
-                Ranked by participation and genuine support, not raw STS, ratings, or volume.
-              </p>
+        <>
+          {/* The highlight. Community Champions is the only board with real earned separation today
+              (§1Q), so it is the only one that can honestly carry the middle of the page. It gets the
+              hero's gradient edge and glow so it reads as the centrepiece, not another list. */}
+          <section className="space-y-3" aria-labelledby="home-spotlight-title">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="vp-label text-primary">Community spotlight</p>
+                <h2
+                  id="home-spotlight-title"
+                  className="text-foreground flex items-center gap-2 text-xl font-extrabold"
+                >
+                  <Trophy className="text-primary" size={20} aria-hidden />
+                  Who is leading right now
+                </h2>
+              </div>
+              <ButtonLink href="/leaderboards" variant="secondary">
+                All rankings
+              </ButtonLink>
             </div>
-            <ButtonLink href="/leaderboards" variant="secondary">
-              Explore all rankings
-            </ButtonLink>
-          </div>
-          {user && <MomentumCard rows={momentum} />}
-          <div className="space-y-5">
-            <div className="relative">
-              <Medal className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
-              <LeaderboardPanel
-                board={players.board}
-                error={players.error}
-                category="players"
-                paused={settings.paused.players}
-                compact
-                viewerId={user?.id ?? null}
-              />
-            </div>
-            <div className="relative">
-              <Medal className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
+            {/* A signed-in player sees their own position immediately before seeing whose position
+                they are chasing. */}
+            {user && <MomentumCard rows={momentum} />}
+            <div className="vp-glow relative overflow-hidden rounded-2xl">
+              <div className="vp-gradient absolute inset-x-0 top-0 z-10 h-1" aria-hidden />
               <LeaderboardPanel
                 board={community.board}
                 error={community.error}
@@ -128,21 +99,56 @@ export default async function HomePage() {
                 viewerId={user?.id ?? null}
               />
             </div>
-            <div className="relative">
-              <Trophy className="text-primary absolute top-4 right-4 z-10" size={20} aria-hidden />
-              <LeaderboardPanel
-                board={clubs.board}
-                error={clubs.error}
-                category="clubs"
-                paused={settings.paused.clubs}
-                compact
-                viewerId={user?.id ?? null}
-              />
-            </div>
-          </div>
-          <RankingsExplanation />
-        </section>
+          </section>
+
+          {/* Everything else, clearly secondary. */}
+          <section className="space-y-3" aria-labelledby="home-more-rankings-title">
+            <h2
+              id="home-more-rankings-title"
+              className="text-foreground-muted vp-label flex items-center gap-2"
+            >
+              More rankings
+            </h2>
+            <LeaderboardPanel
+              board={clubs.board}
+              error={clubs.error}
+              category="clubs"
+              paused={settings.paused.clubs}
+              compact
+              viewerId={user?.id ?? null}
+            />
+            <LeaderboardPanel
+              board={players.board}
+              error={players.error}
+              category="players"
+              paused={settings.paused.players}
+              compact
+              viewerId={user?.id ?? null}
+            />
+            <RankingsExplanation />
+          </section>
+        </>
       )}
+
+      {/* What you can do, after the proof rather than before it: the cards describe the product, the
+          board demonstrates it, and evidence persuades a newcomer more than a description (§1R). */}
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="What you can do here">
+        <FeatureCard
+          icon={<Users size={18} aria-hidden />}
+          title="Discover players"
+          body="Find people to play with by skill, city, and role."
+        />
+        <FeatureCard
+          icon={<ShieldCheck size={18} aria-hidden />}
+          title="Build trust"
+          body="Share real vouches from players and coaches who know your game."
+        />
+        <FeatureCard
+          icon={<Trophy size={18} aria-hidden />}
+          title="Play more"
+          body="Join clubs and register for tournaments when they open."
+        />
+      </section>
 
       <footer className="border-border mt-2 border-t pt-5 text-center">
         <nav className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs">
@@ -165,21 +171,27 @@ export default async function HomePage() {
           rel="noopener noreferrer"
           className="text-foreground-muted hover:text-foreground mt-2 inline-block text-[11px]"
         >
-          Powered by {BRAND.developer}
+          Developed by {BRAND.developer}
         </a>
       </footer>
     </div>
   );
 }
 
+/**
+ * Compact by design: the icon sits beside the title rather than above it, so three cards cost about
+ * half the height on a phone without dropping a word of the explanation (§1R).
+ */
 function FeatureCard({ icon, title, body }: { icon: ReactNode; title: string; body: string }) {
   return (
-    <div className="border-border bg-surface vp-card rounded-2xl border p-5">
-      <span className="vp-gradient inline-flex h-10 w-10 items-center justify-center rounded-xl text-white">
+    <div className="border-border bg-surface vp-card flex gap-3 rounded-2xl border p-4">
+      <span className="vp-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white">
         {icon}
       </span>
-      <h2 className="text-foreground mt-3 font-semibold">{title}</h2>
-      <p className="text-foreground-muted mt-1 text-sm leading-relaxed">{body}</p>
+      <span className="min-w-0">
+        <span className="text-foreground block text-sm font-semibold">{title}</span>
+        <span className="text-foreground-muted mt-0.5 block text-xs leading-relaxed">{body}</span>
+      </span>
     </div>
   );
 }
