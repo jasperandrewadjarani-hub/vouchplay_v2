@@ -1871,3 +1871,26 @@ Open items, highest value first:
   Organizers can already award Champion, Runner-up, Bronze, MVP, Sportsmanship and Participant today,
   so the Phase 15 "results in, achievements out" slice is mostly already built.
   See master_plan §1U, handover v1.28.
+
+- **2026-09-09** - **Fixed the two bugs the pay-first flow introduced, plus the skill-ceiling copy.**
+  Both bugs had one cause: §1U made a team carry a registration from creation, and two older rules
+  assumed the opposite. `leave_team_after_cancel` refuses when a team has an active registration, so
+  under pay-first the "Leave team and change partner" button could only ever fail; and
+  `player_cancel_registration` refuses once a `payments` row exists while the UI only offered Cancel
+  for `payment_pending`/`waitlisted`, so the payer lost the button within a minute of paying and was
+  left with one control that could not succeed and none that could. The partner area now shows only
+  the real states: seat vacant after a decline -> inline "Name a new partner" keeping slot, payment
+  and position; partner still deciding -> say who and that declining is theirs; otherwise nothing.
+  Cancel appears only when it will work, and when it will not the screen says to message the organizer
+  for a refund and slot release instead of failing on tap.
+  **The skill ceiling already blocked** - `evaluateSkillFloor`'s `blocked` branch has always refused a
+  player above the division maximum. The bug was the sentence, which said "your skill level" even when
+  the person over the ceiling was the partner you named. It now names them. **Only runs when the
+  tournament's `enforceSkillFloor` rule is on** - worth checking before testing.
+  **Migration 0026 written, not yet applied** (`scripts/apply-0026.sql`): converts
+  `divisions.fee_amount` from a team total to a per-player price (`/ team_size`, exact, guarded by a
+  `division_fee_is_per_player` settings row so a re-run cannot halve fees twice), adds early-bird
+  columns (window on the tournament, amount per division) and `division_effective_fee()`. **Nobody's
+  price changes**: live divisions hold 3000/team and already display 1500/player, so after conversion
+  they hold 1500/player, display 1500, and collect 3000. Organizer fee UI, early-bird UI and the
+  payment-total display are held until Jasper applies 0026. See master_plan §1V.

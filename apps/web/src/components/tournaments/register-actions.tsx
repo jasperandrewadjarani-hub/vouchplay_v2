@@ -29,7 +29,7 @@ export function RegisterActions({
   teamId?: string;
   format: 'singles' | 'doubles';
   teamSize: number;
-  registration?: { id: string; status: string } | null;
+  registration?: { id: string; status: string; paymentStatus?: string | null } | null;
   divisions?: Array<{ id: string; name: string; format: string; teamSize: number; status: string }>;
   registrationOpen: boolean;
   playerChangesConfigured: boolean;
@@ -48,8 +48,17 @@ export function RegisterActions({
   }
 
   if (registration) {
-    const canWithdraw =
-      registrationOpen && ['payment_pending', 'waitlisted'].includes(registration.status);
+    // A player may cancel their own entry only while no money is involved. The server enforces the
+    // same rule (player_cancel_registration raises payment_already_started once a payments row
+    // exists), so showing the button after that would guarantee a dead end. Once a receipt is in,
+    // the honest answer is the organizer - and we say so instead of hiding the option silently.
+    const paymentStarted = Boolean(registration.paymentStatus);
+    const cancellableStatus = ['payment_pending', 'waitlisted'].includes(registration.status);
+    const canWithdraw = registrationOpen && cancellableStatus && !paymentStarted;
+    const needsOrganiserToCancel =
+      registrationOpen &&
+      !canWithdraw &&
+      !['withdrawn', 'cancelled', 'rejected'].includes(registration.status);
     const moveOptions = divisions.filter(
       (division) =>
         division.id !== divisionId &&
@@ -82,6 +91,13 @@ export function RegisterActions({
           >
             Cancel registration
           </button>
+        )}
+        {needsOrganiserToCancel && (
+          <p className="text-foreground-muted max-w-sm text-xs">
+            {paymentStarted
+              ? 'You have already paid, so cancelling has to go through the organizer. Message them and they can refund you and release your slot.'
+              : 'This entry can no longer be cancelled here. Contact the organizer for help.'}
+          </p>
         )}
         {canMove && (
           <label className="text-foreground-muted flex max-w-sm flex-col gap-1 text-xs">

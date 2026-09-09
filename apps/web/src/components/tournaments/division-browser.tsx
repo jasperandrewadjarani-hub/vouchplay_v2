@@ -199,13 +199,17 @@ export function DivisionBrowser({
                           registration={null}
                           divisions={[]}
                         />
+                        {/* Shown only when there is something to do about the partner: a vacant
+                            seat to fill, or a wait to explain. No disclosure to open and no
+                            control that cannot succeed (§1U). */}
                         {d.format === 'doubles' && team && (
-                          <InfoDisclosure label="Change partner?">
-                            <PartnerChangeActions
-                              teamId={team.teamId}
-                              tournamentId={tournamentId}
-                            />
-                          </InfoDisclosure>
+                          <PartnerChangeActions
+                            teamId={team.teamId}
+                            tournamentId={tournamentId}
+                            divisionId={d.id}
+                            pendingPartnerName={team.pendingPartner?.name ?? null}
+                            seatVacantAfterDecline={team.seatVacantAfterDecline}
+                          />
                         )}
                       </div>
                     )}

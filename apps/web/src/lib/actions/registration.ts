@@ -270,7 +270,13 @@ export async function enterWithPendingPartner(
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
     // Both players are checked against the division's skill floor before anyone pays.
-    const floorError = await skillFloorError(svc, tournamentId, v.divisionId, [user.id, inv.id]);
+    const floorError = await skillFloorError(
+      svc,
+      tournamentId,
+      v.divisionId,
+      [user.id, inv.id],
+      new Map([[inv.id, (await getActorMini(inv.id)).name]]),
+    );
     if (floorError) return { error: floorError };
 
     const { data: created, error: teamError } = await svc.rpc('create_team_with_pending_partner', {
@@ -363,7 +369,13 @@ export async function replacePendingPartner(
       };
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
-    const floorError = await skillFloorError(svc, tournamentId, v.divisionId, [user.id, inv.id]);
+    const floorError = await skillFloorError(
+      svc,
+      tournamentId,
+      v.divisionId,
+      [user.id, inv.id],
+      new Map([[inv.id, (await getActorMini(inv.id)).name]]),
+    );
     if (floorError) return { error: floorError };
 
     const { error } = await svc.rpc('replace_pending_partner', {
@@ -543,6 +555,8 @@ async function skillFloorError(
   tournamentId: string,
   divisionId: string,
   playerIds: string[],
+  /** Optional id -> display name, so the message can say WHO is over the ceiling. */
+  names?: Map<string, string>,
 ): Promise<string | null> {
   const rules = await getTournamentRules(tournamentId);
   if (!rules.enforceSkillFloor || playerIds.length === 0) return null;
@@ -586,7 +600,12 @@ async function skillFloorError(
       enforce: true,
     });
     if (blocked) {
-      return 'You cannot join this division because it is below your skill level. Choose a division at your level or higher.';
+      // Naming the player matters: when you are entering a partner, 'your skill level' is simply
+      // wrong and leaves you with no idea what to change.
+      const who = names?.get(id);
+      return who
+        ? `${who} plays above this division. Their skill level is higher than the division allows, so pick a division at their level or higher.`
+        : 'You cannot join this division because it is below your skill level. Choose a division at your level or higher.';
     }
   }
   return null;

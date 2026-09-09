@@ -1010,6 +1010,77 @@ out" slice is therefore mostly **already built**, and what remains there is much
 described.
 
 
+## 1V. Fixing what the pay-first flow broke, and pricing per player (2026-09-09, post-launch)
+
+### Two bugs, one cause
+
+Both bugs Jasper hit came from the same place: §1U made a team carry a registration **from the moment
+it is created**, and two older rules assumed the opposite.
+
+- **"Leaving a partner just says this action can't be done."** `leave_team_after_cancel` refuses when
+  the team has an active registration. Under pay-first that is always true, so the button could only
+  ever fail. The two-step "cancel, then leave, then re-invite" path it belonged to no longer exists.
+- **No cancel button for the person who registered.** `player_cancel_registration` refuses once a
+  `payments` row exists, and the UI only offered the button for `payment_pending` / `waitlisted`. In
+  the new flow a payer reaches `payment_submitted` within a minute, so the button vanished and the
+  player was left with a control that could not succeed and no control that could.
+
+**The fix is to stop pretending a partner change means dissolving a team.** §1U already built the
+right primitives; the UI had not caught up. The partner area now shows only the state a player is
+actually in:
+
+- **Seat empty because the partner declined** → "Name a new partner", inline search, keeping slot,
+  payment and waitlist position (`replace_pending_partner`).
+- **Partner has not answered** → say who, and say that declining is theirs to do, not yours.
+- **Nothing to do** → render nothing.
+
+And cancellation now tells the truth in both directions: the button appears only while it will
+actually work (registration open, no payment started), and when it will not, the screen says
+**message the organizer, who can refund you and release your slot** rather than hiding the option or
+failing on tap. A control that cannot succeed is worse than no control.
+
+### The skill ceiling already blocked. It just would not say who.
+
+`evaluateSkillFloor` has always refused a player whose skill is **above** the division's ceiling -
+that is exactly the `blocked` branch. What was wrong was the sentence: "You cannot join this division
+because it is **your** skill level" is meaningless when the person over the ceiling is the partner you
+just named. The message now names them: *"<Name> plays above this division..."*, so the reader knows
+what to change. **Note for testing:** the gate only runs when the tournament's `enforceSkillFloor`
+rule is on. With it off, nothing is blocked at any level.
+
+### Fees are configured per player
+
+Today `divisions.fee_amount` holds a **team** total, and the app divides it by `team_size` to display
+"per player". So the organizer types 3000, the player reads 1500, and the QR collects 3000 - three
+different numbers for one price, which is exactly how a fee gets entered wrong.
+
+After migration 0026 the stored number **is** the per-player price. The organizer types 1500, the
+player reads 1500, and the payment screen shows **1500 x 2 = 3000 to send**.
+
+- **Nobody's price changes.** The live divisions hold 3000 per team and are already displayed as 1500
+  per player; the conversion is `fee_amount / team_size`, exact for every row. Same money in, same
+  money shown.
+- The conversion is **guarded by a `system_settings` flag**, so re-running the script cannot halve the
+  fees a second time. That guard is the only thing standing between a re-run and real financial
+  damage, which is why it is a row and not a comment.
+- **The payment screen states the arithmetic** rather than just a total: per-player price, times the
+  team size, equals the amount to send. A player comparing the QR total against the fee they were
+  quoted should never have to work out where the difference came from.
+
+### Early bird
+
+One date range for the whole tournament, one optional early amount per division. Outside the window,
+or with no early amount configured, the normal per-player fee applies.
+
+- **The window lives on the tournament and the amount lives on the division**, because "the promo runs
+  until the 30th" is one decision an organizer makes once, while "how much off" genuinely differs per
+  division. Putting the dates on each division would invite eleven chances to typo the same date.
+- `division_effective_fee()` is the single source of the quoted price, so what the player is charged
+  and what the organizer configured cannot drift apart.
+- Early-bird pricing is **decided when the receipt is submitted**, not when the entry is created:
+  the amount owed is the amount that was true at the moment of payment, which is the only reading
+  that survives someone starting an entry before the deadline and paying after it.
+
 ## 1. Prompt Contract
 
 ### In scope

@@ -120,7 +120,11 @@ export function MyRegistrations({
                   teamSize={d.teamSize}
                   registrationOpen={registrationOpen}
                   playerChangesConfigured={playerChangesConfigured}
-                  registration={{ id: reg.id, status: reg.status }}
+                  registration={{
+                    id: reg.id,
+                    status: reg.status,
+                    paymentStatus: reg.paymentStatus,
+                  }}
                   divisions={divisions.map((division) => ({
                     id: division.id,
                     name: division.name,

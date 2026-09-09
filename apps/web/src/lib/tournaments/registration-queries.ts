@@ -49,6 +49,10 @@ export interface ViewerTeam {
   teamId: string;
   status: string;
   members: Mini[];
+  /** A named partner who has not answered yet, or null. */
+  pendingPartner: Mini | null;
+  /** True when the seat is empty because the last named partner said no (§1U). */
+  seatVacantAfterDecline: boolean;
 }
 export interface ViewerRegistration {
   id: string;
@@ -158,19 +162,38 @@ export async function getViewerRegistrationState(
     const { data: memberRows } = activeTeamIds.length
       ? await svc
           .from('team_members')
-          .select('team_id, player_id, member_order')
+          .select('team_id, player_id, member_order, confirmed_at')
           .in('team_id', activeTeamIds)
       : { data: [] };
     const members = (memberRows ?? []) as {
       team_id: string;
       player_id: string;
       member_order: number;
+      confirmed_at: string | null;
     }[];
     const profiles = await resolve(members.map((m) => m.player_id));
+
+    // A seat is vacant-after-decline when the team is short a player AND its last invitation was
+    // refused or ran out. That is the only state in which a replacement may be named (§1U).
+    const declinedTeamIds = new Set<string>();
+    if (activeTeamIds.length) {
+      const { data: declRows } = await svc
+        .from('partner_invitations')
+        .select('team_id, status')
+        .in('team_id', activeTeamIds)
+        .in('status', ['declined', 'expired']);
+      for (const r of (declRows ?? []) as { team_id: string | null }[])
+        if (r.team_id) declinedTeamIds.add(r.team_id);
+    }
     for (const t of teamRows) {
+      const teamMembers = members.filter((m) => m.team_id === t.id);
+      const pending = teamMembers.find((m) => !m.confirmed_at && m.player_id !== userId);
+      const hasOpenSeat = teamMembers.length < 2 && declinedTeamIds.has(t.id);
       teamsByDivision[t.division_id] = {
         teamId: t.id,
         status: t.status,
+        pendingPartner: pending ? (profiles.get(pending.player_id) ?? null) : null,
+        seatVacantAfterDecline: hasOpenSeat,
         members: members
           .filter((m) => m.team_id === t.id)
           .sort((a, b) => a.member_order - b.member_order)
