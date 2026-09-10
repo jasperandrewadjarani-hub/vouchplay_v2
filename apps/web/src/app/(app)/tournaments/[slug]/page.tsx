@@ -10,6 +10,7 @@ import { ShareButton } from '@/components/players/share-button';
 import { InterestButton } from '@/components/tournaments/interest-button';
 import { TournamentDemandSummary } from '@/components/tournaments/demand-summary';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
+import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { MyRegistrations } from '@/components/tournaments/my-registrations';
 import { DivisionBrowser } from '@/components/tournaments/division-browser';
 import { ClubRepSelector } from '@/components/tournaments/club-rep-selector';
@@ -173,6 +174,15 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           />
         </div>
       </header>
+
+      {/* Availability, right where a player weighs partnering and being noticed at this event (§2N).
+          Onboarded viewers only, so the toggles are never shown to someone who cannot use them. */}
+      {authed && regState?.viewerOnboarded && (
+        <AvailabilityCard
+          lookingForPartner={regState.viewerLookingForPartner}
+          openForSponsorship={regState.viewerOpenForSponsorship}
+        />
+      )}
 
       {/* My registrations: collapsed manager of the player's own active entries, after details. */}
       {authed && regState && (

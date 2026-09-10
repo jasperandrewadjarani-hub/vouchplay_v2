@@ -13,7 +13,7 @@ import {
 } from '@/lib/players/filters';
 import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters } from '@/components/players/search-filters';
-import { LookingForPartnerToggle } from '@/components/players/looking-for-partner-toggle';
+import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { Pagination } from '@/components/ui/pagination';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
@@ -72,7 +72,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       <LeaderboardsEntryCard board={leaders} />
 
       {myProfile?.onboarded_at && (
-        <LookingForPartnerToggle initial={Boolean(myProfile.looking_for_partner)} />
+        <AvailabilityCard
+          lookingForPartner={Boolean(myProfile.looking_for_partner)}
+          openForSponsorship={Boolean(myProfile.open_for_sponsorship)}
+        />
       )}
 
       <SearchFilters

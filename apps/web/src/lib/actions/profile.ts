@@ -225,18 +225,19 @@ export async function updateProfile(
   redirect('/me?profile=updated');
 }
 
+type AvailabilityResult = { ok?: boolean; error?: string; value?: boolean };
+
 /**
- * Flip only the "looking for a partner" flag for the current player (master_plan §2M).
- *
- * A focused write behind the inline toggles on the Players tab and the tournament partner-invite
- * step, so a player can flag themselves at the moment they are searching without opening Edit
- * profile. Writes one column, revalidates the directory and the player's own page, and returns fast
- * so the optimistic switch settles quickly. Same column as the filter and the badge, so every
- * surface stays in sync.
+ * Shared writer for the one-column availability flags (master_plan §2M/§2N). A focused write behind
+ * the inline toggles on the Players tab and the tournament, so a player can flag themselves in the
+ * moment without opening Edit profile. Writes one whitelisted column, revalidates the directory and
+ * the player's own page, and returns fast so the optimistic switch settles quickly. Same columns the
+ * filter and badges use, so every surface stays in sync.
  */
-export async function setLookingForPartner(
+async function setAvailabilityFlag(
+  column: 'looking_for_partner' | 'open_for_sponsorship',
   value: boolean,
-): Promise<{ ok?: boolean; error?: string; value?: boolean }> {
+): Promise<AvailabilityResult> {
   try {
     const supabase = await createClient();
     const {
@@ -254,7 +255,7 @@ export async function setLookingForPartner(
 
     const { error } = await supabase
       .from('profiles')
-      .update({ looking_for_partner: value })
+      .update({ [column]: value })
       .eq('id', user.id);
     if (error) return { error: 'Could not update your status. Please try again.' };
 
@@ -264,4 +265,12 @@ export async function setLookingForPartner(
   } catch {
     return { error: 'That is temporarily unavailable. Please try again shortly.' };
   }
+}
+
+export async function setLookingForPartner(value: boolean): Promise<AvailabilityResult> {
+  return setAvailabilityFlag('looking_for_partner', value);
+}
+
+export async function setOpenForSponsorship(value: boolean): Promise<AvailabilityResult> {
+  return setAvailabilityFlag('open_for_sponsorship', value);
 }

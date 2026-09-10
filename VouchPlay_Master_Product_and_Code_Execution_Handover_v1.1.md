@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.41
+# VouchPlay Master Product & Code Execution Handover v1.42
 
-_(File retains its `…v1.1.md` name; content is v1.41 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.42 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,24 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.42 (2026-09-10)
+
+_App-side, no migration. Extends v1.41._
+
+- **Availability is one compact card - partner and sponsorship together (master_plan §2N).** "Open to
+  sponsorship" now sits beside "Looking for a partner" as two thin rows in a single **"Let people find
+  you"** card, not two cards, so a directory screen is not doubled in height. The toggle is now generic
+  over the flag (`AvailabilityToggle`, `kind: 'partner' | 'sponsor'`), backed by `setLookingForPartner`
+  and `setOpenForSponsorship` sharing one private writer; both write the same columns the badges,
+  filter, row icon and Edit-profile checkboxes use, so every surface stays in sync. The same card now
+  also appears on the **tournament page** (signed-in, onboarded viewers), just below the header - the
+  per-division partner step keeps its own inline "looking for a partner" toggle. The tournament viewer
+  projection returns `viewerOpenForSponsorship` and `viewerOnboarded` alongside
+  `viewerLookingForPartner`.
+- **The top of the Players screen is trimmed (§2N).** The Community-leaderboards doorway went from
+  three stacked text lines with a gradient hero treatment to two lines with a lighter icon; the
+  availability card lost padding and its header shrank. The player list now starts higher without
+  losing either entry point.
 ## v1.41 (2026-09-10)
 
 _App-side, no migration. Follows v1.40's settable flag (§2L)._

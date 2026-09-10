@@ -2120,6 +2120,50 @@ for a signed-in player (anonymous visitors see nothing extra). "Open to sponsors
 profile for now: it is a slower, less frequent decision without a specific in-app moment, so it does
 not need a scattered call to action the way partner-finding does. No migration - the column and the
 read/badge/filter path already exist; this adds only the inline write.
+## 2N. Availability as one compact card: partner and sponsorship together (2026-09-10, post-launch)
+
+§2M put the "looking for a partner" toggle on the Players tab and in the tournament partner step.
+Jasper asked to add "open to sponsorship" next to it - without turning the Players screen into a wall
+of cards - and to surface both toggles on the tournament page too.
+
+### One card, two thin rows - not two cards
+
+Two full toggles side by side is cramped on a phone, and two separate cards double the vertical space
+on a screen that is meant to be a directory. So the two flags share a single **"Let people find
+you"** card: a slim row each -  a partner-search icon + "Looking for a partner" + switch, and a
+handshake icon + "Open to sponsorship" + switch. It is the same footprint the one-toggle card had,
+now carrying both, and it reads as one grouped decision ("how do you want to be found") rather than
+two unrelated settings.
+
+### The same card on the tournament page
+
+Opening a tournament is one of the moments a player weighs partnering and being noticed by sponsors,
+so the same card now sits on the tournament detail, for a signed-in, onboarded viewer, just below the
+header. The per-division partner step keeps its own inline "looking for a partner" toggle (§2M) - that
+is the most specific "I need a partner right now" moment - but the tournament-level card is where both
+availability choices live together.
+
+### One control, two flags, still all in sync
+
+The toggle is now generic over the flag it writes (`AvailabilityToggle`, `kind: 'partner' | 'sponsor'`),
+backed by two focused actions, `setLookingForPartner` and `setOpenForSponsorship`, that share one
+private writer. Both write the same columns the badges, the directory filter, the compact-row icon and
+the Edit-profile checkboxes already use, so a flip anywhere is consistent everywhere on the next read.
+The viewer's current values are read where each card lives: `getMyProfile` on the Players tab, and the
+tournament's viewer projection now returns `viewerOpenForSponsorship` and `viewerOnboarded` alongside
+`viewerLookingForPartner`, so the card only appears for a viewer who can actually use it.
+
+No migration - both columns and their read paths already exist; this adds the second inline write and
+the shared card.
+
+### Trimming the top of the Players screen
+
+The same request extended to the whole top strip: it pushed the player list too far down. The
+Community-leaderboards doorway dropped from three stacked text lines (a category label, a headline and
+a leader line) with a gradient "hero" treatment to **two lines** with a lighter icon - it is a
+doorway, not a display. The availability card lost padding and its header shrank to a single small
+label. On a phone the width is the viewport, so the win is vertical: the directory now starts higher
+without losing either entry point.
 ## 1. Prompt Contract
 
 ### In scope

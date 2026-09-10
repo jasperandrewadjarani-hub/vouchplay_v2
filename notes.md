@@ -2312,3 +2312,16 @@ it done. Several fixes in this session were found only that way.
   `viewerLookingForPartner` (tournament). Signed-in only; never touches others. No migration. All
   gates green (typecheck, lint, 193 tests, format, build). Auth-gated, so verified via build/logic;
   worth a signed-in tap to confirm the switch + sync.
+
+- **2026-09-10** - **"Open to sponsorship" joins "Looking for a partner" as one compact card, on
+  Players and the tournament; top of Players trimmed** (master_plan §2N, handover v1.42). Both flags
+  now share a single "Let people find you" card (two thin rows, not two cards). The toggle is generic
+  (`AvailabilityToggle` kind partner/sponsor) with `setLookingForPartner`/`setOpenForSponsorship`
+  sharing one writer; same columns as the badge/filter/row-icon/edit checkboxes, so all in sync. The
+  card also appears on the tournament page for onboarded viewers (viewer projection now returns
+  viewerOpenForSponsorship + viewerOnboarded); the per-division partner step keeps its inline LFP
+  toggle. Replaced the LFP-only component with availability-toggles.tsx (deleted
+  looking-for-partner-toggle.tsx). Also trimmed the top of Players: the leaderboards doorway went 3
+  lines -> 2 and lost the gradient hero; the availability card lost padding - the list starts higher.
+  No migration. All gates green (typecheck, lint, 193 tests, format, build). Auth-gated surfaces
+  verified via build/logic; leaderboard card compaction is visible on the public Players page.

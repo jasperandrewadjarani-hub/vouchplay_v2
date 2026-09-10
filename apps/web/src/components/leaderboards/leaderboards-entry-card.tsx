@@ -25,16 +25,17 @@ export function LeaderboardsEntryCard({ board }: { board: LeaderboardDTO | null 
   return (
     <Link
       href="/leaderboards"
-      className="vp-card vp-hero border-border bg-surface flex items-center gap-3 rounded-2xl border p-3 sm:gap-4 sm:p-4"
+      className="vp-card border-border bg-surface flex items-center gap-3 rounded-2xl border p-3"
       aria-label="View the community leaderboards"
     >
-      <span className="vp-gradient vp-glow flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white">
-        <Trophy size={20} aria-hidden />
+      <span className="vp-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white">
+        <Trophy size={18} aria-hidden />
       </span>
+      {/* Two lines, not three: a doorway to the boards should not stack a category label, a headline
+          and a leader line before the player list even begins (§2N). */}
       <span className="min-w-0 flex-1">
-        <span className="vp-label text-primary block">Community leaderboards</span>
-        <span className="text-foreground mt-0.5 block truncate text-base leading-tight font-extrabold">
-          {leader ? 'See who is on top' : 'Be the first on the board'}
+        <span className="text-foreground block truncate text-sm leading-tight font-bold">
+          Community leaderboards
         </span>
         <span className="text-foreground-muted mt-0.5 flex items-center gap-1 truncate text-xs">
           {leader ? (
@@ -42,11 +43,11 @@ export function LeaderboardsEntryCard({ board }: { board: LeaderboardDTO | null 
               <Crown size={12} className="shrink-0 text-amber-500" aria-hidden />
               <span className="truncate">
                 <span className="text-foreground font-semibold">{leader.displayName}</span> is
-                leading now
+                leading
               </span>
             </>
           ) : (
-            'Rankings update every day. Vouch for players you know.'
+            'Be the first on the board'
           )}
         </span>
       </span>
@@ -64,9 +65,8 @@ export function LeaderboardsEntryCard({ board }: { board: LeaderboardDTO | null 
           ))}
         </span>
       )}
-      <span className="text-primary flex shrink-0 items-center gap-1 text-sm font-semibold">
-        <span className="hidden sm:inline">View leaderboards</span>
-        <span className="sm:hidden">View</span>
+      <span className="text-primary flex shrink-0 items-center gap-0.5 text-sm font-semibold">
+        <span className="hidden sm:inline">View</span>
         <ChevronRight size={16} aria-hidden />
         <LinkSpinner />
       </span>

@@ -104,8 +104,11 @@ export interface ViewerRegistrationState {
   paymentQrUrl: string | null;
   /** So a team member list can say which of the two players is the OTHER one (§2A). */
   viewerId: string;
-  /** The viewer's own "looking for a partner" flag, for the inline toggle at the partner step (§2M). */
+  /** The viewer's availability flags, for the inline toggle and the tournament card (§2M/§2N). */
   viewerLookingForPartner: boolean;
+  viewerOpenForSponsorship: boolean;
+  /** Whether the viewer has finished onboarding, so the availability card only shows if usable. */
+  viewerOnboarded: boolean;
 }
 
 export async function getViewerRegistrationState(
@@ -119,7 +122,9 @@ export async function getViewerRegistrationState(
   const [{ data: viewerProfileRow }, { data: viewerSkillRow }] = await Promise.all([
     svc
       .from('profiles')
-      .select('slug, self_rated_skill, sex, looking_for_partner')
+      .select(
+        'slug, self_rated_skill, sex, looking_for_partner, open_for_sponsorship, onboarded_at',
+      )
       .eq('id', userId)
       .maybeSingle(),
     svc
@@ -133,6 +138,8 @@ export async function getViewerRegistrationState(
     self_rated_skill: number | null;
     sex: string | null;
     looking_for_partner: boolean | null;
+    open_for_sponsorship: boolean | null;
+    onboarded_at: string | null;
   } | null;
   const skill = viewerSkillRow as {
     community_skill_level: number | null;
@@ -427,6 +434,8 @@ export async function getViewerRegistrationState(
     paymentQrUrl,
     viewerId: userId,
     viewerLookingForPartner: Boolean(viewerProfile?.looking_for_partner),
+    viewerOpenForSponsorship: Boolean(viewerProfile?.open_for_sponsorship),
+    viewerOnboarded: Boolean(viewerProfile?.onboarded_at),
   };
 }
 
