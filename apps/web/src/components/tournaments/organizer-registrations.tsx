@@ -192,6 +192,50 @@ const TONE_STYLES: Record<StatusChip['tone'], string> = {
   closed: 'border-border text-foreground-muted opacity-70',
 };
 
+// Order reasons by how much they should drive an organizer's decision: a hard rule or a skill-cap
+// breach first, "still building / not many vouches" confidence notes last.
+const REASON_PRIORITY = [
+  'SKILL_ABOVE_DIVISION_MAX',
+  'STS_BELOW_REQUIRED',
+  'SKILL_VERIFIED_REQUIRED_MISSING',
+  'AGE_UNKNOWN',
+  'UNRATED',
+  'INSUFFICIENT_EVIDENCE',
+  'LOW_CONFIDENCE',
+];
+
+/**
+ * Plain-language reasons a registration is flagged, for the LIST row (§2AD) - so an organizer sees
+ * WHO and WHY without opening the sheet. Reads the stored eligibility snapshot and maps each flagged
+ * player's most salient code to its human label, grouping players who share a reason. Returns e.g.
+ * ["Berl, Mayong - Community skill is above the division maximum", "Joy - Not many vouches yet"].
+ */
+function eligibilityReasonLines(entry: OrganizerRegistration): string[] {
+  const snap = (entry.eligibilitySnapshot ?? {}) as Snapshot;
+  const nameById = new Map(entry.members.map((m) => [m.id, m.name]));
+  const byReason = new Map<string, string[]>();
+  const add = (label: string, name: string) => {
+    const names = byReason.get(label) ?? [];
+    if (!names.includes(name)) names.push(name);
+    byReason.set(label, names);
+  };
+  for (const p of snap.players ?? []) {
+    if ((p.result ?? 'ELIGIBLE') === 'ELIGIBLE') continue;
+    const name = nameById.get(p.playerId) ?? 'A player';
+    const hard = (p.hardRuleCodes ?? [])[0];
+    const hardLabel = hard ? HARD_RULE_LABELS[hard as keyof typeof HARD_RULE_LABELS] : undefined;
+    if (hardLabel) {
+      add(hardLabel, name);
+      continue;
+    }
+    const code =
+      REASON_PRIORITY.find((c) => (p.reasonCodes ?? []).includes(c)) ?? (p.reasonCodes ?? [])[0];
+    const label = code ? REASON_LABELS[code as keyof typeof REASON_LABELS] : undefined;
+    if (label) add(label, name);
+  }
+  return [...byReason.entries()].map(([label, names]) => `${names.join(', ')} — ${label}`);
+}
+
 /**
  * One entry, scannable in a glance: who, which division, what it needs, how much. The whole row is
  * the control - a small "Manage" link beside a tall row is a smaller target than the row itself.
@@ -200,6 +244,7 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
   const chip = statusChip(entry);
   const amount = amountLabel(entry);
   const unconfirmed = hasUnconfirmedPartner(entry);
+  const reasonLines = entry.eligibilityStatus !== 'eligible' ? eligibilityReasonLines(entry) : [];
   return (
     <li>
       <button
@@ -240,6 +285,17 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
               </span>
             )}
           </span>
+          {/* The specific reason(s) the entry is flagged, right in the list so the organizer sees
+              who and why before opening the sheet (§2AD). */}
+          {reasonLines.length > 0 && (
+            <span className="text-foreground-muted mt-1 block text-[11px] leading-snug">
+              {reasonLines.map((line, i) => (
+                <span key={i} className="block truncate">
+                  {line}
+                </span>
+              ))}
+            </span>
+          )}
         </span>
         <ChevronRight size={16} className="text-foreground-muted shrink-0" aria-hidden />
       </button>

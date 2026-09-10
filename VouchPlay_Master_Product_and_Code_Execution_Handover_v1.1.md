@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.56
+# VouchPlay Master Product & Code Execution Handover v1.57
 
-_(File retains its `…v1.1.md` name; content is v1.56 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.57 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,32 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.57 (2026-09-11)
+
+_Caching phase 1 (tournament count read) + organizer eligibility-reason detail (master_plan §2AC,
+§2AD). No migration. One windowed deploy, ahead of the Hermosa registration event._
+
+- **Caching, phase 1 (§2AC).** The tournament detail page pulled up to 1000 registration rows on
+  every view (twice per render, via `generateMetadata` + page) - the biggest uncached Supabase egress
+  item. The per-division count read is now an `unstable_cache` helper (60s, tag `tournamentTag(slug)`)
+  using the cookie-free service client. Counts stay live because every registration/payment/
+  eligibility/edit write already revalidates that tag; the TTL is only a backstop. Capacity is still
+  enforced in the `register_team` RPC, so a briefly-stale count can never over-register anyone. No
+  viewer data is cached. The rest of the caching layer (list card counts, offers, club members,
+  profile extras, directory tag-splitting) is deferred to phase 2, after the event.
+- **Organizer eligibility reason in the list (§2AD).** The organizer registration list showed a
+  generic "Potential skill mismatch" chip; the specific reason was one tap deeper. `EntryRow` now
+  shows a concise plain-language line under the chip naming the reason(s) and player(s) - e.g.
+  "Berl, Mayong - community skill is above the division maximum" - mapped through the existing
+  `HARD_RULE_LABELS`/`REASON_LABELS`. Organizer-only, read-only. Pairs with the existing "Eligibility"
+  queue filter so an organizer sees which entries are flagged and why at a glance. This is the
+  surfacing half of the §2AB Option-A decision (organizer-managed skill drift).
+- **Deferred, deliberately, for event safety:** the post-window cleanup migration (it adds
+  `player_fits_division` inside the live `register_team` RPC - a registration-path logic change) and
+  the `LEGAL.version` bump (it would re-prompt all 350+ users with the blocking consent gate during
+  the registration rush). Both wait until after the event; counsel review of the legal text remains a
+  human task.
 
 ## v1.56 (2026-09-10)
 

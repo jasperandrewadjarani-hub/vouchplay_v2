@@ -2584,3 +2584,26 @@ windowed deploy self-heals open tabs once via §2Q. Production push HELD for the
 - STILL DEFERRED: caching layer on uncached public reads (§2AC, own deploy - stacks on the region
   win); post-window cleanup migration (drop move_player_registration, dead helper, add
   player_fits_division inside register_team); legal counsel review + LEGAL.version bump.
+
+## 2026-09-11 - Caching phase 1 + organizer eligibility-reason detail (§2AC/§2AD, handover v1.57)
+
+Event-focused batch ahead of tomorrow's Hermosa registration. One windowed deploy. No migration.
+
+- **§2AC caching, phase 1 (queries.ts):** extracted the per-division registration-count read (the
+  limit(1000) rows, biggest uncached egress item, called twice per detail render) into
+  getDivisionRegistrationCounts(tournamentId, slug) - unstable_cache 60s, tag tournamentTag(slug),
+  cookie-free service client. Counts stay live: registration/payment/eligibility/edit writes already
+  revalidateTag(tournamentTag(slug)). Capacity still enforced in register_team RPC, so stale count
+  can't over-register. No viewer data cached. Rest of getTournamentBySlug unchanged.
+- **§2AD organizer reason (organizer-registrations.tsx):** EntryRow now shows a plain-language reason
+  line under the eligibility chip (eligibilityReasonLines() maps snapshot per-player codes via
+  HARD_RULE_LABELS/REASON_LABELS, grouped by reason). Organizer-only, read-only. Covers the live
+  skill_mismatch/review cases; hard-rule-only team-level codes still show via the chip label.
+- **DEFERRED for event safety (told Jasper):** post-window cleanup migration (adds
+  player_fits_division inside the live register_team RPC = registration-path logic change) and
+  LEGAL.version bump (would re-prompt all 350+ with the consent gate mid-event). Counsel review is a
+  human task. Broader caching (card engagement, offers, clubs, profile extras, PLAYERS_LIST_TAG
+  split) = §2AC phase 2, after the event (smaller diff tonight is the safer risk posture).
+
+Gates green: typecheck, lint (migration-grant guard OK), 193 tests, format. Commit local; push held
+for the classifier / Jasper.

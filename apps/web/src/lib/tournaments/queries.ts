@@ -378,6 +378,43 @@ async function resolveNames(ids: string[]): Promise<Map<string, MiniProfile>> {
  * drafts (RLS), while anonymous viewers only see non-draft. Interested count is computed server-side
  * (interests are not publicly readable). Returns null when not found / not visible.
  */
+/**
+ * Per-division registration counts for a tournament (master_plan §2AC). This is the single biggest
+ * uncached Supabase read in the app - up to 1000 rows on every detail view, and the detail render
+ * calls getTournamentBySlug twice (generateMetadata + page). It is public aggregate data (no viewer
+ * fields), so it is cached with the cookie-free service client inside `unstable_cache`.
+ *
+ * TTL is 60s, but the cache is tagged `tournamentTag(slug)`, which every registration / payment /
+ * eligibility / edit write already revalidates - so counts refresh immediately on any write and the
+ * TTL is only a backstop between writes. Capacity is enforced authoritatively in the `register_team`
+ * RPC, so a briefly-stale count can never let a team over-register (worst case a player sees space
+ * and the RPC replies "full" on submit). Returns a plain record because unstable_cache serialises to
+ * JSON; the caller rebuilds a Map.
+ */
+function getDivisionRegistrationCounts(
+  tournamentId: string,
+  slug: string,
+): Promise<Record<string, number>> {
+  return unstable_cache(
+    async () => {
+      const { data } = await createServiceClient()
+        .from('registrations')
+        .select('division_id, status')
+        .eq('tournament_id', tournamentId)
+        .limit(1000);
+      const counts: Record<string, number> = {};
+      for (const r of (data ?? []) as Array<{ division_id: string; status: string }>) {
+        if (!['withdrawn', 'cancelled', 'rejected'].includes(r.status)) {
+          counts[r.division_id] = (counts[r.division_id] ?? 0) + 1;
+        }
+      }
+      return counts;
+    },
+    ['tournament-division-counts', tournamentId],
+    { revalidate: 60, tags: [tournamentTag(slug)] },
+  )();
+}
+
 export async function getTournamentBySlug(
   slug: string,
   viewer: TournamentViewer,
@@ -409,7 +446,7 @@ export async function getTournamentBySlug(
       if (!archivedCoOrganizer) return null;
     }
 
-    const [divRes, orgRes, annRes, registrationRes] = await Promise.all([
+    const [divRes, orgRes, annRes, countsRecord] = await Promise.all([
       supabase
         .from('divisions')
         .select(DIVISION_COLUMNS)
@@ -426,25 +463,12 @@ export async function getTournamentBySlug(
         .eq('tournament_id', row.id)
         .order('published_at', { ascending: false })
         .limit(50),
-      createServiceClient()
-        .from('registrations')
-        .select('division_id, status')
-        .eq('tournament_id', row.id)
-        .limit(1000),
+      // Cached per-division counts (§2AC), tagged so any registration write refreshes them.
+      getDivisionRegistrationCounts(row.id, slug),
     ]);
 
-    const registeredByDivision = new Map<string, number>();
-    for (const registration of (registrationRes.data ?? []) as Array<{
-      division_id: string;
-      status: string;
-    }>) {
-      if (!['withdrawn', 'cancelled', 'rejected'].includes(registration.status)) {
-        registeredByDivision.set(
-          registration.division_id,
-          (registeredByDivision.get(registration.division_id) ?? 0) + 1,
-        );
-      }
-    }
+    // unstable_cache returns a plain record (JSON); rebuild the Map the downstream code expects.
+    const registeredByDivision = new Map<string, number>(Object.entries(countsRecord));
 
     const [demand, rules] = await Promise.all([
       getDemandSummary(row.id),

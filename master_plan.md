@@ -2726,6 +2726,58 @@ registration list renders an amber "Potential skill mismatch" chip on every non-
 - **Legal**: counsel review + a dedicated privacy/DPO email, then a `LEGAL.version` bump (re-prompts
   everyone) - scheduled post-window so it is not a speed bump on tournament day.
 
+## 2AC. Public-read caching layer, phase 1: the tournament detail count read (2026-09-11)
+
+The handover non-negotiable "public reads cache-first" was diagnosed in the audit as largely unmet;
+the region move to Singapore (§2AB follow-up) already cut both latency and Vercel function duration
+~3-5x, but Supabase egress is still the free-tier worry. The single biggest uncached egress item is
+`getTournamentBySlug` (`apps/web/src/lib/tournaments/queries.ts`), which pulls up to 1000 registration
+rows on **every** tournament-detail view - and the detail render calls it twice (once in
+`generateMetadata` with an anonymous viewer, once in the page). With a 350-player registration event
+tomorrow landing everyone on the Hermosa detail page, that read is the hot-path cost.
+
+**Scope shipped now (deliberately narrow for a night-before-the-event deploy):** extract only the
+per-division registration-count read into a cached helper -
+`unstable_cache(fn, ['tournament-division-counts', tournamentId], { revalidate: 60, tags:
+[tournamentTag(slug)] })` using the cookie-free service client (safe inside a cache scope). It returns
+the `divisionId -> count` map; the rest of `getTournamentBySlug` (viewer state, canManage, signed QR
+URL, interest) is untouched and stays uncached/per-viewer.
+
+**Why this is safe on a live registration page:**
+- The count feeds display and the "slots" number only; capacity is enforced authoritatively in the
+  `register_team` RPC, so a briefly-stale count can never let a team over-register (worst case: a
+  player sees "space" and the RPC replies "full" on submit).
+- The cache is tagged `tournamentTag(slug)`, which `registration.ts:139`, `payment.ts:49`,
+  `eligibility.ts:31`, and `tournament.ts:127/875` already call `revalidateTag` on - so every
+  registration/payment/eligibility/edit write busts it immediately. Counts are effectively live during
+  the event; the 60s TTL is only a backstop between writes.
+- No viewer data is cached (no cross-user leakage); the cookie-bound client is never used inside the
+  cache callback.
+
+**Deferred to phase 2 (after the event), tracked here so it isn't lost:** caching for
+`withTournamentCardEngagement` (list card counts), `listOpenOffers`/`getClubOffers`,
+`getClubMembers`/`activeMemberCounts`, and the public bulk of the profile extras
+(`getPlayerAchievements`/`getPlayerHistory`/`getPlayerSkillTags`/`getContributionProgress`), plus
+splitting `PLAYERS_LIST_TAG` so a single vouch does not flush all eight directory caches. All reuse
+tags that already exist and are already revalidated; deferred only because a smaller diff is the right
+risk posture the night before a hot event, and those pages are not the event bottleneck.
+
+## 2AD. Organizer eligibility flag: say WHY, in the list (2026-09-11)
+
+Under the §2AB Option-A decision (organizer reviews skill drift), the organizer list showed only a
+generic amber "Potential skill mismatch" chip; the specific reason lived one tap deeper in the detail
+sheet's eligibility panel. With drift now a live, recurring case (14+ Hermosa registrations), an
+organizer scanning the "Eligibility" queue should see *why* and *who* without opening each entry.
+
+Change (organizer-only surface, read-only, no player-facing effect): `EntryRow`
+(`apps/web/src/components/tournaments/organizer-registrations.tsx`) now renders, beneath the chip, a
+concise plain-language line derived from `eligibilitySnapshot` - the specific reason(s) mapped through
+the existing `HARD_RULE_LABELS`/`REASON_LABELS` and the affected player name(s), e.g. "Berl, Mayong -
+community skill is above the division maximum" or "Joy - not many vouches yet". Grouped by reason,
+hard rules first, names joined, truncated gracefully. The existing "Eligibility" queue filter already
+isolates flagged entries; this makes that queue self-explaining. Non-tech organizers get the decision
+they need in the list, not database codes buried in a sheet.
+
 ## 1. Prompt Contract
 
 ### In scope
