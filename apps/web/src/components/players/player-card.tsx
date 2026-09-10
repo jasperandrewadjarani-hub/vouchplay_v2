@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MapPin } from 'lucide-react';
+import { MapPin, UserSearch } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { CompactRowPending } from './compact-row-pending';
@@ -82,6 +82,17 @@ export function PlayerCard({
               </span>
             )}
             <SexBadge sex={player.sex} symbolOnly />
+            {/* A small icon, not a pill, so line one still holds the name/nickname/sex without
+                wrapping (§1H/§1T). It marks who is open to a partner at a glance, and it is the same
+                looking_for_partner flag the filter and the profile badge use (§2L). */}
+            {player.lookingForPartner && (
+              <UserSearch
+                size={13}
+                className="shrink-0"
+                style={{ color: 'var(--accent-lime)' }}
+                aria-label="Looking for a partner"
+              />
+            )}
           </span>
           {/* Line two: the skill pill alone. Club logos used to sit beside it and pushed the
               longer pills onto a second line, which leaves the whole list ragged (§1H, §1T).

@@ -2,20 +2,18 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2, Users, XCircle } from 'lucide-react';
 import { requestRegistrationCancellation } from '@/lib/actions/registration';
 import { ChangePartnerForm } from './change-partner-form';
 
 /**
- * What a player can do once their receipt is in (master_plan §1Y).
+ * What a player can do once their receipt is in (master_plan §1Y, §2L).
  *
- * The old copy told them to message the organizer about a refund, which invited a conversation about
- * money VouchPlay never handled and was the wrong first thought after paying successfully. The state
- * now says plainly what is true, then offers the two things that genuinely exist.
- *
- * "Request to cancel" does not cancel anything, and the button says so before it is pressed. Once a
- * receipt exists the money went straight to the organizer, so only they can undo it. A control that
- * implies it cancels and then does not would be worse than no control at all.
+ * The state itself is told once, by the §2G "not secured" checklist above this - so this component is
+ * just the two actions, not another retelling. Change partner and Request to cancel are a matched
+ * pair of equal-width buttons; each opens its panel full-width below (§2L). "Request to cancel" does
+ * not cancel anything and says so before it is pressed: once a receipt exists the money went straight
+ * to the organizer, so only they can undo it.
  */
 export function PaidEntryActions({
   registrationId,
@@ -34,7 +32,7 @@ export function PaidEntryActions({
   canChangePartner?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<'none' | 'partner' | 'cancel'>('none');
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -48,9 +46,8 @@ export function PaidEntryActions({
       const res = await requestRegistrationCancellation(registrationId, tournamentId, reason);
       if (res.ok) {
         setSent(true);
-        setOpen(false);
-        setMsg(res.message ?? 'Request sent.');
-        setIsError(false);
+        setPanel('none');
+        setMsg(null);
         router.refresh();
       } else {
         setMsg(res.error ?? 'Could not send that request.');
@@ -59,39 +56,64 @@ export function PaidEntryActions({
     });
   }
 
+  const showChange = Boolean(canChangePartner && teamId && divisionId);
+  const actionBtn =
+    'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors';
+
+  if (sent) {
+    return (
+      <p className="text-foreground-muted mt-2 flex items-start gap-2 text-sm" role="status">
+        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" aria-hidden />
+        <span>Your cancellation request is with the organizer and is under review.</span>
+      </p>
+    );
+  }
+
   return (
     <div className="mt-2 space-y-2">
-      <p className="text-foreground text-sm font-semibold">Payment submitted.</p>
-      <p className="text-foreground-muted text-sm">
-        Your payment is with the organizer to review, so the entry itself is fixed for now.
-        {canChangePartner
-          ? ' You can still change your partner, as long as the new player fits this division: the same skill level and the same gender.'
-          : ''}
-      </p>
+      {/* One matched pair - equal width, side by side from the narrowest phone up. */}
+      <div className={`grid gap-2 ${showChange ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {showChange && (
+          <button
+            type="button"
+            aria-expanded={panel === 'partner'}
+            onClick={() => setPanel((p) => (p === 'partner' ? 'none' : 'partner'))}
+            className={`${actionBtn} ${
+              panel === 'partner'
+                ? 'border-primary bg-primary/10 text-foreground'
+                : 'border-border text-foreground hover:bg-surface-muted'
+            }`}
+          >
+            <Users size={16} aria-hidden />
+            Change partner
+          </button>
+        )}
+        <button
+          type="button"
+          aria-expanded={panel === 'cancel'}
+          onClick={() => setPanel((p) => (p === 'cancel' ? 'none' : 'cancel'))}
+          className={`${actionBtn} ${
+            panel === 'cancel'
+              ? 'border-warning bg-warning/10 text-foreground'
+              : 'border-border text-foreground hover:bg-surface-muted'
+          }`}
+        >
+          <XCircle size={16} aria-hidden />
+          Request to cancel
+        </button>
+      </div>
 
-      {canChangePartner && teamId && divisionId && (
+      {panel === 'partner' && showChange && (
         <ChangePartnerForm
-          teamId={teamId}
+          teamId={teamId as string}
           tournamentId={tournamentId}
-          divisionId={divisionId}
+          divisionId={divisionId as string}
           currentPartnerName={partnerName ?? null}
+          onClose={() => setPanel('none')}
         />
       )}
 
-      {sent ? (
-        <p className="text-foreground-muted flex items-start gap-2 text-sm" role="status">
-          <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" aria-hidden />
-          <span>Your cancellation request is with the organizer and is under review.</span>
-        </p>
-      ) : !open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="border-border text-foreground inline-flex min-h-[44px] items-center rounded-xl border px-4 text-sm font-semibold"
-        >
-          Request to cancel
-        </button>
-      ) : (
+      {panel === 'cancel' && (
         <div className="border-border space-y-2 rounded-xl border p-3">
           <label className="text-foreground block text-sm font-medium" htmlFor="cancelReason">
             Why do you need to cancel?
@@ -122,10 +144,7 @@ export function PaidEntryActions({
             <button
               type="button"
               disabled={pending}
-              onClick={() => {
-                setOpen(false);
-                setMsg(null);
-              }}
+              onClick={() => setPanel('none')}
               className="text-foreground-muted hover:text-foreground min-h-[44px] px-2 text-sm font-medium"
             >
               Never mind

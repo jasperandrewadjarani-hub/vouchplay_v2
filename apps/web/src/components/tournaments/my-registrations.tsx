@@ -204,29 +204,34 @@ export function MyRegistrations({
                   />
                 )
               )}
-              <div className="mt-2">
-                <RegisterActions
-                  tournamentId={tournamentId}
-                  divisionId={divisionId}
-                  teamId={team?.teamId}
-                  format={d.format as 'singles' | 'doubles'}
-                  teamSize={d.teamSize}
-                  registrationOpen={registrationOpen}
-                  playerChangesConfigured={playerChangesConfigured}
-                  registration={{
-                    id: reg.id,
-                    status: reg.status,
-                    paymentStatus: reg.paymentStatus,
-                  }}
-                  divisions={divisions.map((division) => ({
-                    id: division.id,
-                    name: division.name,
-                    format: division.format,
-                    teamSize: division.teamSize,
-                    status: division.status,
-                  }))}
-                />
-              </div>
+              {/* Once a receipt is in, PaidEntryActions above is the sole manager of the entry, so
+                  RegisterActions is not also rendered - it only repeated the status and a dead-end
+                  sentence there (§2L). It still owns cancel / change-division for unpaid entries. */}
+              {reg.paymentStatus !== 'submitted' && (
+                <div className="mt-2">
+                  <RegisterActions
+                    tournamentId={tournamentId}
+                    divisionId={divisionId}
+                    teamId={team?.teamId}
+                    format={d.format as 'singles' | 'doubles'}
+                    teamSize={d.teamSize}
+                    registrationOpen={registrationOpen}
+                    playerChangesConfigured={playerChangesConfigured}
+                    registration={{
+                      id: reg.id,
+                      status: reg.status,
+                      paymentStatus: reg.paymentStatus,
+                    }}
+                    divisions={divisions.map((division) => ({
+                      id: division.id,
+                      name: division.name,
+                      format: division.format,
+                      teamSize: division.teamSize,
+                      status: division.status,
+                    }))}
+                  />
+                </div>
+              )}
               {/* The 'cancel, dissolve, re-invite' explanation that used to live here described a
                   flow that no longer exists: under pay-first a team always carries a registration,
                   so that path could never run (§1V). PartnerChangeActions and PaidEntryActions now

@@ -84,6 +84,8 @@ export async function completeOnboarding(
     city: formData.get('city'),
     facebookUrl: formData.get('facebookUrl') ?? '',
     bio: formData.get('bio') ?? '',
+    lookingForPartner: formData.get('lookingForPartner') === 'on',
+    openForSponsorship: formData.get('openForSponsorship') === 'on',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check your input.' };
@@ -121,6 +123,8 @@ export async function completeOnboarding(
         city: v.city,
         facebook_url: v.facebookUrl ? v.facebookUrl : null,
         bio: v.bio ? v.bio : null,
+        looking_for_partner: v.lookingForPartner,
+        open_for_sponsorship: v.openForSponsorship,
         slug,
         ...(avatarPath ? { avatar_path: avatarPath } : {}),
         onboarded_at: new Date().toISOString(),
@@ -157,6 +161,8 @@ export async function updateProfile(
     city: formData.get('city'),
     facebookUrl: formData.get('facebookUrl') ?? '',
     bio: formData.get('bio') ?? '',
+    lookingForPartner: formData.get('lookingForPartner') === 'on',
+    openForSponsorship: formData.get('openForSponsorship') === 'on',
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Please check your input.' };
@@ -198,6 +204,8 @@ export async function updateProfile(
         city: v.city,
         facebook_url: v.facebookUrl || null,
         bio: v.bio || null,
+        looking_for_partner: v.lookingForPartner,
+        open_for_sponsorship: v.openForSponsorship,
         ...(avatarPath ? { avatar_path: avatarPath } : {}),
       })
       .eq('id', user.id);

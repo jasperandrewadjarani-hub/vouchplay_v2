@@ -21,6 +21,9 @@ export const onboardingSchema = z.object({
   city: z.string().trim().min(1, 'City is required').max(80),
   facebookUrl: z.string().trim().url('Enter a valid URL').max(300).optional().or(z.literal('')),
   bio: z.string().trim().max(300).optional().or(z.literal('')),
+  // Player availability flags (§2L). Set by the player; read by the directory badge and filter.
+  lookingForPartner: z.boolean().optional().default(false),
+  openForSponsorship: z.boolean().optional().default(false),
 });
 
 export type OnboardingInput = z.infer<typeof onboardingSchema>;

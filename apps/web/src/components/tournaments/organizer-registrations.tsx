@@ -4,6 +4,7 @@ import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Clock, Receipt, Search, TriangleAlert } from 'lucide-react';
 import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
+import { formatDate } from '@/lib/format-date';
 import {
   ELIGIBILITY_RESULT_LABELS,
   ELIGIBILITY_RESULT_DESCRIPTIONS,
@@ -435,6 +436,24 @@ function RegRow({
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Cancellation request (§1Y, §2L) - the reason was fetched but never shown, so the organizer
+          could see "Cancellation asked" without knowing why. Now the player's own words are here. */}
+      {reg.cancellationRequest && (
+        <div className="border-warning/40 bg-warning/10 mt-2 rounded-lg border p-2.5">
+          <p className="text-warning flex items-center gap-1.5 text-xs font-semibold">
+            <TriangleAlert size={13} aria-hidden />
+            Cancellation requested
+          </p>
+          <p className="text-foreground mt-1 text-sm whitespace-pre-wrap">
+            &ldquo;{reg.cancellationRequest.reason}&rdquo;
+          </p>
+          <p className="text-foreground-muted mt-1 text-xs">
+            Asked {formatDate(reg.cancellationRequest.requestedAt)}. To cancel this entry, use
+            Reject above; anything about the payment is settled with the player directly.
+          </p>
         </div>
       )}
 

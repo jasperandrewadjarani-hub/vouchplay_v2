@@ -16,6 +16,8 @@ export interface ProfileRow {
   avatar_path: string | null;
   onboarded_at: string | null;
   account_status: string;
+  looking_for_partner: boolean;
+  open_for_sponsorship: boolean;
 }
 
 /**
@@ -45,7 +47,7 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
     const { data } = await supabase
       .from('profiles')
       .select(
-        'id, first_name, last_name, nickname, slug, city, sex, bio, self_rated_skill, facebook_url, avatar_path, onboarded_at, account_status',
+        'id, first_name, last_name, nickname, slug, city, sex, bio, self_rated_skill, facebook_url, avatar_path, onboarded_at, account_status, looking_for_partner, open_for_sponsorship',
       )
       .eq('id', user.id)
       .maybeSingle();

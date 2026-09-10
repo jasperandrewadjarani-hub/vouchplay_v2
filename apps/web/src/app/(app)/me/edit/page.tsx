@@ -34,6 +34,8 @@ export default async function EditProfilePage() {
             city: profile.city ?? '',
             facebookUrl: profile.facebook_url ?? '',
             bio: profile.bio ?? '',
+            lookingForPartner: profile.looking_for_partner ?? false,
+            openForSponsorship: profile.open_for_sponsorship ?? false,
           }}
         />
       </div>

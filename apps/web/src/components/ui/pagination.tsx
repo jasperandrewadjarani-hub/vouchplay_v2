@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { LinkSpinner } from './link-spinner';
 import { PageLinkLabel } from './page-link-label';
 
@@ -54,14 +54,32 @@ export function Pagination({
 }) {
   if (pageCount <= 1) return null;
   const slots = slotsFor(page, pageCount);
-  // A short list fits a phone whole, so show every page. Only once it would overflow do the outer
-  // jump links and ellipses drop below `sm`, leaving the current page and its neighbours.
-  const trimOnMobile = slots.length > 5;
-  const hideOnMobile = (n: number) => trimOnMobile && Math.abs(n - page) > 1;
+  // On a phone, keep a window of at least THREE numbers around the current page (clamped to the
+  // ends), so page 3 is always visible instead of just "1 2". Dedicated first/last jump buttons make
+  // page 1 and the final page reachable in one tap even when they fall outside that window.
+  const winStart = Math.max(1, Math.min(page - 1, pageCount - 2));
+  const winEnd = Math.min(pageCount, winStart + 2);
+  const hideOnMobile = (n: number) => slots.length > 3 && (n < winStart || n > winEnd);
+  const atFirst = page <= 1;
+  const atLast = page >= pageCount;
 
   return (
     <nav className="pt-2" aria-label={label}>
       <ul className="flex flex-wrap items-center justify-center gap-1.5">
+        {/* Jump to the first page. Always present so it never shifts the row; dimmed on page 1. */}
+        <li>
+          {atFirst ? (
+            <span className={`${STEP} opacity-40`} aria-disabled="true">
+              <ChevronsLeft size={16} aria-hidden />
+              <span className="sr-only">First page</span>
+            </span>
+          ) : (
+            <Link href={hrefFor(1)} className={STEP} aria-label="First page">
+              <ChevronsLeft size={16} aria-hidden />
+              <LinkSpinner />
+            </Link>
+          )}
+        </li>
         <li>
           {page > 1 ? (
             <Link href={hrefFor(page - 1)} className={STEP} rel="prev">
@@ -121,6 +139,21 @@ export function Pagination({
               <span className="sr-only sm:hidden">Next page</span>
               <ChevronRight size={16} aria-hidden />
             </span>
+          )}
+        </li>
+
+        {/* Jump to the last page - the counterpart to First, so the end of a long list is one tap. */}
+        <li>
+          {atLast ? (
+            <span className={`${STEP} opacity-40`} aria-disabled="true">
+              <ChevronsRight size={16} aria-hidden />
+              <span className="sr-only">Last page</span>
+            </span>
+          ) : (
+            <Link href={hrefFor(pageCount)} className={STEP} aria-label="Last page">
+              <ChevronsRight size={16} aria-hidden />
+              <LinkSpinner />
+            </Link>
           )}
         </li>
       </ul>

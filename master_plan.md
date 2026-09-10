@@ -2027,6 +2027,57 @@ also reinforces the gamified "one last step to lock it in" feel: a focused, sing
 titled "Pay to secure your slot," entered with a glowing primary button.
 
 No migration. `payment-form.tsx` is removed; its content now lives in the modal.
+## 2L. Four UI fixes: the paid card, pagination, the cancel reason, and setting "looking for partner" (2026-09-10, post-launch)
+
+Four unrelated rough edges Jasper found on real screens.
+
+### The paid entry card said "payment submitted" three times and stacked mismatched buttons
+
+A paid, partner-unconfirmed entry showed the state three ways over: the status chip
+("Partner not confirmed"), the §2G "not secured" checklist ("wait for the organizer to verify your
+payment"), then `PaidEntryActions` ("Payment submitted." + a paragraph repeating the same thing),
+then `RegisterActions` again ("Your status: payment submitted" and "This entry can no longer be
+changed here"). Two components were both narrating the status, with different fonts, and the two
+real actions - Change partner, Request to cancel - were full-width blocks stacked with dead space
+between them.
+
+**Fix.** The §2G checklist is the single place that states what is outstanding, so the narration is
+removed from the actions: `PaidEntryActions` drops its "Payment submitted." heading and paragraph and
+becomes just the two controls. `RegisterActions` no longer renders at all for a paid (submitted)
+entry - it only ever repeated the status and a dead-end sentence there - and its "Your status:" line
+is gone everywhere, because the chip already says it. Change partner and Request to cancel are now one
+matched pair: equal-width buttons side by side, each opening its panel full-width below. To make that
+possible without half-width search boxes, `ChangePartnerForm` became a controlled panel owned by
+`PaidEntryActions` rather than a self-contained button-plus-panel.
+
+### Pagination: at least three pages, and jump to first / last
+
+The player list is 11 pages, and on a phone the pager showed only "1 2 ›" - you could not see page 3
+existed, and reaching the end meant tapping Next ten times. The pager now always shows a window of at
+least three numbers around the current page, and adds dedicated **first (`«`) and last (`»`) jump
+buttons** at the ends (dimmed on the page you are already on). So any page is at most: first, a short
+tap along the window, or last - never a long march.
+
+### The organizer can now read the cancellation reason
+
+The Cancellations queue flagged "Cancellation asked" but never showed WHY - the reason the player
+typed was fetched (`cancellationRequest.reason`) and then never rendered. The detail sheet now shows
+the request prominently: the reason in the player's words and when it was asked, so the organizer can
+act on it instead of guessing or chasing the player.
+
+### "Looking for a partner" is finally settable, and shows on the row
+
+`looking_for_partner` (and `open_for_sponsorship`) were read everywhere - a badge on the profile and
+detailed card, and a Players filter (§2B) - but **nothing ever set them**, so the columns were stuck
+`false` for everyone and the filter matched nobody. The onboarding / edit-profile form now has two
+toggles ("I'm looking for a partner", "Open to sponsorship"), the profile actions write them, and
+`getMyProfile` reads them back so the toggles reflect the saved state.
+
+Because it is one column, it **syncs across by construction**: turning it on shows the
+"Looking for partner" badge on the profile and the detailed card, marks the player in the Players
+filter, and now also shows a compact **partner-search icon on the directory row** (beside the sex
+symbol, an icon not a pill, so the one-pill-per-line rule §1H/§1T is untouched). No migration - the
+columns already existed; only the write path and the row indicator were missing.
 ## 1. Prompt Contract
 
 ### In scope

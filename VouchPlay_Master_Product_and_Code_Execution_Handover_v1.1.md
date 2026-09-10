@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.39
+# VouchPlay Master Product & Code Execution Handover v1.40
 
-_(File retains its `…v1.1.md` name; content is v1.39 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.40 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,31 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.40 (2026-09-10)
+
+_Four UI fixes (master_plan §2L). App-side, no migration._
+
+- **The paid entry card stops repeating itself.** A paid, partner-unconfirmed entry stated its status
+  three times (chip, §2G checklist, `PaidEntryActions` heading, then `RegisterActions` again) with
+  mismatched fonts, and its two real actions were stacked full-width blocks. The narration now lives
+  once in the §2G checklist; `PaidEntryActions` is just the actions; `RegisterActions` no longer
+  renders for a paid entry and its "Your status:" line is gone everywhere (the chip says it).
+  **Change partner** and **Request to cancel** are a matched pair of equal-width buttons, each opening
+  its panel full-width below - so `ChangePartnerForm` became a controlled panel owned by the parent.
+- **Pagination gains first/last jumps and always shows three pages.** An 11-page list showed only
+  "1 2 ›" on a phone. The pager now keeps a window of at least three numbers around the current page
+  and adds dedicated first (`«`) and last (`»`) jump buttons, dimmed on the page you are on.
+- **The organizer can read the cancellation reason.** The Cancellations queue flagged "Cancellation
+  asked" but never showed why; the reason was fetched and dropped. The detail sheet now shows the
+  player's words and when they asked, with a note that Reject is how to cancel and payment is settled
+  with the player.
+- **"Looking for a partner" is finally settable, and shows on the row.** `looking_for_partner` (and
+  `open_for_sponsorship`) were read, badged and filterable (§2B) but nothing ever set them, so the
+  columns were stuck `false` and the filter matched nobody. The onboarding / edit-profile form now has
+  two toggles, the profile actions write them, and `getMyProfile` reads them back. Because it is one
+  column it syncs by construction: turning it on shows the profile/card badge, marks the player in the
+  Players filter, and now also shows a compact partner-search icon on the directory row (an icon, not
+  a pill, so the one-pill-per-line rule holds). No migration - the columns already existed.
 ## v1.39 (2026-09-10)
 
 _App-side, no migration. Payment becomes a centered modal._

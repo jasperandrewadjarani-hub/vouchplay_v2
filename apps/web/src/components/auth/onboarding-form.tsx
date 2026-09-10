@@ -22,6 +22,8 @@ export function OnboardingForm({
     city?: string;
     facebookUrl?: string;
     bio?: string;
+    lookingForPartner?: boolean;
+    openForSponsorship?: boolean;
   };
   next?: string;
   mode?: 'onboarding' | 'edit';
@@ -118,6 +120,46 @@ export function OnboardingForm({
           className="text-foreground-muted file:border-border file:bg-surface file:text-foreground hover:file:bg-surface-muted block w-full text-sm file:mr-3 file:rounded-lg file:border file:px-3 file:py-1.5 file:text-sm file:font-medium"
         />
       </Field>
+
+      {/* Availability the player controls, shown as a badge and filterable in the directory (§2L).
+          Checkboxes, styled as clear rows: the whole row is the target and the state is the label,
+          not colour alone. */}
+      <fieldset className="border-border space-y-2 rounded-xl border p-3">
+        <legend className="text-foreground-muted px-1 text-xs font-medium">
+          Let people find you
+        </legend>
+        <label className="flex min-h-11 cursor-pointer items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            name="lookingForPartner"
+            defaultChecked={initial.lookingForPartner ?? false}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span>
+            <span className="text-foreground block font-medium">
+              I&rsquo;m looking for a partner
+            </span>
+            <span className="text-foreground-muted block text-xs">
+              Shows a badge on your profile and puts you in the &ldquo;Looking for partner&rdquo;
+              filter.
+            </span>
+          </span>
+        </label>
+        <label className="flex min-h-11 cursor-pointer items-start gap-2.5 text-sm">
+          <input
+            type="checkbox"
+            name="openForSponsorship"
+            defaultChecked={initial.openForSponsorship ?? false}
+            className="mt-0.5 h-4 w-4 shrink-0"
+          />
+          <span>
+            <span className="text-foreground block font-medium">Open to sponsorship</span>
+            <span className="text-foreground-muted block text-xs">
+              Lets clubs and sponsors find you in the directory.
+            </span>
+          </span>
+        </label>
+      </fieldset>
 
       <SubmitButton pendingLabel="Saving…">
         {mode === 'edit' ? 'Save changes' : 'Finish setup'}

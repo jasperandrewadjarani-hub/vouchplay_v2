@@ -73,12 +73,8 @@ export function RegisterActions({
       moveOptions.length > 0;
     return (
       <div className="flex flex-col gap-2">
-        <span className="text-foreground-muted text-xs">
-          Your status:{' '}
-          <span className="text-foreground font-medium">
-            {registration.status.replace(/_/g, ' ')}
-          </span>
-        </span>
+        {/* The status is already the chip at the top of the card (§2G), so it is not repeated here
+            (§2L). This block is only the actions that apply to the current state. */}
         {canWithdraw && (
           <button
             type="button"

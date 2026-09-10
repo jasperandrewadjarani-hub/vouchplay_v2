@@ -2288,3 +2288,16 @@ it done. Several fixes in this session were found only that way.
   §2G checklist above it) that opens the same modal; a receipt under review keeps inline management.
   Submitting closes+refreshes; "I'll pay later" closes with the hold warning first. Removed the now
   dead payment-form.tsx. No migration. All gates green (typecheck, lint, 193 tests, format, build).
+
+- **2026-09-10** - **Four UI fixes** (master_plan §2L, handover v1.40). (1) Paid entry card no longer
+  repeats "payment submitted" three times: state lives once in the §2G checklist, PaidEntryActions is
+  just the actions, RegisterActions is skipped for paid entries and its "Your status:" line removed;
+  Change partner / Request to cancel are equal-width side-by-side buttons with panels below
+  (ChangePartnerForm made a controlled panel). (2) Pagination adds first/last jump buttons and always
+  shows >=3 page numbers on mobile. (3) Organizer detail sheet now shows the cancellation reason (was
+  fetched but never rendered). (4) "Looking for a partner" and "Open to sponsorship" are now settable
+  (onboarding/edit toggles + profile actions write them + getMyProfile reads them); the flag syncs to
+  the profile/card badge, the Players filter (§2B), and a new compact partner-search icon on the
+  directory row. No migration (columns existed; only the write path was missing). All gates green
+  (typecheck, lint, 193 tests, format, build). Auth-gated surfaces, so verified via build/logic;
+  worth a signed-in check of the edit toggle and the paid-card layout.

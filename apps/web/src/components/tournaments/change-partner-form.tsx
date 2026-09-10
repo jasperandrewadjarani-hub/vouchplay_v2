@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Users } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import {
   changePartner,
   searchInvitablePlayers,
@@ -20,19 +20,25 @@ import { Input } from '@/components/ui/field';
  * The person being removed is always notified. §1D forbids displacing somebody without their
  * knowledge; telling them is what makes this permissible rather than a loophole in that rule.
  */
+/**
+ * Controlled panel (no trigger of its own): the parent renders the "Change partner" button and mounts
+ * this when it is open, so it can sit as one of a matched pair of equal-width actions with its panel
+ * full-width below (§2L). `onClose` backs the "Never mind" control and the post-success close.
+ */
 export function ChangePartnerForm({
   teamId,
   tournamentId,
   divisionId,
   currentPartnerName,
+  onClose,
 }: {
   teamId: string;
   tournamentId: string;
   divisionId: string;
   currentPartnerName: string | null;
+  onClose: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<PlayerSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -72,10 +78,10 @@ export function ChangePartnerForm({
       if (res.ok) {
         setMsg(`${name} has been asked to confirm. Your slot and payment are unchanged.`);
         setIsError(false);
-        setOpen(false);
         setQ('');
         setResults([]);
         router.refresh();
+        onClose();
       } else {
         setMsg(res.error ?? 'Could not change partner.');
         setIsError(true);
@@ -83,31 +89,8 @@ export function ChangePartnerForm({
     });
   }
 
-  if (!open) {
-    return (
-      <div className="space-y-2">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="border-border text-foreground inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-4 text-sm font-semibold"
-        >
-          <Users size={16} aria-hidden />
-          Change partner
-        </button>
-        {msg && (
-          <p
-            className={`text-sm ${isError ? 'text-danger' : 'text-foreground-muted'}`}
-            role="status"
-          >
-            {msg}
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="border-border space-y-2 rounded-xl border p-3">
+    <div className="border-border mt-2 space-y-2 rounded-xl border p-3">
       <p className="text-foreground text-sm font-semibold">
         {currentPartnerName ? `Replace ${currentPartnerName}` : 'Choose a new partner'}
       </p>
@@ -164,8 +147,8 @@ export function ChangePartnerForm({
         type="button"
         disabled={pending}
         onClick={() => {
-          setOpen(false);
           setMsg(null);
+          onClose();
         }}
         className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
       >
