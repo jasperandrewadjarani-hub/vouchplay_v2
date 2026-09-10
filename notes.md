@@ -2555,3 +2555,32 @@ DISRUPTION TO PLAYERS / HERMOSA: none from 0033 (privilege only, app uses servic
 the v1.56 batch (read-side/onboarding-only/cosmetic; existing registrants already onboarded). The one
 windowed deploy self-heals open tabs once via §2Q. Production push HELD for the 01:00-06:00 PHT window
 (currently peak PHT) - see runbook in the fix-plan doc.
+
+## 2026-09-11 - Decisions & deploy: region -> sin1, skill-drift policy = Option A
+
+- **Skill-drift policy DECIDED: Option A** (organizer-managed; no code). When a player's community
+  skill rises above a division cap after they register, the organizer reviews via the existing amber
+  "Potential skill mismatch" chip and decides per team. Option B (evidence threshold before community
+  skill overrides self-rating at the fit gate; reuses eligibility_min_unique_vouchers=2) is DEFERRED,
+  not rejected - revisit if organizer review becomes a burden or the low-confidence-vouch case draws
+  complaints; would be one windowed deploy + migration 0034 (SQL twin player_fits_division), not
+  retroactive. Option C (freeze skill at registration) REJECTED - re-enables sandbagging, against the
+  core value. Memo: working/P_006b_SkillDriftPolicyMemo_(2026-09).md. Master_plan §2AB updated.
+  OPEN: handing the current 14-registration Hermosa flag list to the organizer is pending Jasper's go
+  (external sharing of live player data - not done without explicit instruction).
+
+- **DEPLOYED (commit c40a58d, then a region redeploy):** §2AA/§2AB batch is live on both domains.
+  Verified: new dpl flipped on both; migration 0033 applied (verify-rpc-grants.mjs = 0 write RPCs
+  reachable by anon); Verify-2 tripwire reviewed - every remaining anon/authenticated-executable
+  security-definer function either read-only or self-authorizes via auth.uid() (safe).
+- **Function Region -> Singapore (sin1):** flipped in Vercel; took a redeploy to apply (region binds
+  at build time, not on save). Now x-vercel-id = sin1::sin1 on both domains (was sin1::iad1). Warm
+  TTFB from Manila dropped ~3-5x on DB-heavy pages: /tournaments ~1.0-1.4s -> ~0.27-0.30s, /players
+  ~1.4-2.6s -> ~0.37-0.47s. Static-light /terms barely moved, as expected. DB is ap-southeast-1
+  (Singapore); functions now co-located, so the 6-10 sequential Supabase queries/page stopped
+  crossing the Pacific.
+- STILL PENDING JASPER EYEBALL (auth-gated, couldn't verify anonymously): new-account onboarding
+  Terms/Privacy checkbox; header/online-chip/legal-gate render when signed in.
+- STILL DEFERRED: caching layer on uncached public reads (§2AC, own deploy - stacks on the region
+  win); post-window cleanup migration (drop move_player_registration, dead helper, add
+  player_fits_division inside register_team); legal counsel review + LEGAL.version bump.

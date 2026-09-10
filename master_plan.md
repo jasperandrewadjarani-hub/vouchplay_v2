@@ -2707,9 +2707,18 @@ registration list renders an amber "Potential skill mismatch" chip on every non-
   because it is the largest change and needs a two-browser correctness test that no viewer-specific
   state is ever served cross-user. Tracked as §2AC when scheduled.
 - **Skill-drift policy** (a live player's community skill rising above a division cap after they
-  register): a product decision (do nothing / evidence-threshold before community skill overrides
-  self-rating / freeze skill at registration). Decision gate for Jasper; nothing ships without a pick.
-  11 current Hermosa registrations are affected and handed to the organizer as a read-only list.
+  register): a product decision, memo at `working/P_006b_SkillDriftPolicyMemo_(2026-09).md`. Three
+  options were laid out - A (organizer-managed, already live), B (require `eligibility_min_unique_vouchers`
+  vouchers before community skill overrides self-rating at the fit gate), C (freeze skill at
+  registration). **DECIDED 2026-09-11: Option A.** Rationale: a rising community skill is the
+  reputation system working, so the right default is to surface it to the organizer (the amber
+  "Potential skill mismatch" chip is already live on every flagged registration), not to suppress it.
+  C was rejected as re-enabling sandbagging. B is deferred, not rejected - revisit if organizer review
+  becomes a burden or the "one low-confidence vouch bumped me out of my band" case draws complaints;
+  it would then be one windowed deploy plus migration 0034 for the SQL twin `player_fits_division`,
+  and it is not retroactive. No code ships for this item. The current Hermosa flagged list
+  (`working/eligibility-scan-*.csv`, regenerable via `scripts/audit-eligibility-scan.mjs`) is handled
+  by the organizer; handing it over is pending Jasper's go.
 - **Cleanup migration** dropping the now-unused `move_player_registration` RPC and the dead
   `hasPlayerRegistrationChangePolicy` helper, and adding `player_fits_division` inside `register_team`
   as SQL-side defense in depth: after the Hermosa registration window closes, to avoid editing a live
