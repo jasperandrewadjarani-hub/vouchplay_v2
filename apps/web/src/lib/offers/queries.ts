@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import type { ClubOfferRow, ClubOfferResponseRow } from '@vouchplay/db';
 import { isOfferPubliclyVisible } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -86,8 +87,20 @@ function toOfferDTO(row: ClubOfferRow, club: ClubMini | undefined): OfferDTO {
   };
 }
 
-/** Open, non-expired offers from verified, active clubs - the public player browse. */
+/**
+ * Open, non-expired offers from verified, active clubs - the public player browse. Cache-first
+ * (master_plan §2AC): pure public data (service client, no viewer fields), 60s TTL, tagged
+ * OFFERS_LIST_TAG which the offer write actions already revalidate, so a new/withdrawn offer shows
+ * immediately and the TTL is only a backstop.
+ */
 export async function listOpenOffers(limit = 60): Promise<OfferDTO[]> {
+  return unstable_cache(() => fetchOpenOffers(limit), ['open-offers', String(limit)], {
+    revalidate: 60,
+    tags: [OFFERS_LIST_TAG],
+  })();
+}
+
+async function fetchOpenOffers(limit: number): Promise<OfferDTO[]> {
   const svc = createServiceClient();
   const { data } = await svc
     .from('club_offers')

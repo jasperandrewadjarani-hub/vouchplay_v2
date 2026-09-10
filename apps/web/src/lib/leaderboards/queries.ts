@@ -116,7 +116,22 @@ export async function getMyMomentum(userId: string): Promise<MomentumDTO[]> {
   }));
 }
 
+/**
+ * Public contribution progress for a player. Cache-first (master_plan §2AC): pure public data
+ * (public client, no viewer fields), 60s TTL. Contribution recomputes on the nightly rebuild, so
+ * short staleness is harmless.
+ */
 export async function getContributionProgress(playerId: string) {
+  return unstable_cache(
+    () => fetchContributionProgress(playerId),
+    ['contribution-progress', playerId],
+    {
+      revalidate: 60,
+    },
+  )();
+}
+
+async function fetchContributionProgress(playerId: string) {
   const db = createPublicClient();
   const { data } = await db
     .from('player_contributions')

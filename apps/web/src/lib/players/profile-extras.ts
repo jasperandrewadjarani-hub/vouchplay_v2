@@ -1,4 +1,5 @@
 import 'server-only';
+import { unstable_cache } from 'next/cache';
 import { skillByOrdinal } from '@vouchplay/config';
 import { createServiceClient } from '@/lib/supabase/service';
 import { divisionName } from '@/lib/tournaments/dto';
@@ -246,7 +247,18 @@ export interface HistoryEntry {
 
 const HISTORY_STATUSES = ['confirmed', 'waitlisted', 'payment_submitted', 'under_review'];
 
+/**
+ * Player tournament history. Cache-first (master_plan §2AC): pure public projection (service client,
+ * no viewer fields, keyed only by playerId). 60s TTL - history changes only when a tournament result
+ * or registration state changes, so short staleness is harmless.
+ */
 export async function getPlayerHistory(playerId: string): Promise<HistoryEntry[]> {
+  return unstable_cache(() => fetchPlayerHistory(playerId), ['player-history', playerId], {
+    revalidate: 60,
+  })();
+}
+
+async function fetchPlayerHistory(playerId: string): Promise<HistoryEntry[]> {
   try {
     const svc = createServiceClient();
     const { data: memberRows } = await svc

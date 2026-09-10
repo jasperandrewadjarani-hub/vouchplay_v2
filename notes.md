@@ -2607,3 +2607,13 @@ Event-focused batch ahead of tomorrow's Hermosa registration. One windowed deplo
 
 Gates green: typecheck, lint (migration-grant guard OK), 193 tests, format. Commit local; push held
 for the classifier / Jasper.
+
+## 2026-09-11 - Caching phase 1 extended to the pure-public reads (§2AC)
+
+Added, same deploy as the count cache: listOpenOffers (60s, tag OFFERS_LIST_TAG), getPlayerHistory
+(60s), getContributionProgress (60s). All pure public (service/public client, no viewer fields).
+CORRECTION on the earlier "pure-public" list: getClubMembers is RLS-scoped (manager sees pending,
+anon sees active only - club_memberships policy status='active' OR auth.uid()=user_id OR staff), and
+getPlayerAchievements carries endorsedByViewer + own pending claims - both are viewer-dependent, so
+they were NOT cached; they join withTournamentCardEngagement + getPlayerSkillTags in phase 2 (need a
+public/viewer split + cross-user leakage test). Gates green (typecheck, lint, 193 tests, format).

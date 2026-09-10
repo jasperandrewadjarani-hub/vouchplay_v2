@@ -6164,8 +6164,12 @@ _Caching phase 1 (tournament count read) + organizer eligibility-reason detail (
   using the cookie-free service client. Counts stay live because every registration/payment/
   eligibility/edit write already revalidates that tag; the TTL is only a backstop. Capacity is still
   enforced in the `register_team` RPC, so a briefly-stale count can never over-register anyone. No
-  viewer data is cached. The rest of the caching layer (list card counts, offers, club members,
-  profile extras, directory tag-splitting) is deferred to phase 2, after the event.
+  viewer data is cached. Also cached in the same deploy, as pure-public reads with the same near-zero
+  risk: `listOpenOffers` (60s, tag `OFFERS_LIST_TAG`), `getPlayerHistory` (60s), and
+  `getContributionProgress` (60s). The reads that turned out to mix viewer state -
+  `withTournamentCardEngagement`, `getClubMembers` (RLS-scoped members), `getPlayerAchievements`
+  (endorsed/own pending), `getPlayerSkillTags` (voted-by-viewer) - stay in phase 2, where they get a
+  public/viewer split and a cross-user leakage test.
 - **Organizer eligibility reason in the list (§2AD).** The organizer registration list showed a
   generic "Potential skill mismatch" chip; the specific reason was one tap deeper. `EntryRow` now
   shows a concise plain-language line under the chip naming the reason(s) and player(s) - e.g.

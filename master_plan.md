@@ -2754,13 +2754,27 @@ URL, interest) is untouched and stays uncached/per-viewer.
 - No viewer data is cached (no cross-user leakage); the cookie-bound client is never used inside the
   cache callback.
 
-**Deferred to phase 2 (after the event), tracked here so it isn't lost:** caching for
-`withTournamentCardEngagement` (list card counts), `listOpenOffers`/`getClubOffers`,
-`getClubMembers`/`activeMemberCounts`, and the public bulk of the profile extras
-(`getPlayerAchievements`/`getPlayerHistory`/`getPlayerSkillTags`/`getContributionProgress`), plus
-splitting `PLAYERS_LIST_TAG` so a single vouch does not flush all eight directory caches. All reuse
-tags that already exist and are already revalidated; deferred only because a smaller diff is the right
-risk posture the night before a hot event, and those pages are not the event bottleneck.
+**Also cached now - the pure-public reads (added same deploy):** on closer reading, three of the
+uncached reads carry NO viewer data, so caching them has the same near-zero risk as the count read
+above and gives extra egress headroom for the event:
+- `listOpenOffers` (`offers/queries.ts`) - service client, no viewer fields; 60s, tag
+  `OFFERS_LIST_TAG` (already revalidated by offer writes).
+- `getPlayerHistory` (`players/profile-extras.ts`) - service client, keyed only by playerId; 60s.
+- `getContributionProgress` (`leaderboards/queries.ts`) - public client, keyed only by playerId; 60s.
+
+**Deferred to phase 2 (after the event) - these are NOT pure-public and need a viewer/public split
+first, or caching them would leak one viewer's state to another:**
+- `withTournamentCardEngagement` - mixes `viewerInterested`/`viewerJoining`/`viewerSecured`.
+- `getClubMembers` - RLS-scoped: a manager sees pending members, anon sees only active
+  (`club_memberships` policy `status='active' OR auth.uid()=user_id OR staff`); caching via the
+  cookie-free client would break the manage view.
+- `getPlayerAchievements` - carries `endorsedByViewer` and the viewer's own pending claims.
+- `getPlayerSkillTags` - carries `votedByViewer`.
+- Plus splitting `PLAYERS_LIST_TAG` so a single vouch does not flush all eight directory caches, and
+  `activeMemberCounts` (pure but embedded; low egress, not worth the refactor risk tonight).
+Each reuses tags that already exist; deferred only because they need the careful public/viewer split
+plus a two-browser cross-user leakage test, which is the wrong thing to rush the night before a hot
+event.
 
 ## 2AD. Organizer eligibility flag: say WHY, in the list (2026-09-11)
 
