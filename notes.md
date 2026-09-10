@@ -2516,3 +2516,42 @@ shell (title, leaderboard card, availability, SearchFilters) stays mounted. New 
 player-list-skeleton.tsx (density-matched compact rows / detailed cards, animate-pulse surface-muted,
 motion-reduce safe, aria-hidden + sr-only "Loading players"). listPlayers moved out of the shell
 Promise.all into the boundary; no extra queries. Gates: typecheck/lint/format clean. No migration.
+
+## 2026-09-10 - Post-launch audit + fix batch (audit report + §2AA/§2AB, handover v1.55/v1.56)
+
+Audited commits 5197f62..f7f1fc3 (read-only, against prod DB + both live domains). Reports:
+working/P_006b_PostLaunchAudit_(2026-09).md and working/P_006b_FixExecutionPlan_(2026-09).md.
+
+Key facts verified against production (service-role, read-only):
+- Migration 0032 (legal) IS applied. 54/348 onboarded players have accepted 2026-09-10; gate is live.
+- ?dpl= emitted on both domains (dpl_GnGf9E...); skew reload guard is loop-safe.
+- 407 profiles, 348 onboarded, 2731 vouches, 106 system_settings rows.
+
+### v1.55 / §2AA - SECURITY (urgent, no deploy)
+create_team_with_pending_partner, decline_partner_invitation, replace_pending_partner (0025/0031)
+were world-executable: proven callable with the anon key (no session), while every sibling denied
+42501. No auth.uid() check, no player_fits_division -> same bypass class as §2X, reachable by anyone.
+Migration 0033 (scripts/apply-0033.sql) revokes public/anon/authenticated + regrants service_role.
+App already calls them as service_role, so ZERO player impact and no deploy. Also added
+verify-rpc-grants.mjs, check-migration-grants.mjs (lint gate), and a CLAUDE.md/AGENTS.md rule.
+APPLY 0033 FIRST via SQL editor - it is safe anytime.
+
+### v1.56 / §2AB - perf/consent/resilience (one windowed deploy)
+- lib/auth.ts: getCachedUser() (React.cache) collapses 5-6 auth.getUser()/req -> 1; getMyProfile,
+  getViewerLegalStatus, getViewerReputationNudge, getViewerContext memoised. Legal read stays a
+  SEPARATE select (kept §2R fail-open separation). Pure read-side.
+- onboarding-form.tsx + profile.ts completeOnboarding: required consent checkbox at onboarding
+  (onboarding mode only), server refuses + does not stamp acceptance unless checked -> fixes Google
+  sign-ups getting an unearned acceptance record. Existing 350 unaffected (already onboarded).
+- online-counter.tsx: reset to null (hide) on CHANNEL_ERROR/TIMED_OUT/CLOSED; 30s hide debounce.
+- Organizer skill-mismatch chip: ALREADY shipped (organizer-registrations.tsx:230) - no change.
+
+Deferred (told Jasper): Function Region -> sin1 (dashboard); caching layer on uncached public reads
+(own deploy, §2AC); skill-drift policy (decision gate; 11 Hermosa regs handed to organizer);
+post-window cleanup migration (drop move_player_registration, dead helper, add player_fits_division
+inside register_team); legal counsel review + LEGAL.version bump.
+
+DISRUPTION TO PLAYERS / HERMOSA: none from 0033 (privilege only, app uses service_role) and none from
+the v1.56 batch (read-side/onboarding-only/cosmetic; existing registrants already onboarded). The one
+windowed deploy self-heals open tabs once via §2Q. Production push HELD for the 01:00-06:00 PHT window
+(currently peak PHT) - see runbook in the fix-plan doc.

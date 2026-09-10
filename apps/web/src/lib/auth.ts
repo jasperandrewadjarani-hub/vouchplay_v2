@@ -1,7 +1,27 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { isCurrentLegalVersion } from '@vouchplay/config';
 import { createClient } from '@/lib/supabase/server';
+
+/**
+ * Request-memoised user lookup (master_plan §2AB). A signed-in page previously validated the session
+ * with `supabase.auth.getUser()` 5-6 times per request (middleware, header, and each viewer reader
+ * below), each a network round trip to Supabase Auth. `React.cache` scopes memoisation to the current
+ * request/render (and, for a Server Action, to that action's own invocation), so this never leaks a
+ * user across requests. Everything that needs "who is signed in" routes through here.
+ */
+const getCachedUser = cache(async (): Promise<User | null> => {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user ?? null;
+  } catch {
+    return null;
+  }
+});
 
 export interface ProfileRow {
   id: string;
@@ -26,25 +46,15 @@ export interface ProfileRow {
  * request is anonymous, it resolves to null so public pages and the shell keep rendering.
  */
 export async function getOptionalUser(): Promise<User | null> {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user ?? null;
-  } catch {
-    return null;
-  }
+  return getCachedUser();
 }
 
-/** Loads the current user's profile row (or null). Never throws. */
-export async function getMyProfile(): Promise<ProfileRow | null> {
+/** Loads the current user's profile row (or null). Never throws. Memoised per request (§2AB). */
+export const getMyProfile = cache(async (): Promise<ProfileRow | null> => {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCachedUser();
     if (!user) return null;
+    const supabase = await createClient();
     const { data } = await supabase
       .from('profiles')
       .select(
@@ -56,7 +66,7 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
   } catch {
     return null;
   }
-}
+});
 
 /**
  * Whether the signed-in viewer still needs to accept the current Terms/Privacy version (§2R). Read
@@ -65,13 +75,11 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
  * one is locked out - it never disturbs the main profile read. Anonymous viewers never need to
  * accept. Once the migration lands, an existing player (null version) is flagged until they accept.
  */
-export async function getViewerLegalStatus(): Promise<{ needsAcceptance: boolean }> {
+export const getViewerLegalStatus = cache(async (): Promise<{ needsAcceptance: boolean }> => {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCachedUser();
     if (!user) return { needsAcceptance: false };
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from('profiles')
       .select('terms_accepted_version')
@@ -84,7 +92,7 @@ export async function getViewerLegalStatus(): Promise<{ needsAcceptance: boolean
   } catch {
     return { needsAcceptance: false };
   }
-}
+});
 
 /** Guards a page: redirects to /login (with a return path) when there is no session. */
 export async function requireUser(returnTo?: string): Promise<User> {
@@ -125,63 +133,64 @@ const STAFF_ROLES = ['moderator', 'support', 'admin', 'super_admin'];
  * Viewer context for DTO projection: the current user's id (or null) and whether they are staff.
  * Reads only the caller's OWN roles (RLS-permitted). Never throws - degrades to an anonymous viewer.
  */
-export async function getViewerContext(): Promise<{
-  viewerId: string | null;
-  isStaff: boolean;
-  isCoach: boolean;
-}> {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { viewerId: null, isStaff: false, isCoach: false };
-    const { data } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('status', 'active');
-    const roles = (data ?? []).map((r) => (r as { role: string }).role);
-    return {
-      viewerId: user.id,
-      isStaff: roles.some((r) => STAFF_ROLES.includes(r)),
-      isCoach: roles.includes('coach'),
-    };
-  } catch {
-    return { viewerId: null, isStaff: false, isCoach: false };
-  }
-}
+export const getViewerContext = cache(
+  async (): Promise<{
+    viewerId: string | null;
+    isStaff: boolean;
+    isCoach: boolean;
+  }> => {
+    try {
+      const user = await getCachedUser();
+      if (!user) return { viewerId: null, isStaff: false, isCoach: false };
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+      const roles = (data ?? []).map((r) => (r as { role: string }).role);
+      return {
+        viewerId: user.id,
+        isStaff: roles.some((r) => STAFF_ROLES.includes(r)),
+        isCoach: roles.includes('coach'),
+      };
+    } catch {
+      return { viewerId: null, isStaff: false, isCoach: false };
+    }
+  },
+);
 
 /**
  * Whether to nudge the signed-in viewer that their profile has no vouches yet (master_plan §2O).
  * Shown as a slim banner in the shell for an onboarded player with zero vouches; it disappears the
  * moment they have one. Reads only the viewer's own profile and their public skill aggregate.
  */
-export async function getViewerReputationNudge(): Promise<{
-  unvouched: boolean;
-  slug: string | null;
-}> {
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return { unvouched: false, slug: null };
-    const { data: profileRow } = await supabase
-      .from('profiles')
-      .select('slug, onboarded_at')
-      .eq('id', user.id)
-      .maybeSingle();
-    const profile = profileRow as { slug: string | null; onboarded_at: string | null } | null;
-    if (!profile?.onboarded_at) return { unvouched: false, slug: null };
-    const { data: skillRow } = await supabase
-      .from('player_skill_profiles')
-      .select('unique_voucher_count')
-      .eq('player_id', user.id)
-      .maybeSingle();
-    const count = (skillRow as { unique_voucher_count: number } | null)?.unique_voucher_count ?? 0;
-    return { unvouched: count === 0, slug: profile.slug };
-  } catch {
-    return { unvouched: false, slug: null };
-  }
-}
+export const getViewerReputationNudge = cache(
+  async (): Promise<{
+    unvouched: boolean;
+    slug: string | null;
+  }> => {
+    try {
+      const user = await getCachedUser();
+      if (!user) return { unvouched: false, slug: null };
+      const supabase = await createClient();
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('slug, onboarded_at')
+        .eq('id', user.id)
+        .maybeSingle();
+      const profile = profileRow as { slug: string | null; onboarded_at: string | null } | null;
+      if (!profile?.onboarded_at) return { unvouched: false, slug: null };
+      const { data: skillRow } = await supabase
+        .from('player_skill_profiles')
+        .select('unique_voucher_count')
+        .eq('player_id', user.id)
+        .maybeSingle();
+      const count =
+        (skillRow as { unique_voucher_count: number } | null)?.unique_voucher_count ?? 0;
+      return { unvouched: count === 0, slug: profile.slug };
+    } catch {
+      return { unvouched: false, slug: null };
+    }
+  },
+);

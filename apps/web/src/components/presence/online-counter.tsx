@@ -27,6 +27,10 @@ function stableKey(): string {
   }
 }
 
+/** Keep the presence connection a short while after the tab hides, so a quick tab-switch does not
+ *  churn a leave+join (each is a Realtime message against the free-tier budget, §2S). */
+const HIDE_DISCONNECT_DELAY_MS = 30_000;
+
 export function OnlineCounter() {
   const [count, setCount] = useState<number | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -35,6 +39,7 @@ export function OnlineCounter() {
     let active = true;
     const key = stableKey();
     const supabase = createClient();
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
     const connect = () => {
       if (channelRef.current) return;
@@ -47,7 +52,14 @@ export function OnlineCounter() {
           setCount(Object.keys(channel.presenceState()).length);
         })
         .subscribe((status) => {
-          if (status === 'SUBSCRIBED') void channel.track({ t: Date.now() });
+          if (!active) return;
+          if (status === 'SUBSCRIBED') {
+            void channel.track({ t: Date.now() });
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            // Don't leave a stale number frozen on screen if the socket drops - hide the chip until
+            // a fresh sync arrives (supabase-js retries the subscription on its own).
+            setCount(null);
+          }
         });
       channelRef.current = channel;
     };
@@ -56,12 +68,27 @@ export function OnlineCounter() {
       const channel = channelRef.current;
       if (!channel) return;
       channelRef.current = null;
+      setCount(null);
       void supabase.removeChannel(channel);
     };
 
+    const clearHideTimer = () => {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    };
+
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') connect();
-      else disconnect();
+      if (document.visibilityState === 'visible') {
+        clearHideTimer();
+        connect();
+      } else if (!hideTimer) {
+        hideTimer = setTimeout(() => {
+          hideTimer = null;
+          disconnect();
+        }, HIDE_DISCONNECT_DELAY_MS);
+      }
     };
 
     if (document.visibilityState === 'visible') connect();
@@ -69,6 +96,7 @@ export function OnlineCounter() {
 
     return () => {
       active = false;
+      clearHideTimer();
       document.removeEventListener('visibilitychange', onVisibility);
       disconnect();
     };

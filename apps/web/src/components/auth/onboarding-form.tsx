@@ -161,6 +161,37 @@ export function OnboardingForm({
         </label>
       </fieldset>
 
+      {/* Consent captured at collection (§2AB). Onboarding is the single funnel BOTH email and
+          Google sign-ups pass through, so the authoritative Terms/Privacy agreement lives here (the
+          server refuses to finish, and records nothing, unless it is checked). Never shown in edit
+          mode - existing players already accepted. Plain language + a 44px row for a wide age range. */}
+      {mode === 'onboarding' && (
+        <label className="border-border bg-surface-muted flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-sm">
+          <input type="checkbox" name="agree" required className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="text-foreground">
+            I agree to VouchPlay&rsquo;s{' '}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-medium underline underline-offset-2"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-medium underline underline-offset-2"
+            >
+              Privacy Policy
+            </a>
+            .
+          </span>
+        </label>
+      )}
+
       <SubmitButton pendingLabel="Saving…">
         {mode === 'edit' ? 'Save changes' : 'Finish setup'}
       </SubmitButton>

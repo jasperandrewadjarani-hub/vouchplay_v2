@@ -2600,6 +2600,123 @@ the cue** with preloaded skeleton boxes.
   barely flashes, while a genuinely new query shows it for as long as the query really takes - honest
   feedback, not a fixed timer.
 
+## 2AA. SECURITY: lock the three partner RPCs that shipped world-executable (2026-09-10, urgent)
+
+Post-launch audit finding (companion doc `working/P_006b_PostLaunchAudit_(2026-09).md`). Three
+`SECURITY DEFINER` functions added in migration 0025 and re-created in 0031 were never given the
+`revoke ... from public, anon, authenticated; grant execute ... to service_role` pair that every
+other registration-writing RPC in this codebase carries:
+
+- `create_team_with_pending_partner(uuid, uuid, uuid, uuid, text, timestamptz)`
+- `decline_partner_invitation(uuid, uuid)`
+- `replace_pending_partner(uuid, uuid, uuid, text, timestamptz)`
+
+**Verified against production** by calling each with the public `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+no session (zero-UUID arguments, so nothing was written): all three EXECUTED and returned a business
+error (`self_partner` / `invitation_not_found` / `team_not_found`), while every sibling
+(`register_team`, `move_player_registration`, `change_partner`, `accept_partner_invitation`,
+`player_cancel_registration`) correctly returned `42501 permission denied`. Postgres grants EXECUTE
+to PUBLIC on function creation unless revoked, and these three were the only registration writers
+missed.
+
+Why it matters: the anon key ships in the client bundle. The functions take `p_inviter` / `p_invitee`
+/ `p_actor` as plain parameters and never compare them to `auth.uid()`, and none calls
+`player_fits_division`. So a direct `rpc()` call bypasses both the ownership check and the
+gender/skill-cap gate that lives only in the TypeScript layer (`division-fit-check.ts`) - the same
+class of bypass §2X closed, but reachable by anyone. Concrete abuse: spam partner invitations to any
+of the 350 players; decline a stranger's pending invitation on a paid entry (flipping their team back
+to `forming`); insert an arbitrary new partner into a paid team's vacant seat with no fit check; and
+forge `registration_events.actor_id`.
+
+### The fix (migration 0033 - privilege only, no deploy, no player impact)
+
+The app already calls all three through the service-role client
+(`lib/actions/registration.ts:302,402,713`), which keeps EXECUTE. Revoking public/anon/authenticated
+therefore changes nothing a real player does; it only closes the direct-RPC hole. Deliverables:
+
+- `supabase/migrations/0033_lock_partner_rpcs.sql` + `scripts/apply-0033.sql`: the three
+  revoke/grant pairs, plus two verification selects - one asserting the three are no longer
+  anon/authenticated-executable (expect 0 rows), one listing EVERY `SECURITY DEFINER` function in
+  `public` still executable by anon/authenticated (a standing tripwire; expected survivors are only
+  the read helpers deliberately granted to `authenticated`).
+- `scripts/verify-rpc-grants.mjs`: the anon-key probe from the audit, read-only, re-runnable against
+  production, expecting `42501` for every write RPC.
+- `scripts/check-migration-grants.mjs` wired into `npm run lint`: fails the build if a migration
+  defines a `security definer` function in `public` without a matching `revoke ... from ... anon`.
+  This is how 0025/0031 slipped through, so it becomes a mechanical gate.
+- A Non-negotiable added to `CLAUDE.md` + `AGENTS.md`: every security-definer function in a migration
+  must be followed by the revoke/grant pair.
+
+Rollout: privilege-only and idempotent, so it is safe to paste in the Supabase SQL editor at any
+time, independent of any code deploy. Apply first (it is the urgent item); the code changes below
+ride a later windowed deploy.
+
+## 2AB. Post-audit performance, consent, and resilience batch (2026-09-10)
+
+The rest of the audit's actionable, low-risk items, batched into ONE deploy for the low-traffic
+window (01:00-06:00 PHT) so open tabs self-heal (§2Q) only once. None touches registration
+semantics, RLS, vouch/STS logic, or any registration table. Companion doc:
+`working/P_006b_FixExecutionPlan_(2026-09).md`.
+
+### Request-level auth/profile dedupe (perf/cost)
+
+Every signed-in page currently calls `supabase.auth.getUser()` 5-6 times (middleware + header
+`getOptionalUser` + `getMyProfile` + `getViewerReputationNudge` + `getViewerLegalStatus` +
+welcome-modal `getOptionalUser`) and reads the same `profiles` row up to three times. Each
+`getUser()` is a network validation against Supabase Auth. Fix: a `React.cache()`-memoised
+`getCachedUser()` in `lib/auth.ts`, and route every reader through it; wrap `getMyProfile`,
+`getViewerLegalStatus`, `getViewerReputationNudge`, `getViewerContext` in `cache()` too so a repeat
+call in the same request is free. **Deliberately NOT folding the legal-column read into
+`getMyProfile`** - §2R's fail-open separation stays intact (folding it would couple the main profile
+read to the legal column and could blank the header if that column were ever missing). Net:
+`auth.getUser()` collapses to one per request; the three distinct profile selects stay distinct but
+are each deduped. Pure read-side; identical data returned.
+
+### Consent captured at onboarding, for Google sign-ups too (legal)
+
+Today only the email signup form has the required Terms/Privacy checkbox; the Google button
+(`signup/page.tsx`) relies on browsewrap text, yet `completeOnboarding` stamps
+`terms_accepted_version` unconditionally - so every Google sign-up gets an acceptance record it never
+actively gave. Fix: onboarding is the single funnel BOTH email and Google users pass through, so the
+authoritative consent moves there. Add a required, plain-language checkbox to the onboarding form
+(onboarding mode only - never the shared edit mode), with the two documents opening in a new tab.
+`completeOnboarding` refuses to finish and does NOT stamp acceptance unless the box is checked
+(server-side, behind the required attribute). Existing 350 players are already onboarded, so they are
+untouched and still governed by the §2R in-app gate. UX: one clear row above "Finish setup", 44px tap
+target, label states what and why, friendly error if skipped - legible for a wide age range.
+
+### Online-counter resilience (polish)
+
+`online-counter.tsx` only handles the `SUBSCRIBED` status, so on `CHANNEL_ERROR` / `TIMED_OUT` /
+`CLOSED` the last number stays frozen on screen. Fix: reset the count to null (hide the chip) on
+those statuses, and debounce the visibility-hide disconnect by ~30s (cleared if the tab returns) to
+cut Realtime join/leave churn against the free-tier message budget.
+
+### Already done, verified, dropped from scope
+
+The organizer "make skill_mismatch impossible to miss" item is already shipped: the organizer
+registration list renders an amber "Potential skill mismatch" chip on every non-eligible row
+(`organizer-registrations.tsx:230`) and the eligibility panel auto-expands for those. No change made.
+
+### Deferred to their own phases (not in this batch)
+
+- **Function Region -> Singapore** (biggest latency/cost win): a Vercel dashboard setting Jasper
+  flips; takes effect on the next deploy. Not code.
+- **Caching layer on uncached public reads** (tournament detail, club members, offers, profile
+  extras) using the already-defined-but-unused tags: its own deploy after this batch is stable ~24h,
+  because it is the largest change and needs a two-browser correctness test that no viewer-specific
+  state is ever served cross-user. Tracked as §2AC when scheduled.
+- **Skill-drift policy** (a live player's community skill rising above a division cap after they
+  register): a product decision (do nothing / evidence-threshold before community skill overrides
+  self-rating / freeze skill at registration). Decision gate for Jasper; nothing ships without a pick.
+  11 current Hermosa registrations are affected and handed to the organizer as a read-only list.
+- **Cleanup migration** dropping the now-unused `move_player_registration` RPC and the dead
+  `hasPlayerRegistrationChangePolicy` helper, and adding `player_fits_division` inside `register_team`
+  as SQL-side defense in depth: after the Hermosa registration window closes, to avoid editing a live
+  registration RPC mid-event.
+- **Legal**: counsel review + a dedicated privacy/DPO email, then a `LEGAL.version` bump (re-prompts
+  everyone) - scheduled post-window so it is not a speed bump on tournament day.
+
 ## 1. Prompt Contract
 
 ### In scope

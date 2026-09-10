@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.54
+# VouchPlay Master Product & Code Execution Handover v1.56
 
-_(File retains its `…v1.1.md` name; content is v1.54 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.56 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,48 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.56 (2026-09-10)
+
+_Post-audit performance, consent, and resilience batch (master_plan §2AB). No migration. One windowed
+deploy._
+
+- **Request-level auth/profile dedupe.** A signed-in page load made `supabase.auth.getUser()` 5-6
+  times and read the same `profiles` row up to three times. `getCachedUser()` (`React.cache`) now
+  backs `getOptionalUser` and every viewer reader in `lib/auth.ts`, and `getMyProfile` /
+  `getViewerLegalStatus` / `getViewerReputationNudge` / `getViewerContext` are memoised per request.
+  `auth.getUser()` collapses to one call per request. The §2R fail-open legal read stays a SEPARATE
+  select (never folded into `getMyProfile`). Pure read-side; identical data.
+- **Consent captured at onboarding, Google included.** Only the email signup form had the required
+  Terms/Privacy checkbox, yet onboarding stamped `terms_accepted_version` for everyone - so Google
+  sign-ups got an acceptance record they never gave. The onboarding form (onboarding mode only, not
+  edit) now carries a required, plain-language checkbox linking both documents, and
+  `completeOnboarding` refuses to finish and does not stamp acceptance unless it is checked. The
+  existing 350 players are already onboarded and remain governed by the §2R gate.
+- **Online counter resilience.** `online-counter.tsx` reset the count to null (hides the chip) on
+  `CHANNEL_ERROR` / `TIMED_OUT` / `CLOSED` instead of freezing the last number, and debounces the
+  visibility-hide disconnect by ~30s to cut Realtime churn.
+- **No change** to the organizer skill-mismatch surface: the amber "Potential skill mismatch" chip
+  already renders on every non-eligible registration row and the eligibility panel auto-expands.
+
+## v1.55 (2026-09-10)
+
+_SECURITY: lock three partner RPCs that shipped world-executable (master_plan §2AA). Migration 0033.
+Privilege-only - no deploy, no player-facing change._
+
+- `create_team_with_pending_partner`, `decline_partner_invitation`, and `replace_pending_partner`
+  (migrations 0025/0031) never received the `revoke ... from public, anon, authenticated; grant
+  execute ... to service_role` pair every other registration RPC carries. **Verified in production:**
+  all three were executable with the public anon key (no session), while every sibling correctly
+  denied with `42501`. They take actor ids as plain parameters (no `auth.uid()` check) and skip
+  `player_fits_division`, so a direct `rpc()` call bypassed both ownership and the gender/skill-cap
+  gate - the §2X bypass class, reachable by anyone.
+- **Migration 0033** (`scripts/apply-0033.sql`) revokes and re-grants the three to `service_role`
+  only. The app already calls them via the service-role client, so nothing legitimate changes; only
+  the direct-RPC hole closes. Safe to paste anytime, independent of any deploy.
+- Added `scripts/verify-rpc-grants.mjs` (anon-key probe), `scripts/check-migration-grants.mjs` (a
+  lint gate that fails when a migration defines a `security definer` function without the revoke
+  pair), and a Non-negotiable in `CLAUDE.md` / `AGENTS.md`.
 
 ## v1.54 (2026-09-10)
 

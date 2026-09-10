@@ -45,6 +45,10 @@ bump `next`/`eslint-config-next` back to `^16`, rename `middleware.ts` → `prox
 Canonical skill order LOCKED; CSL / STS / Identity Verified / Skill Verified are separate (Skill-Verified
 and Facebook never affect vouch weight); operational values live in `system_settings` (never hardcoded);
 server-side authz + RLS everywhere; anonymous voucher identity never exposed; `audit_logs` append-only.
+Every `create ... function ... security definer` in a migration MUST be followed by `revoke all ...
+from public, anon, authenticated; grant execute ... to service_role;` (Postgres defaults EXECUTE to
+PUBLIC - skipping this ships a world-executable RPC; see §2AA / migration 0033). `npm run lint` enforces
+this via `scripts/check-migration-grants.mjs`.
 
 ## Secrets
 Never commit secrets. `apps/web/.env.local` is gitignored; `SUPABASE_SERVICE_ROLE_KEY` is server-only

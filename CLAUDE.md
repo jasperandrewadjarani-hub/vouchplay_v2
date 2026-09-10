@@ -90,6 +90,12 @@ Log the change in `notes.md` and this file.
   never hardcoded.
 - Server-side authorization + RLS on everything; anonymous voucher identity is never exposed outside
   authorized Admin/moderation; `audit_logs` is append-only.
+- Every `create [or replace] function ... security definer` in a migration MUST be followed by
+  `revoke all on function public.<fn>(<args>) from public, anon, authenticated;` and (for the ones the
+  app calls) `grant execute ... to service_role;`. Postgres grants EXECUTE to PUBLIC on CREATE, so
+  skipping this ships a world-executable RPC (this is exactly how three partner RPCs leaked - §2AA /
+  migration 0033). `npm run lint` runs `scripts/check-migration-grants.mjs`, which fails on any
+  unlocked security-definer function; read-only predicates called inside RLS live on its allowlist.
 - Public reads cache-first; no `select(*)` in list endpoints; STS recomputed on write, not read.
 
 ## Secrets

@@ -14,7 +14,7 @@
     "dev": "npm run dev --workspace @vouchplay/web",
     "build": "npm run build --workspace @vouchplay/web",
     "start": "npm run start --workspace @vouchplay/web",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "node scripts/check-migration-grants.mjs && npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "verify:phase13-rls": "node scripts/verify-phase13-rls.mjs",

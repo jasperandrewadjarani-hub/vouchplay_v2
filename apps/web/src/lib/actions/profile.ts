@@ -91,6 +91,15 @@ export async function completeOnboarding(
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check your input.' };
 
+  // Consent at collection (§2AB): onboarding is the one funnel every new account (email AND Google)
+  // passes through, so the authoritative Terms/Privacy acceptance is captured and recorded here.
+  // Server-enforced behind the form's required checkbox; kept out of the shared onboardingSchema so
+  // it never touches the edit path (updateProfile). If unchecked we refuse and record nothing, so
+  // the acceptance stamp below is always a real, given consent.
+  const agreedToLegal = formData.get('agree') === 'on';
+  if (!agreedToLegal)
+    return { error: 'Please agree to the Terms of Service and Privacy Policy to continue.' };
+
   const v = parsed.data;
   const next = safeNext(formData.get('next') as string | null);
   let savedSlug: string | null = null;
@@ -138,9 +147,10 @@ export async function completeOnboarding(
     }
     savedSlug = slug;
 
-    // Record the Terms/Privacy consent the player gave at signup (§2R) so they are not shown the
-    // in-app gate right after onboarding. Its own try/catch: if migration 0032 is not applied yet
-    // this no-ops and the fail-open gate simply catches them on their next visit instead.
+    // Record the Terms/Privacy consent the player just gave via the required onboarding checkbox
+    // (§2AB; we already refused above if it was unchecked) so they are not shown the in-app gate
+    // right after onboarding. Its own try/catch: if migration 0032 were ever missing this no-ops and
+    // the fail-open gate simply catches them on their next visit instead.
     try {
       await supabase
         .from('profiles')

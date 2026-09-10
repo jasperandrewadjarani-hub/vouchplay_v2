@@ -37,3 +37,34 @@ direct authorization checks, and removes both accounts. The 2026-09-08 release r
 zero failures or skips. `npm run verify:phase13-rls` remains the non-provisioning variant for supplied
 controlled tokens; a skipped controlled-account check is not a release pass.
 
+
+## check-migration-grants.mjs (wired into `npm run lint`)
+
+Static guard for master_plan §2AA. Scans `supabase/migrations/*.sql` and fails if any
+`security definer` function in `public` is left on the Postgres PUBLIC-execute default (no
+`revoke ... from public, anon, authenticated`, and not an explicit `authenticated` read helper).
+Read-only, no env/network. Read-only authz predicates called inside RLS (`is_staff`, `is_admin`, …)
+are on an in-file allowlist. This is the tripwire that would have caught the three world-executable
+partner RPCs fixed by migration 0033.
+
+```bash
+node scripts/check-migration-grants.mjs
+```
+
+## verify-rpc-grants.mjs
+
+Read-only proof (master_plan §2AA) that registration/team-writing `SECURITY DEFINER` RPCs are NOT
+callable with the public anon key. Calls each with the anon key, no session, zero-UUID args (writes
+nothing); a locked function returns `42501`. Exit non-zero if any write RPC is reachable by anon.
+Run after applying `apply-0033.sql` to confirm the three partner RPCs now deny.
+
+```bash
+node scripts/verify-rpc-grants.mjs
+```
+
+## apply-0033.sql (applied 2026-09-__ — pending)
+
+Migration 0033 (master_plan §2AA): revokes public/anon/authenticated and re-grants `service_role`
+on `create_team_with_pending_partner`, `decline_partner_invitation`, `replace_pending_partner`.
+Privilege-only, idempotent, no deploy, no player-facing change. Paste in the Supabase SQL editor;
+expect Verify-1 to return 0 rows and Verify-2 to list only read helpers.
