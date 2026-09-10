@@ -1,13 +1,12 @@
 import type { Metadata } from 'next';
-import { PagePlaceholder } from '@/components/page-placeholder';
+import { PrivacyContent } from '@/components/legal/privacy-content';
 
-export const metadata: Metadata = { title: 'Privacy Notice' };
+export const metadata: Metadata = { title: 'Privacy Policy' };
 
 export default function PrivacyPage() {
   return (
-    <PagePlaceholder title="Privacy Notice" phase="Phase 14 · Legal">
-      The full Privacy Notice (Philippine Data Privacy Act aligned) will be published before public
-      beta (handover §46). Placeholder page so links resolve during development.
-    </PagePlaceholder>
+    <div className="py-4">
+      <PrivacyContent />
+    </div>
   );
 }

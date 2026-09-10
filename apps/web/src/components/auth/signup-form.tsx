@@ -19,6 +19,7 @@ export function SignupForm({ next }: { next?: string }) {
     return (
       <form action={requestAction} className="space-y-4">
         {next && <input type="hidden" name="next" value={next} />}
+        <input type="hidden" name="intent" value="signup" />
         <FormError>{request.error}</FormError>
         <Field
           label="Email"
@@ -28,6 +29,30 @@ export function SignupForm({ next }: { next?: string }) {
         >
           <Input id="signup-email" name="email" type="email" autoComplete="email" required />
         </Field>
+        <label className="text-foreground-muted flex cursor-pointer items-start gap-2 text-sm">
+          <input type="checkbox" name="agree" required className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            I agree to the{' '}
+            <a
+              href="/terms"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-medium underline underline-offset-2"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary font-medium underline underline-offset-2"
+            >
+              Privacy Policy
+            </a>
+            .
+          </span>
+        </label>
         <SubmitButton pendingLabel="Sending…">Send verification code</SubmitButton>
       </form>
     );

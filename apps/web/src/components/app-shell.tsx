@@ -6,9 +6,10 @@ import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
+import { LegalConsentGate } from './legal/legal-consent-gate';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
-import { getOptionalUser, getViewerReputationNudge } from '@/lib/auth';
+import { getOptionalUser, getViewerReputationNudge, getViewerLegalStatus } from '@/lib/auth';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -29,6 +30,9 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
   // have played with vouch for them (§2O). Skipped under maintenance gating.
   const nudge = gated ? { unvouched: false, slug: null } : await getViewerReputationNudge();
+  // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
+  // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
+  const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
 
   // Launch/campaign pop-up: only loaded when an Admin has switched it on.
   const welcome = welcomeEnabled
@@ -115,6 +119,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <BottomNav />
+      {legal.needsAcceptance && <LegalConsentGate />}
     </div>
   );
 }

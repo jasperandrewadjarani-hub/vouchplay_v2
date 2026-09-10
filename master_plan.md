@@ -2335,6 +2335,59 @@ Two secondary contributors:
 - It does not fix genuine Supabase outages - it stops them from taking the whole page down and lets
   the user retry. Free-tier capacity (egress) remains the thing to upgrade.
 
+## 2R. Terms of Service and Privacy Policy, with a blocking acceptance gate (2026-09-10, post-launch)
+
+The app went live and grew to 350+ real players with only **placeholder** /terms and /privacy pages
+and **no consent capture anywhere** - no signup checkbox, no acceptance record. Given what VouchPlay
+holds (payment proofs with names and bank reference numbers, DOB, city, sex, and vouches people write
+about each other), a published Privacy Policy is effectively required under the Philippine Data
+Privacy Act (RA 10173), and Terms are what limit JT Consulting & Analytics Inc.'s liability. So this
+is overdue rather than early.
+
+### Decisions (confirmed with Jasper)
+
+- **Existing 350+ accept via a blocking gate**, not a soft banner: most defensible, and the acceptance
+  is recorded (version + timestamp).
+- **We draft the text, Jasper has it reviewed by counsel.** The drafts are solid, plain-language, and
+  PH-context, but they are unreviewed - flagged for legal review, and written so a lawyer can edit the
+  content components without touching the mechanism.
+
+### The mechanism (additive; no change to vouch/registration/auth semantics)
+
+- **Versioning:** `LEGAL.version` (date-based) in `@vouchplay/config`. `profiles.terms_accepted_version`
+  is compared to it; bumping the constant re-prompts everyone on their next visit. `isCurrentLegalVersion()`
+  is the pure, unit-tested comparison.
+- **Record:** migration 0032 adds `terms_accepted_version` + `terms_accepted_at` to `profiles`
+  (nullable, additive, no backfill, no RLS change - the existing self-update policy covers them).
+- **Read is fail-open and separate:** `getViewerLegalStatus()` does its OWN small select, deliberately
+  NOT folded into `getMyProfile`. If the column is missing (migration not yet applied) it returns
+  needsAcceptance=false, so deploying the code before the migration cannot break the profile read or
+  bounce all 350 users to onboarding. Once the migration lands, existing players (null version) are
+  gated automatically.
+- **The gate** (`LegalConsentGate`) overlays everything above the header and bottom nav for a signed-in
+  player who has not accepted the current version. The Terms and Privacy text are **embedded and
+  scrollable inside the gate** (tabbed), not linked out - which also sidesteps the trap that /terms and
+  /privacy live inside the same shell the gate covers. One "I agree" checkbox + "Agree and continue"
+  calls `acceptCurrentLegalTerms()`, which stamps the profile and refreshes.
+- **New users** get consent at collection: a required checkbox on the signup form (enforced server-side
+  only when intent=signup, so login is unaffected), and their acceptance is stamped at onboarding
+  completion (tolerant write, so pre-migration it simply no-ops and the gate catches them later).
+- **Pages:** /terms and /privacy now render the real documents (shared content components reused by the
+  gate), replacing the placeholders.
+
+### Rollout order and honest limits
+
+- Migration 0032 is safe to apply anytime (purely additive); the gate activates once it is applied.
+  Follow the project rule and apply it before/around the deploy - the fail-open read means a slip in
+  ordering cannot lock anyone out.
+- The **text is unreviewed by a lawyer.** It is a strong standard draft, not legal advice; get it
+  reviewed and bump `LEGAL.version` when counsel edits it, which re-prompts everyone cleanly.
+- Contact currently routes to the real JT Consulting & Analytics Inc. Facebook page. A **dedicated
+  privacy/DPO email** should be added (and, depending on volume of sensitive data, consider NPC
+  registration and naming a Data Protection Officer) - a legal-review item, not a code blocker.
+- A blocking gate is a one-time ~10-second speed bump for the 350 mid-tournament; that is the
+  deliberate, defensible trade for a real acceptance record.
+
 ## 1. Prompt Contract
 
 ### In scope

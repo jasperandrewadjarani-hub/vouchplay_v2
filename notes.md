@@ -2359,6 +2359,12 @@ it done. Several fixes in this session were found only that way.
   the standardized gold `RISE OF THE EMPIRES`, multicolor `HERMOSA`, gold-script `GRAND`, and white
   `PICKLEBALL TOURNAMENT` lockup. Saved as the `Uniform_Tournament_Lockup` revision.
 
+- **2026-09-10** - Corrected the new-features post to use the supplied tournament lockup artwork
+  itself instead of an AI-rendered approximation. The exact crown, gold `RISE OF THE EMPIRES`,
+  multicolor `HERMOSA`, gold-script `GRAND`, pickleball, and white `PICKLEBALL TOURNAMENT` grouping
+  were proportionally placed at lower right; the B-STEEL badge and all other post content remain
+  unchanged. Saved as the `Exact_Tournament_Lockup` revision (1254 x 1254 PNG).
+
 ## 2026-09-10 - Deployment-skew self-healing (§2Q, handover v1.45)
 
 Players reported two error screens as common: "VouchPlay hit a snag" (global-error, no chrome) and
@@ -2379,3 +2385,30 @@ Fixes (no DB/RLS/auth/vouch changes):
 Gates: typecheck clean, web tests 152 pass (error-telemetry now 6), format clean, lint clean. Build +
 deploy + both-domain verify next. Note: this deploy still skews tabs on the previous build one last
 time; from the next deploy on they self-heal.
+
+## 2026-09-10 - Terms of Service + Privacy Policy + blocking consent gate (§2R, handover v1.46)
+
+350+ live players, only placeholder legal pages, no consent capture. Added real Terms + Privacy and a
+blocking acceptance gate. Confirmed with Jasper: blocking gate for existing users; I draft, counsel
+reviews.
+
+- Migration 0032 (scripts/apply-0032.sql): profiles.terms_accepted_version + terms_accepted_at
+  (nullable, additive, no RLS change). APPLY THIS - verify version_col=1, at_col=1, pending_players=all.
+- @vouchplay/config LEGAL {version (date-based), effectiveDate, entity, jurisdiction} +
+  isCurrentLegalVersion() (2 tests). Bump version to re-prompt everyone.
+- auth.ts getViewerLegalStatus(): SEPARATE fail-open read (NOT in getMyProfile) so deploy-before-migrate
+  can't lock anyone out / bounce to onboarding.
+- components/legal/: legal-doc, terms-content, privacy-content (plain presentational, reused by pages +
+  gate), legal-consent-gate (overlay above header/nav, embedded scrollable tabbed docs, one checkbox).
+- actions/legal.ts acceptCurrentLegalTerms() stamps profile + revalidate.
+- app-shell renders <LegalConsentGate/> when getViewerLegalStatus().needsAcceptance (skipped under
+  maintenance). signup-form: required agree checkbox + intent=signup; auth action enforces server-side
+  for intent=signup only (login unaffected). profile.ts completeOnboarding: tolerant acceptance stamp.
+- /terms and /privacy now render real docs (were placeholders).
+
+Limits: text UNREVIEWED by counsel (strong draft) - review, then bump LEGAL.version. Contact = JT
+Facebook page; add dedicated privacy/DPO email; consider NPC registration/DPO. Gate = ~10s one-time
+speed bump for the 350 mid-tournament (deliberate, for a real acceptance record).
+
+Gates: typecheck clean, 193 tests pass (config now 21 incl legal 2), format clean, lint clean.
+Deploy order: apply 0032 (safe, additive) around the deploy; fail-open read tolerates either order.

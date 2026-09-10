@@ -11,6 +11,7 @@ export * from './skill';
 export * from './settings';
 export * from './settings-catalog';
 export * from './brand';
+export * from './legal';
 export * from './visibility';
 export * from './geo';
 export * from './moderation';

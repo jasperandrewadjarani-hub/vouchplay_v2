@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidateTag } from 'next/cache';
 import { onboardingSchema } from '@vouchplay/validation';
+import { LEGAL } from '@vouchplay/config';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { safeNext } from '@/lib/auth';
@@ -136,6 +137,21 @@ export async function completeOnboarding(
       return { error: 'Could not save your profile. Please try again.' };
     }
     savedSlug = slug;
+
+    // Record the Terms/Privacy consent the player gave at signup (§2R) so they are not shown the
+    // in-app gate right after onboarding. Its own try/catch: if migration 0032 is not applied yet
+    // this no-ops and the fail-open gate simply catches them on their next visit instead.
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          terms_accepted_version: LEGAL.version,
+          terms_accepted_at: new Date().toISOString(),
+        })
+        .eq('id', user!.id);
+    } catch {
+      /* gate will catch them once the column exists */
+    }
   } catch {
     return { error: 'Profile setup is not available yet. Please try again shortly.' };
   }

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
+import { isCurrentLegalVersion } from '@vouchplay/config';
 import { createClient } from '@/lib/supabase/server';
 
 export interface ProfileRow {
@@ -54,6 +55,34 @@ export async function getMyProfile(): Promise<ProfileRow | null> {
     return (data as ProfileRow | null) ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * Whether the signed-in viewer still needs to accept the current Terms/Privacy version (§2R). Read
+ * on its own, deliberately NOT folded into getMyProfile's select: if the column does not exist yet
+ * (migration 0032 not applied), this fails OPEN (needsAcceptance=false) so nothing is gated and no
+ * one is locked out - it never disturbs the main profile read. Anonymous viewers never need to
+ * accept. Once the migration lands, an existing player (null version) is flagged until they accept.
+ */
+export async function getViewerLegalStatus(): Promise<{ needsAcceptance: boolean }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { needsAcceptance: false };
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('terms_accepted_version')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) return { needsAcceptance: false };
+    const version =
+      (data as { terms_accepted_version: string | null } | null)?.terms_accepted_version ?? null;
+    return { needsAcceptance: !isCurrentLegalVersion(version) };
+  } catch {
+    return { needsAcceptance: false };
   }
 }
 

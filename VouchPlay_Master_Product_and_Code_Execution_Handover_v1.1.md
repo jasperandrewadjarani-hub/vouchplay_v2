@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.45
+# VouchPlay Master Product & Code Execution Handover v1.46
 
-_(File retains its `…v1.1.md` name; content is v1.45 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.46 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,31 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.46 (2026-09-10)
+
+_Terms of Service + Privacy Policy with a blocking acceptance gate (master_plan §2R). Migration 0032._
+
+- **Why:** live with 350+ players and only placeholder legal pages + no consent capture. VouchPlay
+  holds payment proofs (names + bank references), DOB, city, sex, and vouches about people, so a
+  published Privacy Policy is expected under the PH Data Privacy Act (RA 10173) and Terms limit
+  liability. Confirmed with Jasper: blocking gate for existing users; we draft, counsel reviews.
+- **Migration 0032** (`scripts/apply-0032.sql`): adds `profiles.terms_accepted_version` +
+  `terms_accepted_at` (nullable, additive, no RLS change). Apply via SQL editor; verify query returns
+  `version_col=1, at_col=1, pending_players=<current players>`.
+- **Versioning:** `LEGAL.version` in `@vouchplay/config` (date-based) is compared to the stored
+  version; bump it to re-prompt everyone. `isCurrentLegalVersion()` is unit-tested.
+- **Fail-open read:** `getViewerLegalStatus()` selects the column on its own (NOT via `getMyProfile`);
+  missing column ⇒ needsAcceptance=false, so deploying before the migration cannot break the profile
+  read or bounce users to onboarding.
+- **Gate:** `LegalConsentGate` overlays above header/nav for a signed-in player who has not accepted
+  the current version; Terms + Privacy are embedded and scrollable (tabbed), one checkbox + Agree
+  calls `acceptCurrentLegalTerms()`. New users: required checkbox on signup (server-enforced only for
+  intent=signup) + tolerant stamp at onboarding. /terms and /privacy now render the real docs.
+- **Limits:** text is a strong draft, **unreviewed by counsel** - review then bump `LEGAL.version`;
+  contact routes to the JT Consulting & Analytics Inc. Facebook page (add a dedicated privacy/DPO
+  email); consider NPC registration/DPO depending on data volume. No vouch/registration/auth-semantics
+  changes.
 
 ## v1.45 (2026-09-10)
 

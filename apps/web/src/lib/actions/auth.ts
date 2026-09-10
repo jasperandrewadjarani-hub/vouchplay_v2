@@ -37,6 +37,13 @@ export async function requestEmailOtp(_prev: FormState, formData: FormData): Pro
   if (!parsed.success) return { error: firstIssue(parsed.error) };
   const next = (formData.get('next') as string | null) ?? undefined;
 
+  // Consent at collection (§2R): the signup form marks intent=signup and requires the agreement box.
+  // Login uses the same action without that marker and is unaffected (existing users accept at the
+  // in-app gate instead). Defense-in-depth behind the client-side required checkbox.
+  if (formData.get('intent') === 'signup' && formData.get('agree') !== 'on') {
+    return { error: 'Please agree to the Terms of Service and Privacy Policy to continue.' };
+  }
+
   try {
     // When signups are disabled (§30.7) new emails must not create an account; existing users can
     // still request a login code (shouldCreateUser:false only creates for known addresses).
