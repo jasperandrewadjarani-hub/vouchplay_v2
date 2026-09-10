@@ -11,6 +11,7 @@ export const CORE_PACKAGE = '@vouchplay/core';
 export * from './notifications/email';
 export * from './notifications/catalog';
 export * from './vouches';
+export * from './skill/v2';
 export * from './eligibility';
 export * from './payments/provider';
 export * from './analytics/summary';

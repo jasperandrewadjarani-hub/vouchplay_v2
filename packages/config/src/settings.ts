@@ -175,6 +175,49 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   welcome_modal_cta_note: 'Sign-up now to register tomorrow.',
   welcome_modal_image_url: '',
   welcome_modal_link_url: '',
+
+  // Rig-resistant Community Skill (STS_V2, master_plan §2AF). Operational values only - the STS_V2
+  // structural constants are version-locked in STS_V2_CONSTANTS below, not here.
+  // The public switch: which algorithm feeds CSL/STS/Skill-Verified/eligibility. Flipping this is a
+  // no-deploy, instantly reversible Admin action (§2AF rollout step 2).
+  skill_algorithm_active_version: 'STS_V1',
+  // Kill switch for the velocity hold (the one live automatic guard, §2AF anomaly table).
+  vouch_velocity_guard_enabled: true,
+  // Voucher trust VT(u): a brand-new account nobody has vouched for and who is unanchored.
+  skill_v2_trust_unknown_factor: 0.25,
+  // Voucher trust VT(u): floor for an unanchored voucher who has received at least one vouch.
+  skill_v2_trust_unanchored_factor: 0.6,
+  // Voucher trust VT(u): standing (received vouches, reciprocal-excluded) saturates at this count.
+  skill_v2_trust_standing_saturation: 3,
+  // Voucher trust VT(u): account-age maturity ramps from 0.5x to 1.0x over this many days.
+  skill_v2_trust_maturity_days: 7,
+  // Independence IND(v): multiplier applied when the target also actively vouches the voucher back.
+  skill_v2_reciprocal_multiplier: 0.5,
+  // Independence IND(v): per-rank decay applied to each additional voucher inside the same club bloc.
+  skill_v2_bloc_decay: 0.6,
+  // Aggregation: weight given to the target's own self-rating as a Bayesian prior in the shrunk
+  // weighted median.
+  skill_v2_prior_weight: 2,
+  // Skill Verified (V2): minimum independent-equivalent vouchers (N_eff), alongside the existing
+  // skill_verified_min_sts threshold (reused, not duplicated).
+  skill_v2_min_independent_vouchers: 2,
+  // Velocity guard: rolling window (hours) in which a burst is measured.
+  skill_v2_velocity_window_hours: 6,
+  // Velocity guard: minimum vouches on one target inside the window to be a candidate burst.
+  skill_v2_velocity_burst_min: 8,
+  // Velocity guard: minimum share of the burst's vouches that must be low-trust to trigger a hold.
+  skill_v2_velocity_low_trust_share: 0.6,
+  // Velocity guard: voucher-trust (VT) ceiling below which a voucher counts as "low-trust" for the
+  // burst share above.
+  skill_v2_velocity_low_trust_vt: 0.5,
+  // LOW_TRUST_SWARM flag: minimum active vouches from unanchored, zero-standing vouchers.
+  skill_v2_swarm_min: 6,
+  // RECIPROCAL_RING flag: minimum share of a >=4-vouch set that must be reciprocal edges.
+  skill_v2_ring_reciprocal_share: 0.5,
+  // CLUB_BLOC flag: minimum share of a >=4-vouch set supplied by one club.
+  skill_v2_bloc_share: 0.6,
+  // SPIKE flag: minimum skill-band distance (V1 vs V2, or CSL vs self-rating with low N_eff) to flag.
+  skill_v2_spike_bands: 2,
 } as const;
 
 export type SystemSettingsKey = keyof typeof DEFAULT_SYSTEM_SETTINGS;
@@ -200,3 +243,32 @@ export const STS_CONSTANTS = {
   min: 0.0,
   max: 5.0,
 } as const;
+
+/**
+ * STS_V2 algorithm constants (master_plan §2AF). Version-locked and NOT admin-tunable, deliberately
+ * identical in value and structure to STS_CONSTANTS (STS_V2 is still 0.50*count + 0.25*weight +
+ * 0.25*agreement scaled to 0..5, so the number still means "confidence"). What changes for V2 is not
+ * this formula but what feeds it: `count`/`weight`/`agreement` are computed from independent-equivalent
+ * vouches (voucher-trust x independence), not raw voucher/weight sums - see
+ * packages/core/src/skill/v2/. Changing any of these values would itself be a new algorithm version;
+ * do not mutate historical calculation semantics.
+ */
+export const STS_V2_CONSTANTS = {
+  /** count_component = min(n_eff / this, 1) */
+  countDivisor: 5,
+  /** weight_component = min(weight_sum_v2 / this, 1) */
+  weightDivisor: 7.5,
+  /** agreement_component = max(0, 1 - min(dispersion / this, 1)) */
+  dispersionDivisor: 2.0,
+  /** Final blend: 0.50*count + 0.25*weight + 0.25*agreement, scaled to 0..5. */
+  countCoefficient: 0.5,
+  weightCoefficient: 0.25,
+  agreementCoefficient: 0.25,
+  scale: 5,
+  min: 0.0,
+  max: 5.0,
+} as const;
+
+/** The public skill-algorithm switch (`skill_algorithm_active_version`, §2AF). */
+export const SKILL_ALGORITHM_VERSIONS = ['STS_V1', 'STS_V2'] as const;
+export type SkillAlgorithmVersion = (typeof SKILL_ALGORITHM_VERSIONS)[number];

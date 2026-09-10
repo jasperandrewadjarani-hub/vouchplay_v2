@@ -11,9 +11,15 @@ import {
   type LeaderboardFact,
   type RankedLeaderboardRow,
 } from '@vouchplay/core';
+import type { SkillAlgorithmVersion } from '@vouchplay/config';
 import { createServiceClient } from '@/lib/supabase/service';
 import { fetchAllRows } from '@/lib/supabase/fetch-all';
-import { getLeaderboardSettings } from '@/lib/settings';
+import { getLeaderboardSettings, getActiveSkillVersion } from '@/lib/settings';
+import {
+  pickActiveSkill,
+  skillProfileColumns,
+  type SkillProfileRow,
+} from '@/lib/vouches/active-skill';
 import { recomputeAllContributions } from '@/lib/contribution/recompute';
 import { notifyMany } from '@/lib/notifications/create';
 import type { LeaderboardPeriod, LeaderboardScope } from './types';
@@ -113,6 +119,60 @@ function exclusionFor(
   );
 }
 
+/**
+ * `player_skill_profiles.skill_verified` (V1) alone would be stale the moment the site flips to
+ * STS_V2 (§2AF rollout step 2), since STS_V2 has no separate `skill_verified` column of its own (it is
+ * derived from `sts_v2`/`n_eff_v2` via `pickActiveSkill`, §2AF E2/E3) - the leaderboard's "verified"
+ * weight would silently keep ranking on the retired algorithm. This selects the version-routed column
+ * set, falls open to V1 on a 42703 (migration 0034 not applied), and reduces every row back down to
+ * `{ player_id, skill_verified }` so the rest of this file is untouched.
+ */
+async function fetchSkillVerifiedRows(
+  db: ReturnType<typeof createServiceClient>,
+  limit: number,
+): Promise<{ rows: Row[]; count: number; capped: boolean }> {
+  const version = await getActiveSkillVersion();
+  const columnsFor = (v: SkillAlgorithmVersion) => `player_id, ${skillProfileColumns(v)}`;
+  // Supabase's client falls back to an opaque `GenericStringError[]` data type for a dynamic (non-
+  // literal) `.select()` column string, so this one cast is required here (same reasoning as
+  // `PostgrestLikeResponse` in active-skill.ts, which fetchAllRows's stricter `PageResult<T>` shape
+  // does not accept without it).
+  const page = (v: SkillAlgorithmVersion) => (from: number, to: number) =>
+    db
+      .from('player_skill_profiles')
+      .select(columnsFor(v), { count: 'exact' })
+      .order('player_id', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{
+      data: (SkillProfileRow & { player_id: string })[] | null;
+      error: { message?: string; code?: string; details?: string } | null;
+      count: number | null;
+    }>;
+
+  let result: { rows: (SkillProfileRow & { player_id: string })[]; count: number; capped: boolean };
+  try {
+    result = await fetchAllRows<SkillProfileRow & { player_id: string }>(
+      page(version),
+      limit,
+      'leaderboard_skill_profiles',
+    );
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '';
+    if (version !== 'STS_V2' || !message.includes('42703')) throw e;
+    // The V2 columns do not exist yet (migration 0034 not applied) - fail open to V1, §2R.
+    result = await fetchAllRows<SkillProfileRow & { player_id: string }>(
+      page('STS_V1'),
+      limit,
+      'leaderboard_skill_profiles',
+    );
+  }
+
+  const rows: Row[] = result.rows.map((row) => ({
+    player_id: row.player_id,
+    skill_verified: pickActiveSkill(row, version).skillVerified,
+  }));
+  return { rows, count: result.count, capped: result.capped };
+}
+
 async function loadSources(max: number): Promise<SourceBundle> {
   const db = createServiceClient();
   const limit = Math.max(100, max);
@@ -174,16 +234,7 @@ async function loadSources(max: number): Promise<SourceBundle> {
       limit,
       'leaderboard_contributions',
     ),
-    fetchAllRows<Row>(
-      (from, to) =>
-        db
-          .from('player_skill_profiles')
-          .select('player_id, skill_verified', { count: 'exact' })
-          .order('player_id', { ascending: true })
-          .range(from, to),
-      limit,
-      'leaderboard_skill_profiles',
-    ),
+    fetchSkillVerifiedRows(db, limit),
     fetchAllRows<Row>(
       (from, to) =>
         db

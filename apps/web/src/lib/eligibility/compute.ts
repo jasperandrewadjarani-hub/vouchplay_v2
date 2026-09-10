@@ -7,7 +7,12 @@ import {
   type EligibilityResult,
 } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
-import { getEligibilitySettings } from '@/lib/settings';
+import { getEligibilitySettings, getActiveSkillVersion } from '@/lib/settings';
+import {
+  pickActiveSkill,
+  selectSkillProfiles,
+  type SkillProfileRow,
+} from '@/lib/vouches/active-skill';
 import { tournamentTag, getTournamentRules } from '@/lib/tournaments/queries';
 import { hasHistoricalSkillMismatch } from '@/lib/players/profile-extras';
 
@@ -137,15 +142,19 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
   const memberIds = members.map((m) => m.player_id);
   if (memberIds.length === 0) return;
 
-  const [{ data: profileData }, { data: skillData }, { data: fraudData }] = await Promise.all([
+  const skillVersion = await getActiveSkillVersion();
+  const [{ data: profileData }, { rows: skillRows }, { data: fraudData }] = await Promise.all([
     svc
       .from('profiles')
       .select('id, sex, date_of_birth, account_status, self_rated_skill')
       .in('id', memberIds),
-    svc
-      .from('player_skill_profiles')
-      .select('player_id, community_skill_level, sts, unique_voucher_count, skill_verified')
-      .in('player_id', memberIds),
+    // Eligibility reads through the public skill-algorithm switch too (§2AF rollout step 2) - a
+    // player's eligibility numbers must match what their profile page shows.
+    selectSkillProfiles<SkillProfileRow & { player_id: string }>(
+      skillVersion,
+      (query) => svc.from('player_skill_profiles').select(query).in('player_id', memberIds),
+      'player_id',
+    ),
     svc
       .from('fraud_flags')
       .select('subject_id, flag_type, status')
@@ -166,15 +175,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     ).map((p) => [p.id, p]),
   );
   const skillById = new Map(
-    (
-      (skillData ?? []) as {
-        player_id: string;
-        community_skill_level: number | null;
-        sts: number | string;
-        unique_voucher_count: number;
-        skill_verified: boolean;
-      }[]
-    ).map((s) => [s.player_id, s]),
+    skillRows.map((row) => [row.player_id, pickActiveSkill(row, skillVersion)]),
   );
   const unusualByPlayer = new Set(
     ((fraudData ?? []) as { subject_id: string; flag_type: string }[])
@@ -214,11 +215,11 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     const skill = skillById.get(m.player_id);
     return {
       playerId: m.player_id,
-      communitySkillLevel: skill?.community_skill_level ?? null,
-      sts: skill ? Number(skill.sts) : 0,
-      skillVerified: skill?.skill_verified ?? false,
+      communitySkillLevel: skill?.communitySkillLevel ?? null,
+      sts: skill?.sts ?? 0,
+      skillVerified: skill?.skillVerified ?? false,
       selfRatedSkill: prof?.self_rated_skill ?? null,
-      uniqueVoucherCount: skill?.unique_voucher_count ?? 0,
+      uniqueVoucherCount: skill?.evidenceCount ?? 0,
       sex: prof?.sex ?? null,
       ageAtStart: ageAt(prof?.date_of_birth ?? null, startAt),
       accountActive: (prof?.account_status ?? 'active') === 'active',

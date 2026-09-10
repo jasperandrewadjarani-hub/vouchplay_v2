@@ -2862,6 +2862,228 @@ lines down with it, and Build CPU falls with deploy discipline. I cannot promise
 without a day of live data; the invocation count on the usage screen is the number to watch after this
 deploy settles.
 
+## 2AF. Rig-resistant Community Skill: the "independent evidence" model (STS_V2) (2026-09-11)
+
+### What Jasper asked for
+
+The vouch system has become "the talk of the town": groups of players ("gangs", often a club) are
+coordinating vouches to move skill levels - inflating rivals so they land in higher divisions, or
+deflating friends so they can sandbag lower tiers - plus fake accounts and trolling. It has disrupted
+the community in an intriguing-but-alarming way, and VouchPlay is the only party positioned to fix it.
+The ask: make the math and the system as close to rig-proof as possible, recalibrate how Community
+Skill Level (CSL) is computed, stay inside legal/privacy bounds, brainstorm first, document, then
+implement aggressively with best-practice UX for a non-technical, mixed-age audience.
+
+### Why it is exploitable today (verified against production, 2026-09-11)
+
+The locked §10 model: CSL = weighted median of all active vouches; STS = confidence from raw voucher
+count, weight sum, and agreement. The single weight input is the voucher's *credential* (normal 1.0 /
+identity-verified 1.25 / coach 2.0 / 2.5). Live facts:
+
+| Fact | Value | Consequence |
+|---|---|---|
+| Active vouches / profiles / rated players | 3,209 / 422 / 309 | enough volume for blocs to matter |
+| Identity-verified accounts / approved coaches | **0 / 0** | every one of 3,208 vouches weighs exactly 1.0 - a fresh account is as credible as anyone |
+| Reciprocal vouch edges (A->B and B->A both active) | **882 (27.5%)** | mutual back-scratching is a quarter of all evidence |
+| Rated players with >=4 vouches where ONE club supplies >=60% | **84 of 209 (40%)** | club blocs dominate; a club can out-vote the community by volume |
+| Vouch vs the target's own self-rating | above **1,758** · equal 1,339 · below 112 | the live pattern is *inflation*, exactly the "push rivals up" attack |
+| Largest burst on one player inside 6h | 23 vouches | bursts are real and unguarded |
+| Accounts under 3 days old giving vouches | ~93% | the platform is 3 days old - **account age cannot separate fakes from honest early adopters** |
+| Players with a paid/live tournament registration | 81 | the only real-world "this is a real human who paid money" anchor we have |
+
+Root cause in one line: **credibility is flat and independence is never measured**, so N coordinated or
+fake vouches count as N independent opinions. The weighted median resists a *lone* outlier, not a bloc.
+
+### Threat model
+
+1. **Sybil / fake accounts** - email OTP is cheap; N accounts vouch a target at level X.
+2. **Reciprocal pairs** - A<->B mutually inflate (or deflate).
+3. **Rings / club gangs** - a connected group vouches a rival UP (force into a higher division) or a
+   friend DOWN (sandbag a lower tier). This is the reported live behaviour.
+4. **Bursts** - many vouches on one player in hours, moving CSL before anyone notices.
+5. **Direction games** - deflation to sandbag is rarer (112) but the most tournament-damaging.
+
+### Design principles (locked for V2)
+
+- **Independence is the currency.** A vouch's influence = credential x voucher-trust x independence.
+  Blocs collapse toward one or two opinions; the median is then taken over *independent-equivalents*.
+- **Anchors, not age.** Because the cohort is 3 days old, trust comes from what fakes cannot cheaply
+  forge: a paid/confirmed tournament registration, identity verification, an approved coach role, and
+  being vouched-for by such people (a one-hop web of trust). Account age is a mild, tunable factor.
+- **Shrink toward the player's own claim until independent evidence is strong.** A Bayesian prior at
+  the self-rating (weight `prior_weight`) means a handful of vouches cannot flip a band; a real
+  community consensus still can. This directly counters the inflation majority and the
+  "one friend's vouch moved me" unfairness (§2AB).
+- **No new data collection.** Every signal is derived from data VouchPlay already holds for its stated
+  purposes (vouch graph, club membership, registrations, verification, timestamps). No IP/device
+  fingerprinting, no new PII. Fraud prevention is a legitimate platform-integrity interest under
+  RA 10173; it will be reflected in the Privacy Policy at counsel review.
+- **Anonymity preserved.** Voucher identity is never exposed beyond the existing staff-only RLS. Flags
+  name a *subject* and *reasons*, never "who vouched you".
+- **Versioned, tunable, reversible.** STS_V2 is a new `algorithm_version` (§10.10); every threshold is
+  a `system_settings` key (non-negotiable); the public switch is one Admin setting with no deploy; V1
+  keeps running alongside so it can be compared and rolled back.
+- **Never punish automatically except for the one live guard.** Flags inform moderation (§11.2). The
+  only automatic action is the velocity *hold* (a reversible quarantine), because that is the only way
+  to stop an attack in progress tonight.
+
+### The V2 model
+
+Skill bands are ordinals 0..6 (locked). For a target T with active vouches V = {v_i from voucher u_i at
+level s_i, credential weight c_i (the §10.5 table, unchanged)}:
+
+**1. Voucher trust `VT(u)` in [0,1]** - how credible is this witness at all?
+- `anchored(u)` = has a `registrations` row in (`confirmed`,`payment_submitted`,`payment_pending`) via
+  team_members, OR an approved identity verification, OR an active coach role.
+- `standing(u)` = vouches u has *received* from OTHER accounts, counting an anchored giver as 1.0 and an
+  unanchored giver as 0.5, **excluding reciprocal pairs** (if u also vouches that giver, it does not
+  count toward u's standing - mutual vouches cannot manufacture standing). `standing_component =
+  min(1, standing / trust_standing_saturation)`.
+- `maturity(u)` = `0.5 + 0.5 * min(1, account_age_days / trust_maturity_days)` (mild; tunable up later).
+- `VT = maturity * (anchored ? 1.0 : (standing > 0 ? trust_unanchored_factor + (1 - trust_unanchored_factor) * standing_component : trust_unknown_factor))`.
+  Defaults: unknown 0.25, unanchored 0.6, saturation 3, maturity_days 7. Read: a fresh account nobody
+  has vouched counts a quarter; a real newcomer with a few real vouches ~0.6-1.0; a paid registrant 1.0.
+
+**2. Independence `IND(v_i)` in (0,1]** - is this opinion additional evidence, or the same voice again?
+- **Reciprocity:** if T has an active vouch for u_i, `x reciprocal_multiplier` (default 0.5).
+- **Club bloc decay:** group T's vouchers by shared *active club membership* (a voucher in several
+  clubs is assigned to the club that forms the largest bloc; greedy, deterministic by club id). Within
+  a bloc, order vouchers by `VT` descending; the j-th (0-based) gets `x bloc_decay^j` (default 0.6).
+  A bloc of any size therefore contributes at most `1/(1-0.6) = 2.5` independent-equivalents. Twenty
+  club-mates ~ 2.5 opinions. This is the gang defence, and it is *fair*: a player's community skill
+  should mean the community, not one club; a club's honest view still counts, as ~2-3 voices, and
+  cross-club evidence is what lifts confidence.
+- (Phase 2 candidate: mutual-vouch cluster detection beyond clubs - see limits.)
+
+**3. Effective weight** `w_i = c_i * VT(u_i) * IND(v_i)`.
+
+**4. Aggregation - shrunk weighted median.**
+- Add the prior: the target's `self_rated_skill` at weight `prior_weight` (default 2.0) if present.
+- `CSL_V2` = weighted median over {(s_i, w_i)} U {(self, prior_weight)}. Ties resolve as V1.
+- `N_eff` = sum(w_i) / 1.0 (independent-equivalent count, prior excluded). `weight_sum_v2` = sum(w_i).
+
+**5. STS_V2** (structure identical to §10.7 so the number still means "confidence"):
+- `count = min(N_eff / count_divisor, 1)` · `weight = min(weight_sum_v2 / weight_divisor, 1)` ·
+  `agreement = max(0, 1 - min(dispersion / dispersion_divisor, 1))` with dispersion the w-weighted
+  mean |s_i - CSL_V2| (prior excluded).
+- `STS_V2 = round(5 * (0.5*count + 0.25*weight + 0.25*agreement), 1)`, clamped 0..5.
+- Divisors/coefficients are `STS_V2` constants in `@vouchplay/config` (version-locked like V1);
+  trust/independence/prior/velocity parameters are Admin `system_settings` (operational values).
+
+**6. Skill Verified (V2)** = `STS_V2 >= skill_verified_min_sts` AND `N_eff >= min_independent_vouchers`
+(default 2.0). Verification can no longer be bought with a swarm.
+
+**Worked example (why it works):** 12 fresh, unvouched accounts from one club vouch T at 5 (T
+self-rates 2, two real cross-club anchored players vouch 2). V1: 12 x 1.0 at 5 vs 2 x 1.0 at 2 ->
+CSL 5. V2: the 12 each have VT 0.25, then bloc decay -> total ~0.25 x 2.5 = 0.63 independent-
+equivalents at 5; the two anchors ~2.0 at 2; prior 2.0 at 2. Median -> 2. STS_V2 low (N_eff ~2.6) and
+the bloc is flagged. The attack costs 12 accounts and moves nothing.
+
+### Anomaly detection and the one live guard
+
+Computed at every vouch write for the target (pure functions in core; persistence in the app):
+
+| Flag (`fraud_flags.flag_type`) | Trigger (defaults, all tunable) | Effect |
+|---|---|---|
+| `VELOCITY_BURST` | >= `velocity_burst_min` (8) vouches on T within `velocity_window_hours` (6) AND >= `velocity_low_trust_share` (0.6) of them from vouchers with VT < `velocity_low_trust_vt` (0.5) | **HOLD**: those low-trust vouches in the burst are set `status='invalidated'`, `invalidation_reason='velocity_hold:<flag>'`, revision `invalidated`; excluded from CSL until a moderator reinstates or confirms. Flag OPEN, severity high. |
+| `LOW_TRUST_SWARM` | >= `swarm_min` (6) active vouches on T from unanchored, zero-standing vouchers | flag only |
+| `RECIPROCAL_RING` | n >= 4 and reciprocal share >= `ring_reciprocal_share` (0.5) | flag only |
+| `CLUB_BLOC` | one club supplies >= `bloc_share` (0.6) of n >= 4 vouches AND the bloc's median is >= 2 bands from the target's self-rating in one direction | flag only (coordinated pattern, §11.2) |
+| `SPIKE` | |CSL_V2 - CSL_V1| >= 2, or |CSL - self| >= 2 with N_eff < 3 | flag only |
+
+Flags are deduplicated per (subject, type) while OPEN/REVIEWING; evidence JSON holds counts, shares,
+the window, and vouch ids (staff-only under existing RLS) - never a narrative naming vouchers. The
+guard has a kill switch `vouch_velocity_guard_enabled` (default true) and is deliberately keyed on
+*low-trust share*, not raw count, so a real vouch drive by anchored players at an event is not held.
+
+### Workflow and UX (simple, calm, non-accusatory)
+
+- **Staff -> Moderation -> "Vouch integrity"** (extends the existing fraud-flags panel): a queue of
+  flagged players, one card each: plain-language reason ("8 vouches in 6 hours, 6 from brand-new
+  accounts"), CSL V1 vs V2 vs self-rating, N_eff, the held vouch count, and three actions -
+  **Reinstate held vouches** (clear), **Keep hold & mark reviewed**, **Invalidate** (existing, with
+  reason). Every action audited. No voucher names in the card; the existing vouch-moderation panel
+  already exposes identity to staff when they drill in.
+- **Player profile**: under the skill chips, one gentle line - "Based on N independent players"
+  (N_eff rounded; this is the honest number) and, only when a hold is active on them, "Some recent
+  vouches are being reviewed" - neutral, no blame, no counts.
+- **Voucher, after submitting a held vouch**: "Thanks - your vouch is saved and will count after a
+  quick review." Saved, not rejected; nothing to argue with.
+- **Admin -> Settings** gets a "Vouch integrity" group with every parameter and the version switch.
+
+### Versioning and rollout (safe on a live registration event)
+
+1. **Compute V2 alongside V1 on every write; store both.** Migration 0034 adds to
+   `player_skill_profiles`: `community_skill_level_v2`, `sts_v2`, `n_eff_v2`, `weight_sum_v2`,
+   `components_v2 jsonb`, `calculated_v2_at`. Additive, nullable. The recompute writes them inside a
+   tolerant call: **until Jasper applies 0034 the V2 write no-ops** (§2R pattern) and nothing breaks.
+2. **Public CSL/STS and tournament eligibility read through one accessor** that honours
+   `skill_algorithm_active_version` (`STS_V1` default -> unchanged behaviour; `STS_V2` -> the v2
+   columns when present, else V1). **The flip is one Admin setting, no deploy, instantly reversible.**
+3. **Shadow report first.** `scripts/skill-v2-shadow-report.mjs` computes V2 for every player in
+   memory (no DDL needed) and writes `working/skill-v2-shadow-<date>.csv`: V1 vs V2 vs self, N_eff,
+   flags and reasons, sorted by |V1-V2|. Jasper reviews this before flipping. Expected: honest
+   profiles barely move; bloc-inflated profiles drop toward self-rating; a small set of clear rings.
+4. **The velocity guard and flags go live at this deploy** (no DDL). They stop attacks in progress
+   without touching anyone's existing CSL.
+5. After 0034: `scripts/backfill-skill-v2.mjs` persists V2 for all players; then flip when satisfied.
+
+### Legal and privacy check
+
+Signals used: account timestamps, verification status, coach role, own vouch graph, club membership,
+registration status - all already collected for their stated purposes. No new fields, no device or
+network fingerprinting, no cross-service data. Anonymous vouchers stay anonymous (staff-only RLS
+unchanged). Holds are reversible and moderated by a human with an audit trail; nothing is auto-banned.
+Counsel should add a sentence on integrity processing to the Privacy Policy at review (§2R).
+
+### Engine contract (what executors implement, `packages/core/src/skill/v2/`)
+
+```ts
+export interface V2Voucher { id: string; anchored: boolean; standingRaw: number; accountAgeDays: number; clubIds: string[] }
+export interface V2Vouch { voucherId: string; level: number; credentialWeight: number; reciprocal: boolean; createdAt: string }
+export interface V2Params { trustUnknownFactor: number; trustUnanchoredFactor: number; trustStandingSaturation: number; trustMaturityDays: number; reciprocalMultiplier: number; blocDecay: number; priorWeight: number; minIndependentVouchers: number; skillVerifiedMinSts: number }
+export interface V2Constants { countDivisor: number; weightDivisor: number; dispersionDivisor: number; countCoefficient: number; weightCoefficient: number; agreementCoefficient: number; scale: number }
+export function voucherTrust(u: V2Voucher, p: V2Params): number
+export function independence(vouches: V2Vouch[], vouchers: Map<string, V2Voucher>, p: V2Params): Map<string /*voucherId*/, number>
+export function computeSkillV2(input: { selfRating: number | null; vouches: V2Vouch[]; vouchers: Map<string, V2Voucher> }, p: V2Params, k: V2Constants): { csl: number | null; sts: number; nEff: number; weightSum: number; components: { count: number; weight: number; agreement: number; dispersion: number }; perVouchWeight: Map<string, number>; skillVerified: boolean }
+export function detectAnomalies(input: { now: string; selfRating: number | null; cslV1: number | null; cslV2: number | null; nEff: number; vouches: V2Vouch[]; vouchers: Map<string, V2Voucher>; trust: Map<string, number> }, p: V2Params & AnomalyParams): AnomalyFlag[]
+```
+Pure, deterministic, no I/O, fully unit-tested (incl. the worked example above as a test).
+
+### Execution plan (orchestrated by Fable; Sonnet executors; all gates before deploy)
+
+- **E1 core engine + tests** (blocks the rest): the contract above.
+- **E2 config + migration + settings**: `STS_V2` constants; new `SystemSettingsKey`s with defaults and
+  admin-catalog entries (group "Vouch integrity"); `skill_algorithm_active_version`; migration 0034 +
+  `scripts/apply-0034.sql` (additive columns; verify query); settings seed (also upserted live via
+  service role - DML, no DDL).
+- **E3 app integration**: fact-gathering (`lib/vouches/v2-facts.ts`: anchors, standing, clubs,
+  reciprocity from existing tables, bounded queries); `recompute.ts` computes V1 (unchanged) + V2 and
+  writes v2 columns tolerantly; the vouch write action runs the velocity guard (hold + `fraud_flags`)
+  BEFORE recompute; one `getEffectiveSkill(playerId)` accessor honouring the version setting, used by
+  the profile DTO, directory, and `division-fit-check`; server actions: `reinstateHeldVouches`,
+  `reviewIntegrityFlag`.
+- **E4 UI**: moderation "Vouch integrity" cards + actions; profile "Based on N independent players" +
+  review note; vouch-form held message; Admin settings group.
+- **E5 scripts**: shadow report (runs now) and backfill (after 0034).
+- Orchestrator: review each diff, gates, commit, deploy, verify both domains, run the shadow report,
+  write the morning summary.
+
+### Honest limits and phase 2
+
+- **Not touched tonight:** the public CSL stays on V1 until Jasper flips the setting after reading the
+  shadow report. Flipping 350 players' skill mid-registration-event blind would be reckless; the guard
+  and flags protect the event now.
+- **Beyond clubs:** a ring that shares no club (pure sock-puppet cluster) is caught by low VT
+  (unanchored, no standing) and reciprocity, but not by bloc decay. Phase 2: mutual-vouch community
+  detection (connected components of reciprocal edges) as an additional bloc key.
+- **Sandbagging by omission:** a strong player with few vouches keeps a low self-rating as prior. The
+  organizer flag (§2AB/§2AD) and skill reviews (§14.1) remain the human backstop; V2 makes it *harder*
+  to *manufacture* a low CSL, not impossible to simply have little evidence.
+- **Anchors will strengthen** as identity verification and coach approvals are used; the model already
+  honours them.
+- **Thresholds are first-pass**; tune from the shadow report and the first week of flags.
+
 ## 1. Prompt Contract
 
 ### In scope

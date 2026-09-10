@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.58
+# VouchPlay Master Product & Code Execution Handover v1.59
 
-_(File retains its `…v1.1.md` name; content is v1.58 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.59 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -1417,6 +1417,35 @@ Initial version:
 
 Never alter historical calculation semantics without incrementing algorithm version.
 
+## 10.11 STS_V2 - the "independent evidence" model (added v1.59, 2026-09-11)
+
+`STS_V1` (§10.5–§10.8) weighs every vouch by the voucher's *credential* only, so N coordinated or fake
+vouches count as N independent opinions. `STS_V2` keeps the locked band ordinals, the weighted median,
+and the STS structure, and changes only **what feeds them**: a vouch's influence becomes
+
+`effective_weight = credential_weight (§10.5, unchanged) × voucher_trust × independence`
+
+- **Voucher trust (0–1):** anchored accounts (a paid/confirmed tournament registration, approved
+  identity verification, or an active coach role) weigh 1.0; an unanchored account is weighed by its
+  *standing* (vouches it has received from others, an anchored giver counting 1.0 and an unanchored
+  giver 0.5, mutual pairs excluded), with a floor factor for a brand-new unvouched account; a mild
+  account-maturity ramp applies. All factors are Admin settings (`skill_v2_trust_*`).
+- **Independence:** a vouch from someone the target also vouches is multiplied by
+  `skill_v2_reciprocal_multiplier`; vouchers grouped by shared active club form a *bloc* whose j-th
+  member is multiplied by `skill_v2_bloc_decay^j`, so a bloc of any size contributes at most
+  `1/(1-decay)` independent-equivalents.
+- **Shrinkage:** the target's own self-rating enters the weighted median as a prior with weight
+  `skill_v2_prior_weight`, so a handful of vouches cannot flip a band; a genuine consensus still can.
+- **N_eff** (sum of effective weights, prior excluded) replaces the raw unique-voucher count in the
+  STS count component; Skill Verified requires `STS_V2 >= skill_verified_min_sts` AND
+  `N_eff >= skill_v2_min_independent_vouchers`.
+- `STS_V2` divisors/coefficients are version-locked constants (`STS_V2_CONSTANTS`, identical to V1).
+- **Coexistence:** both versions are computed on every write and stored; the public/eligibility reader
+  honours the Admin setting `skill_algorithm_active_version` (`STS_V1` default). Flipping is one
+  setting, no deploy, reversible. Historical V1 rows are never rewritten.
+- Signals use only data already held for its stated purpose; no new collection; anonymous voucher
+  identity is never exposed beyond existing staff-only access.
+
 ---
 
 # 11. Vouch Fraud & Abuse Controls
@@ -1460,6 +1489,27 @@ Possible actions:
 - ban account.
 
 All actions require reason and audit log.
+
+## 11.4 Automated integrity flags and the velocity hold (implemented v1.59, 2026-09-11)
+
+§11.2's risk flags were specified but never automated. They now run at every vouch write for the
+target (pure detectors in `@vouchplay/core`, persistence in the app) and write `fraud_flags` rows
+(`subject_type='user'`, deduplicated per subject+type while open/reviewing). Every threshold is an
+Admin setting (`skill_v2_*`). Flags never alter public scores (§11.2) with ONE deliberate exception:
+
+| `flag_type` | Trigger (defaults) | Effect |
+|---|---|---|
+| `VELOCITY_BURST` | ≥ 8 vouches on a player within 6h, ≥ 60% from low-trust vouchers (trust < 0.5) | **Hold**: those low-trust vouches are set `status='invalidated'` with `invalidation_reason='velocity_hold:<flag_id>'` and a revision, excluded from CSL until a moderator reinstates them (`change_type='reinstated'`). The only automatic action; reversible; kill switch `vouch_velocity_guard_enabled`. |
+| `LOW_TRUST_SWARM` | ≥ 6 vouches from unanchored accounts with no standing | flag only |
+| `RECIPROCAL_RING` | ≥ 4 vouches and ≥ 50% reciprocal | flag only |
+| `CLUB_BLOC` | one club supplies ≥ 60% of ≥ 4 vouches and that bloc's median sits ≥ 2 bands from the self-rating in one direction | flag only |
+| `SPIKE` | V2 and V1 differ by ≥ 2 bands, or CSL is ≥ 2 bands from self-rating on thin evidence (N_eff < 3) | flag only |
+
+The guard is keyed on *low-trust share*, not raw volume, so a genuine vouch drive by anchored players
+at an event is not held. Flag `evidence` carries counts, shares, the window and vouch ids (staff-only
+under existing RLS); `reason` is plain language and never names a voucher. Staff act from the
+Moderation "Vouch integrity" queue: reinstate held vouches, keep the hold and mark reviewed, or
+invalidate (existing action) - each audited.
 
 ---
 
@@ -6152,6 +6202,44 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.59 (2026-09-11)
+
+_Rig-resistant Community Skill: STS_V2 "independent evidence" model + automated integrity flags +
+live velocity hold (master_plan §2AF; new §10.11, §11.4). Migration 0034 (additive, fail-open)._
+
+- **Why:** coordinated vouching by groups/clubs (inflate rivals into higher divisions, deflate friends
+  to sandbag), fake accounts, and trolling have disrupted the community. Verified on production: 27.5%
+  of vouches are reciprocal; 40% of well-vouched players get ≥60% of their vouches from ONE club;
+  1,758 vouches sit above the target's self-rating vs 112 below; zero identity-verified accounts or
+  coaches exist, so every vouch weighs 1.0; the platform is 3 days old, so account age cannot separate
+  fakes from honest early adopters. V1 weighs credentials but never measures independence.
+- **STS_V2 (§10.11):** `effective_weight = credential × voucher_trust × independence`. Trust from
+  anchors (paid registration / identity verification / coach) and standing (vouches received from
+  others, reciprocal pairs excluded) with a floor for brand-new unvouched accounts and a mild maturity
+  ramp; independence from reciprocity damping and club-bloc geometric decay (a bloc of any size caps at
+  `1/(1-decay)` independent-equivalents); the self-rating enters the median as a prior; `N_eff`
+  replaces raw voucher count in STS and in Skill Verified. Worked example: 12 fresh same-club accounts
+  at level 5 vs 2 anchored cross-club at level 2, self 2 → V1 says 5, V2 says 2 and flags the bloc.
+- **Coexistence & rollout:** both versions computed on every write; V2 stored in new
+  `player_skill_profiles` columns (migration 0034, additive, nullable; writes no-op until applied).
+  Public/eligibility reads honour Admin `skill_algorithm_active_version` (`STS_V1` default — public
+  CSL is UNCHANGED at this deploy). `scripts/skill-v2-shadow-report.mjs` produces a V1-vs-V2 CSV for
+  review before flipping; `scripts/backfill-skill-v2.mjs` persists V2 after 0034.
+- **Automated flags + velocity hold (§11.4):** VELOCITY_BURST (the one automatic, reversible action:
+  low-trust vouches in a burst are held via `invalidated`/`reinstated`), LOW_TRUST_SWARM,
+  RECIPROCAL_RING, CLUB_BLOC, SPIKE. Live at this deploy, no DDL needed. Kill switch
+  `vouch_velocity_guard_enabled`.
+- **UX:** Moderation → "Vouch integrity" queue (plain-language reason, V1/V2/self, N_eff, held count;
+  reinstate / keep hold / invalidate); profile shows "Based on N independent players" and, only when
+  held vouches exist, "Some recent vouches are being reviewed"; a voucher whose vouch is held sees
+  "saved, will count after a quick review". Admin → Settings gains a "Vouch integrity" group with all
+  18 new keys.
+- **Privacy:** no new data collection; anonymous voucher identity unchanged (staff-only RLS); holds are
+  human-moderated and audited; counsel to add an integrity-processing sentence to the Privacy Policy.
+- **Limits:** public CSL stays on V1 until Jasper flips the setting after reading the shadow report;
+  sock-puppet rings sharing no club are caught by low trust + reciprocity, not bloc decay (phase 2:
+  mutual-vouch community detection); thresholds are first-pass and tunable.
 
 ## v1.58 (2026-09-11)
 

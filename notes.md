@@ -2637,3 +2637,49 @@ Owner (not code): Vercel dashboard - disable Observability beyond included tier 
 OFF; DEPLOY LESS OFTEN (batch). Deferred post-event: middleware matcher skip prefetch/RSC (auth-
 sensitive, verify signed-in; small marginal benefit after card prefetch removed).
 Gates green (typecheck, lint, 193 tests, format). Watch invocation count on usage screen after settle.
+
+## 2026-09-11 (overnight) - Rig-resistant Community Skill: STS_V2 + integrity flags + velocity hold (§2AF, handover v1.59)
+
+Jasper's ask (asleep, full execution permission): make CSL/vouching as rig-proof as possible against
+gang/club coordinated vouching, fake accounts, trolling; recalibrate CSL; legal/privacy-safe; brainstorm
+-> document -> delegate -> implement -> deploy. Orchestrated by Fable; 5x Sonnet executors + 1 code map.
+
+Diagnosis (prod, read-only): 3,209 active vouches / 422 profiles / 309 rated; 27.5% reciprocal; 40% of
+well-vouched players get >=60% of vouches from ONE club; inflation dominates (1,758 above self vs 112
+below); ZERO identity-verified/coach accounts so every vouch weighs 1.0; platform 3 days old so account
+age can't separate fakes; only real anchor = paid/live registration (81 players). §11.2's 7 detectors
+were never implemented; 24h vouch limits are 0 (unlimited, JT decision 09-07). Root cause: credibility
+flat, independence never measured.
+
+Built (all gates green, 422 tests):
+- core: packages/core/src/skill/v2/* - voucherTrust (anchors/standing/maturity), independence
+  (reciprocal x0.5, club-bloc decay 0.6^j), computeSkillV2 (shrunk weighted median w/ self-rating prior
+  2.0, N_eff, STS_V2, SkillVerified needs N_eff>=2), detectAnomalies (VELOCITY_BURST/LOW_TRUST_SWARM/
+  RECIPROCAL_RING/CLUB_BLOC/SPIKE). 39 tests incl. the worked example: 12 fresh same-club at 5 vs 2
+  anchored at 2, self 2 -> V1=5, V2=2 (nEff 2.36).
+- config: STS_V2_CONSTANTS (=V1 values, version-locked); 18 admin settings (skill_v2_*,
+  skill_algorithm_active_version=STS_V1, vouch_velocity_guard_enabled=true) + catalog group "Vouch
+  integrity"; migration 0034 + apply-0034.sql (6 nullable v2 cols + seed). SEEDED LIVE via service
+  role (DML) - version stays STS_V1, zero public change. 0034 DDL is PENDING Jasper's paste.
+- app: v2-facts.ts (bounded facts), recompute.ts computes V1 (unchanged) + V2 (tolerant write,
+  42703-safe) + persists informational flags (dedup); velocity-guard.ts holds low-trust burst vouches
+  (invalidated + reason velocity_hold:<flag>, revision, audit actor null) before recompute - LIVE;
+  active-skill.ts pickActiveSkill/selectSkillProfiles (42703 fallback) routed into players/queries,
+  division-fit-check, eligibility/compute, leaderboards/builder (version in cache keys);
+  moderation: reinstateHeldVouches/keepHold + loadIntegrityQueue; UI: integrity-panel in Staff ->
+  Moderation, profile "Based on N (independent) players" + "Some recent vouches are being reviewed",
+  vouch-form held message, STS dialog copy.
+- scripts (vite-node, import the real engine): skill-v2-shadow-report.ts (read-only) ->
+  working/skill-v2-shadow-2026-09-10.csv; backfill-skill-v2.ts (refuses until 0034).
+- Orchestrator fix: guard now hands POST-hold facts to recompute (held vouches excluded from V2 in
+  the same cycle).
+
+SHADOW RESULT (prod): 105/309 change band (down -1x72,-2x17,-3x3,-5x1; up +1x10,+2x1,+3x1);
+Skill-Verified 221->148; flags ring 28, spike 24, club bloc 7, swarm 2, burst 1. Top corrections = thin
+evidence (1-2 low-trust vouches pushing self 0-1 to CSL 3, one to 6). kendee + JBoMan (yesterday's
+Hermosa mismatches) return to band 1 under V2.
+
+JASPER TODO (morning brief working/P_006b_IntegrityRollout_(2026-09).md): read CSV; paste
+apply-0034.sql; run backfill; decide flip timing (AFTER Hermosa window - 34% move a band) and any
+softening (bloc_decay 0.6->0.75 / prior 2->1.5); skim Vouch integrity queue.
+Deferred: mutual-vouch community detection (non-club rings); counsel sentence on integrity processing.

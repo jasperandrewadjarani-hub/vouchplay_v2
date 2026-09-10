@@ -79,11 +79,22 @@ export function VouchForm({
               <Check size={28} aria-hidden />
             </span>
             <div>
-              <p className="text-foreground text-lg font-bold">Thank you. Your vouch is in.</p>
-              <p className="text-foreground-muted mt-1 text-sm">
-                It strengthens {targetName}&apos;s skill level and how confident the community is
-                about it.
-              </p>
+              {state.held ? (
+                <>
+                  <p className="text-foreground text-lg font-bold">Thanks – your vouch is saved.</p>
+                  <p className="text-foreground-muted mt-1 text-sm">
+                    It will count after a quick review. You don&apos;t need to do anything.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-foreground text-lg font-bold">Thank you. Your vouch is in.</p>
+                  <p className="text-foreground-muted mt-1 text-sm">
+                    It strengthens {targetName}&apos;s skill level and how confident the community
+                    is about it.
+                  </p>
+                </>
+              )}
             </div>
             <p className="text-foreground-muted text-sm">
               Who else have you played with? Vouching for more people you genuinely know is what

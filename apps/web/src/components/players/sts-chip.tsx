@@ -117,7 +117,8 @@ export function StsChip({
 
             <p className="text-foreground-muted text-sm leading-relaxed">
               STS tops out once enough people have vouched, because there is only so sure we can be.
-              Your vouch count keeps growing after that.
+              The number beside it is how many players&rsquo; vouches count toward this rating, and
+              it keeps growing after that.
             </p>
 
             <div className="flex flex-col gap-2 pt-0.5">

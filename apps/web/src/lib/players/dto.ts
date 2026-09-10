@@ -16,6 +16,7 @@ import {
   parseVisibility,
   skillByOrdinal,
   type SkillBand,
+  type SkillAlgorithmVersion,
 } from '@vouchplay/config';
 import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { avatarUrl } from '@/lib/storage';
@@ -57,6 +58,16 @@ export interface PlayerCardDTO {
    * it belongs beside the score wherever the score appears (master_plan §1W).
    */
   uniqueVoucherCount: number;
+  /**
+   * The version-aware evidence count behind the current skill numbers (master_plan §2AF "Workflow and
+   * UX"): the raw unique-voucher tally under STS_V1, or the independent-equivalent count (N_eff,
+   * rounded) under STS_V2. Null when there is no skill profile yet. Kept separate from
+   * `uniqueVoucherCount` above so existing V1 callers never see their field change shape.
+   */
+  evidenceCount: number | null;
+  /** Which skill algorithm produced the numbers above (master_plan §2AF rollout step 2). Defaults to
+   *  'STS_V1' - byte-identical to pre-§2AF behaviour until the Admin setting is flipped. */
+  skillVersion: SkillAlgorithmVersion;
   skillVerified: boolean;
   identityVerified: boolean;
   isCoach: boolean;
@@ -128,6 +139,10 @@ export interface SkillSnapshot {
   skillVerified: boolean;
   uniqueVoucherCount: number;
   distribution: Record<string, number>;
+  /** Version-aware evidence count and the version it came from (master_plan §2AF); see
+   *  `PlayerCardDTO.evidenceCount` / `skillVersion` for the exact meaning. */
+  evidenceCount: number | null;
+  skillVersion: SkillAlgorithmVersion;
 }
 
 /** Extra facts fetched in bulk (avoids N+1) and passed alongside the profile row. */
@@ -160,6 +175,8 @@ export function toPlayerCardDTO(
     selfRatedSkill: bandFromOrdinal(row.self_rated_skill),
     sts: extras.skill?.sts ?? null,
     uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
+    evidenceCount: extras.skill?.evidenceCount ?? null,
+    skillVersion: extras.skill?.skillVersion ?? 'STS_V1',
     skillVerified: extras.skill?.skillVerified ?? false,
     identityVerified: extras.identityVerified,
     isCoach: extras.roles.includes('coach'),

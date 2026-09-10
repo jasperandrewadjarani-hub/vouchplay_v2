@@ -1,7 +1,13 @@
 import { unstable_cache } from 'next/cache';
-import { DEFAULT_SYSTEM_SETTINGS, STS_CONSTANTS, type SystemSettingsKey } from '@vouchplay/config';
+import {
+  DEFAULT_SYSTEM_SETTINGS,
+  STS_CONSTANTS,
+  SKILL_ALGORITHM_VERSIONS,
+  type SystemSettingsKey,
+  type SkillAlgorithmVersion,
+} from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
-import type { ContributionConfig } from '@vouchplay/core';
+import type { ContributionConfig, V2Params, AnomalyParams } from '@vouchplay/core';
 
 export const SYSTEM_SETTINGS_TAG = 'system_settings';
 
@@ -164,6 +170,62 @@ export async function getVouchSettings(): Promise<VouchSettings> {
       scale: STS_CONSTANTS.scale,
     },
   };
+}
+
+/**
+ * Rig-resistant Community Skill (STS_V2, master_plan §2AF.1-4) trust/independence/prior parameters.
+ * Operational and admin-tunable via `system_settings` - unlike `STS_V2_CONSTANTS` (the version-locked
+ * blend structure), these are the levers Jasper tunes from the shadow report and the first week of
+ * flags.
+ */
+export async function getSkillV2Params(): Promise<V2Params> {
+  const m = await loadSettings();
+  return {
+    trustUnknownFactor: num(m, 'skill_v2_trust_unknown_factor'),
+    trustUnanchoredFactor: num(m, 'skill_v2_trust_unanchored_factor'),
+    trustStandingSaturation: num(m, 'skill_v2_trust_standing_saturation'),
+    trustMaturityDays: num(m, 'skill_v2_trust_maturity_days'),
+    reciprocalMultiplier: num(m, 'skill_v2_reciprocal_multiplier'),
+    blocDecay: num(m, 'skill_v2_bloc_decay'),
+    priorWeight: num(m, 'skill_v2_prior_weight'),
+    minIndependentVouchers: num(m, 'skill_v2_min_independent_vouchers'),
+    // §2AF.6: Skill Verified (V2) reuses the existing V1 threshold rather than a duplicate key.
+    skillVerifiedMinSts: num(m, 'skill_verified_min_sts'),
+  };
+}
+
+/** Anomaly-detection thresholds (master_plan §2AF anomaly table). Admin-tunable, all defaults tunable. */
+export async function getAnomalyParams(): Promise<AnomalyParams> {
+  const m = await loadSettings();
+  return {
+    velocityWindowHours: num(m, 'skill_v2_velocity_window_hours'),
+    velocityBurstMin: num(m, 'skill_v2_velocity_burst_min'),
+    velocityLowTrustShare: num(m, 'skill_v2_velocity_low_trust_share'),
+    velocityLowTrustVt: num(m, 'skill_v2_velocity_low_trust_vt'),
+    swarmMin: num(m, 'skill_v2_swarm_min'),
+    ringReciprocalShare: num(m, 'skill_v2_ring_reciprocal_share'),
+    blocShare: num(m, 'skill_v2_bloc_share'),
+    spikeBands: num(m, 'skill_v2_spike_bands'),
+  };
+}
+
+/**
+ * The public skill-algorithm switch (`skill_algorithm_active_version`, §2AF rollout step 2) - flipping
+ * this is a no-deploy, instantly reversible Admin action. Validated against the known version list so
+ * an unset, corrupted, or future-unknown value fails safe to the locked V1 behaviour rather than
+ * silently routing readers through an algorithm this build was never verified against.
+ */
+export async function getActiveSkillVersion(): Promise<SkillAlgorithmVersion> {
+  const m = await loadSettings();
+  const v = m['skill_algorithm_active_version'];
+  return typeof v === 'string' && (SKILL_ALGORITHM_VERSIONS as readonly string[]).includes(v)
+    ? (v as SkillAlgorithmVersion)
+    : 'STS_V1';
+}
+
+/** Kill switch for the velocity hold (§2AF - the one live automatic guard). Default on. */
+export async function isVelocityGuardEnabled(): Promise<boolean> {
+  return loadSettingFlag('vouch_velocity_guard_enabled', true);
 }
 
 /** Tournament planning interest is fail-closed until migration 0019 seeds its explicit flag. */

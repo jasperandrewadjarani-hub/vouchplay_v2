@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Facebook } from 'lucide-react';
+import { MapPin, CalendarDays, Facebook, Clock } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import {
   getPlayerBySlug,
@@ -43,6 +43,7 @@ import {
 import { getContributionProgress } from '@/lib/leaderboards/queries';
 import { getVouchSettings } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
+import { countHeldVouchesForTarget } from '@/lib/vouches/held';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -85,13 +86,15 @@ export default async function PlayerProfilePage({ params }: Params) {
   if (!player) notFound();
 
   const comments = await getPlayerComments(player.id);
-  const [skillTags, achievements, history, contribution, vouchSettings] = await Promise.all([
-    getPlayerSkillTags(player.id, viewer.viewerId),
-    getPlayerAchievements(player.id, viewer.viewerId),
-    getPlayerHistory(player.id),
-    getContributionProgress(player.id),
-    getVouchSettings(),
-  ]);
+  const [skillTags, achievements, history, contribution, vouchSettings, heldVouchCount] =
+    await Promise.all([
+      getPlayerSkillTags(player.id, viewer.viewerId),
+      getPlayerAchievements(player.id, viewer.viewerId),
+      getPlayerHistory(player.id),
+      getContributionProgress(player.id),
+      getVouchSettings(),
+      countHeldVouchesForTarget(player.id),
+    ]);
   const authed = viewer.viewerId !== null;
   const iBlocked =
     authed && !player.isOwnProfile
@@ -176,6 +179,23 @@ export default async function PlayerProfilePage({ params }: Params) {
           <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
           <SexBadge sex={player.sex} />
         </div>
+
+        {/* Honest evidence caption (master_plan §2AF "Workflow and UX"): the version-aware count
+            behind the numbers above, so nothing visibly changes until Admin flips the algorithm
+            version, and a calm, blame-free note when a hold is active - never a count, never a name. */}
+        {player.evidenceCount != null && player.evidenceCount > 0 && (
+          <p className="text-foreground-muted mt-1.5 text-xs">
+            {player.skillVersion === 'STS_V2'
+              ? `Based on ${player.evidenceCount} independent players`
+              : `Based on ${player.uniqueVoucherCount} players`}
+          </p>
+        )}
+        {heldVouchCount > 0 && (
+          <p className="text-foreground-muted mt-1 flex items-center gap-1.5 text-xs">
+            <Clock size={12} aria-hidden />
+            Some recent vouches are being reviewed and aren&apos;t counted yet.
+          </p>
+        )}
 
         {(player.identityVerified ||
           player.skillVerified ||

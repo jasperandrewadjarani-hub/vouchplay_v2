@@ -1,7 +1,14 @@
 import 'server-only';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertStaffActor } from '@/lib/moderation/staff';
-import type { ReportRow, SkillReviewRow, SupportTicketRow, FraudFlagRow } from '@vouchplay/db';
+import { selectSkillProfiles, type SkillProfileRow } from '@/lib/vouches/active-skill';
+import type {
+  ReportRow,
+  SkillReviewRow,
+  SupportTicketRow,
+  FraudFlagRow,
+  FraudStatus,
+} from '@vouchplay/db';
 
 /**
  * Staff-side moderation reads (handover §30.6). All of these run behind the /staff page guard
@@ -140,6 +147,165 @@ export async function listFraudFlags(includeResolved = false): Promise<FraudFlag
         ? (profiles.get(row.subject_id) ?? null)
         : null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Vouch integrity queue (§2AF "Staff -> Moderation -> Vouch integrity"). Deliberately its own read,
+// not a filter on listFraudFlags: the card needs CSL V1 vs V2 side by side plus N_eff, which the
+// generic fraud-flag list has no reason to carry. NEVER returns a voucher's identity - only vouch ids
+// inside `evidence` (staff-only under existing RLS, same as the rest of this file).
+// ---------------------------------------------------------------------------
+
+const INTEGRITY_FLAG_TYPES = [
+  'VELOCITY_BURST',
+  'LOW_TRUST_SWARM',
+  'RECIPROCAL_RING',
+  'CLUB_BLOC',
+  'SPIKE',
+] as const;
+
+export interface IntegrityQueueItem {
+  id: string;
+  flagType: string;
+  severity: string | null;
+  status: FraudStatus;
+  /** Plain-language reason (§2AF "8 vouches in 6 hours, 6 from brand-new accounts") - never a narrative
+   *  naming a voucher. */
+  reason: string;
+  createdAt: string;
+  subject: { id: string; slug: string | null; name: string };
+  skill: {
+    self: number | null;
+    v1: { csl: number | null; sts: number | null };
+    /** Null when STS_V2 has not been computed for this player yet (migration 0034 not applied, or no
+     *  recompute has run since) - the card shows "not yet computed" rather than a misleading 0. */
+    v2: { csl: number | null; sts: number | null } | null;
+    /** V2's independent-equivalent evidence count - "Based on N independent players" (§2AF UX). */
+    nEff: number | null;
+  };
+  /** How many of this flag's held vouches are STILL invalidated under a velocity hold right now. */
+  heldCount: number;
+  evidence: Record<string, unknown>;
+}
+
+export async function loadIntegrityQueue(): Promise<IntegrityQueueItem[]> {
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('fraud_flags')
+    .select('id, subject_type, subject_id, flag_type, severity, evidence, status, created_at')
+    .in('flag_type', INTEGRITY_FLAG_TYPES)
+    .in('status', ['open', 'reviewing'])
+    .order('created_at', { ascending: false })
+    .limit(100);
+  const rows = (data ?? []) as {
+    id: string;
+    subject_type: string;
+    subject_id: string;
+    flag_type: string;
+    severity: string | null;
+    evidence: Record<string, unknown> | null;
+    status: FraudStatus;
+    created_at: string;
+  }[];
+  if (rows.length === 0) return [];
+
+  const subjectIds = Array.from(new Set(rows.map((r) => r.subject_id)));
+
+  // Subject display name/slug (reuses the same resolver as every other moderation list) + self-rating.
+  const [profiles, selfRatedRes] = await Promise.all([
+    resolveProfiles(subjectIds),
+    svc.from('profiles').select('id, self_rated_skill').in('id', subjectIds).limit(1000),
+  ]);
+  const selfRatedById = new Map(
+    ((selfRatedRes.data ?? []) as { id: string; self_rated_skill: number | null }[]).map((r) => [
+      r.id,
+      r.self_rated_skill,
+    ]),
+  );
+
+  // CSL V1 vs V2 side by side (§2AF card spec) - deliberately requests V2 regardless of the site-wide
+  // `skill_algorithm_active_version` switch (staff needs to compare both, not just "the active one"),
+  // failing open to V1-only columns when migration 0034 is not applied yet (§2R).
+  const { rows: skillRows } = await selectSkillProfiles<SkillProfileRow & { player_id: string }>(
+    'STS_V2',
+    (columns) =>
+      svc.from('player_skill_profiles').select(columns).in('player_id', subjectIds).limit(1000),
+    'player_id',
+  );
+  const skillByPlayer = new Map(skillRows.map((r) => [r.player_id, r]));
+
+  // Held-vouch status, batched across every flag's evidence.heldVouchIds in one query.
+  const allHeldIds = Array.from(
+    new Set(
+      rows.flatMap((r) =>
+        Array.isArray(r.evidence?.heldVouchIds)
+          ? (r.evidence?.heldVouchIds as unknown[]).filter(
+              (v): v is string => typeof v === 'string',
+            )
+          : [],
+      ),
+    ),
+  );
+  const { data: heldVouchRows } =
+    allHeldIds.length > 0
+      ? await svc
+          .from('vouches')
+          .select('id, status, invalidation_reason')
+          .in('id', allHeldIds)
+          .limit(1000)
+      : { data: [] as { id: string; status: string; invalidation_reason: string | null }[] };
+  const heldStatusById = new Map(
+    (
+      (heldVouchRows ?? []) as { id: string; status: string; invalidation_reason: string | null }[]
+    ).map((r) => [r.id, r]),
+  );
+
+  return rows.map((row) => {
+    const heldIds = Array.isArray(row.evidence?.heldVouchIds)
+      ? (row.evidence?.heldVouchIds as unknown[]).filter((v): v is string => typeof v === 'string')
+      : [];
+    const heldCount = heldIds.filter((id) => {
+      const v = heldStatusById.get(id);
+      return (
+        v?.status === 'invalidated' && (v.invalidation_reason ?? '').startsWith('velocity_hold:')
+      );
+    }).length;
+
+    const skillRow = skillByPlayer.get(row.subject_id);
+    const v1 = {
+      csl: skillRow?.community_skill_level ?? null,
+      sts: skillRow?.sts != null ? Number(skillRow.sts) : null,
+    };
+    const hasV2 =
+      skillRow?.community_skill_level_v2 != null ||
+      skillRow?.sts_v2 != null ||
+      skillRow?.n_eff_v2 != null;
+    const v2 = hasV2
+      ? {
+          csl: skillRow?.community_skill_level_v2 ?? null,
+          sts: skillRow?.sts_v2 != null ? Number(skillRow.sts_v2) : null,
+        }
+      : null;
+    const nEff = skillRow?.n_eff_v2 != null ? Number(skillRow.n_eff_v2) : null;
+
+    const profile = profiles.get(row.subject_id);
+    return {
+      id: row.id,
+      flagType: row.flag_type,
+      severity: row.severity,
+      status: row.status,
+      reason: typeof row.evidence?.reason === 'string' ? (row.evidence.reason as string) : '',
+      createdAt: row.created_at,
+      subject: {
+        id: row.subject_id,
+        slug: profile?.slug ?? null,
+        name: profile?.name ?? 'VouchPlay player',
+      },
+      skill: { self: selfRatedById.get(row.subject_id) ?? null, v1, v2, nEff },
+      heldCount,
+      evidence: row.evidence ?? {},
+    };
+  });
 }
 
 export async function listSupportTickets(includeResolved = false): Promise<SupportTicketItem[]> {

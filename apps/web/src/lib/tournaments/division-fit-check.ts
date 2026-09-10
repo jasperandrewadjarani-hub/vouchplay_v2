@@ -2,6 +2,12 @@ import 'server-only';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { describeDivisionFit, evaluateDivisionFit } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
+import { getActiveSkillVersion } from '@/lib/settings';
+import {
+  pickActiveSkill,
+  selectSkillProfiles,
+  type SkillProfileRow,
+} from '@/lib/vouches/active-skill';
 import { getTournamentRules } from './queries';
 import { divisionName } from './dto';
 
@@ -78,12 +84,16 @@ export async function checkDivisionFit(
   if (!div) return 'That division is no longer available.';
 
   const ids = Array.from(new Set(candidates.map((c) => c.playerId)));
-  const [{ data: profileRows, error: profileError }, { data: skillRows }] = await Promise.all([
+  const skillVersion = await getActiveSkillVersion();
+  const [{ data: profileRows, error: profileError }, { rows: skillRows }] = await Promise.all([
     svc.from('profiles').select('id, sex, self_rated_skill').in('id', ids),
-    svc
-      .from('player_skill_profiles')
-      .select('player_id, community_skill_level')
-      .in('player_id', ids),
+    // Effective skill honours the public skill-algorithm switch (§2AF rollout step 2) - falls open to
+    // V1 columns when migration 0034 is not applied yet.
+    selectSkillProfiles<SkillProfileRow & { player_id: string }>(
+      skillVersion,
+      (columns) => svc.from('player_skill_profiles').select(columns).in('player_id', ids),
+      'player_id',
+    ),
   ]);
   // A failed lookup is a failed lookup, never a silent pass (v1.31).
   if (profileError) return 'Could not check player details. Please try again.';
@@ -94,9 +104,7 @@ export async function checkDivisionFit(
     ).map((p) => [p.id, p]),
   );
   const community = new Map(
-    ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
-      (s) => [s.player_id, s.community_skill_level],
-    ),
+    skillRows.map((row) => [row.player_id, pickActiveSkill(row, skillVersion).communitySkillLevel]),
   );
 
   // The skill rule is the organizer's to switch on: "Only allow players at each division's level

@@ -9,10 +9,12 @@ import {
   listClubsForModeration,
   listRoleApplications,
   getModerationCounts,
+  loadIntegrityQueue,
 } from '@/lib/moderation/queries';
 import { ReportsPanel } from '@/components/moderation/reports-panel';
 import { SkillReviewsPanel } from '@/components/moderation/skill-reviews-panel';
 import { FraudFlagsPanel } from '@/components/moderation/fraud-flags-panel';
+import { IntegrityPanel } from '@/components/moderation/integrity-panel';
 import { SupportPanel } from '@/components/moderation/support-panel';
 import { ClubsPanel } from '@/components/moderation/clubs-panel';
 import { RoleAppsPanel } from '@/components/moderation/role-apps-panel';
@@ -85,7 +87,26 @@ export default async function ModerationQueue({ searchParams }: Props) {
 
       {tab === 'reports' && <ReportsPanel items={await listReports()} />}
       {tab === 'skill-reviews' && <SkillReviewsPanel items={await listSkillReviews()} />}
-      {tab === 'fraud' && <FraudFlagsPanel items={await listFraudFlags()} />}
+      {tab === 'fraud' && (
+        <div className="space-y-5">
+          <div>
+            <h2 className="text-foreground text-sm font-semibold">Vouch integrity</h2>
+            <p className="text-foreground-muted mt-0.5 text-xs">
+              Patterns the system noticed on its own (master_plan §2AF). Calm, reversible, never
+              visible to players.
+            </p>
+            <div className="mt-2">
+              <IntegrityPanel items={await loadIntegrityQueue()} />
+            </div>
+          </div>
+          <div>
+            <h2 className="text-foreground text-sm font-semibold">All fraud flags</h2>
+            <div className="mt-2">
+              <FraudFlagsPanel items={await listFraudFlags()} />
+            </div>
+          </div>
+        </div>
+      )}
       {tab === 'support' && <SupportPanel items={await listSupportTickets()} />}
       {tab === 'clubs' && <ClubsPanel items={await listClubsForModeration()} />}
       {tab === 'roles' && <RoleAppsPanel items={await listRoleApplications()} />}

@@ -1,9 +1,15 @@
 import { unstable_cache } from 'next/cache';
 import type { GlobalRole, ProfileRow } from '@vouchplay/db';
+import type { SkillAlgorithmVersion } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
-import { getVouchSettings } from '@/lib/settings';
+import { getVouchSettings, getActiveSkillVersion } from '@/lib/settings';
+import {
+  pickActiveSkill,
+  selectSkillProfiles,
+  type SkillProfileRow,
+} from '@/lib/vouches/active-skill';
 import { CLUBS_LIST_TAG, getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
 import {
   PLAYER_CARD_COLUMNS,
@@ -101,34 +107,36 @@ const fetchBadgeFacts = unstable_cache(
 /**
  * Bulk-load computed skill snapshots (player_skill_profiles) for a set of ids. PUBLIC-safe aggregate
  * (no voucher identity), read via the anon client. Returns {} when the table isn't present yet.
+ *
+ * Routes through the `skill_algorithm_active_version` accessor (master_plan §2AF rollout step 2):
+ * byte-identical V1 behaviour while the version is `STS_V1` (default); once flipped to `STS_V2`, reads
+ * the six v2 columns and falls open to V1 automatically if migration 0034 is not applied (§2R). `version`
+ * is a cache-key argument (Next's `unstable_cache` keys on serialized args), so flipping the Admin
+ * setting invalidates this cache instead of serving stale V1 numbers for up to 60s.
  */
 const fetchSkillSnapshots = unstable_cache(
-  async (ids: string[]): Promise<Record<string, SkillSnapshot>> => {
+  async (ids: string[], version: SkillAlgorithmVersion): Promise<Record<string, SkillSnapshot>> => {
     const out: Record<string, SkillSnapshot> = {};
     if (ids.length === 0) return out;
     try {
       const supabase = createPublicClient();
-      const { data } = await supabase
-        .from('player_skill_profiles')
-        .select(
-          'player_id, community_skill_level, sts, skill_verified, unique_voucher_count, distribution',
-        )
-        .in('player_id', ids);
-      for (const r of data ?? []) {
-        const row = r as {
-          player_id: string;
-          community_skill_level: number | null;
-          sts: number | string;
-          skill_verified: boolean;
-          unique_voucher_count: number;
-          distribution: Record<string, number> | null;
-        };
+      const { rows } = await selectSkillProfiles<
+        SkillProfileRow & { player_id: string; distribution: Record<string, number> | null }
+      >(
+        version,
+        (columns) => supabase.from('player_skill_profiles').select(columns).in('player_id', ids),
+        'player_id, distribution',
+      );
+      for (const row of rows) {
+        const active = pickActiveSkill(row, version);
         out[row.player_id] = {
-          communitySkillLevel: row.community_skill_level,
-          sts: Number(row.sts),
-          skillVerified: row.skill_verified,
-          uniqueVoucherCount: row.unique_voucher_count,
+          communitySkillLevel: active.communitySkillLevel,
+          sts: active.sts ?? 0,
+          skillVerified: active.skillVerified,
+          uniqueVoucherCount: active.evidenceCount ?? 0,
           distribution: row.distribution ?? {},
+          evidenceCount: active.evidenceCount,
+          skillVersion: active.version,
         };
       }
     } catch {
@@ -195,26 +203,27 @@ const fetchVerifiedUserIds = unstable_cache(
  * value the chip now renders, §2B).
  */
 const fetchSkillIndex = unstable_cache(
-  async (): Promise<Record<string, SkillIndexEntry>> => {
+  async (version: SkillAlgorithmVersion): Promise<Record<string, SkillIndexEntry>> => {
     const out: Record<string, SkillIndexEntry> = {};
     try {
       const supabase = createPublicClient();
-      const [profilesRes, skillsRes] = await Promise.all([
+      const [profilesRes, { rows: skillRows }] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, self_rated_skill')
           .eq('account_status', 'active')
           .not('onboarded_at', 'is', null),
-        supabase.from('player_skill_profiles').select('player_id, community_skill_level, sts'),
+        selectSkillProfiles<SkillProfileRow & { player_id: string }>(
+          version,
+          (columns) => supabase.from('player_skill_profiles').select(columns),
+          'player_id',
+        ),
       ]);
 
       const skills = new Map<string, { csl: number | null; sts: number }>();
-      for (const r of skillsRes.data ?? []) {
-        const row = r as { player_id: string; community_skill_level: number | null; sts: number };
-        skills.set(row.player_id, {
-          csl: row.community_skill_level,
-          sts: Number(row.sts) || 0,
-        });
+      for (const row of skillRows) {
+        const active = pickActiveSkill(row, version);
+        skills.set(row.player_id, { csl: active.communitySkillLevel, sts: active.sts ?? 0 });
       }
 
       for (const p of profilesRes.data ?? []) {
@@ -438,6 +447,7 @@ export async function listPlayers(
   // Role, identity, club, skill and STS all live outside `profiles`, so each contributes an id set
   // that is intersected before the page query runs. `null` means "this filter is off", which is not
   // the same as an empty list - an empty list is a filter that genuinely matched nobody.
+  const skillVersion = await getActiveSkillVersion();
   let restrictIds: string[] | null = null;
   if (filters.coach) {
     restrictIds = intersectIds(restrictIds, await fetchUserIdsWithRole('coach'));
@@ -449,7 +459,7 @@ export async function listPlayers(
     restrictIds = intersectIds(restrictIds, await fetchClubMemberIds(filters.club));
   }
   if ((filters.skills && filters.skills.length > 0) || (filters.minSts && filters.minSts > 0)) {
-    const index = await fetchSkillIndex();
+    const index = await fetchSkillIndex(skillVersion);
     // An index that failed to load is empty, and restricting to nothing would empty the directory
     // for everyone. Leave the skill filters unapplied rather than lie about the result.
     if (Object.keys(index).length > 0) {
@@ -467,7 +477,7 @@ export async function listPlayers(
   const ids = rows.map((r) => r.id);
   const [facts, skills, clubs, vouchMap] = await Promise.all([
     fetchBadgeFacts(ids),
-    fetchSkillSnapshots(ids),
+    fetchSkillSnapshots(ids, skillVersion),
     getUserClubsBulk(ids),
     viewer.viewerId
       ? getViewerVouchCooldownMap(viewer.viewerId)
@@ -532,9 +542,10 @@ export async function getPlayerBySlug(
   const row = await cached();
   if (!row) return null;
 
+  const skillVersion = await getActiveSkillVersion();
   const [facts, skills, clubs] = await Promise.all([
     fetchBadgeFacts([row.id]),
-    fetchSkillSnapshots([row.id]),
+    fetchSkillSnapshots([row.id], skillVersion),
     getUserClubs(row.id),
   ]);
   const f = facts[row.id] ?? emptyFacts();

@@ -349,6 +349,173 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// Vouch integrity (§2AF) - the velocity guard's hold is reversible; these two actions are the
+// moderator's only response to a VELOCITY_BURST flag. Neither ever touches the anonymous voucher's
+// identity - only vouch ids, exactly like the rest of this file's invalidate/moderation actions.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reinstate the vouches a velocity hold quarantined (§2AF "Reinstate held vouches (clear)"). Only
+ * touches vouches that are STILL `status='invalidated'` with a `velocity_hold:` reason (a moderator
+ * may have separately, individually invalidated one for cause via `invalidateVouch` in the meantime -
+ * that is left alone), and skips any pair that already has a different active vouch (the voucher
+ * re-vouched after the hold), since reinstating would collide with the one-active-vouch-per-pair index.
+ */
+export async function reinstateHeldVouches(
+  flagId: string,
+  note: string,
+): Promise<SafetyActionState> {
+  const actor = await assertStaffActor();
+  if (!actor) return NO_STAFF;
+  if (requireReason(note)) return { error: 'A note is required to reinstate held vouches.' };
+  const svc = createServiceClient();
+  try {
+    const { data: flagRow } = await svc
+      .from('fraud_flags')
+      .select('id, subject_type, subject_id, flag_type, status, evidence')
+      .eq('id', flagId)
+      .maybeSingle();
+    if (!flagRow) return { error: 'Flag not found.' };
+    const flag = flagRow as {
+      id: string;
+      subject_type: string;
+      subject_id: string;
+      flag_type: string;
+      status: string;
+      evidence: Record<string, unknown> | null;
+    };
+    if (flag.flag_type !== 'VELOCITY_BURST') {
+      return { error: 'Only a velocity-hold flag can reinstate vouches.' };
+    }
+    if (!['open', 'reviewing'].includes(flag.status)) {
+      return { error: 'This flag has already been closed.' };
+    }
+
+    const heldIds = Array.isArray(flag.evidence?.heldVouchIds)
+      ? (flag.evidence?.heldVouchIds as unknown[]).filter((v): v is string => typeof v === 'string')
+      : [];
+    const targetId = flag.subject_id;
+    let reinstatedCount = 0;
+
+    if (heldIds.length > 0) {
+      const { data: candidateRows } = await svc
+        .from('vouches')
+        .select(
+          'id, voucher_id, target_id, status, invalidation_reason, skill_level, effective_weight',
+        )
+        .in('id', heldIds)
+        .limit(1000);
+      const candidates = (candidateRows ?? []) as {
+        id: string;
+        voucher_id: string;
+        target_id: string;
+        status: string;
+        invalidation_reason: string | null;
+        skill_level: number;
+        effective_weight: number | string;
+      }[];
+      // Still held by this mechanism (not separately invalidated for cause since the hold).
+      const eligible = candidates.filter(
+        (v) =>
+          v.status === 'invalidated' && (v.invalidation_reason ?? '').startsWith('velocity_hold:'),
+      );
+
+      const voucherIds = eligible.map((v) => v.voucher_id);
+      const { data: activeNowRows } =
+        voucherIds.length > 0
+          ? await svc
+              .from('vouches')
+              .select('voucher_id')
+              .eq('target_id', targetId)
+              .eq('status', 'active')
+              .in('voucher_id', voucherIds)
+              .limit(1000)
+          : { data: [] as { voucher_id: string }[] };
+      const alreadyActivePairs = new Set(
+        ((activeNowRows ?? []) as { voucher_id: string }[]).map((r) => r.voucher_id),
+      );
+
+      for (const v of eligible) {
+        if (alreadyActivePairs.has(v.voucher_id)) continue; // would collide with uq_vouches_active_pair
+        const { error } = await svc
+          .from('vouches')
+          .update({ status: 'active', invalidated_by: null, invalidation_reason: null })
+          .eq('id', v.id);
+        if (error) continue;
+        await svc.from('vouch_revisions').insert({
+          vouch_id: v.id,
+          previous_skill_level: v.skill_level,
+          new_skill_level: v.skill_level,
+          previous_weight: v.effective_weight,
+          new_weight: v.effective_weight,
+          changed_by: actor.viewerId,
+          change_type: 'reinstated',
+        });
+        reinstatedCount += 1;
+      }
+    }
+
+    await svc
+      .from('fraud_flags')
+      .update({ status: 'cleared', resolution: note.trim(), reviewed_by: actor.viewerId })
+      .eq('id', flagId);
+
+    await writeAudit({
+      actorId: actor.viewerId,
+      actorRole: actor.role,
+      action: 'moderation.integrity.reinstate',
+      entityType: 'fraud_flag',
+      entityId: flagId,
+      before: { status: flag.status },
+      after: { status: 'cleared', reinstatedCount },
+      reason: note.trim(),
+    });
+
+    await recomputePlayerSkillProfile(targetId);
+  } catch {
+    return { error: 'Moderation action failed. Please try again.' };
+  }
+  revalidatePath('/staff/moderation');
+  return { ok: true, message: 'Held vouches reinstated and the skill profile recomputed.' };
+}
+
+/** Keep a velocity hold in place - the flagged vouches stay invalidated; only the flag is closed. */
+export async function keepHold(flagId: string, note: string): Promise<SafetyActionState> {
+  const actor = await assertStaffActor();
+  if (!actor) return NO_STAFF;
+  if (requireReason(note)) return { error: 'A note is required to keep the hold.' };
+  const svc = createServiceClient();
+  try {
+    const { data: before } = await svc
+      .from('fraud_flags')
+      .select('status, flag_type')
+      .eq('id', flagId)
+      .maybeSingle();
+    if (!before) return { error: 'Flag not found.' };
+    const b = before as { status: string; flag_type: string };
+    const { error } = await svc
+      .from('fraud_flags')
+      .update({ status: 'action_taken', resolution: note.trim(), reviewed_by: actor.viewerId })
+      .eq('id', flagId);
+    if (error) return { error: 'Could not update the flag.' };
+    await writeAudit({
+      actorId: actor.viewerId,
+      actorRole: actor.role,
+      action: 'moderation.integrity.keep_hold',
+      entityType: 'fraud_flag',
+      entityId: flagId,
+      before: { status: b.status },
+      after: { status: 'action_taken' },
+      reason: note.trim(),
+    });
+  } catch {
+    return { error: 'Moderation action failed. Please try again.' };
+  }
+  revalidatePath('/staff/moderation');
+  return { ok: true, message: 'Hold kept; flag marked reviewed.' };
+}
+
+// ---------------------------------------------------------------------------
 // Club moderation (§15.1–§15.2) - admin verification + activity status.
 // ---------------------------------------------------------------------------
 export async function verifyClub(

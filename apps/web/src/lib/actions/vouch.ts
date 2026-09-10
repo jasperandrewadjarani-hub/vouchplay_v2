@@ -7,6 +7,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
+import { runVelocityGuard } from '@/lib/vouches/velocity-guard';
 import { recomputePlayerContribution } from '@/lib/contribution/recompute';
 import { checkActorCanVouch } from '@/lib/moderation/enforcement';
 import { notify } from '@/lib/notifications/create';
@@ -16,6 +17,9 @@ export interface VouchActionState {
   ok?: boolean;
   error?: string;
   message?: string;
+  /** True when this specific vouch was caught by the velocity guard's hold (§2AF) - it was saved,
+   *  just not counted yet, pending a moderator's look. */
+  held?: boolean;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -220,7 +224,11 @@ export async function submitVouch(
       .eq('recipient_id', user.id)
       .eq('status', 'pending');
 
-    await recomputePlayerSkillProfile(v.targetId);
+    // Velocity guard (§2AF anomaly table) runs BEFORE recompute, on this same write, so a held vouch
+    // never counts toward CSL even for one recompute cycle. `guard.facts` is handed straight into the
+    // recompute so it does not re-run the same bounded queries.
+    const guard = await runVelocityGuard(v.targetId);
+    await recomputePlayerSkillProfile(v.targetId, { facts: guard.facts });
     await recomputePlayerContribution(user.id);
 
     // Notify the target (§27.1). Vouches are ANONYMOUS - never reveal the voucher's identity here.
@@ -236,6 +244,14 @@ export async function submitVouch(
       link: targetSlug ? `/players/${targetSlug}` : '/me',
       entityType: 'vouch',
     });
+
+    if (guard.heldVouchIds.includes(vouchId)) {
+      return {
+        ok: true,
+        held: true,
+        message: 'Thanks - your vouch is saved and will count after a quick review.',
+      };
+    }
   } catch {
     return { error: 'Vouching is temporarily unavailable. Please try again shortly.' };
   }
