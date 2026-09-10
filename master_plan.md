@@ -3084,6 +3084,101 @@ Pure, deterministic, no I/O, fully unit-tested (incl. the worked example above a
   honours them.
 - **Thresholds are first-pass**; tune from the shadow report and the first week of flags.
 
+## 2AG. Directory, organizer, and identity UX batch - PLAN (2026-09-11; not yet built)
+
+Jasper's list, grouped into phases by risk and dependency. This section is the decision record; the
+executor-ready handover (file:line, slice briefs, acceptance criteria) is
+`working/P_006b_UIUXBatchHandover_(2026-09).md`. Nothing here is implemented yet; execution is
+delegated to Opus (orchestrate/review) + Sonnet (implement) once the decisions below are answered.
+
+### What was asked (verbatim intent) and what the code says today
+
+| # | Ask | Today (verified) |
+|---|---|---|
+| 1 | Identity Verified badge when a player uploads BOTH a profile photo and an ID | Badge + `identity_verifications` table exist; **no upload or review flow exists at all**; 0 verified accounts |
+| 2 | Yellow warning (like the unvouched nudge) when not identity-verified | The unvouched nudge is a self-banner in `app-shell.tsx` |
+| 3 | Coach badge for approved coaches | Already on the detailed card and profile; **missing on the compact row** (`player-card.tsx` compact branch shows only partner/sponsor icons) |
+| 4 | Admin-only filter: players registered to a specific tournament | `listPlayers` already supports a `restrictIds` path (used by club filters) - reusable |
+| 5 | STS filter as a two-sided range | Single-thumb `minSts` range input in `search-filters.tsx:288` |
+| 6 | Vouches-received range | Not present; `unique_voucher_count` is in the cached skill index |
+| 7 | "Total number of vouches" range | Not present; read as vouches **given** (needs a per-voucher count; 3.2K vouches, fine in a 60s cached index) |
+| 8 | "New account" filter + temporary badge | Not present |
+| 9 | Uniformize existing city data | 362 onboarded → 36 raw strings → 22 canonical; **4 variant groups**, Zamboanga = 318 players across 7 spellings; 2 test rows ("Phase 13 City") |
+| 10 | City input with PH-city suggestions | Free text (`profile.ts:21`, 1-80 chars) |
+| 11 | Pagination must survive vouch-and-return | The Players **tab** links to bare `/players`; the profile has no "back to list" link; browser-back already keeps the URL |
+| 12 | Default sort = new unvouched first; Excel-like sort options | List is ordered `updated_at desc` (`players/queries.ts:370`), no sort control; **locked §8.4 forbids ordering the directory by STS** |
+| 13 | Organizer registrations: combinable filters, per-division counts vs capacity, column sort | `EntryFilters` = one queue + one division + closed toggle + search; fixed `sortEntries`; counts exist (`getDivisionRegistrationCounts`, `divisions.capacity_teams`) |
+
+### Decisions Jasper must answer before execution (recommendations inline)
+
+- **D1 - Identity Verified must be staff-approved, not automatic on upload.** Under STS_V2 (§2AF) an
+  approved identity verification is a trust *anchor* (weight 1.0). Auto-badging on upload would let
+  any fake account self-anchor by uploading any image - undoing the integrity work. Recommended flow:
+  photo + ID uploaded → "ID submitted, pending review" chip on the player's own profile → staff
+  approves in Moderation → badge + anchor. Rejections carry a reason. **Recommend: staff-approved.**
+- **D2 - "Warning when not verified":** a self-nudge banner for the signed-in player (mirror of the
+  unvouched nudge, dismissible, with a "Verify now" CTA) - yes. A public "Unverified" marker on other
+  people's cards/profiles - **recommend no**: with 0 verified accounts today it would stamp every
+  player, and absence of the badge already carries the meaning without stigma. Confirm.
+- **D3 - Sorting by STS conflicts with locked §8.4** ("no ordering the directory by STS": STS is
+  confidence, not skill; ranking by it reads as a skill leaderboard). **Recommend:** public sorts =
+  New & unvouched first (default), Newest, Oldest, Name A-Z, Most vouches received; **STS sort only
+  for staff** (moderation use), never public. Confirm or overrule (overruling means a §8.4 changelog).
+- **D4 - "Total number of vouches"** interpreted as vouches **given** (the other slider is vouches
+  received). Confirm.
+- **D5 - "New account" window: recommend 7 days, not 24h**, as an Admin setting
+  `new_account_badge_days` (default 7). 24h expires before most people ever see the badge; 7 days
+  reads as "joined this week" and matches the V2 maturity ramp (`skill_v2_trust_maturity_days`).
+  Badge copy: "New" (neutral pill, not a warning). Filter label: "New this week".
+- **D6 - The default sort change is global** (every visitor sees new-unvouched first). It is a
+  deliberate community nudge (get newcomers vouched) but it sinks established players unless they
+  change the sort. Mitigation: the "Sort by" control is visible (not hidden in the filter sheet) and
+  the choice persists in the URL. Confirm.
+- **D7 - Tournament filter visibility:** recommend staff **and** that tournament's organizers (they
+  are the ones who need "who from this event is in the directory"). Confirm.
+- **D8 - City canonical mapping:** apply the four variant groups (→ "Zamboanga City", "Isabela City",
+  "Lamitan City", "Dumaguete City") and blank the two test rows. Confirm the mapping (it will be shown
+  as a CSV before the DML runs). `leaderboard_city_region_map` is empty today, so no scope impact.
+
+### Phases (each = one batched, windowed deploy; none during the Hermosa registration window)
+
+**Phase A - Directory & organizer UX (no DDL; one DML seed for `new_account_badge_days`).**
+A1 sort options + default + pagination persistence · A2 shared dual-range slider for STS, vouches
+received, vouches given · A3 "New" badge/filter + compact-row coach icon · A4 tournament filter
+(staff/organizer) · A5 organizer registrations: combinable filters, division capacity strip, column
+sort. All read-side/UI, reversible by redeploy. Sorting by skill-profile fields happens in memory over
+the already-cached skill index before pagination (fine to ~1k players, same ceiling the code already
+documents).
+
+**Phase B - Cities (DML migration 0035 after D8 sign-off).** Canonical Philippine city list in
+`@vouchplay/config` (cities + the municipalities already present in the data), a native `<datalist>`
+autocomplete on onboarding/edit (zero-JS, works on every phone, free text still allowed),
+normalization-on-save (case/whitespace/"City" suffix → canonical when it matches), a review CSV of
+proposed changes, then the one-time data fix. The city filter switches to the canonical list.
+
+**Phase C - Identity verification pipeline (own phase; needs counsel on ID retention).** Private
+storage bucket for ID images (never public URLs; signed, short-TTL, staff-only), migration 0036
+extending `identity_verifications` (document path, submitted/reviewed timestamps, reviewer, reason),
+upload UI in Me → Settings with the photo requirement, a Staff → Moderation "Identity" queue
+(approve/reject with reason, audited), the self-nudge banner (D2), the pending chip, and the badge on
+approval - which also makes the player a V2 anchor. Government IDs are sensitive personal information
+under RA 10173: define retention (recommend delete the image after decision, keep only the decision),
+add it to the Privacy Policy, and have counsel confirm before build.
+
+### UX principles for the executors
+
+Plain labels ("Sort by", "Vouches received: 3 - 20"), one dual-thumb slider component with big
+handles, live value chips and an "Any" state; active filters shown as removable chips above the list;
+the sort control outside the collapsible filter sheet; everything in the URL so back/refresh/share
+keep state; "Back to players" on the profile that returns to the exact page and filters; badges are
+calm pills, never red; nothing exposes voucher identity or STS internals.
+
+### Deferred / not in this batch
+
+STS as a public sort (D3), a public "unverified" marker (D2), and any ID auto-verification (D1) - by
+recommendation. The middleware prefetch-skip, phase-2 caches, cleanup migration and `LEGAL.version`
+bump remain post-event as before.
+
 ## 1. Prompt Contract
 
 ### In scope

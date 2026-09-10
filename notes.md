@@ -2683,3 +2683,28 @@ JASPER TODO (morning brief working/P_006b_IntegrityRollout_(2026-09).md): read C
 apply-0034.sql; run backfill; decide flip timing (AFTER Hermosa window - 34% move a band) and any
 softening (bloc_decay 0.6->0.75 / prior 2->1.5); skim Vouch integrity queue.
 Deferred: mutual-vouch community detection (non-club rings); counsel sentence on integrity processing.
+
+## 2026-09-11 - Directory/organizer/identity UX batch: PLAN written, not built (§2AG)
+
+Jasper asked for a handover plan (no code yet) covering: identity-verified badge on photo+ID, not-
+verified nudge, coach badge, admin tournament filter, STS/vouches-received/vouches-given range
+sliders, "new account" badge+filter, city normalization + PH-city autocomplete, pagination persistence
+after vouching, new default sort (new unvouched first) + Excel-like sorts, organizer registrations
+combinable filters + division capacity strip + column sort.
+
+Grounding (verified): list orders by updated_at desc, no sort control; STS filter single-thumb; NO
+identity upload/review flow exists (badge only, 0 verified); coach badge missing only on compact row;
+cities: 362 onboarded -> 36 raw -> 22 canonical, 4 variant groups, Zamboanga 318 across 7 spellings,
+2 test rows; Players TAB links bare /players (pagination reset cause). leaderboard_city_region_map
+empty (no scope impact from city normalization).
+
+Docs: master_plan §2AG (decision record, D1-D8, phases A/B/C, UX principles) +
+working/P_006b_UIUXBatchHandover_(2026-09).md (executor brief w/ file:line, slices A1-A5, gates).
+Handover spec unchanged (nothing shipped; v1.60 entry when Phase A ships).
+
+DECISIONS PENDING JASPER: D1 identity = staff-approved (V2 anchor - never auto on upload); D2 self-
+nudge only, no public "unverified" marker; D3 STS sort violates locked §8.4 -> staff-only; D4 "total
+vouches" = given; D5 new-account window 7d tunable; D6 global default sort change; D7 tournament
+filter = staff + that tournament's organizers; D8 city mapping review before DML.
+Phasing: A (UI/read-side, one windowed deploy post-Hermosa window) -> B (cities, DML after D8) -> C
+(identity pipeline, after counsel on ID retention).
