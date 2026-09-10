@@ -39,7 +39,7 @@ export async function Header() {
           Developed by {BRAND.developer.replace(' Inc.', '')}
         </a>
       </div>
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
+      <div className="relative mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
         <Link href="/" className="flex items-center gap-2" aria-label="VouchPlay home">
           <Image
             src="/brand/vouchplay-logo-horizontal.png"
@@ -52,7 +52,6 @@ export async function Header() {
         </Link>
 
         <div className="flex items-center gap-2">
-          {showCounter && <OnlineCounter />}
           <ThemeToggle />
           {user ? (
             <>
@@ -89,6 +88,15 @@ export async function Header() {
             </ButtonLink>
           )}
         </div>
+
+        {/* Live presence: a hovering chip just below the bell/profile, glued under the sticky header
+            (master_plan §2S). Absolute to this max-width row so it aligns under those icons on wide
+            screens rather than the far viewport corner. */}
+        {showCounter && (
+          <div className="absolute top-full right-4 z-50 mt-2">
+            <OnlineCounter />
+          </div>
+        )}
       </div>
       <div className="vp-gradient h-0.5 w-full opacity-80" aria-hidden />
     </header>

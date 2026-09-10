@@ -2433,3 +2433,7 @@ merge code defaults).
 
 Gates: typecheck/lint/format clean, 193 tests pass. UX: pulsing emerald dot + tabular number + "online"
 on sm+, reduced-motion safe.
+
+- Follow-up (v1.48): moved the counter to a hovering chip floating just below the header at the row's
+  right edge (under bell/profile), absolute top-full of the sticky header row; soft shadow + backdrop-
+  blur; full "N online" label on all sizes. header.tsx placement + online-counter.tsx styling only.

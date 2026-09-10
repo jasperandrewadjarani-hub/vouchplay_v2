@@ -2434,11 +2434,18 @@ key and count once.
 
 ### UX / gamification
 
-A compact pill in the header: a pulsing green dot + the number, with "online" shown on wider screens
-(full label in the accessible name). It appears only once connected with a count ≥ 1 (so it never
-reads a lonely/broken "0"), respects reduced-motion (no pulse), and uses tabular figures so the width
-does not jump as the number changes. Small but readable, and alive - it reinforces the "people are
-here right now" gamified feel without crowding the header.
+A compact pill showing a pulsing green dot + "N online". It appears only once connected with a
+count ≥ 1 (so it never reads a lonely/broken "0"), respects reduced-motion (no pulse), and uses
+tabular figures so the width does not jump as the number changes. Small but readable, and alive - it
+reinforces the "people are here right now" gamified feel.
+
+**Placement (revised).** Rather than sitting inline in the crowded header row, the chip **floats as a
+hovering card just below the header, at the right edge of the max-width row - under the notification
+bell and profile icon**. It is positioned `absolute` at `top-full` of the header's inner row, so on
+wide screens it aligns under those icons (not the far viewport corner) and, because the header is
+sticky, it stays glued just beneath it while scrolling. A soft shadow + slight backdrop-blur make it
+read as floating above content. Because it now has its own space, the full "online" label shows on
+every screen size (it was hidden on mobile when inline).
 
 ## 1. Prompt Contract
 

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.47
+# VouchPlay Master Product & Code Execution Handover v1.48
 
-_(File retains its `…v1.1.md` name; content is v1.47 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.48 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.48 (2026-09-10)
+
+_Online counter placement + label (master_plan §2S). No migration._
+
+- The counter is now a **hovering chip that floats just below the header**, at the right edge of the
+  max-width row (under the notification bell / profile icon), instead of sitting inline in the header
+  row. Positioned `absolute` at `top-full` of the header's inner row, so it aligns under those icons on
+  wide screens and stays glued below the sticky header while scrolling; soft shadow + backdrop-blur
+  give it a floating-card look.
+- Shows the full **"N online"** on every screen size now that it has its own space (the "online" word
+  was previously hidden on mobile).
 
 ## v1.47 (2026-09-10)
 

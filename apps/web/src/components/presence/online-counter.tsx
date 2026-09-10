@@ -78,7 +78,7 @@ export function OnlineCounter() {
 
   return (
     <span
-      className="border-border bg-surface inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1"
+      className="border-border bg-surface/95 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-md backdrop-blur-sm"
       title={`${count} ${count === 1 ? 'player' : 'players'} viewing VouchPlay now`}
       aria-label={`${count} ${count === 1 ? 'player' : 'players'} viewing VouchPlay now`}
     >
@@ -87,7 +87,7 @@ export function OnlineCounter() {
         <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
       </span>
       <span className="text-foreground text-xs font-semibold tabular-nums">{count}</span>
-      <span className="text-foreground-muted hidden text-xs sm:inline">online</span>
+      <span className="text-foreground-muted text-xs">online</span>
     </span>
   );
 }
