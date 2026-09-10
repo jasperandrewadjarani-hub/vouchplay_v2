@@ -289,6 +289,15 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: 'Per-player fee stamped on each of the 15 starter divisions of a new tournament. 0 = free.',
   },
   {
+    key: 'export_receipt_link_days',
+    label: 'Export receipt link validity (days)',
+    group: 'tournament',
+    kind: 'int',
+    min: 1,
+    max: 90,
+    help: 'How long the receipt links in an export stay valid, from the time of export. Re-export to refresh them.',
+  },
+  {
     key: 'club_representation_required',
     label: 'Club representation required',
     group: 'tournament',

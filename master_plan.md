@@ -2217,11 +2217,17 @@ are self-explanatory, and the words were pushing the actual controls down the sc
 ### Receipt links in the export, for bank review
 
 The registrations CSV (and the normalized workbook) gain a **Receipt link** column: a signed URL to
-each submitted proof, valid for seven days, so an organizer can hand the file to whoever does the bank
-reconciliation without logging in to review each one. The link is empty when there is no proof. It is
-a time-boxed signed URL, never a public path, so a leaked file does not expose the private bucket
-forever. The export schema is append-only here: the column is added at the end, existing columns keep
-their order.
+each submitted proof, so an organizer can hand the file to whoever does the bank reconciliation
+without logging in to review each one. The link is empty when there is no proof. It is a time-boxed
+signed URL, never a public path, so a leaked file does not expose the private bucket forever. The
+export schema is append-only here: the column is added at the end, existing columns keep their order.
+
+**The validity window is counted from the moment of export, not from receipt upload** - so a
+month-long registration is not a problem: each export mints fresh links, and re-downloading refreshes
+them. The window defaults to **30 days** (covering a monthly cycle plus a review lag) and is an Admin
+setting, `export_receipt_link_days`, capped at 90. It is a genuine trade-off, stated in the setting:
+a longer window is more convenient for a slow reviewer, but a leaked export exposes private receipts
+for that whole time, so it is bounded rather than unlimited.
 ## 2P. Phase 16 (planned, not yet built): organizers register teams on a player's behalf
 
 Jasper asked for two organizer powers. One - manually confirming a slot regardless of payment - already

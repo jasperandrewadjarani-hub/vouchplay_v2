@@ -2341,3 +2341,10 @@ it done. Several fixes in this session were found only that way.
   + division, players confirm). Needs a migration, an organizer-authorized RPC, a §1D consent flow,
   and a wizard UI - designed in §2P, awaiting Jasper's go-ahead. Manual confirm (bypass payment) was
   already supported and is shipped/clarified in this batch.
+
+- **2026-09-10** - **Export receipt links: window from export time, 30-day default, Admin-tunable**
+  (master_plan §2O, handover v1.44). Answering "what if registration runs a month?": the signed URL
+  is generated at EXPORT time, not receipt upload, so re-exporting always mints fresh links. Raised
+  the default 7 -> 30 days and made it setting `export_receipt_link_days` (capped 90). Trade-off:
+  longer is friendlier to a slow reviewer but a leaked export exposes private receipts longer. No
+  migration (merges via system_settings). Gates green.

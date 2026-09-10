@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.43
+# VouchPlay Master Product & Code Execution Handover v1.44
 
-_(File retains its `…v1.1.md` name; content is v1.43 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.44 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,16 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.44 (2026-09-10)
+
+_Follow-up to v1.43's receipt links. No migration._
+
+- **Export receipt links: window is from export time, and now 30 days by default, Admin-tunable
+  (master_plan §2O).** The signed URL is minted when the organizer exports, not when the receipt was
+  uploaded, so a month-long registration is fine - each export refreshes the links. The default rose
+  from 7 to **30 days** (a monthly cycle plus review lag) and is a new setting,
+  `export_receipt_link_days` (capped at 90). Bounded on purpose: a longer window is friendlier to a
+  slow bank reviewer, but a leaked export exposes private receipts for the whole time.
 ## v1.43 (2026-09-10)
 
 _App-side, no migration. A "less text, more organizer control" batch (master_plan §2O). One requested
