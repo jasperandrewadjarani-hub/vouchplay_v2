@@ -2437,3 +2437,12 @@ on sm+, reduced-motion safe.
 - Follow-up (v1.48): moved the counter to a hovering chip floating just below the header at the row's
   right edge (under bell/profile), absolute top-full of the sticky header row; soft shadow + backdrop-
   blur; full "N online" label on all sizes. header.tsx placement + online-counter.tsx styling only.
+
+## 2026-09-10 - Polish: translucent chip + compact-card sponsorship icon (§\&2T, handover v1.49)
+
+- online-counter.tsx: bg-surface/70 + backdrop-blur-md (was /95) so the floating chip does not block
+  text behind it; frosted-glass look, chip number stays readable.
+- player-card.tsx (compact): added Handshake icon (text-primary) beside the UserSearch partner icon on
+  line one, gated by player.openForSponsorship. Detailed card + DTO already had both; only compact row
+  was missing sponsorship. Colors: lime=partner, primary=sponsorship (matches detailed badges).
+Gates: typecheck/lint/format clean. UI-only, no migration.

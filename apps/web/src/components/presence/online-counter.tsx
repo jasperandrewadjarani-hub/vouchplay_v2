@@ -78,7 +78,7 @@ export function OnlineCounter() {
 
   return (
     <span
-      className="border-border bg-surface/95 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-md backdrop-blur-sm"
+      className="border-border/70 bg-surface/70 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 shadow-sm backdrop-blur-md"
       title={`${count} ${count === 1 ? 'player' : 'players'} viewing VouchPlay now`}
       aria-label={`${count} ${count === 1 ? 'player' : 'players'} viewing VouchPlay now`}
     >

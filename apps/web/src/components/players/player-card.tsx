@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MapPin, UserSearch } from 'lucide-react';
+import { MapPin, UserSearch, Handshake } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { CompactRowPending } from './compact-row-pending';
@@ -91,6 +91,15 @@ export function PlayerCard({
                 className="shrink-0"
                 style={{ color: 'var(--accent-lime)' }}
                 aria-label="Looking for a partner"
+              />
+            )}
+            {/* Same open_for_sponsorship flag as the filter, profile badge, and detailed card (§2T).
+                Primary colour mirrors the detailed OpenForSponsorship badge; lime = partner above. */}
+            {player.openForSponsorship && (
+              <Handshake
+                size={13}
+                className="text-primary shrink-0"
+                aria-label="Open to sponsorship"
               />
             )}
           </span>

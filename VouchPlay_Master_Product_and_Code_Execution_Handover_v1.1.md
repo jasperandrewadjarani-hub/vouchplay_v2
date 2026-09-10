@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.48
+# VouchPlay Master Product & Code Execution Handover v1.49
 
-_(File retains its `…v1.1.md` name; content is v1.48 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.49 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,16 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.49 (2026-09-10)
+
+_Two polish fixes (master_plan §2T). No migration._
+
+- **Online chip is now translucent** (`bg-surface/70` + `backdrop-blur-md`, lighter shadow) so it never
+  hard-blocks page text it floats over - a frosted-glass pill; its own number stays crisp.
+- **"Open to sponsorship" now shows on the compact player card** - a small Handshake icon (primary
+  colour) beside the looking-for-partner icon on line one, using the same `open_for_sponsorship` flag.
+  The detailed card and DTO already had it; only the compact row was missing the marker.
 
 ## v1.48 (2026-09-10)
 

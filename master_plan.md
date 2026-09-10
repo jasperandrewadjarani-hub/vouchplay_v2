@@ -2447,6 +2447,24 @@ sticky, it stays glued just beneath it while scrolling. A soft shadow + slight b
 read as floating above content. Because it now has its own space, the full "online" label shows on
 every screen size (it was hidden on mobile when inline).
 
+## 2T. Two polish fixes: translucent online chip, and sponsorship icon on compact cards (2026-09-10)
+
+Two small follow-ups reported by Jasper.
+
+1. **The hovering online chip could sit over page text.** It floats below the header (§2S), so on some
+   layouts it can overlap the top-right of the content. Fix: make it **semi-transparent with a frosted
+   backdrop-blur** (`bg-surface/70` + `backdrop-blur-md`, lighter shadow) so anything behind it stays
+   legible through the glass while the chip's own number stays crisp - it reads as a floating glass
+   pill rather than a solid block.
+
+2. **"Open to sponsorship" was missing on the compact player card.** The *detailed* card already shows
+   both availability badges (LookingForPartner + OpenForSponsorship), and the DTO/query populate both.
+   But the *compact* row only drew the looking-for-partner icon (UserSearch, lime); it had no
+   sponsorship marker at all. Fix: add a small **Handshake** icon (primary colour, matching the
+   detailed OpenForSponsorship badge) beside it on line one, using the same `open_for_sponsorship`
+   flag as the filter, profile badge, and detailed card. Both availability signals now appear in both
+   views, consistently coloured (lime = partner, primary = sponsorship).
+
 ## 1. Prompt Contract
 
 ### In scope
