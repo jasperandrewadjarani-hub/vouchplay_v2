@@ -1,6 +1,7 @@
 import 'server-only';
 import { skillByOrdinal } from '@vouchplay/config';
 import { createServiceClient } from '@/lib/supabase/service';
+import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { divisionName } from '@/lib/tournaments/dto';
 import {
   ENTERED_BY,
@@ -195,19 +196,35 @@ export async function buildTournamentSnapshot(
   const { data: payData } = regIds.length
     ? await svc
         .from('payments')
-        .select('registration_id, status, amount_due, currency')
+        .select('registration_id, status, amount_due, currency, proof_storage_path')
         .in('registration_id', regIds)
     : { data: [] };
-  const payByReg = new Map(
-    (
-      (payData ?? []) as {
-        registration_id: string;
-        status: string;
-        amount_due: number;
-        currency: string;
-      }[]
-    ).map((p) => [p.registration_id, p]),
-  );
+  const payRows = (payData ?? []) as {
+    registration_id: string;
+    status: string;
+    amount_due: number;
+    currency: string;
+    proof_storage_path: string | null;
+  }[];
+  const payByReg = new Map(payRows.map((p) => [p.registration_id, p]));
+
+  // Time-boxed signed links to each submitted proof, so an organizer can hand the export to whoever
+  // does the bank reconciliation without opening each one in the app (§2O). Seven days; never a
+  // public path. Best-effort: a proof that fails to sign simply exports a blank link.
+  const RECEIPT_LINK_TTL_SECONDS = 7 * 24 * 60 * 60;
+  const receiptByReg = new Map<string, string>();
+  const proofRows = payRows.filter((p) => p.proof_storage_path);
+  if (proofRows.length > 0) {
+    const signed = await Promise.all(
+      proofRows.map(async (p) => {
+        const { data } = await svc.storage
+          .from(PAYMENT_PROOFS_BUCKET)
+          .createSignedUrl(p.proof_storage_path as string, RECEIPT_LINK_TTL_SECONDS);
+        return [p.registration_id, data?.signedUrl ?? ''] as const;
+      }),
+    );
+    for (const [regId, url] of signed) if (url) receiptByReg.set(regId, url);
+  }
   const { data: wlData } = regIds.length
     ? await svc
         .from('waitlist_entries')
@@ -318,6 +335,7 @@ export async function buildTournamentSnapshot(
       waitlistPosition: wlByReg.get(r.id) ?? null,
       representedClubs: clubs.join(', '),
       registeredAt: dateOrNull(r.created_at),
+      receiptLink: receiptByReg.get(r.id) ?? '',
     };
   });
 

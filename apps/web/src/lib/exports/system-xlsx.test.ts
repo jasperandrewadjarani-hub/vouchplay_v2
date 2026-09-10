@@ -88,6 +88,7 @@ const fixture: TournamentExportSnapshot = {
       waitlistPosition: null,
       representedClubs: 'Cebu Smashers',
       registeredAt: d(2026, 9, 1),
+      receiptLink: '',
     },
   ],
 };

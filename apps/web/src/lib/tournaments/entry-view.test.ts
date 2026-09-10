@@ -137,10 +137,10 @@ describe('filtering', () => {
     expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a', 'c']);
   });
 
-  it('shows them only when asked', () => {
+  it('shows ONLY the closed ones when asked, not appended to the open list (§2O)', () => {
     expect(
       filterEntries(rows, { ...DEFAULT_FILTERS, includeClosed: true }).map((r) => r.id),
-    ).toEqual(['a', 'b', 'c']);
+    ).toEqual(['b']);
   });
 
   it('filters to one queue', () => {

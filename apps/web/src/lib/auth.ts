@@ -122,3 +122,37 @@ export async function getViewerContext(): Promise<{
     return { viewerId: null, isStaff: false, isCoach: false };
   }
 }
+
+/**
+ * Whether to nudge the signed-in viewer that their profile has no vouches yet (master_plan §2O).
+ * Shown as a slim banner in the shell for an onboarded player with zero vouches; it disappears the
+ * moment they have one. Reads only the viewer's own profile and their public skill aggregate.
+ */
+export async function getViewerReputationNudge(): Promise<{
+  unvouched: boolean;
+  slug: string | null;
+}> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { unvouched: false, slug: null };
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('slug, onboarded_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    const profile = profileRow as { slug: string | null; onboarded_at: string | null } | null;
+    if (!profile?.onboarded_at) return { unvouched: false, slug: null };
+    const { data: skillRow } = await supabase
+      .from('player_skill_profiles')
+      .select('unique_voucher_count')
+      .eq('player_id', user.id)
+      .maybeSingle();
+    const count = (skillRow as { unique_voucher_count: number } | null)?.unique_voucher_count ?? 0;
+    return { unvouched: count === 0, slug: profile.slug };
+  } catch {
+    return { unvouched: false, slug: null };
+  }
+}

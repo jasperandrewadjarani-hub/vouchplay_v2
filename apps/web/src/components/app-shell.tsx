@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Wrench, Megaphone } from 'lucide-react';
+import Link from 'next/link';
+import { Wrench, Megaphone, ShieldAlert } from 'lucide-react';
 import { Header } from './header';
 import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
@@ -7,7 +8,7 @@ import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
-import { getOptionalUser } from '@/lib/auth';
+import { getOptionalUser, getViewerReputationNudge } from '@/lib/auth';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -25,6 +26,9 @@ export async function AppShell({ children }: { children: ReactNode }) {
   const showBanner = bannerEnabled && bannerText.trim().length > 0;
   const staff = maintenance ? await viewerIsStaff() : false;
   const gated = maintenance && !staff;
+  // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
+  // have played with vouch for them (§2O). Skipped under maintenance gating.
+  const nudge = gated ? { unvouched: false, slug: null } : await getViewerReputationNudge();
 
   // Launch/campaign pop-up: only loaded when an Admin has switched it on.
   const welcome = welcomeEnabled
@@ -83,6 +87,27 @@ export async function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <Header />
+      {/* A quiet amber strip just below the logo for a player with no vouches yet - a nudge, not an
+          interruption. It links to their profile so they can share it and ask for vouches (§2O). */}
+      {nudge.unvouched && !gated && (
+        <div className="border-warning/40 bg-warning/10 border-b">
+          <div className="text-foreground mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
+            <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">
+              Your profile has no vouches yet. Ask players you&rsquo;ve played with to vouch for you
+              so your skill is trusted.
+            </span>
+            {nudge.slug && (
+              <Link
+                href={`/players/${nudge.slug}`}
+                className="text-warning shrink-0 font-semibold underline underline-offset-2"
+              >
+                My profile
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
       <div className="mx-auto flex w-full max-w-6xl">
         <Sidebar />
         <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">

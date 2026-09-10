@@ -44,6 +44,7 @@ export function buildCsv(snapshot: TournamentExportSnapshot, entity: CsvEntity):
           'WaitlistPosition',
           'RepresentedClubs',
           'RegisteredAt',
+          'ReceiptLink',
         ],
         snapshot.registrations.map((r) => [
           r.divisionName,
@@ -57,6 +58,7 @@ export function buildCsv(snapshot: TournamentExportSnapshot, entity: CsvEntity):
           r.waitlistPosition,
           r.representedClubs,
           r.registeredAt,
+          r.receiptLink,
         ]),
       );
     case 'teams':

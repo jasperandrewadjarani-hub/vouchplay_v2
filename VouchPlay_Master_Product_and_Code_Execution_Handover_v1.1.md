@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.42
+# VouchPlay Master Product & Code Execution Handover v1.43
 
-_(File retains its `…v1.1.md` name; content is v1.42 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.43 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,40 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.43 (2026-09-10)
+
+_App-side, no migration. A "less text, more organizer control" batch (master_plan §2O). One requested
+power - organizers registering teams on a player's behalf - is scoped as a planned phase (§2P), not
+built here._
+
+- **Less text where the screen already explains itself.** Removed the "Interest by division. Counts
+  are not registrations…" subtitle from the interest dialog; dropped the category subtitles from the
+  Home leaderboards (each entry explains itself; `/leaderboards` keeps them); dropped the two filter
+  helper paragraphs (skill level, minimum trust score) and shrank the skill chips. The Community-
+  Champions entry line no longer truncates mid-word ("…88 were newcomers. Repeat pair…") - the stored
+  text now ends at "…were newcomers." and the display trims the old trailing clause from existing
+  snapshots.
+- **Unvouched players are nudged.** A slim amber banner sits below the header for a signed-in,
+  onboarded player with zero vouches: "Your profile has no vouches yet - ask players you've played
+  with to vouch for you," linking to their profile. It disappears at the first vouch.
+- **Organizer Manage is collapsible.** Every section is native disclosure; Status and Overview open by
+  default, the rest (Registrations, Export, Divisions, Details, Announcements, Club override,
+  Co-organizers, Archive) collapsed, so the page opens as a short menu. **"Show cancelled and
+  withdrawn" now shows ONLY those** instead of appending them to the live list. **Confirm slot** is
+  relabelled and titled so it is clear it locks a slot in without a verified payment (it already did).
+  **Cancel registration shows "Cancelling…".**
+- **Receipt links in the export.** The registrations CSV and the normalized workbook gain a
+  **ReceiptLink** column - a 7-day signed URL to each submitted proof - so an organizer can forward the
+  file for bank reconciliation. Empty when there is no proof; never a public path. Column is appended,
+  existing columns unchanged. (Column name corrected to `proof_storage_path` before shipping - the
+  first draft used a column that does not exist and would have exported blank links.)
+- **Manual confirm bypassing payment already existed** and is now clearly labelled; no new mechanism
+  was needed.
+- **Planned, not built (Phase 16, §2P): organizers registering teams on a player's behalf** - with
+  club affiliations and divisions, players confirming. It writes rows for other people and touches the
+  §1D "nobody enrolled without their knowledge" invariant, so it needs a migration, an
+  organizer-authorized RPC, a consent/confirm flow, and its own wizard UI. Designed in §2P for
+  Jasper's go-ahead.
 ## v1.42 (2026-09-10)
 
 _App-side, no migration. Extends v1.41._

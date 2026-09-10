@@ -23,6 +23,7 @@ export function LeaderboardPanel({
   error = false,
   paused = false,
   viewerId = null,
+  hideSubtitle = false,
 }: {
   board: LeaderboardDTO | null;
   compact?: boolean;
@@ -31,6 +32,9 @@ export function LeaderboardPanel({
   paused?: boolean;
   /** The signed-in viewer, so their own row can be highlighted. Never used to reveal anyone else. */
   viewerId?: string | null;
+  /** On Home the boards are a highlight and each entry explains itself, so the category subtitle is
+   *  dropped there; the /leaderboards page keeps it (§2O). */
+  hideSubtitle?: boolean;
 }) {
   const meta = boardMeta(board?.category ?? category ?? 'players');
   if (error) {
@@ -54,7 +58,7 @@ export function LeaderboardPanel({
         <h2 id={emptyId} className="text-foreground font-semibold">
           {meta.title}
         </h2>
-        <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>
+        {!hideSubtitle && <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>}
         <p className="text-foreground-muted mt-2 text-sm">
           No rankings published yet. This board appears after the next snapshot.
         </p>
@@ -78,7 +82,7 @@ export function LeaderboardPanel({
           <h2 id={`board-${board.category}`} className="text-foreground text-xl font-bold">
             {meta.title}
           </h2>
-          <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>
+          {!hideSubtitle && <p className="text-foreground-muted mt-1 text-sm">{meta.subtitle}</p>}
           <p className="text-foreground-muted mt-1 text-xs capitalize">
             {board.period.replace('_', ' ')}
           </p>
@@ -280,7 +284,9 @@ function Podium({
       {/* One line on a phone: the leading clause carries the person-specific fact, and three
           full explanations stacked pushed rank four off the bottom of a 375px screen. */}
       <p className="text-foreground-muted mt-2 line-clamp-1 text-[11px] sm:line-clamp-2">
-        {entry.explanation}
+        {/* Trim the old trailing "Repeat pairs and suspicious rings…" clause from snapshots taken
+            before §2O shortened it, so existing boards read cleanly without waiting for a rebuild. */}
+        {entry.explanation.replace(/\s*Repeat pairs.*$/, '')}
       </p>
     </li>
   );

@@ -85,7 +85,7 @@ export function RegisterActions({
             }}
             className={`${btn} text-danger border-border w-fit border`}
           >
-            Cancel registration
+            {pending ? 'Cancelling…' : 'Cancel registration'}
           </button>
         )}
         {/* Once a receipt exists, PaidEntryActions owns this state and offers Request to cancel.

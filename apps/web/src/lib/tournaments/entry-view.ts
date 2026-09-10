@@ -124,7 +124,9 @@ export function filterEntries(
 ): OrganizerRegistration[] {
   const needle = filters.search.trim().toLowerCase();
   return entries.filter((e) => {
-    if (!filters.includeClosed && isClosed(e)) return false;
+    // "Show cancelled and withdrawn" is a switch between two views, not an append: checked shows ONLY
+    // closed entries (the organizer wants to look at them), unchecked shows only open ones (§2O).
+    if (filters.includeClosed ? !isClosed(e) : isClosed(e)) return false;
     if (filters.divisionName !== 'all' && e.divisionName !== filters.divisionName) return false;
     if (filters.queue !== 'all' && !queuesFor(e).includes(filters.queue)) return false;
     if (needle) {

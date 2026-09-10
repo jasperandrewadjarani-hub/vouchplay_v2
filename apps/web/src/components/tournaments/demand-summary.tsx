@@ -65,11 +65,7 @@ export function TournamentDemandSummary({
         </span>
       </button>
       {open && (
-        <Modal
-          title="Tournament interest"
-          subtitle="Interest by division. Counts are not registrations or reserved slots."
-          onClose={() => setOpen(false)}
-        >
+        <Modal title="Tournament interest" onClose={() => setOpen(false)}>
           <div className="space-y-2">
             {rows.map((division) => (
               <div key={division.key} className="border-border rounded-lg border px-3 py-2 text-sm">

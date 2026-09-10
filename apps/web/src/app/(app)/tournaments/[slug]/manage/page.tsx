@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { ChevronDown } from 'lucide-react';
 import { notFound, redirect } from 'next/navigation';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
@@ -31,6 +33,43 @@ interface Params {
 // time (slicing the raw ISO string would have shown the UTC wall clock instead).
 const toLocalInput = (iso: string | null) => isoToPhInput(iso);
 const toDateInput = (iso: string | null) => isoToPhDateInput(iso);
+
+/**
+ * A collapsible Manage section (§2O). The screen is long, so every section is native disclosure with
+ * a clear header and a chevron that turns on open. Status and Overview open by default - the
+ * at-a-glance answer to "how is my event doing?" - everything else is collapsed so the page opens as
+ * a short menu instead of a wall of forms.
+ */
+function ManageSection({
+  title,
+  defaultOpen = false,
+  danger = false,
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  danger?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className={`group rounded-2xl border p-5 ${
+        danger ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface'
+      }`}
+    >
+      <summary className="text-foreground flex cursor-pointer list-none items-center justify-between gap-2 text-base font-semibold">
+        {title}
+        <ChevronDown
+          size={18}
+          className="text-foreground-muted shrink-0 transition-transform group-open:rotate-180"
+          aria-hidden
+        />
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
+  );
+}
 
 export default async function ManageTournamentPage({ params }: Params) {
   const { slug } = await params;
@@ -72,18 +111,15 @@ export default async function ManageTournamentPage({ params }: Params) {
         </h1>
       </div>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Status</h2>
+      <ManageSection title="Status" defaultOpen>
         <LifecycleControls tournamentId={t.id} slug={slug} status={t.status} />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Overview</h2>
+      <ManageSection title="Overview" defaultOpen>
         <TournamentOverview overview={overview} />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Registrations</h2>
+      <ManageSection title="Registrations">
         <OrganizerRegistrations
           tournamentId={t.id}
           registrations={registrations}
@@ -94,20 +130,17 @@ export default async function ManageTournamentPage({ params }: Params) {
             teamSize: d.teamSize,
           }))}
         />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Export</h2>
+      <ManageSection title="Export">
         <TournamentExport slug={slug} />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Divisions</h2>
+      <ManageSection title="Divisions">
         <DivisionBuilder tournamentId={t.id} slug={slug} divisions={t.divisions} />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Details</h2>
+      <ManageSection title="Details">
         <TournamentForm
           action={updateTournament.bind(null, t.id, slug)}
           submitLabel="Save details"
@@ -136,38 +169,30 @@ export default async function ManageTournamentPage({ params }: Params) {
             requireOrganizerApproval: t.requireOrganizerApproval,
           }}
         />
-      </section>
+      </ManageSection>
 
-      <section className="border-border bg-surface rounded-2xl border p-5">
-        <h2 className="text-foreground mb-3 text-base font-semibold">Announcements</h2>
+      <ManageSection title="Announcements">
         <AnnouncementForm tournamentId={t.id} slug={slug} />
-      </section>
+      </ManageSection>
 
-      <details className="border-border bg-surface rounded-2xl border p-5">
-        <summary className="text-foreground cursor-pointer text-base font-semibold">
-          Club representation override
-        </summary>
-        <div className="mt-3">
-          <ClubOverrideControl
-            tournamentId={t.id}
-            participants={clubOverrideParticipants}
-            maxClubs={t.maxClubsPerPlayer}
-          />
-        </div>
-      </details>
+      <ManageSection title="Club representation override">
+        <ClubOverrideControl
+          tournamentId={t.id}
+          participants={clubOverrideParticipants}
+          maxClubs={t.maxClubsPerPlayer}
+        />
+      </ManageSection>
 
       {t.isOwner && (
-        <section className="border-border bg-surface rounded-2xl border p-5">
-          <h2 className="text-foreground mb-3 text-base font-semibold">Co-organizers</h2>
+        <ManageSection title="Co-organizers">
           <CoOrganizerManager tournamentId={t.id} slug={slug} organizers={t.organizers} />
-        </section>
+        </ManageSection>
       )}
 
       {t.isOwner && (
-        <section className="border-danger/30 bg-danger/5 rounded-2xl border p-5">
-          <h2 className="text-foreground mb-1 text-base font-semibold">Archive tournament</h2>
+        <ManageSection title="Archive tournament" danger>
           <ArchiveControls tournamentId={t.id} slug={slug} name={t.name} status={t.status} />
-        </section>
+        </ManageSection>
       )}
     </div>
   );

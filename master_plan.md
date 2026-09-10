@@ -2164,6 +2164,107 @@ a leader line) with a gradient "hero" treatment to **two lines** with a lighter 
 doorway, not a display. The availability card lost padding and its header shrank to a single small
 label. On a phone the width is the viewport, so the win is vertical: the directory now starts higher
 without losing either entry point.
+## 2O. Less text, tighter filters, and more organizer control (2026-09-10, post-launch)
+
+A batch of "make the app less texty and the organizer screen more powerful" fixes. All ship together;
+none needs a migration. The one big-power item Jasper asked for - organizers registering teams on a
+player's behalf - is deliberately held for its own phase (see §2P).
+
+### Copy the screen already explains, removed
+
+- **Tournament interest dialog.** The "Interest by division. Counts are not registrations or reserved
+  slots." subtitle is gone - the dialog shows per-division bars under a clear heading, and the counts
+  are labelled interest, so the caveat was restating the obvious.
+- **Home leaderboard subtitles.** On Home the boards are a highlight, not the full board, and each
+  entry already carries its own one-line explanation ("N distinct players supported…"), so the
+  category subtitle ("Ranked on vouches given…") is dropped on Home. The `/leaderboards` page keeps
+  its subtitles, where they orient someone who came specifically to read the boards.
+- **The Community-Champions entry line no longer truncates mid-word.** It read "…88 were newcomers.
+  Repeat pair…" because a long third clause hit the line clamp. The stored explanation now ends at
+  "…were newcomers.", and the display trims the old trailing clause too, so existing snapshots read
+  cleanly before the next rebuild.
+
+### An unvouched player is told, gently, once
+
+A brand-new player with zero vouches has an empty reputation and no reason to know it matters. A slim
+amber banner now sits just below the header for a signed-in, onboarded player with no vouches yet:
+"Your profile has no vouches yet - ask players you've played with to vouch for you so your skill is
+trusted," linking to their profile. It disappears the moment they have a single vouch. It is a quiet
+strip, not a modal, because it is a nudge, not an interruption.
+
+### Filters, tighter
+
+The skill chips shrank and the two helper paragraphs ("What the community rates them…", "How confident
+the community is…") are gone - a labelled "Skill level" chip set and a "Minimum trust score" slider
+are self-explanatory, and the words were pushing the actual controls down the screen.
+
+### The organizer screen is sections you open, and cancel means cancel
+
+- **Every section on Manage is collapsible.** Status and Overview stay open - they are the
+  at-a-glance answer to "how is my event doing?" - and Registrations, Export, Divisions, Details,
+  Announcements and the rest are collapsed by default, so the page opens as a short menu instead of a
+  long scroll. Each remembers nothing; it is just native disclosure.
+- **"Show cancelled and withdrawn" now shows only those.** It used to ADD closed entries to the live
+  list, which is the opposite of what an organizer wants when they tick it - they want to look at the
+  closed ones. Checked, the list is exactly the cancelled and withdrawn entries; unchecked, exactly
+  the open ones.
+- **Confirming a slot already bypasses payment.** The organizer's Confirm button confirms an entry
+  from any pre-terminal state - awaiting payment included - so an organizer can lock in a slot without
+  a receipt. The control is now labelled so that is obvious ("Confirm slot"), and its effect is stated
+  where it sits.
+- **"Cancel registration" shows "Cancelling…"** while it works, like every other action.
+
+### Receipt links in the export, for bank review
+
+The registrations CSV (and the normalized workbook) gain a **Receipt link** column: a signed URL to
+each submitted proof, valid for seven days, so an organizer can hand the file to whoever does the bank
+reconciliation without logging in to review each one. The link is empty when there is no proof. It is
+a time-boxed signed URL, never a public path, so a leaked file does not expose the private bucket
+forever. The export schema is append-only here: the column is added at the end, existing columns keep
+their order.
+## 2P. Phase 16 (planned, not yet built): organizers register teams on a player's behalf
+
+Jasper asked for two organizer powers. One - manually confirming a slot regardless of payment - already
+exists and is polished in §2O. The other - an organizer creating a team entry FOR players, who then
+just confirm - is real new power that writes registrations and team memberships for other people, so
+it gets its own phase rather than a corner of a batch. This section is the design; nothing here is
+built yet.
+
+### Why it is a phase, not a quick add
+
+It touches the most sensitive invariant in the product: §1D - nobody is put on a team, or into a paid
+entry, without their knowledge. An organizer acting on a player's behalf must not become a way to
+enrol someone silently. So the flow needs a real consent step, new server authority, and RLS that lets
+an organizer write rows they do not own - none of which should be rushed onto a live registration
+window.
+
+### The shape (for review before building)
+
+- **Who/what.** An approved organizer of the tournament picks a division, searches VouchPlay accounts
+  for the one or two players, optionally sets each player's club representation, and submits. Players
+  must already have an account - the organizer never creates accounts or enters personal data.
+- **What it creates.** A team plus a registration in a new status, `organizer_pending_confirmation`
+  (or reuse the pending-partner machinery): the entry exists and holds a slot per the normal capacity
+  rules, but every named player must confirm they agree to play before it is live. Until all confirm,
+  it shows on the organizer's board as "awaiting player confirmation" and on each player's own
+  My-registrations as "an organizer entered you - confirm or decline".
+- **Consent is the gate (§1D).** Each player gets a critical notification and an explicit
+  confirm/decline. Declining never charges them and frees them from the team; it does not silently
+  cancel the other player's slot (mirrors the §1U decline carve-out).
+- **Payment.** The organizer decides per entry whether it is already settled (they can mark it paid /
+  confirm the slot with the §2O power) or whether the players still owe - in which case the normal
+  pay-first flow applies once confirmed.
+- **Migration + RLS.** A `register_on_behalf` SECURITY DEFINER RPC (organizer-authorized), the new
+  status value if used, and audit rows for every on-behalf action. The organizer write is service-role
+  inside the audited action, never a direct client write.
+- **UI.** A dedicated "Add an entry" flow on Manage - a short wizard (division -> players -> clubs ->
+  review) rather than a dense form, because the organizers doing this at a venue are not all
+  tech-savvy.
+
+### Recommendation
+
+Build it as Phase 16 after Jasper confirms the consent model above, so the §1D promise is designed in
+rather than bolted on. Everything else in this round (§2O) ships now and does not depend on it.
 ## 1. Prompt Contract
 
 ### In scope

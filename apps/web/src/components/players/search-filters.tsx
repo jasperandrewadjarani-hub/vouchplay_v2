@@ -38,19 +38,21 @@ const controlClass =
   'w-full min-h-[44px] rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-foreground-muted focus-visible:outline-2 focus-visible:outline-offset-2';
 
 const sectionLabel = 'text-foreground block text-sm font-semibold';
-const sectionHint = 'text-foreground-muted mt-0.5 block text-xs leading-relaxed';
 
-/** A tappable pill used for skill bands, the sex segments and the boolean toggles. */
+/** A tappable pill used for skill bands, the sex segments and the boolean toggles. `compact` is the
+ *  smaller skill-chip size, so the seven bands fit tighter without a wall of full-height buttons. */
 function TogglePill({
   selected,
   onClick,
   children,
   label,
+  compact = false,
 }: {
   selected: boolean;
   onClick: () => void;
   children: React.ReactNode;
   label?: string;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -58,13 +60,15 @@ function TogglePill({
       onClick={onClick}
       aria-pressed={selected}
       aria-label={label}
-      className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+      className={`inline-flex items-center gap-1 rounded-lg border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+        compact ? 'min-h-[34px] px-2.5 py-1 text-xs' : 'min-h-[44px] gap-1.5 px-3 py-2 text-sm'
+      } ${
         selected
           ? 'border-primary bg-primary/10 text-foreground'
           : 'border-border bg-background text-foreground-muted hover:border-primary/40 hover:text-foreground'
       }`}
     >
-      {selected && <Check size={14} aria-hidden className="text-primary shrink-0" />}
+      {selected && <Check size={compact ? 12 : 14} aria-hidden className="text-primary shrink-0" />}
       {children}
     </button>
   );
@@ -253,17 +257,15 @@ export function SearchFilters({
 
       {showFilters && (
         <div className="border-border space-y-5 border-t pt-4">
-          {/* Skill: named, ordered, discrete - so it gets chips, not a two-thumb slider (§2B). */}
+          {/* Skill: named, ordered, discrete - so it gets chips, not a two-thumb slider (§2B).
+              Compact chips and no helper line: a labelled chip set explains itself (§2O). */}
           <div>
             <span className={sectionLabel}>Skill level</span>
-            <span className={sectionHint}>
-              What the community rates them, or their own rating when nobody has vouched yet. Pick
-              as many as you like.
-            </span>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {SKILL_BANDS.map((b) => (
                 <TogglePill
                   key={b.key}
+                  compact
                   selected={(draft.skills ?? []).includes(b.ordinal)}
                   onClick={() => toggleSkill(b.ordinal)}
                 >
@@ -278,10 +280,6 @@ export function SearchFilters({
             <label htmlFor="minSts" className={sectionLabel}>
               Minimum trust score
             </label>
-            <span className={sectionHint}>
-              How confident the community is about their level, 0 to 5. It is not a ranking of how
-              good they are.
-            </span>
             {/* The slider's height is written as an exact pixel value on purpose: the app sets a
                 14px root font, so `h-11` renders 38.5px here, under the touch minimum. Measured on
                 a real page rather than assumed. */}

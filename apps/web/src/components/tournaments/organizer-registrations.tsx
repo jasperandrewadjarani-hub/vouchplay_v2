@@ -317,10 +317,13 @@ function RegRow({
             <button
               type="button"
               disabled={pending}
+              // Confirms the slot from any pre-terminal state, payment or not - the organizer's
+              // manual override to lock a place in without a verified receipt (§2O).
+              title="Locks in this slot now, even without a verified payment"
               onClick={() => run(() => confirmRegistration(reg.id, tournamentId))}
               className={`${btn} vp-gradient text-white`}
             >
-              Confirm
+              {pending ? 'Working…' : 'Confirm slot'}
             </button>
           )}
           {!terminal && (

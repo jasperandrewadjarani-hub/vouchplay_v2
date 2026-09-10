@@ -2325,3 +2325,19 @@ it done. Several fixes in this session were found only that way.
   lines -> 2 and lost the gradient hero; the availability card lost padding - the list starts higher.
   No migration. All gates green (typecheck, lint, 193 tests, format, build). Auth-gated surfaces
   verified via build/logic; leaderboard card compaction is visible on the public Players page.
+
+- **2026-09-10** - **"Less text + more organizer control" batch** (master_plan §2O, handover v1.43).
+  Removed the interest-dialog subtitle, Home leaderboard subtitles (/leaderboards keeps them), and the
+  two filter helper paragraphs; shrank skill chips; fixed the truncated "Repeat pair…" Community
+  Champions line (source shortened + display trims old snapshots). Added an unvouched-player amber
+  nudge banner below the header (onboarded, 0 vouches; links to their profile). Made all organizer
+  Manage sections collapsible (Status + Overview open by default). "Show cancelled and withdrawn" now
+  shows ONLY closed entries (test updated). Confirm-slot relabelled (already bypasses payment); Cancel
+  shows "Cancelling…". Added a ReceiptLink column (7-day signed URL) to the CSV + normalized xlsx for
+  bank review - caught that the proof column is `proof_storage_path`, not `proof_path`, before it
+  shipped blank links; verified sign returns 200 against production. No migration. All gates green
+  (typecheck, lint, 193 tests, format, build).
+  **DEFERRED to Phase 16 (master_plan §2P):** organizers registering teams on a player's behalf (club
+  + division, players confirm). Needs a migration, an organizer-authorized RPC, a §1D consent flow,
+  and a wizard UI - designed in §2P, awaiting Jasper's go-ahead. Manual confirm (bypass payment) was
+  already supported and is shipped/clarified in this batch.

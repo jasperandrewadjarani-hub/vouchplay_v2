@@ -262,6 +262,9 @@ export interface ExportRegistrationRow {
   waitlistPosition: number | null;
   representedClubs: string; // club names joined by ", "
   registeredAt: Date | null;
+  /** A time-boxed signed URL to the submitted payment proof, for bank review (§2O). Empty when there
+   *  is no proof. Expires; never a public path. */
+  receiptLink: string;
 }
 
 export interface TournamentExportSnapshot {

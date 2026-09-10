@@ -464,7 +464,9 @@ function makeFacts(
         eligible: subject.privateEligible,
         components: { contribution: score },
         tieBreak: [newcomers, distinct, streak],
-        explanation: `${distinct} distinct players supported; ${newcomers} were newcomers. Repeat pairs and suspicious rings do not add raw-volume credit.`,
+        // Short by design: the trailing "repeat pairs / rings" clause was truncated mid-word by the
+        // one-line clamp on the board, so it is dropped (§2O). The scoring still discounts repeats.
+        explanation: `${distinct} distinct players supported; ${newcomers} were newcomers.`,
       };
     });
   }

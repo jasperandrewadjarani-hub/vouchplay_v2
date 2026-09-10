@@ -94,6 +94,7 @@ export default async function HomePage() {
                 paused={settings.paused.community}
                 compact
                 viewerId={user?.id ?? null}
+                hideSubtitle
               />
             </div>
           </section>
@@ -113,6 +114,7 @@ export default async function HomePage() {
               paused={settings.paused.clubs}
               compact
               viewerId={user?.id ?? null}
+              hideSubtitle
             />
             <LeaderboardPanel
               board={players.board}
@@ -121,6 +123,7 @@ export default async function HomePage() {
               paused={settings.paused.players}
               compact
               viewerId={user?.id ?? null}
+              hideSubtitle
             />
             {/* Below the boards, not above them: the middle of Home belongs to the community, and
                 this is where you stand in it (§1T). Collapsed, with the rank still in the summary. */}
