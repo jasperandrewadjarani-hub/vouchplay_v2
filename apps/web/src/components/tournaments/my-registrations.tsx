@@ -34,7 +34,6 @@ export function MyRegistrations({
   divisions,
   state,
   registrationOpen,
-  playerChangesConfigured,
   paymentInstructions,
   paymentMethods,
   earlyBird = { startsAt: null, endsAt: null },
@@ -45,7 +44,6 @@ export function MyRegistrations({
   divisions: DivisionDTO[];
   state: ViewerRegistrationState;
   registrationOpen: boolean;
-  playerChangesConfigured: boolean;
   paymentInstructions: string | null;
   paymentMethods: string | null;
   /** Tournament-wide early-bird window (§1V). */
@@ -214,21 +212,12 @@ export function MyRegistrations({
                     divisionId={divisionId}
                     teamId={team?.teamId}
                     format={d.format as 'singles' | 'doubles'}
-                    teamSize={d.teamSize}
                     registrationOpen={registrationOpen}
-                    playerChangesConfigured={playerChangesConfigured}
                     registration={{
                       id: reg.id,
                       status: reg.status,
                       paymentStatus: reg.paymentStatus,
                     }}
-                    divisions={divisions.map((division) => ({
-                      id: division.id,
-                      name: division.name,
-                      format: division.format,
-                      teamSize: division.teamSize,
-                      status: division.status,
-                    }))}
                   />
                 </div>
               )}

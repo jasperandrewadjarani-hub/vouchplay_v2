@@ -2534,6 +2534,28 @@ flow** rather than describing it:
   inside a specific tournament's registration step is a deeper cross-flow change left for the Partner
   Finder phase; it is not wired here to avoid touching the live registration internals.
 
+## 2X. SECURITY: remove in-registration division change (eligibility bypass) (2026-09-10, urgent)
+
+**Bug (live).** A registered team could pick "Change division → Choose another division" on their
+entry and move to a different division. That move ran through `move_player_registration` and skipped
+the **gender (mixed/men's/women's) and skill-cap eligibility** that only runs at *register* time - so
+a team could reclassify into a division they do not qualify for. The client only filtered the options
+by format and team size, and the move path did not re-apply the register-time rules.
+
+**Fix (deployed ASAP).** The capability is removed entirely, not patched:
+
+- The "Change division" control is gone from `RegisterActions` (and the `divisions` /
+  `playerChangesConfigured` / `teamSize` plumbing that fed it, up through `my-registrations` and the
+  tournament page).
+- `moveRegistrationDivision` is neutralised to a **rejecting stub** that never calls the RPC and
+  returns "Changing division is no longer supported. Please cancel this registration and register in
+  the correct division." Kept as a stub (not deleted) on purpose: a stale client left open across the
+  deploy (deployment skew, §2Q) could still call the old action, and the stub makes that call safe.
+
+**The intended path** is now explicit: to change division, **cancel the registration and re-register**
+in the correct one, which re-runs every eligibility rule. No migration (the `move_player_registration`
+RPC is simply never invoked; it can be dropped in a later cleanup).
+
 ## 1. Prompt Contract
 
 ### In scope

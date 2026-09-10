@@ -2483,3 +2483,13 @@ Files: vouch-button.tsx (rewrite), dto.ts (viewerVouchCanUpdateInMs), queries.ts
 player-card.tsx (both pass canUpdateInMs), profile page (pass canUpdateInMs), profile-actions.tsx (partner
 Link, removed tooltip/partnerNote), tournaments/page.tsx (banner).
 Gates: typecheck/lint/format clean, 197 tests. No migration.
+
+## 2026-09-10 - SECURITY: removed in-registration division change (§\&2X, handover v1.52)
+
+Bug: registered team could Change division -> move_player_registration bypassed gender + skill-cap
+eligibility (only enforced at register time). Removed capability entirely: RegisterActions change-
+division UI gone (+ divisions/playerChangesConfigured/teamSize plumbing through my-registrations +
+tournament page); moveRegistrationDivision neutralized to a rejecting stub (never calls RPC) so stale
+clients cant exploit it. Intended path: cancel + re-register. No migration; move_player_registration
+RPC now unused (drop later). UI polish (partner search align, pay-later, vouch note/layout) shipping
+next as v1.53.

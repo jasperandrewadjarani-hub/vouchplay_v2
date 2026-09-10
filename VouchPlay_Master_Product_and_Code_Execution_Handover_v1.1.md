@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.51
+# VouchPlay Master Product & Code Execution Handover v1.52
 
-_(File retains its `…v1.1.md` name; content is v1.51 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.52 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.52 (2026-09-10)
+
+_SECURITY: removed in-registration division change (master_plan §2X). No migration._
+
+- A team could "Change division" on their entry and move to a division they didn't qualify for -
+  `move_player_registration` skipped the gender + skill-cap eligibility that runs only at register
+  time. Removed the whole capability: the control is gone from `RegisterActions` (and its
+  `divisions`/`playerChangesConfigured`/`teamSize` plumbing), and `moveRegistrationDivision` is now a
+  rejecting stub (never calls the RPC) so even a stale client can't perform the move. To change
+  division, cancel and re-register (which re-runs every rule). The `move_player_registration` RPC is
+  simply never invoked now; drop it in a later cleanup.
 
 ## v1.51 (2026-09-10)
 

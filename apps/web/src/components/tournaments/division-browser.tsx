@@ -336,11 +336,8 @@ export function DivisionBrowser({
                           divisionId={d.id}
                           teamId={team?.teamId}
                           format={d.format as 'singles' | 'doubles'}
-                          teamSize={d.teamSize}
                           registrationOpen={registrationOpen}
-                          playerChangesConfigured={false}
                           registration={null}
-                          divisions={[]}
                         />
                         {/* Shown only when there is something to do about the partner: a vacant
                             seat to fill, or a wait to explain. No disclosure to open and no

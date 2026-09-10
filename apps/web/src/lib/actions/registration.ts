@@ -1146,30 +1146,19 @@ export async function withdrawRegistration(
 }
 
 /** Move an unpaid pending team into an immediately available compatible division (§1D). */
-export async function moveRegistrationDivision(
-  registrationId: string,
-  targetDivisionId: string,
-  tournamentId: string,
-): Promise<RegistrationActionState> {
-  const user = await getOptionalUser();
-  if (!user) return { error: 'Please sign in.' };
-  const statusErr = await checkActorCanInteract(user.id);
-  if (statusErr) return { error: statusErr };
-  const svc = createServiceClient();
-  try {
-    const { data, error } = await svc.rpc('move_player_registration', {
-      p_registration_id: registrationId,
-      p_target_division_id: targetDivisionId,
-      p_actor: user.id,
-    });
-    if (error) return { error: friendly(error.message) };
-    const movedId = (data as { registration_id?: string } | null)?.registration_id;
-    if (movedId) await computeRegistrationEligibility(movedId);
-    await revalTournament(tournamentId);
-  } catch {
-    return { error: 'Division changes are temporarily unavailable.' };
-  }
-  return { ok: true, message: 'Division changed. Your team and payment deadline were kept.' };
+/**
+ * REMOVED (master_plan §2X). Moving a registration between divisions bypassed the gender and
+ * skill-cap eligibility that only runs at register time, letting a team reclassify into a division
+ * they do not qualify for. The capability is gone: to change division, a team cancels this
+ * registration and registers in the correct one. This is kept as a rejecting stub - never calling the
+ * RPC - so that a stale client left open across the deploy (deployment skew) cannot still perform the
+ * move; it just receives this message.
+ */
+export async function moveRegistrationDivision(): Promise<RegistrationActionState> {
+  return {
+    error:
+      'Changing division is no longer supported. Please cancel this registration and register in the correct division.',
+  };
 }
 
 /** Leave a cancelled team before inviting a different partner. Active registered teams cannot change. */

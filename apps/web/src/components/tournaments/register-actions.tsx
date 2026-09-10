@@ -2,12 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  moveRegistrationDivision,
-  registerSolo,
-  registerTeam,
-  withdrawRegistration,
-} from '@/lib/actions/registration';
+import { registerSolo, registerTeam, withdrawRegistration } from '@/lib/actions/registration';
 
 const btn =
   'inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50';
@@ -18,21 +13,15 @@ export function RegisterActions({
   divisionId,
   teamId,
   format,
-  teamSize,
   registration,
-  divisions = [],
   registrationOpen,
-  playerChangesConfigured,
 }: {
   tournamentId: string;
   divisionId: string;
   teamId?: string;
   format: 'singles' | 'doubles';
-  teamSize: number;
   registration?: { id: string; status: string; paymentStatus?: string | null } | null;
-  divisions?: Array<{ id: string; name: string; format: string; teamSize: number; status: string }>;
   registrationOpen: boolean;
-  playerChangesConfigured: boolean;
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
@@ -59,18 +48,6 @@ export function RegisterActions({
       registrationOpen &&
       !canWithdraw &&
       !['withdrawn', 'cancelled', 'rejected'].includes(registration.status);
-    const moveOptions = divisions.filter(
-      (division) =>
-        division.id !== divisionId &&
-        division.status === 'open' &&
-        division.format === format &&
-        division.teamSize === teamSize,
-    );
-    const canMove =
-      playerChangesConfigured &&
-      registrationOpen &&
-      registration.status === 'payment_pending' &&
-      moveOptions.length > 0;
     return (
       <div className="flex flex-col gap-2">
         {/* The status is already the chip at the top of the card (§2G), so it is not repeated here
@@ -95,36 +72,7 @@ export function RegisterActions({
             This entry can no longer be cancelled here. Contact the organizer for help.
           </p>
         )}
-        {canMove && (
-          <label className="text-foreground-muted flex max-w-sm flex-col gap-1 text-xs">
-            Change division
-            <select
-              defaultValue=""
-              disabled={pending}
-              onChange={(event) => {
-                const targetDivisionId = event.target.value;
-                if (!targetDivisionId) return;
-                if (
-                  confirm('Move your complete team? The current payment deadline stays the same.')
-                ) {
-                  run(() =>
-                    moveRegistrationDivision(registration.id, targetDivisionId, tournamentId),
-                  );
-                }
-                event.currentTarget.value = '';
-              }}
-              className="border-border bg-surface text-foreground rounded-lg border px-2.5 py-1.5 text-sm"
-            >
-              <option value="">Choose another division</option>
-              {moveOptions.map((division) => (
-                <option key={division.id} value={division.id}>
-                  {division.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {!canWithdraw && !canMove && (
+        {!canWithdraw && !needsOrganiserToCancel && (
           <p className="text-foreground-muted text-xs">
             This entry can no longer be changed here. Contact the organizer for help.
           </p>
