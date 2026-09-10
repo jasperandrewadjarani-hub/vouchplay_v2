@@ -2348,3 +2348,34 @@ it done. Several fixes in this session were found only that way.
   the default 7 -> 30 days and made it setting `export_receipt_link_days` (capped 90). Trade-off:
   longer is friendlier to a slow reviewer but a leaked export exposes private receipts longer. No
   migration (merges via system_settings). Gates green.
+
+- **2026-09-10** - Added a square Facebook announcement for the newly launched **Looking for a
+  partner** and **Open for sponsorships** profile settings. The 1254 x 1254 creative uses the clean
+  VouchPlay UI-inspired visual system and includes a compact B-STEEL Hermosa 2026 / Rise of the
+  Empires tournament footer. Saved under `deliverables/facebook-posts/`.
+
+- **2026-09-10** - Revised the new-features post tournament footer for cross-post consistency. Kept
+  the B-STEEL badge unchanged on the left and replaced only the right-side plain tournament text with
+  the standardized gold `RISE OF THE EMPIRES`, multicolor `HERMOSA`, gold-script `GRAND`, and white
+  `PICKLEBALL TOURNAMENT` lockup. Saved as the `Uniform_Tournament_Lockup` revision.
+
+## 2026-09-10 - Deployment-skew self-healing (§2Q, handover v1.45)
+
+Players reported two error screens as common: "VouchPlay hit a snag" (global-error, no chrome) and
+"Something went wrong on this page ... after a tab has been idle" ((app)/error, generic branch).
+Diagnosed as **deployment skew**: frequent deploys orphan the immutable chunks of already-open/idle
+tabs; the next fetch 404s -> boundary. "Try again" used reset() (re-renders the stale tree, fails
+again). Root layout was clean (not the cause of global-error); middleware getUser() was unguarded, so
+a Supabase blip could 500 into global-error too.
+
+Fixes (no DB/RLS/auth/vouch changes):
+- next.config.ts: `deploymentId: process.env.VERCEL_DEPLOYMENT_ID` (Next-native skew handling; dev
+  no-op). Also flip Vercel Skew Protection ON in the dashboard (keeps old assets served a while).
+- error-telemetry.ts: new pure `isChunkLoadError()` (+ 2 tests). Boundaries (global-error, (app)/error,
+  leaderboards) hard-reload ONCE on a chunk error, guarded by sessionStorage key `vp:skew-reload:<ver>`
+  so it can't loop; "Try again" hard-reloads for chunk errors; telemetry flushes first (keepalive).
+- supabase/middleware.ts: getUser() wrapped in try/catch.
+
+Gates: typecheck clean, web tests 152 pass (error-telemetry now 6), format clean, lint clean. Build +
+deploy + both-domain verify next. Note: this deploy still skews tabs on the previous build one last
+time; from the next deploy on they self-heal.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAuthStaleError, buildErrorTelemetry } from './error-telemetry';
+import { isAuthStaleError, isChunkLoadError, buildErrorTelemetry } from './error-telemetry';
 
 describe('isAuthStaleError', () => {
   it('flags expired-session shaped errors', () => {
@@ -12,6 +12,27 @@ describe('isAuthStaleError', () => {
     expect(isAuthStaleError({ message: 'Cannot read properties of undefined' })).toBe(false);
     expect(isAuthStaleError({ name: 'TypeError', message: 'x is not a function' })).toBe(false);
     expect(isAuthStaleError(null)).toBe(false);
+  });
+});
+
+describe('isChunkLoadError', () => {
+  it('flags stale-asset / deployment-skew shaped errors', () => {
+    expect(isChunkLoadError({ name: 'ChunkLoadError', message: 'Loading chunk 42 failed' })).toBe(
+      true,
+    );
+    expect(isChunkLoadError({ message: 'Loading CSS chunk 7 failed' })).toBe(true);
+    expect(
+      isChunkLoadError({ message: 'Failed to fetch dynamically imported module: /_next/x.js' }),
+    ).toBe(true);
+    expect(isChunkLoadError({ message: 'error loading dynamically imported module' })).toBe(true);
+    expect(isChunkLoadError({ message: 'Importing a module script failed.' })).toBe(true);
+  });
+
+  it('does not flag auth or ordinary render errors', () => {
+    expect(isChunkLoadError({ message: 'JWT expired' })).toBe(false);
+    expect(isChunkLoadError({ name: 'TypeError', message: 'x is not a function' })).toBe(false);
+    expect(isChunkLoadError({ message: 'Cannot read properties of undefined' })).toBe(false);
+    expect(isChunkLoadError(null)).toBe(false);
   });
 });
 

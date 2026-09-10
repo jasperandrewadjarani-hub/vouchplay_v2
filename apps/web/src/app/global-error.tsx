@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { buildErrorTelemetry } from '@/lib/navigation/error-telemetry';
+import { buildErrorTelemetry, isChunkLoadError } from '@/lib/navigation/error-telemetry';
 
 /**
  * Root fallback for failures in the root layout itself (Phase 13.5). It replaces the whole document,
@@ -15,16 +15,18 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const chunkStale = isChunkLoadError(error);
   const reported = useRef(false);
   useEffect(() => {
     if (reported.current) return;
     reported.current = true;
+    const deployVersion = process.env.NEXT_PUBLIC_DEPLOY_VERSION ?? 'dev';
     const body = buildErrorTelemetry({
       error,
       route: typeof location !== 'undefined' ? location.pathname : '/',
       visibility: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
       persistedRestore: false,
-      deployVersion: process.env.NEXT_PUBLIC_DEPLOY_VERSION ?? 'dev',
+      deployVersion,
       scope: 'global',
     });
     void fetch('/api/client-error', {
@@ -33,7 +35,30 @@ export default function GlobalError({
       body: JSON.stringify(body),
       keepalive: true,
     }).catch(() => {});
-  }, [error]);
+
+    // Auto-heal deployment skew (§2Q): a chunk orphaned by a deploy can fail at the document root and
+    // land here. reset() cannot recover a missing chunk, so hard-reload once (guarded per deploy
+    // version so it never loops) to fetch the current build.
+    if (chunkStale) {
+      try {
+        const key = `vp:skew-reload:${deployVersion}`;
+        if (sessionStorage.getItem(key) !== '1') {
+          sessionStorage.setItem(key, '1');
+          window.location.reload();
+        }
+      } catch {
+        /* sessionStorage blocked - fall through to the manual retry button */
+      }
+    }
+  }, [error, chunkStale]);
+
+  const onRetry = () => {
+    if (chunkStale) {
+      window.location.reload();
+      return;
+    }
+    reset();
+  };
 
   return (
     <html lang="en">
@@ -56,7 +81,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={reset}
+            onClick={onRetry}
             style={{
               marginTop: 20,
               padding: '8px 16px',

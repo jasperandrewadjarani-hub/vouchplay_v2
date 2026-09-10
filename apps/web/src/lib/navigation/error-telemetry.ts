@@ -23,6 +23,28 @@ export function isAuthStaleError(error: { message?: string; name?: string } | nu
   return AUTH_STALE_PATTERNS.some((p) => haystack.includes(p));
 }
 
+/**
+ * Stale-asset signatures. A tab left open across a deploy points at immutable chunks whose hashes no
+ * longer exist, so the next chunk/RSC fetch fails with one of these. React's reset() re-renders the
+ * same stale tree and fails again; the correct recovery is a one-time hard reload to the current
+ * build (see the App Router error boundaries, §2Q). Kept narrow and unambiguous so an ordinary render
+ * bug is never mistaken for skew.
+ */
+const CHUNK_LOAD_PATTERNS = [
+  'chunkloaderror',
+  'loading chunk',
+  'loading css chunk',
+  'failed to fetch dynamically imported module',
+  'error loading dynamically imported module',
+  'importing a module script failed',
+];
+
+export function isChunkLoadError(error: { message?: string; name?: string } | null): boolean {
+  if (!error) return false;
+  const haystack = `${error.name ?? ''} ${error.message ?? ''}`.toLowerCase();
+  return CHUNK_LOAD_PATTERNS.some((p) => haystack.includes(p));
+}
+
 export interface ClientErrorTelemetry {
   route: string;
   digest: string | null;

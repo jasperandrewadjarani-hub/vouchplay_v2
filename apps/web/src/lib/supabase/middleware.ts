@@ -34,7 +34,15 @@ export async function updateSession(request: NextRequest) {
   });
 
   // Touch the user to trigger token refresh; do not gate routing here (route guards live in pages).
-  await supabase.auth.getUser();
+  // Guard it (§2Q): a transient Supabase failure (over-quota, egress throttle, network blip) must not
+  // throw out of middleware and 500 the whole request into the global error boundary. On failure we
+  // skip the refresh this pass - route guards in pages still enforce auth, and the next navigation
+  // retries the refresh.
+  try {
+    await supabase.auth.getUser();
+  } catch {
+    // Session simply is not refreshed on this request; nothing to route on here.
+  }
 
   return response;
 }

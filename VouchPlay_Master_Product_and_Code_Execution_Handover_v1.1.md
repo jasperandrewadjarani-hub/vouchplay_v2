@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.44
+# VouchPlay Master Product & Code Execution Handover v1.45
 
-_(File retains its `…v1.1.md` name; content is v1.44 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.45 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,30 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.45 (2026-09-10)
+
+_Deployment-skew self-healing for the "hit a snag" / "something went wrong" reports (master_plan §2Q).
+No migration._
+
+- **Root cause: deployment skew.** Players' open/idle tabs (VouchPlay is used PWA-style) pointed at
+  immutable chunks orphaned by our frequent deploys; the next fetch 404'd and tripped the error
+  boundaries (`global-error.tsx`, `(app)/error.tsx`). "Try again" called React `reset()`, which
+  re-rendered the same stale tree and failed again, so it read as common and sticky.
+- **`deploymentId` added** (`next.config.ts` = `process.env.VERCEL_DEPLOYMENT_ID`): Next tags
+  asset/RSC requests with the deploy id and hard-navigates to the current build on a mismatch instead
+  of 404-ing. Pair with **Vercel Skew Protection** (Project -> Settings -> Skew Protection -> On) to
+  keep prior deployments' assets served for a window; the code works with or without the toggle.
+- **Self-healing boundaries:** new pure `isChunkLoadError()` (unit-tested) classifies stale-asset
+  errors; the boundaries then hard-reload **once**, guarded by a `sessionStorage` key scoped to the
+  deploy version so it can never loop. Applied to `global-error`, `(app)/error`, and the `leaderboards`
+  boundary; "Try again" hard-reloads for chunk errors. Telemetry still flushes first (`keepalive`).
+- **Middleware crash-guard:** `supabase.auth.getUser()` in `supabase/middleware.ts` is wrapped in
+  try/catch so a transient Supabase failure skips the refresh (pages still guard auth) rather than
+  500-ing the whole request into `global-error`.
+- **Limits:** this rollout still skews tabs on the *previous* build one last time (the fix is not yet
+  in their client); it does not reduce deploy frequency (batching + caching do); it does not fix real
+  Supabase outages, only stops them taking the page down. No DB/RLS/auth-semantics/vouch changes.
 
 ## v1.44 (2026-09-10)
 

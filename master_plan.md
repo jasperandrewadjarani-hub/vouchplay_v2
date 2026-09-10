@@ -2271,6 +2271,70 @@ window.
 
 Build it as Phase 16 after Jasper confirms the consent model above, so the §1D promise is designed in
 rather than bolted on. Everything else in this round (§2O) ships now and does not depend on it.
+
+## 2Q. "Hit a snag" / "Something went wrong": deployment skew, and making it self-heal (2026-09-10, post-launch)
+
+Players reported two error screens as *common*: a bare "VouchPlay hit a snag" (no header/nav) and an
+in-app "Something went wrong on this page - this can happen after a tab has been idle for a long time."
+These are our own Phase 13.5 error boundaries (`global-error.tsx` and `(app)/error.tsx`) firing - two
+symptoms of one root cause, not two bugs.
+
+### Root cause: deployment skew, amplified by deploy frequency
+
+Every Vercel deploy ships new **immutable** JS/RSC chunks with new content hashes and a new build id.
+A tab a player already has open - and VouchPlay is installed PWA-style, so tabs stay open for days -
+is now pointing at chunk URLs that 404. The next tap, or the wake-of-an-idle-tab refresh, fails to
+fetch its orphaned chunk and trips the nearest error boundary. The screenshot of the in-app screen is
+the **generic** branch, not the auth-stale branch (which reads "Your session needs a refresh"), so it
+is a stale-asset failure, not an expired session.
+
+Three things made it frequent and sticky:
+
+1. **No version-skew protection anywhere** - no `deploymentId`, no `ChunkLoadError` handling, no Vercel
+   Skew Protection. Confirmed by grep: nothing in source referenced it.
+2. **We deploy very often** - the post-launch iteration cadence was dozens of deploys in two days
+   (visible as ~7h of Build CPU on the Vercel usage screen). Each deploy orphaned every open tab.
+3. **"Try again" could not fix it** - the boundary button called React's `reset()`, which re-renders
+   the *same* stale tree; the chunk is still gone, so it failed again. Users got stuck, so it read as
+   "common".
+
+Two secondary contributors:
+
+- **The middleware Supabase call was unguarded.** `await supabase.auth.getUser()` in
+  `supabase/middleware.ts` had no try/catch, so a transient Supabase failure (free-tier over-quota,
+  egress throttle under live load, a network blip) threw *out of middleware* and 500'd the whole
+  request into `global-error` - the bare no-chrome screen.
+- **Deploy frequency itself**, which the caching work (a separate track) and simple batching reduce.
+
+### The fix (no DB, no RLS, no auth semantics, no vouch/registration logic)
+
+- **`deploymentId: process.env.VERCEL_DEPLOYMENT_ID`** in `next.config.ts`. Next then tags asset/RSC
+  requests with the deploy id; on a mismatch it hard-navigates to the *current* build instead of
+  silently 404-ing an orphaned chunk. Undefined locally, so a dev no-op. This is the Next-native half
+  and does not depend on any dashboard setting (which have historically not persisted here - see
+  CLAUDE.md gotchas). The Vercel-side half - **Project -> Settings -> (Advanced) Skew Protection ->
+  On** - keeps prior deployments' assets served for a window so most wake-ups resolve with no reload
+  at all. Jasper toggles that; the code works with or without it.
+- **Self-healing error boundaries.** A new pure classifier `isChunkLoadError()` (unit-tested beside
+  `isAuthStaleError`) recognises stale-asset signatures (`ChunkLoadError`, "Loading chunk … failed",
+  "Failed to fetch dynamically imported module", etc.). When a boundary catches one it hard-reloads
+  **once** - guarded by a `sessionStorage` key scoped to the deploy version, so it can never loop and
+  a genuinely-down server still lands on a manual retry. Telemetry is sent first (`keepalive`) so the
+  reload does not lose the report. Applied to `global-error.tsx`, `(app)/error.tsx`, and the
+  `leaderboards` segment boundary; the "Try again" button also hard-reloads for chunk errors.
+- **Crash-guard the middleware.** `getUser()` is wrapped in try/catch: a transient Supabase failure
+  now skips the refresh for that request (route guards in pages still enforce auth) instead of 500-ing
+  the page. Strictly more robust; no behaviour change on the happy path.
+
+### Honest limits
+
+- This deploy still skews tabs already open on the *previous* build one last time, because the fix is
+  not yet in their running client - unavoidable for any first rollout of skew handling. From the next
+  deploy on, open tabs self-heal.
+- It does not reduce how often we deploy; batching changes and the caching track do that.
+- It does not fix genuine Supabase outages - it stops them from taking the whole page down and lets
+  the user retry. Free-tier capacity (egress) remains the thing to upgrade.
+
 ## 1. Prompt Contract
 
 ### In scope

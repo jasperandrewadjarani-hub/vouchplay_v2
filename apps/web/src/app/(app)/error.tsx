@@ -2,7 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
-import { buildErrorTelemetry, isAuthStaleError } from '@/lib/navigation/error-telemetry';
+import {
+  buildErrorTelemetry,
+  isAuthStaleError,
+  isChunkLoadError,
+} from '@/lib/navigation/error-telemetry';
 
 /**
  * Route-aware error boundary for the authenticated/public app (Phase 13.5). A long-idle tab that
@@ -19,6 +23,7 @@ export default function AppError({
 }) {
   const pathname = usePathname();
   const authStale = isAuthStaleError(error);
+  const chunkStale = isChunkLoadError(error);
   const reported = useRef(false);
 
   useEffect(() => {
@@ -28,12 +33,13 @@ export default function AppError({
       typeof performance !== 'undefined'
         ? (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)
         : undefined;
+    const deployVersion = process.env.NEXT_PUBLIC_DEPLOY_VERSION ?? 'dev';
     const body = buildErrorTelemetry({
       error,
       route: pathname || '/',
       visibility: typeof document !== 'undefined' ? document.visibilityState : 'unknown',
       persistedRestore: entry?.type === 'back_forward',
-      deployVersion: process.env.NEXT_PUBLIC_DEPLOY_VERSION ?? 'dev',
+      deployVersion,
       scope: 'app',
     });
     void fetch('/api/client-error', {
@@ -42,9 +48,35 @@ export default function AppError({
       body: JSON.stringify(body),
       keepalive: true,
     }).catch(() => {});
-  }, [error, pathname]);
+
+    // Auto-heal deployment skew (§2Q): a tab left open across a deploy fails to load an orphaned
+    // chunk. reset() re-renders the same stale tree and fails again, so hard-reload once to pull the
+    // current build. Guarded per deploy version (keepalive above still flushes telemetry first) so it
+    // can never loop; if the reload does not resolve it, the manual retry button remains.
+    if (chunkStale) {
+      try {
+        const key = `vp:skew-reload:${deployVersion}`;
+        if (sessionStorage.getItem(key) !== '1') {
+          sessionStorage.setItem(key, '1');
+          window.location.reload();
+        }
+      } catch {
+        /* sessionStorage blocked - fall through to the manual retry button */
+      }
+    }
+  }, [error, pathname, chunkStale]);
 
   const signInHref = `/login?next=${encodeURIComponent(pathname || '/')}`;
+
+  // For a stale-chunk error, reset() cannot recover (the chunk is gone); reload the document to fetch
+  // the current build. For any other error, React's reset() is the right retry.
+  const onRetry = () => {
+    if (chunkStale) {
+      window.location.reload();
+      return;
+    }
+    reset();
+  };
 
   return (
     <section className="mx-auto max-w-md py-16 text-center" role="alert">
@@ -60,7 +92,7 @@ export default function AppError({
         <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <button
             type="button"
-            onClick={reset}
+            onClick={onRetry}
             className="border-border bg-surface text-foreground rounded-xl border px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Try again

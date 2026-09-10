@@ -2,6 +2,12 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Version-skew protection (§2Q): tag asset/RSC requests with the Vercel deployment id so a tab left
+  // open across a deploy detects the build mismatch and hard-navigates to the current build instead of
+  // silently 404-ing an orphaned chunk (the "hit a snag" / "something went wrong" reports). Undefined
+  // locally, so this is a no-op in dev. Pairs with Vercel Skew Protection (dashboard toggle), which
+  // keeps prior deployments' assets served for a window so wake-ups resolve without a reload.
+  deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
   // Public, privacy-safe build identifier for client error telemetry (short commit SHA on Vercel).
   env: { NEXT_PUBLIC_DEPLOY_VERSION: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev' },
   // Lint runs as its own CI step; don't let it gate the production build (Next 15 lints on build).
