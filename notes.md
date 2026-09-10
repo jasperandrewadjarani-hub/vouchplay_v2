@@ -2505,3 +2505,14 @@ next as v1.53.
 - partner-invite-form.tsx: result row items-center, name/city stacked, Choose button proportionate.
 - payment-modal.tsx: "Ill pay later" -> full-width bordered secondary button.
 Gates: typecheck/lint/format clean. No migration.
+
+## 2026-09-10 - Players list filter skeleton (§\&2Z, handover v1.54)
+
+Filtering now shows preloaded skeleton boxes on the list, not just the filter spinner. players/page.tsx:
+extracted async PlayersResults (count row + cards + pagination, awaits listPlayers) wrapped in
+<Suspense key={JSON.stringify(filters)+compact} fallback={<PlayerListSkeleton compact/>}> so any
+filter/search/page/view change remounts the boundary and shows the skeleton until the query resolves;
+shell (title, leaderboard card, availability, SearchFilters) stays mounted. New component
+player-list-skeleton.tsx (density-matched compact rows / detailed cards, animate-pulse surface-muted,
+motion-reduce safe, aria-hidden + sr-only "Loading players"). listPlayers moved out of the shell
+Promise.all into the boundary; no extra queries. Gates: typecheck/lint/format clean. No migration.

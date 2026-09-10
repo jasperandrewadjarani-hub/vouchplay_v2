@@ -2580,6 +2580,26 @@ A batch of UI fixes on the player profile and registration surfaces.
   Now a full-width, centered, bordered secondary button under "Submit payment proof" - clearly a
   deliberate secondary action, not stray copy.
 
+## 2Z. Skeleton results while the players list filters (2026-09-10)
+
+Filtering the directory showed only the filter control's own spinner; the list below sat unchanged
+until the new results popped in, so it wasn't obvious anything was loading. Now the **list itself gives
+the cue** with preloaded skeleton boxes.
+
+- The results (count row + cards/rows + pagination) are extracted into an async `PlayersResults`
+  component and wrapped in a `<Suspense>` **keyed on the filters + view**. Any search/filter/page/view
+  change remounts the boundary, so React shows the skeleton fallback while the new query resolves, then
+  streams the real results in. The shell above (title, leaderboard card, availability, and the filter
+  controls) stays mounted and interactive throughout - only the list swaps.
+- `PlayerListSkeleton` mirrors the real layout at the current density (compact rows vs detailed cards),
+  including a count/toggle placeholder row so nothing jumps. It uses `animate-pulse` on
+  `surface-muted` boxes, respects `motion-reduce`, is hidden from assistive tech, and pairs with a
+  polite "Loading players…" status.
+- `listPlayers` is the only filter-dependent await, so moving just it into the boundary keeps the cost
+  the same; the row cache (`unstable_cache`, 60s) means a repeat filter resolves fast and the skeleton
+  barely flashes, while a genuinely new query shows it for as long as the query really takes - honest
+  feedback, not a fixed timer.
+
 ## 1. Prompt Contract
 
 ### In scope

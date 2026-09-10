@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.53
+# VouchPlay Master Product & Code Execution Handover v1.54
 
-_(File retains its `…v1.1.md` name; content is v1.53 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.54 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.54 (2026-09-10)
+
+_Skeleton results while the players list filters (master_plan §2Z). No migration._
+
+- Filtering now shows preloaded skeleton boxes on the list, not just the filter spinner. The results
+  (count + cards + pagination) are an async `PlayersResults` wrapped in `<Suspense>` keyed on the
+  filters + view; any change remounts the boundary and shows `PlayerListSkeleton` (density-matched,
+  animate-pulse, motion-reduce-safe, aria-hidden + polite "Loading players…") until the new query
+  resolves. The shell (title, top cards, filter controls) stays mounted. `listPlayers` moved into the
+  boundary; no extra queries.
 
 ## v1.53 (2026-09-10)
 
