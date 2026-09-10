@@ -2392,6 +2392,54 @@ is overdue rather than early.
 - A blocking gate is a one-time ~10-second speed bump for the 350 mid-tournament; that is the
   deliberate, defensible trade for a real acceptance record.
 
+## 2S. Live "players online" counter (2026-09-10, post-launch)
+
+Jasper wants a small, readable live counter at the top showing how many players are online and looking
+at the app, with the explicit constraint that it must not blow up Supabase/Vercel usage (the project
+is on a $20 Vercel budget and a free Supabase near its egress limit).
+
+### Approach chosen: Supabase Realtime Presence, visible-only, opaque key
+
+The browser opens a WebSocket straight to Supabase's Realtime service and joins a presence channel;
+the counter is the number of distinct presence keys. Rejected alternatives: a heartbeat/poll through
+Next API routes (would add tens of thousands of Vercel function invocations - the meter we are
+watching); a heartbeat table read directly (needs a writable table, RLS exposure, and a cleanup cron
+for little gain).
+
+### Why this is cheap (the cost answer)
+
+- **Vercel ≈ zero.** The WebSocket is browser↔Supabase; no functions, so no added invocations or
+  bandwidth. Nothing about the counter touches a Vercel function.
+- **Supabase uses the Realtime service, metered separately from the database egress** that is pushing
+  the project toward an upgrade - so it does not worsen that number. Free tier: 200 concurrent
+  Realtime connections and 2M messages/month; at this scale (peak tens of concurrent viewers) it sits
+  well inside. There are no DB reads/writes, no table, and no egress from the count itself.
+- **Connect only while the tab is visible** (connect on visible, drop on hidden/unmount). This keeps
+  concurrent connections and message churn minimal, and makes the number honestly mean "people
+  looking at the app right now," not "tabs left open for days."
+
+### Honest limits
+
+- If concurrent *visible* tabs ever exceed ~200 (Realtime free-tier connection cap), extra viewers are
+  simply not counted - graceful under-count, never an error. Revisit if the app grows a lot.
+- If Realtime is disabled/unavailable, the component renders nothing (never "0 online" or an error).
+- An Admin flag `online_counter_enabled` (default on) can switch it off instantly with no deploy.
+
+### Privacy
+
+Presence is keyed by an **opaque random per-browser id** stored in localStorage, never the user id,
+and the presence payload carries no personal data. Anyone on the channel can read presence state, so
+this matters: they can see *how many* are online, never *who*. Multiple tabs in one browser share the
+key and count once.
+
+### UX / gamification
+
+A compact pill in the header: a pulsing green dot + the number, with "online" shown on wider screens
+(full label in the accessible name). It appears only once connected with a count ≥ 1 (so it never
+reads a lonely/broken "0"), respects reduced-motion (no pulse), and uses tabular figures so the width
+does not jump as the number changes. Small but readable, and alive - it reinforces the "people are
+here right now" gamified feel without crowding the header.
+
 ## 1. Prompt Contract
 
 ### In scope

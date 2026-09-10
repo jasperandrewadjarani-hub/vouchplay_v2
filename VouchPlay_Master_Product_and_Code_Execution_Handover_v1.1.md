@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.46
+# VouchPlay Master Product & Code Execution Handover v1.47
 
-_(File retains its `…v1.1.md` name; content is v1.46 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.47 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,24 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.47 (2026-09-10)
+
+_Live "players online" counter in the header (master_plan §2S). No migration._
+
+- **What:** a small pulsing pill in the header showing how many players are viewing the app right now.
+- **How (cost-safe):** Supabase Realtime **presence**, connecting only while the tab is visible. The
+  WebSocket is browser↔Supabase, so it adds **no Vercel functions/invocations** and uses the Realtime
+  service, which is metered **separately from the database egress** the project is watching - no DB
+  rows, no polling, no cleanup. Free-tier headroom (200 concurrent connections, 2M msgs/mo) is ample
+  at this scale; if visible tabs ever exceed ~200 the extra viewers are simply not counted (graceful).
+- **Privacy:** keyed by an opaque random per-browser id (never the user id); payload carries nothing.
+  Others see how many are online, never who. Multiple tabs in one browser count once.
+- **Controls/UX:** Admin flag `online_counter_enabled` (default on) toggles it with no deploy. The pill
+  shows only once connected with count ≥ 1 (never a lonely "0"), respects reduced-motion, uses
+  tabular figures, and hides itself if Realtime is unavailable.
+- **Files:** `components/presence/online-counter.tsx`, header wiring, `@vouchplay/config` settings
+  default + catalog entry.
 
 ## v1.46 (2026-09-10)
 

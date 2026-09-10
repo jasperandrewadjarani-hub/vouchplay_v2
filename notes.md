@@ -2415,3 +2415,21 @@ Deploy order: apply 0032 (safe, additive) around the deploy; fail-open read tole
 
 - Follow-up: added persistent SiteFooter (About/FAQ/Terms/Privacy + dev credit) in app-shell on
   every page; removed the duplicate Home footer (dropped now-unused Link/BRAND imports there).
+
+## 2026-09-10 - Live "players online" counter (§2S, handover v1.47)
+
+Header pill showing live count of players viewing the app. Supabase Realtime PRESENCE, connect only
+while tab visible. No Vercel functions (WebSocket browser<->Supabase), no DB rows/polling; Realtime is
+metered separately from DB egress, so it does NOT worsen the egress we're near. Free tier 200 conc
+conns / 2M msgs-mo is ample now; >~200 visible tabs -> extra viewers uncounted (graceful).
+
+Privacy: opaque random per-browser key (localStorage 'vp:presence-key'), never user id; empty payload.
+Others see count, never who. Multi-tab same browser counts once.
+
+Files: components/presence/online-counter.tsx (client, visibilitychange connect/disconnect, hides when
+count<1 or Realtime down); header.tsx renders it (gated by loadSettingFlag online_counter_enabled,
+default true); config settings default + catalog entry (group 'announcement'). No migration (settings
+merge code defaults).
+
+Gates: typecheck/lint/format clean, 193 tests pass. UX: pulsing emerald dot + tabular number + "online"
+on sm+, reduced-motion safe.

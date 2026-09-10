@@ -155,6 +155,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   leaderboard_club_placement_weight: 6,
   leaderboard_club_contribution_weight: 1,
 
+  // Live "players online" counter in the header (master_plan §2S). Realtime presence, visible-tab
+  // only; no DB rows and no Vercel functions. Off switches it off instantly with no deploy.
+  online_counter_enabled: true,
+
   // Site-wide announcement banner (handover §30.7). When enabled, shown to every visitor.
   announcement_banner_enabled: false,
   announcement_banner: '',

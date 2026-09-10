@@ -956,6 +956,15 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     max: 180,
   },
 
+  // Live presence counter
+  {
+    key: 'online_counter_enabled',
+    label: 'Show "players online" counter',
+    group: 'announcement',
+    kind: 'bool',
+    help: 'A small live count of players viewing the app now, in the header. Uses Supabase Realtime presence (no extra database load); turn off if ever needed.',
+  },
+
   // Announcement banner
   {
     key: 'announcement_banner_enabled',

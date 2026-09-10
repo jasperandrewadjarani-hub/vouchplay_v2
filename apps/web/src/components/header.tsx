@@ -5,7 +5,9 @@ import { BRAND } from '@vouchplay/config';
 import { ThemeToggle } from './theme-toggle';
 import { ButtonLink } from './ui/button';
 import { PlayerAvatar } from './players/player-avatar';
+import { OnlineCounter } from './presence/online-counter';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
+import { loadSettingFlag } from '@/lib/settings';
 import { getUnreadCount } from '@/lib/notifications/queries';
 import { avatarUrl } from '@/lib/storage';
 import { LinkSpinner } from './ui/link-spinner';
@@ -15,6 +17,7 @@ export async function Header() {
   const user = await getOptionalUser();
   const profile = user ? await getMyProfile() : null;
   const unread = user ? await getUnreadCount(user.id) : 0;
+  const showCounter = await loadSettingFlag('online_counter_enabled', true);
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
     profile?.nickname ||
@@ -49,6 +52,7 @@ export async function Header() {
         </Link>
 
         <div className="flex items-center gap-2">
+          {showCounter && <OnlineCounter />}
           <ThemeToggle />
           {user ? (
             <>
