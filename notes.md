@@ -2412,3 +2412,6 @@ speed bump for the 350 mid-tournament (deliberate, for a real acceptance record)
 
 Gates: typecheck clean, 193 tests pass (config now 21 incl legal 2), format clean, lint clean.
 Deploy order: apply 0032 (safe, additive) around the deploy; fail-open read tolerates either order.
+
+- Follow-up: added persistent SiteFooter (About/FAQ/Terms/Privacy + dev credit) in app-shell on
+  every page; removed the duplicate Home footer (dropped now-unused Link/BRAND imports there).

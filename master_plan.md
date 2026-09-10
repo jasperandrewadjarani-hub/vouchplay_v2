@@ -2374,6 +2374,10 @@ is overdue rather than early.
   completion (tolerant write, so pre-migration it simply no-ops and the gate catches them later).
 - **Pages:** /terms and /privacy now render the real documents (shared content components reused by the
   gate), replacing the placeholders.
+- **Persistent footer:** a shared `SiteFooter` (About · FAQ · Terms · Privacy + developer credit) is
+  rendered once by the app shell on every in-app page, so the legal pages are always reachable, not
+  only from the gate and signup. The old per-page footer on Home was removed to avoid duplication;
+  Settings already links to both documents.
 
 ### Rollout order and honest limits
 

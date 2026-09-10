@@ -7,6 +7,7 @@ import { BottomNav } from './bottom-nav';
 import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
 import { LegalConsentGate } from './legal/legal-consent-gate';
+import { SiteFooter } from './site-footer';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import { getOptionalUser, getViewerReputationNudge, getViewerLegalStatus } from '@/lib/auth';
@@ -116,6 +117,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
         <Sidebar />
         <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">
           {gated ? <MaintenanceScreen /> : children}
+          {!gated && <SiteFooter />}
         </main>
       </div>
       <BottomNav />
