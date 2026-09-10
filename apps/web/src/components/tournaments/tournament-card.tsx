@@ -28,6 +28,7 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
   return (
     <Link
       href={`/tournaments/${tournament.slug}`}
+      prefetch={false}
       className="border-border bg-surface vp-card overflow-hidden rounded-2xl border"
     >
       <div className="bg-surface-muted relative h-28 w-full">

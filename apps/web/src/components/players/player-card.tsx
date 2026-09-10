@@ -53,7 +53,13 @@ export function PlayerCard({
           the row reads as exactly one link, not two. Positioned, so it paints above the row's
           in-flow content; the STS and Vouch controls sit above it with z-10.
         */}
-        <Link href={profileHref} aria-hidden tabIndex={-1} className="absolute inset-0 rounded-xl">
+        <Link
+          href={profileHref}
+          prefetch={false}
+          aria-hidden
+          tabIndex={-1}
+          className="absolute inset-0 rounded-xl"
+        >
           {/* useLinkStatus only reports for the Link it sits inside, and nearly every tap lands on
               this overlay rather than on the name, so the cue has to be here as well (§1T). */}
           <CompactRowPending />
@@ -70,7 +76,7 @@ export function PlayerCard({
         <span className="min-w-0 flex-1">
           {/* Line one: name, nickname, sex. The name truncates last. */}
           <span className="flex min-w-0 items-center gap-1.5">
-            <Link href={profileHref} className="min-w-0 shrink">
+            <Link href={profileHref} prefetch={false} className="min-w-0 shrink">
               <span className="text-foreground block truncate text-sm font-semibold">
                 {player.displayName}
               </span>
@@ -132,7 +138,7 @@ export function PlayerCard({
   return (
     <div className="border-border bg-surface vp-card flex flex-col gap-2.5 rounded-2xl border p-3.5">
       <div className="flex items-start gap-3">
-        <Link href={profileHref} aria-label={player.displayName}>
+        <Link href={profileHref} prefetch={false} aria-label={player.displayName}>
           <PlayerAvatar
             url={player.avatarUrl}
             initials={player.initials}

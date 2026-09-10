@@ -2792,6 +2792,76 @@ hard rules first, names joined, truncated gracefully. The existing "Eligibility"
 isolates flagged entries; this makes that queue self-explaining. Non-tech organizers get the decision
 they need in the list, not database codes buried in a sheet.
 
+## 2AE. Vercel cost blowout: diagnosis and mitigation (2026-09-11)
+
+Day 3 of public launch and the project has burned ~$10 of its $20/mo Vercel credit - a ~$100/mo
+trajectory the (unmonetized) app cannot afford. Usage screen, current cycle:
+
+| Line | Cost | Volume |
+|---|---|---|
+| Observability Events | $3.14 | 2.62M events |
+| Fluid Active CPU | $1.99 | 15 hrs |
+| Build CPU Minutes | $1.74 | 9 hrs |
+| Fast Origin Transfer | $1.47 | 7 GB |
+| Fluid Provisioned Memory | $0.88 | 81 GB-hrs |
+| Function Invocations | $0.54 | 911K |
+
+### Root cause: function-invocation volume, plus deploy frequency
+
+It is NOT a runaway or a rogue dependency - confirmed no `@vercel/analytics`/`speed-insights`, no
+client polling loops (the online counter is a Supabase WebSocket, not a Vercel function), and the only
+server log is one line in `/api/client-error`. The cost is structural: **every page is a dynamic
+server render (auth cookies), so every request is a function invocation**, and the top four lines all
+scale with invocation count - Observability Events at ~2.9 per request (2.62M / 911K), Fluid CPU +
+Provisioned Memory as the compute for each, and Origin Transfer as the RSC/data payloads. Build CPU
+(9 hrs in 3 days) is the *other* driver: we have deployed very frequently.
+
+**The biggest invocation amplifier is Next.js viewport prefetch on the directory lists.** The player,
+tournament, and club cards each wrap a `<Link>` with default prefetch, and the leaderboard entries do
+too; the directories render 24+ per page. App Router prefetches links as they enter the viewport, and
+because these target dynamic (auth) routes, each prefetch fires a real RSC function invocation *and* a
+middleware invocation before any click. Scrolling one directory can fire dozens of invocations. Two
+secondary amplifiers: the resume-refresh fires a full server re-render whenever a PWA tab is refocused
+after only 60s hidden, and the frequent deploys drive Build CPU.
+
+### Fixes shipped now (code, safe, no auth impact)
+
+- **`prefetch={false}` on the high-fanout list links** - the three card components (`player-card`,
+  `tournament-card`, `club-card`) and the leaderboard entry links (`leaderboard-panel`). Cards still
+  navigate on click, with the existing `LinkSpinner` feedback (a spinner the moment you tap), so for
+  the mobile/tap audience the UX is unchanged - prefetch gives little benefit on dynamic routes
+  anyway. Primary nav (bottom nav / header - 5 links) keeps prefetch: cheap and worth the snappiness.
+- **Resume-refresh idle threshold 60s -> 300s** (`RESUME_IDLE_MS`). A quick tab-out/in no longer
+  triggers a full server re-render; it still refreshes after a genuinely long idle. Fewer automatic
+  invocations for the PWA usage pattern.
+
+Both cut invocations, which cuts Fluid CPU + Function Invocations + Observability Events + Origin
+Transfer together. Already-shipped work compounds this: the Singapore region move cut per-invocation
+CPU duration, and §2AB/§2AC caching cut per-invocation DB work and origin transfer.
+
+### Mitigations that are not code (owner actions)
+
+- **Vercel dashboard:** open Observability settings and disable anything beyond the included tier;
+  confirm "Observability Plus" is OFF. Observability Events is the single biggest line and also falls
+  as invocations fall.
+- **Deploy far less often.** Build CPU is 9 hrs from many deploys (several were this engagement's).
+  Standing rule reaffirmed: batch changes into ONE deploy per approved set, in the low-traffic window.
+
+### Deferred to phase 2 (post-event, auth-sensitive)
+
+- **Middleware matcher skips prefetch/RSC requests** (`missing` the `next-router-prefetch` /
+  `purpose=prefetch` headers) - cuts middleware invocations on the remaining (nav) prefetches. It is a
+  documented, low-risk Vercel pattern, but it changes auth-cookie-refresh behaviour on every request
+  and cannot be verified signed-in from here mid-event, so it waits until after the event. Its
+  marginal benefit is small once the card prefetches above are gone.
+
+### Honest expectation
+
+Invocation count should drop materially (the card prefetches were the bulk), taking the top four
+lines down with it, and Build CPU falls with deploy discipline. I cannot promise an exact percentage
+without a day of live data; the invocation count on the usage screen is the number to watch after this
+deploy settles.
+
 ## 1. Prompt Contract
 
 ### In scope

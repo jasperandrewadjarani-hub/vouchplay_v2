@@ -158,6 +158,7 @@ export function LeaderboardPanel({
                   <li key={entry.subjectId}>
                     <Link
                       href={subjectHref(entry)}
+                      prefetch={false}
                       className={`flex min-h-14 items-center gap-3 px-4 py-3 ${
                         isViewer
                           ? 'bg-primary/10 ring-primary/40 hover:bg-primary/15 ring-1 ring-inset'
@@ -271,6 +272,7 @@ function Podium({
       </div>
       <Link
         href={subjectHref(entry)}
+        prefetch={false}
         className={`text-foreground mt-2 inline-flex items-center gap-1 font-bold hover:underline ${
           first ? 'text-lg' : ''
         }`}

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.57
+# VouchPlay Master Product & Code Execution Handover v1.58
 
-_(File retains its `…v1.1.md` name; content is v1.57 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.58 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,29 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.58 (2026-09-11)
+
+_Vercel cost mitigation: cut function-invocation volume (master_plan §2AE). No migration._
+
+- **Why:** day 3 of launch, ~$10 of the $20/mo Vercel credit already spent. Diagnosed as
+  function-invocation volume (911K/3 days) driving the top four cost lines together - Observability
+  Events (~2.9 events/request), Fluid CPU, Provisioned Memory, Origin Transfer - plus Build CPU from
+  frequent deploys. No analytics/insights packages, no polling loops; it is structural (every page is
+  a dynamic auth render).
+- **Biggest amplifier fixed:** Next viewport-prefetch on the directory lists. The player, tournament,
+  and club cards and the leaderboard entry links each prefetched their dynamic detail route as they
+  scrolled into view - a real RSC + middleware invocation per card before any click. Added
+  `prefetch={false}` to those high-fanout links; they still navigate on tap with the existing
+  `LinkSpinner` feedback. Primary nav keeps prefetch (only 5 links, worth the snappiness).
+- **Resume-refresh** idle threshold raised 60s -> 300s (`RESUME_IDLE_MS`), so refocusing a PWA tab
+  after a brief switch no longer triggers a full server re-render.
+- **Owner actions (not code):** in the Vercel dashboard, disable Observability beyond the included
+  tier (confirm Observability Plus OFF); and deploy far less often (Build CPU was 9 hrs from many
+  deploys) - batch into one windowed deploy per approved set.
+- **Deferred (post-event, auth-sensitive):** a middleware matcher that skips prefetch/RSC requests -
+  low-risk but touches auth-cookie refresh on every request, so verify signed-in after the event; its
+  marginal benefit is small once the card prefetches are gone.
 
 ## v1.57 (2026-09-11)
 

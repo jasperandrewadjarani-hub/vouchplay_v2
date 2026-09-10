@@ -8,6 +8,7 @@ export function ClubCard({ club }: { club: ClubCardDTO }) {
   return (
     <Link
       href={`/clubs/${club.slug}`}
+      prefetch={false}
       className="border-border bg-surface vp-card flex items-center gap-3 rounded-2xl border p-3.5"
     >
       <span className="border-border bg-surface-muted ring-primary/15 inline-flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border ring-2">

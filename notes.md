@@ -2617,3 +2617,23 @@ anon sees active only - club_memberships policy status='active' OR auth.uid()=us
 getPlayerAchievements carries endorsedByViewer + own pending claims - both are viewer-dependent, so
 they were NOT cached; they join withTournamentCardEngagement + getPlayerSkillTags in phase 2 (need a
 public/viewer split + cross-user leakage test). Gates green (typecheck, lint, 193 tests, format).
+
+## 2026-09-11 - Vercel cost mitigation: cut invocation volume (§2AE, handover v1.58)
+
+Day 3, ~$10/$20 credit spent (~$100/mo trajectory). Diagnosed: function-invocation volume (911K/3d)
+drives the top 4 lines together - Observability Events $3.14 (~2.9/req), Fluid CPU $1.99, Provisioned
+Memory $0.88, Origin Transfer $1.47; Build CPU $1.74 = deploy frequency. NOT analytics/polling (no
+@vercel/analytics|speed-insights; online counter is Supabase WS; only 1 server log line). Biggest
+amplifier: Next viewport-prefetch on directory cards (player/tournament/club) + leaderboard entries -
+each prefetched a DYNAMIC detail route on scroll -> RSC + middleware invocation before any click,
+24+/page.
+
+Shipped (code): prefetch={false} on player-card (3 Links), tournament-card, club-card, and
+leaderboard-panel subjectHref (2). Cards still navigate on tap w/ existing LinkSpinner. Nav keeps
+prefetch. resume-refresh.ts RESUME_IDLE_MS 60s -> 300s (fewer auto re-renders on PWA refocus).
+Compounds with the sin1 region move (per-invocation CPU) + §2AB/§2AC caching (per-invocation DB/egress).
+
+Owner (not code): Vercel dashboard - disable Observability beyond included tier / confirm Obs Plus
+OFF; DEPLOY LESS OFTEN (batch). Deferred post-event: middleware matcher skip prefetch/RSC (auth-
+sensitive, verify signed-in; small marginal benefit after card prefetch removed).
+Gates green (typecheck, lint, 193 tests, format). Watch invocation count on usage screen after settle.
