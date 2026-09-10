@@ -2446,3 +2446,22 @@ on sm+, reduced-motion safe.
   line one, gated by player.openForSponsorship. Detailed card + DTO already had both; only compact row
   was missing sponsorship. Colors: lime=partner, primary=sponsorship (matches detailed badges).
 Gates: typecheck/lint/format clean. UI-only, no migration.
+
+## 2026-09-10 - "Already vouched" button state + profile note (§2U, handover v1.50)
+
+Vouch button now shows a "Vouched" success-outline state (CheckCircle2) when the viewer already has an
+active vouch - on compact cards, detailed cards, and profile. Still tappable (change/withdraw).
+Profile note under actions: "You've vouched for {name}. You can change or withdraw it in {N hrs/days}"
+(cooldown from vouch_update_cooldown_days) or "...anytime - just tap Vouched."
+
+Read-only over existing vouch model, no schema/logic change:
+- queries.ts getViewerVouchedTargetIds(viewerId): one query, listPlayers sets dto.viewerHasVouched
+  (fetched in the Promise.all before the map). getViewerVouchState(targetId, viewerId): hasVouched +
+  canUpdateInMs. Service client filtered to voucher_id=self (no identity leak).
+- dto.ts: PlayerCardDTO.viewerHasVouched (default false).
+- vouch-button.tsx: hasVouched prop -> vouchedCls (border-success/50 bg-success/10 text-success) +
+  CheckCircle2 + "Vouched"; else primary. player-card passes it (both variants).
+- lib/vouches/cooldown.ts formatVouchCooldown(ms) pure (+4 tests): minutes->hours->days, round up.
+- profile page: getViewerVouchState + note.
+
+Gates: typecheck/lint/format clean, 197 tests pass (cooldown 4). UI + read-only queries, no migration.

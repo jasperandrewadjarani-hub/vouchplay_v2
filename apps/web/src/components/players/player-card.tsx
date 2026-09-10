@@ -119,6 +119,7 @@ export function PlayerCard({
             slug={player.slug}
             targetName={player.displayName}
             authed={authed}
+            hasVouched={player.viewerHasVouched}
             size="sm"
             mode="card"
           />
@@ -202,6 +203,7 @@ export function PlayerCard({
           slug={player.slug}
           targetName={player.displayName}
           authed={authed}
+          hasVouched={player.viewerHasVouched}
           size="sm"
           mode="card"
         />

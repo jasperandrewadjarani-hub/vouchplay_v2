@@ -1,9 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Facebook } from 'lucide-react';
+import { MapPin, CalendarDays, Facebook, CheckCircle2 } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
-import { getPlayerBySlug, getPlayerMetaBySlug, getPlayerComments } from '@/lib/players/queries';
+import {
+  getPlayerBySlug,
+  getPlayerMetaBySlug,
+  getPlayerComments,
+  getViewerVouchState,
+} from '@/lib/players/queries';
+import { formatVouchCooldown } from '@/lib/vouches/cooldown';
 import { hasViewerBlocked } from '@/lib/moderation/enforcement';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
@@ -92,6 +98,11 @@ export default async function PlayerProfilePage({ params }: Params) {
     authed && !player.isOwnProfile
       ? await hasViewerBlocked(viewer.viewerId as string, player.id)
       : false;
+  // The viewer's own vouch state for this player (§2U): colours the button and drives the note below.
+  const vouchState =
+    authed && !player.isOwnProfile
+      ? await getViewerVouchState(player.id, viewer.viewerId as string)
+      : { hasVouched: false, canUpdateInMs: null };
   const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
@@ -191,10 +202,22 @@ export default async function PlayerProfilePage({ params }: Params) {
             authed={authed}
             isOwnProfile={player.isOwnProfile}
             viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
+            hasVouched={vouchState.hasVouched}
             mode="profile"
           />
           <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
         </div>
+        {vouchState.hasVouched && (
+          <p className="text-foreground-muted mt-2 flex items-center gap-1.5 text-xs">
+            <CheckCircle2 size={13} className="text-success shrink-0" aria-hidden />
+            <span>
+              You&rsquo;ve vouched for {player.displayName}.{' '}
+              {vouchState.canUpdateInMs && vouchState.canUpdateInMs > 0
+                ? `You can change or withdraw it in ${formatVouchCooldown(vouchState.canUpdateInMs)}.`
+                : 'You can change or withdraw it anytime — just tap Vouched.'}
+            </span>
+          </p>
+        )}
         <div className="mt-2">
           <ProfileActions
             slug={slug}

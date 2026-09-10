@@ -64,6 +64,12 @@ export interface PlayerCardDTO {
   isClubOwner: boolean;
   lookingForPartner: boolean;
   openForSponsorship: boolean;
+  /**
+   * Whether the viewing user already has an active vouch for this player (master_plan §2U). Defaults
+   * to false; listPlayers sets it for the signed-in viewer so the card's Vouch button can show the
+   * "already vouched" state. Never true for an anonymous viewer.
+   */
+  viewerHasVouched: boolean;
   clubs: ClubRef[];
 }
 
@@ -156,6 +162,7 @@ export function toPlayerCardDTO(
     isClubOwner: (extras.clubs ?? []).some((c) => c.relationship === 'owner'),
     lookingForPartner: row.looking_for_partner,
     openForSponsorship: row.open_for_sponsorship,
+    viewerHasVouched: false,
     clubs: extras.clubs ?? [],
   };
 }

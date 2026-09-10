@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { ThumbsUp } from 'lucide-react';
+import { ThumbsUp, CheckCircle2 } from 'lucide-react';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { VouchForm } from './vouch-form';
 
@@ -20,6 +20,7 @@ export function VouchButton({
   authed,
   isOwnProfile = false,
   viewerIsCoach = false,
+  hasVouched = false,
   size = 'md',
   mode = 'card',
 }: {
@@ -30,6 +31,8 @@ export function VouchButton({
   authed: boolean;
   isOwnProfile?: boolean;
   viewerIsCoach?: boolean;
+  /** The viewer already has an active vouch for this player - shows the "Vouched" state (§2U). */
+  hasVouched?: boolean;
   size?: 'sm' | 'md';
   mode?: 'card' | 'profile';
 }) {
@@ -40,6 +43,10 @@ export function VouchButton({
   const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
   const btn = `inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${pad}`;
   const iconSize = size === 'sm' ? 14 : 16;
+  // "Already vouched" look: a calm success-tinted outline (not the loud primary fill), so it reads as
+  // done rather than a fresh call to action - while staying tappable to change or withdraw (§2U).
+  const vouchedCls = 'border border-success/50 bg-success/10 text-success hover:bg-success/15';
+  const primaryCls = 'bg-primary text-white hover:opacity-90';
 
   if (isOwnProfile) {
     return (
@@ -67,10 +74,15 @@ export function VouchButton({
     return (
       <Link
         href={`/players/${slug}?intent=vouch`}
-        className={`${btn} bg-primary text-white hover:opacity-90`}
+        className={`${btn} ${hasVouched ? vouchedCls : primaryCls}`}
+        aria-label={hasVouched ? `You vouched for ${targetName ?? 'this player'}` : undefined}
       >
-        <ThumbsUp size={iconSize} aria-hidden />
-        Vouch
+        {hasVouched ? (
+          <CheckCircle2 size={iconSize} aria-hidden />
+        ) : (
+          <ThumbsUp size={iconSize} aria-hidden />
+        )}
+        {hasVouched ? 'Vouched' : 'Vouch'}
         <LinkSpinner size={iconSize} />
       </Link>
     );
@@ -81,10 +93,14 @@ export function VouchButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={`${btn} bg-primary text-white hover:opacity-90`}
+        className={`${btn} ${hasVouched ? vouchedCls : primaryCls}`}
       >
-        <ThumbsUp size={iconSize} aria-hidden />
-        Vouch
+        {hasVouched ? (
+          <CheckCircle2 size={iconSize} aria-hidden />
+        ) : (
+          <ThumbsUp size={iconSize} aria-hidden />
+        )}
+        {hasVouched ? 'Vouched' : 'Vouch'}
       </button>
       {open && targetId && (
         <VouchForm

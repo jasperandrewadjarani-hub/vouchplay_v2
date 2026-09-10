@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.49
+# VouchPlay Master Product & Code Execution Handover v1.50
 
-_(File retains its `…v1.1.md` name; content is v1.49 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.50 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,20 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.50 (2026-09-10)
+
+_"Already vouched" state on the button + profile note (master_plan §2U). No migration._
+
+- The **Vouch button turns to a calm success-outline "Vouched" state (check icon)** wherever it
+  appears - compact cards, detailed cards, profile - when the viewer already has an active vouch for
+  that player. Still tappable (opens the change/withdraw form, or routes from a card).
+- The **profile shows a clear note** under the actions: "You've vouched for {name}. You can change or
+  withdraw it in {N hours/days}." (during the update cooldown) or "…anytime - just tap Vouched."
+- Read-only over the existing vouch model: `getViewerVouchedTargetIds(viewerId)` (one query, sets
+  `viewerHasVouched` on each card DTO in `listPlayers`) and `getViewerVouchState(targetId, viewerId)`
+  (profile: hasVouched + `canUpdateInMs` from `vouch_update_cooldown_days`). Friendly duration from a
+  pure, unit-tested `formatVouchCooldown`. No schema, no change to vouch write logic.
 
 ## v1.49 (2026-09-10)
 

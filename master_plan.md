@@ -2465,6 +2465,40 @@ Two small follow-ups reported by Jasper.
    flag as the filter, profile badge, and detailed card. Both availability signals now appear in both
    views, consistently coloured (lime = partner, primary = sponsorship).
 
+## 2U. "Already vouched" state: button colour + a clear profile note (2026-09-10)
+
+Nothing told a viewer they had already vouched for someone - the Vouch button looked identical whether
+or not they had, and there was no cue about the one-active-vouch rule or the update cooldown. Two
+changes, both read-only signals over the existing vouch model (no schema, no change to vouch logic).
+
+### The signal
+
+A player already has at most one ACTIVE vouch per pair (existing rule), and updates are gated by the
+`vouch_update_cooldown_days` setting (default 1 day) measured from the vouch's `updated_at`. Two new
+read-only helpers surface that to the UI:
+
+- `getViewerVouchedTargetIds(viewerId)` - one indexed query returning the set of target ids the viewer
+  has an active vouch for. `listPlayers` calls it once per render and sets `viewerHasVouched` on each
+  card DTO, so the directory can colour buttons without an N+1. Service client, filtered to
+  `voucher_id = viewerId`, so it only ever returns the viewer's own rows (no voucher-identity leak).
+- `getViewerVouchState(targetId, viewerId)` - for the profile: whether the viewer has vouched, and how
+  long until they can change it (`canUpdateInMs`, 0 = now), from the same cooldown setting.
+
+### The button (everywhere it appears)
+
+When the viewer has already vouched, the Vouch button switches from the loud primary fill to a calm
+**success-tinted outline with a check icon and the label "Vouched"** - it reads as done, not as a
+fresh call to action, while staying tappable (tapping still opens the form to change or withdraw, or
+routes to the profile from a card). Consistent across compact cards, detailed cards, and the profile.
+
+### The profile note (improved copy)
+
+Below the actions, when the viewer has vouched: a small line with a success check -
+"You've vouched for {name}." followed by either "You can change or withdraw it in {N hours/days}."
+(during cooldown) or "You can change or withdraw it anytime - just tap Vouched." The remaining time is
+a friendly rounded-up phrase from a pure, unit-tested `formatVouchCooldown(ms)` (minutes → hours →
+days). This states the one-vouch rule and the cooldown in plain language exactly where the viewer acts.
+
 ## 1. Prompt Contract
 
 ### In scope

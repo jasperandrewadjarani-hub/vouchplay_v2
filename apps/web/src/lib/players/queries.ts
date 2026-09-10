@@ -3,6 +3,7 @@ import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
+import { getVouchSettings } from '@/lib/settings';
 import { CLUBS_LIST_TAG, getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
 import {
   PLAYER_CARD_COLUMNS,
@@ -372,6 +373,52 @@ export interface PlayerListPage {
   pageCount: number;
 }
 
+/**
+ * The set of target ids the viewer currently has an ACTIVE vouch for (master_plan §2U). One indexed
+ * query keyed on the viewer's own id, so it never exposes anyone else's vouching. Service client is
+ * safe here: the filter is `voucher_id = viewerId`, so only the viewer's own rows can return.
+ */
+export async function getViewerVouchedTargetIds(viewerId: string): Promise<Set<string>> {
+  try {
+    const { data } = await createServiceClient()
+      .from('vouches')
+      .select('target_id')
+      .eq('voucher_id', viewerId)
+      .eq('status', 'active');
+    return new Set((data ?? []).map((r) => (r as { target_id: string }).target_id));
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * The viewer's vouch state for one player (master_plan §2U): whether they have an active vouch, and
+ * how long until they can change it under the update cooldown (0 = changeable now, null = no vouch).
+ * Used by the profile page to colour the button and show the "already vouched" note.
+ */
+export async function getViewerVouchState(
+  targetId: string,
+  viewerId: string,
+): Promise<{ hasVouched: boolean; canUpdateInMs: number | null }> {
+  try {
+    const { data } = await createServiceClient()
+      .from('vouches')
+      .select('updated_at')
+      .eq('voucher_id', viewerId)
+      .eq('target_id', targetId)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (!data) return { hasVouched: false, canUpdateInMs: null };
+    const settings = await getVouchSettings();
+    const cooldownMs = settings.limits.updateCooldownDays * 24 * 60 * 60 * 1000;
+    const ageMs = Date.now() - new Date((data as { updated_at: string }).updated_at).getTime();
+    const remaining = cooldownMs - ageMs;
+    return { hasVouched: true, canUpdateInMs: remaining > 0 ? remaining : 0 };
+  } catch {
+    return { hasVouched: false, canUpdateInMs: null };
+  }
+}
+
 export async function listPlayers(
   filters: PlayerFilters,
   viewer: ViewerContext,
@@ -406,10 +453,13 @@ export async function listPlayers(
   const { rows, total } = await cached();
 
   const ids = rows.map((r) => r.id);
-  const [facts, skills, clubs] = await Promise.all([
+  const [facts, skills, clubs, vouchedSet] = await Promise.all([
     fetchBadgeFacts(ids),
     fetchSkillSnapshots(ids),
     getUserClubsBulk(ids),
+    viewer.viewerId
+      ? getViewerVouchedTargetIds(viewer.viewerId)
+      : Promise.resolve(new Set<string>()),
   ]);
   const players = rows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
@@ -419,7 +469,9 @@ export async function listPlayers(
       skill: skills[row.id] ?? null,
       clubs: clubs[row.id] ?? [],
     };
-    return toPlayerCardDTO(row, extras, viewer);
+    const dto = toPlayerCardDTO(row, extras, viewer);
+    dto.viewerHasVouched = vouchedSet.has(row.id);
+    return dto;
   });
 
   // Verified/high-confidence first within the recency-ordered page (§8.4), no STS ranking.
