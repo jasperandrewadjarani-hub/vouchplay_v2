@@ -9,6 +9,7 @@ import {
   type PlayerSearchResult,
 } from '@/lib/actions/registration';
 import { Input } from '@/components/ui/field';
+import { LookingForPartnerToggle } from '@/components/players/looking-for-partner-toggle';
 
 /**
  * Enter a doubles division with a partner, in one sitting (handover §20.1-§20.2, master_plan §1U).
@@ -25,9 +26,12 @@ import { Input } from '@/components/ui/field';
 export function PartnerInviteForm({
   tournamentId,
   divisionId,
+  viewerLookingForPartner = false,
 }: {
   tournamentId: string;
   divisionId: string;
+  /** The viewer's own looking-for-partner flag, for the inline call-to-action toggle (§2M). */
+  viewerLookingForPartner?: boolean;
 }) {
   const router = useRouter();
   const [q, setQ] = useState('');
@@ -171,6 +175,9 @@ export function PartnerInviteForm({
 
   return (
     <div className="space-y-2">
+      {/* The exact moment a player is hunting for a partner - so offer the one-tap "I'm looking too"
+          call to action right here (§2M). It writes the same flag the directory filter reads. */}
+      <LookingForPartnerToggle initial={viewerLookingForPartner} variant="inline" />
       <Input
         value={q}
         onChange={(e) => updateQuery(e.target.value)}

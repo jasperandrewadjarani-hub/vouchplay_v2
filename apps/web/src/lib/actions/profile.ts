@@ -224,3 +224,44 @@ export async function updateProfile(
   if (savedSlug) revalidateTag(playerTag(savedSlug));
   redirect('/me?profile=updated');
 }
+
+/**
+ * Flip only the "looking for a partner" flag for the current player (master_plan §2M).
+ *
+ * A focused write behind the inline toggles on the Players tab and the tournament partner-invite
+ * step, so a player can flag themselves at the moment they are searching without opening Edit
+ * profile. Writes one column, revalidates the directory and the player's own page, and returns fast
+ * so the optimistic switch settles quickly. Same column as the filter and the badge, so every
+ * surface stays in sync.
+ */
+export async function setLookingForPartner(
+  value: boolean,
+): Promise<{ ok?: boolean; error?: string; value?: boolean }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: 'Please sign in.' };
+
+    const { data: current } = await supabase
+      .from('profiles')
+      .select('slug, onboarded_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    const row = current as { slug: string | null; onboarded_at: string | null } | null;
+    if (!row?.onboarded_at) return { error: 'Finish setting up your profile first.' };
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ looking_for_partner: value })
+      .eq('id', user.id);
+    if (error) return { error: 'Could not update your status. Please try again.' };
+
+    revalidateTag(PLAYERS_LIST_TAG);
+    if (row.slug) revalidateTag(playerTag(row.slug));
+    return { ok: true, value };
+  } catch {
+    return { error: 'That is temporarily unavailable. Please try again shortly.' };
+  }
+}

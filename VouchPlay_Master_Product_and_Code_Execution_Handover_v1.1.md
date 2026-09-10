@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.40
+# VouchPlay Master Product & Code Execution Handover v1.41
 
-_(File retains its `…v1.1.md` name; content is v1.40 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.41 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6153,6 +6153,23 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.41 (2026-09-10)
+
+_App-side, no migration. Follows v1.40's settable flag (§2L)._
+
+- **"Looking for a partner" is now a one-tap call to action where it matters (master_plan §2M).**
+  v1.40 made the flag settable, but only inside Edit profile - far from the moments a player thinks
+  "I need a partner". A shared `LookingForPartnerToggle`, backed by a focused `setLookingForPartner`
+  server action that writes only that column, now appears in two places: a card at the top of the
+  **Players tab** ("Looking for a partner? [toggle]") where people browse for partners, and inline at
+  the top of the **tournament partner-invite step** ("No partner yet? Let others know") - the exact
+  moment a doubles player is searching. The switch is optimistic (moves on tap, settles on the
+  write). It reuses the same `looking_for_partner` column as the badge, the directory filter, the row
+  icon and the Edit-profile checkbox, so flipping it anywhere keeps every surface in sync. The
+  viewer's current value is read where each toggle lives (`getMyProfile` on Players;
+  `getViewerRegistrationState` now selects `looking_for_partner` as `viewerLookingForPartner` for the
+  tournament). Signed-in only; it never shows or changes anyone else's status. "Open to sponsorship"
+  stays in Edit profile - it has no equivalent in-app moment. No migration.
 ## v1.40 (2026-09-10)
 
 _Four UI fixes (master_plan §2L). App-side, no migration._

@@ -104,6 +104,8 @@ export interface ViewerRegistrationState {
   paymentQrUrl: string | null;
   /** So a team member list can say which of the two players is the OTHER one (§2A). */
   viewerId: string;
+  /** The viewer's own "looking for a partner" flag, for the inline toggle at the partner step (§2M). */
+  viewerLookingForPartner: boolean;
 }
 
 export async function getViewerRegistrationState(
@@ -115,7 +117,11 @@ export async function getViewerRegistrationState(
   // Tight, viewer-scoped projection for the §19.4 pre-registration prompt. The aggregate contains
   // no voucher identities; a missing row means the player has no community vouches yet.
   const [{ data: viewerProfileRow }, { data: viewerSkillRow }] = await Promise.all([
-    svc.from('profiles').select('slug, self_rated_skill, sex').eq('id', userId).maybeSingle(),
+    svc
+      .from('profiles')
+      .select('slug, self_rated_skill, sex, looking_for_partner')
+      .eq('id', userId)
+      .maybeSingle(),
     svc
       .from('player_skill_profiles')
       .select('community_skill_level, sts, unique_voucher_count, skill_verified')
@@ -126,6 +132,7 @@ export async function getViewerRegistrationState(
     slug: string | null;
     self_rated_skill: number | null;
     sex: string | null;
+    looking_for_partner: boolean | null;
   } | null;
   const skill = viewerSkillRow as {
     community_skill_level: number | null;
@@ -419,6 +426,7 @@ export async function getViewerRegistrationState(
     viewerSkill,
     paymentQrUrl,
     viewerId: userId,
+    viewerLookingForPartner: Boolean(viewerProfile?.looking_for_partner),
   };
 }
 

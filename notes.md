@@ -2301,3 +2301,14 @@ it done. Several fixes in this session were found only that way.
   directory row. No migration (columns existed; only the write path was missing). All gates green
   (typecheck, lint, 193 tests, format, build). Auth-gated surfaces, so verified via build/logic;
   worth a signed-in check of the edit toggle and the paid-card layout.
+
+- **2026-09-10** - **"Looking for a partner" is now a one-tap CTA on the Players tab and in the
+  tournament** (master_plan §2M, handover v1.41). v1.40 made it settable but only in Edit profile.
+  Added a shared `LookingForPartnerToggle` + a focused `setLookingForPartner` action (writes one
+  column, revalidates directory + own page, optimistic). It renders as a card atop the Players tab and
+  inline at the top of the tournament partner-invite step (the moment you're searching). Same
+  `looking_for_partner` column as the badge/filter/row-icon/edit checkbox, so all surfaces stay in
+  sync. Viewer value read via getMyProfile (Players) and getViewerRegistrationState -> new
+  `viewerLookingForPartner` (tournament). Signed-in only; never touches others. No migration. All
+  gates green (typecheck, lint, 193 tests, format, build). Auth-gated, so verified via build/logic;
+  worth a signed-in tap to confirm the switch + sync.

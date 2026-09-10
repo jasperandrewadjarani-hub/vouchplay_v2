@@ -323,7 +323,11 @@ export function DivisionBrowser({
                         <p className="text-foreground-muted mb-1 text-xs">
                           Invite a partner to form your team:
                         </p>
-                        <PartnerInviteForm tournamentId={tournamentId} divisionId={d.id} />
+                        <PartnerInviteForm
+                          tournamentId={tournamentId}
+                          divisionId={d.id}
+                          viewerLookingForPartner={state?.viewerLookingForPartner ?? false}
+                        />
                       </div>
                     ) : (
                       <div className="space-y-2">

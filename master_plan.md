@@ -2078,6 +2078,48 @@ Because it is one column, it **syncs across by construction**: turning it on sho
 filter, and now also shows a compact **partner-search icon on the directory row** (beside the sex
 symbol, an icon not a pill, so the one-pill-per-line rule §1H/§1T is untouched). No migration - the
 columns already existed; only the write path and the row indicator were missing.
+## 2M. "Looking for a partner" as a one-tap call to action (2026-09-10, post-launch)
+
+§2L made the flag settable, but only inside Edit profile - buried under six other fields, nowhere near
+the moments a player actually thinks "I need a partner". Jasper asked to surface it as a toggle where
+it matters: the Players tab, and the tournament.
+
+### The two moments
+
+- **The Players tab** is where you go to look for people. So it is exactly where you should be able
+  to say "and I'm available too". A compact card at the top now shows the signed-in viewer's own
+  status with a real switch: **"Looking for a partner? [toggle]"** - on turns the badge on, marks you
+  in the filter, and shows the partner-search icon on your row; the helper line says so. It is the one
+  self-directed control on a page otherwise about other people, so it is a single small card, not a
+  row that competes with the directory.
+- **The tournament, at the moment of forming a doubles team.** When a player expands a doubles
+  division they do not yet have a team in, the partner-invite step is literally "find your partner".
+  The toggle sits at the top of it: **"No partner yet? [toggle] Let others know you're looking."**
+  Turning it on there, then and there, is the strongest possible call to action - the player is one
+  tap from being findable by everyone else in the same division who is also searching.
+
+### How it works
+
+One shared control, `LookingForPartnerToggle`, backed by one focused server action,
+`setLookingForPartner(value)`, that writes only that column, revalidates the directory and the
+player's own page, and returns immediately. It is optimistic: the switch moves on tap and settles
+when the write returns, so it feels instant. The action reuses the same `looking_for_partner` column
+as the Edit-profile toggle and the filter, so **every surface stays in sync by construction** - flip
+it in any one place and the badge, the row icon, the filter and the Edit-profile checkbox all agree
+on the next read.
+
+The viewer's current value is read where each toggle lives: `getMyProfile` already returns it for the
+Players tab, and the tournament's viewer projection (`getViewerRegistrationState`) now selects
+`looking_for_partner` alongside the sex and skill it already reads, exposed as
+`viewerLookingForPartner`.
+
+### Boundaries
+
+The toggle is the viewer's own status only - it never shows or changes anyone else's. It appears only
+for a signed-in player (anonymous visitors see nothing extra). "Open to sponsorship" stays in Edit
+profile for now: it is a slower, less frequent decision without a specific in-app moment, so it does
+not need a scattered call to action the way partner-finding does. No migration - the column and the
+read/badge/filter path already exist; this adds only the inline write.
 ## 1. Prompt Contract
 
 ### In scope

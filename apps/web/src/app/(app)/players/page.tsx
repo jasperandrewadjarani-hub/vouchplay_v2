@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { getViewerContext } from '@/lib/auth';
+import { getViewerContext, getMyProfile } from '@/lib/auth';
 import {
   getDirectoryCityOptions,
   getDirectoryClubOptions,
@@ -13,6 +13,7 @@ import {
 } from '@/lib/players/filters';
 import { PlayerCard } from '@/components/players/player-card';
 import { SearchFilters } from '@/components/players/search-filters';
+import { LookingForPartnerToggle } from '@/components/players/looking-for-partner-toggle';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { Pagination } from '@/components/ui/pagination';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
@@ -53,6 +54,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     )
     .catch(() => null);
   const authed = viewer.viewerId !== null;
+  // The viewer's own "looking for a partner" status, so the Players tab can offer a one-tap toggle
+  // right where people browse for partners (§2M). Signed-in only.
+  const myProfile = authed ? await getMyProfile() : null;
 
   return (
     <div className="space-y-5">
@@ -66,6 +70,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       </div>
 
       <LeaderboardsEntryCard board={leaders} />
+
+      {myProfile?.onboarded_at && (
+        <LookingForPartnerToggle initial={Boolean(myProfile.looking_for_partner)} />
+      )}
 
       <SearchFilters
         current={filters}
