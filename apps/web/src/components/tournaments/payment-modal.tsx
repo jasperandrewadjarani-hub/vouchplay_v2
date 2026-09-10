@@ -187,7 +187,7 @@ function PaymentModalBody({ details, onClose }: { details: PaymentDetails; onClo
           <button
             type="button"
             onClick={() => setPayingLater(true)}
-            className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
+            className="border-border text-foreground-muted hover:text-foreground hover:bg-surface-muted inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border text-sm font-medium transition-colors"
           >
             I&rsquo;ll pay later
           </button>

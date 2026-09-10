@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Facebook, CheckCircle2 } from 'lucide-react';
+import { MapPin, CalendarDays, Facebook } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import {
   getPlayerBySlug,
@@ -9,7 +9,6 @@ import {
   getPlayerComments,
   getViewerVouchState,
 } from '@/lib/players/queries';
-import { formatVouchCooldown } from '@/lib/vouches/cooldown';
 import { hasViewerBlocked } from '@/lib/moderation/enforcement';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
@@ -121,105 +120,101 @@ export default async function PlayerProfilePage({ params }: Params) {
       {/* Header (§9.1) */}
       <header className="border-border bg-surface vp-hero relative overflow-hidden rounded-2xl border p-5">
         <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-          <PlayerAvatar
-            url={player.avatarUrl}
-            initials={player.initials}
-            name={player.displayName}
-            size="lg"
-            className="ring-primary/25 ring-4"
-          />
-          <div className="min-w-0 flex-1 space-y-2">
-            <div>
-              <h1 className="text-foreground text-2xl font-semibold tracking-tight">
+        {/* Identity + primary action: avatar and name on the left, the Vouch/Share cluster pinned
+            top-right on desktop and a prominent row under the name on mobile (§2Y). */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
+          <div className="flex min-w-0 items-start gap-4">
+            <PlayerAvatar
+              url={player.avatarUrl}
+              initials={player.initials}
+              name={player.displayName}
+              size="lg"
+              className="ring-primary/25 shrink-0 ring-4"
+            />
+            <div className="min-w-0">
+              <h1 className="text-foreground truncate text-2xl font-semibold tracking-tight">
                 {player.displayName}
               </h1>
               {player.nickname && (
-                <p className="text-foreground-muted">&ldquo;{player.nickname}&rdquo;</p>
+                <p className="text-foreground-muted truncate">&ldquo;{player.nickname}&rdquo;</p>
               )}
-            </div>
-
-            <div className="text-foreground-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              {player.city && (
+              <div className="text-foreground-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                {player.city && (
+                  <span className="inline-flex items-center gap-1">
+                    <MapPin size={14} aria-hidden />
+                    {player.city}
+                  </span>
+                )}
+                {player.age != null && <span>{player.age} yrs</span>}
                 <span className="inline-flex items-center gap-1">
-                  <MapPin size={14} aria-hidden />
-                  {player.city}
+                  <CalendarDays size={14} aria-hidden />
+                  Member since {memberSince}
                 </span>
-              )}
-              {player.age != null && <span>{player.age} yrs</span>}
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays size={14} aria-hidden />
-                Member since {memberSince}
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {skill && <SkillPill band={skill.band} source={skill.source} />}
-              <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
-              <SexBadge sex={player.sex} />
-            </div>
-
-            {(player.identityVerified ||
-              player.skillVerified ||
-              player.isCoach ||
-              player.isOrganizer ||
-              player.lookingForPartner ||
-              player.openForSponsorship) && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {player.identityVerified && <IdentityVerifiedBadge />}
-                {player.skillVerified && <SkillVerifiedBadge />}
-                {player.isCoach && <CoachBadge />}
-                {player.isOrganizer && <OrganizerBadge />}
-                {player.lookingForPartner && <LookingForPartnerBadge />}
-                {player.openForSponsorship && <OpenForSponsorshipBadge />}
               </div>
-            )}
+            </div>
+          </div>
 
-            <ClubStack clubs={player.clubs} />
-
-            {player.bio && <p className="text-foreground pt-1 text-sm">{player.bio}</p>}
-
-            {player.facebookUrl && (
-              <a
-                href={player.facebookUrl}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="text-primary inline-flex items-center gap-1 text-sm hover:underline"
-              >
-                <Facebook size={14} aria-hidden />
-                Facebook
-              </a>
-            )}
+          <div className="flex shrink-0 items-center gap-2">
+            <VouchButton
+              slug={slug}
+              targetId={player.id}
+              targetName={player.displayName}
+              authed={authed}
+              isOwnProfile={player.isOwnProfile}
+              viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
+              hasVouched={vouchState.hasVouched}
+              canUpdateInMs={vouchState.canUpdateInMs}
+              mode="profile"
+            />
+            <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
           </div>
         </div>
 
-        {/* Primary actions (§9.1) */}
+        {/* Credentials: skill, confidence, sex, then verification / role / availability badges. */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <VouchButton
-            slug={slug}
-            targetId={player.id}
-            targetName={player.displayName}
-            authed={authed}
-            isOwnProfile={player.isOwnProfile}
-            viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
-            hasVouched={vouchState.hasVouched}
-            canUpdateInMs={vouchState.canUpdateInMs}
-            mode="profile"
-          />
-          <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
+          {skill && <SkillPill band={skill.band} source={skill.source} />}
+          <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
+          <SexBadge sex={player.sex} />
         </div>
-        {vouchState.hasVouched && (
-          <p className="text-foreground-muted mt-2 flex items-center gap-1.5 text-xs">
-            <CheckCircle2 size={13} className="text-success shrink-0" aria-hidden />
-            <span>
-              You&rsquo;ve vouched for {player.displayName}.{' '}
-              {vouchState.canUpdateInMs && vouchState.canUpdateInMs > 0
-                ? `You can change or withdraw it in ${formatVouchCooldown(vouchState.canUpdateInMs)}.`
-                : 'You can change or withdraw it anytime — just tap Vouched.'}
-            </span>
-          </p>
+
+        {(player.identityVerified ||
+          player.skillVerified ||
+          player.isCoach ||
+          player.isOrganizer ||
+          player.lookingForPartner ||
+          player.openForSponsorship) && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {player.identityVerified && <IdentityVerifiedBadge />}
+            {player.skillVerified && <SkillVerifiedBadge />}
+            {player.isCoach && <CoachBadge />}
+            {player.isOrganizer && <OrganizerBadge />}
+            {player.lookingForPartner && <LookingForPartnerBadge />}
+            {player.openForSponsorship && <OpenForSponsorshipBadge />}
+          </div>
         )}
-        <div className="mt-2">
+
+        {player.clubs.length > 0 && (
+          <div className="mt-3">
+            <ClubStack clubs={player.clubs} />
+          </div>
+        )}
+
+        {player.bio && <p className="text-foreground mt-3 text-sm">{player.bio}</p>}
+
+        {player.facebookUrl && (
+          <a
+            href={player.facebookUrl}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="text-primary mt-2 inline-flex items-center gap-1 text-sm hover:underline"
+          >
+            <Facebook size={14} aria-hidden />
+            Facebook
+          </a>
+        )}
+
+        {/* Secondary actions: request a vouch / partner / skill review, report, block (§9.1, §12). */}
+        <div className="mt-4">
           <ProfileActions
             slug={slug}
             authed={authed}

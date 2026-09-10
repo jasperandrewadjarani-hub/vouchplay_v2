@@ -81,105 +81,89 @@ export function VouchButton({
     );
   }
 
-  // Already vouched (§2V): a tap opens a confirm dialog, never the form directly. The dialog is the
-  // shared portaled Modal so it escapes a card row's `relative z-10` stacking context (§1X).
-  if (hasVouched) {
-    const inCooldown = typeof canUpdateInMs === 'number' && canUpdateInMs > 0;
-    const startChange = () => {
-      setConfirmOpen(false);
-      if (mode === 'profile' && targetId) setFormOpen(true);
-      else router.push(`/players/${slug}?intent=vouch`);
-    };
-    return (
-      <>
-        <button
-          type="button"
-          onClick={() => setConfirmOpen(true)}
-          className={`${btn} ${vouchedCls}`}
-          aria-label={`You vouched for ${label}`}
-        >
-          <CheckCircle2 size={iconSize} aria-hidden />
-          Vouched
-        </button>
+  // Authed and not own profile. The trigger varies by state, but the overlays (confirm dialog + the
+  // vouch form) are rendered in ONE FIXED position below - never inside a state-specific branch. A
+  // successful vouch flips hasVouched on refresh; if the form lived in a branch it would remount and
+  // wipe its own "vouch submitted" confirmation, which is the bug this structure prevents (§2Y).
+  const inCooldown = typeof canUpdateInMs === 'number' && canUpdateInMs > 0;
+  const startChange = () => {
+    setConfirmOpen(false);
+    if (mode === 'profile' && targetId) setFormOpen(true);
+    else router.push(`/players/${slug}?intent=vouch`);
+  };
 
-        {confirmOpen && (
-          <Modal
-            title="You’ve already vouched"
-            onClose={() => setConfirmOpen(false)}
-            align="center"
-          >
-            {inCooldown ? (
-              <div className="space-y-4">
-                <p className="text-foreground-muted text-sm">
-                  You’ve already vouched for {label}. You can change or withdraw your vouch in{' '}
-                  <span className="text-foreground font-semibold">
-                    {formatVouchCooldown(canUpdateInMs as number)}
-                  </span>
-                  .
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setConfirmOpen(false)}
-                  className={`${btn} ${primaryCls} w-full`}
-                >
-                  Got it
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-foreground-muted text-sm">
-                  You’ve already vouched for {label}. Would you like to change or withdraw your
-                  vouch?
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row-reverse">
-                  <button
-                    type="button"
-                    onClick={startChange}
-                    className={`${btn} ${primaryCls} flex-1`}
-                  >
-                    Change my vouch
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmOpen(false)}
-                    className={`${btn} border-border text-foreground flex-1 border`}
-                  >
-                    Not now
-                  </button>
-                </div>
-              </div>
-            )}
-          </Modal>
-        )}
-
-        {formOpen && targetId && (
-          <VouchForm
-            targetId={targetId}
-            targetName={label}
-            viewerIsCoach={viewerIsCoach}
-            onClose={() => setFormOpen(false)}
-          />
-        )}
-      </>
-    );
-  }
-
-  if (mode === 'card') {
-    return (
-      <Link href={`/players/${slug}?intent=vouch`} className={`${btn} ${primaryCls}`}>
-        <ThumbsUp size={iconSize} aria-hidden />
-        Vouch
-        <LinkSpinner size={iconSize} />
-      </Link>
-    );
-  }
+  const trigger = hasVouched ? (
+    <button
+      type="button"
+      onClick={() => setConfirmOpen(true)}
+      className={`${btn} ${vouchedCls}`}
+      aria-label={`You vouched for ${label}`}
+    >
+      <CheckCircle2 size={iconSize} aria-hidden />
+      Vouched
+    </button>
+  ) : mode === 'card' ? (
+    <Link href={`/players/${slug}?intent=vouch`} className={`${btn} ${primaryCls}`}>
+      <ThumbsUp size={iconSize} aria-hidden />
+      Vouch
+      <LinkSpinner size={iconSize} />
+    </Link>
+  ) : (
+    <button type="button" onClick={() => setFormOpen(true)} className={`${btn} ${primaryCls}`}>
+      <ThumbsUp size={iconSize} aria-hidden />
+      Vouch
+    </button>
+  );
 
   return (
     <>
-      <button type="button" onClick={() => setFormOpen(true)} className={`${btn} ${primaryCls}`}>
-        <ThumbsUp size={iconSize} aria-hidden />
-        Vouch
-      </button>
+      {trigger}
+
+      {confirmOpen && (
+        <Modal title="You’ve already vouched" onClose={() => setConfirmOpen(false)} align="center">
+          {inCooldown ? (
+            <div className="space-y-4">
+              <p className="text-foreground-muted text-sm">
+                You’ve already vouched for {label}. You can change or withdraw your vouch in{' '}
+                <span className="text-foreground font-semibold">
+                  {formatVouchCooldown(canUpdateInMs as number)}
+                </span>
+                .
+              </p>
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className={`${btn} ${primaryCls} w-full`}
+              >
+                Got it
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-foreground-muted text-sm">
+                You’ve already vouched for {label}. Would you like to change or withdraw your vouch?
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                <button
+                  type="button"
+                  onClick={startChange}
+                  className={`${btn} ${primaryCls} flex-1`}
+                >
+                  Change my vouch
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmOpen(false)}
+                  className={`${btn} border-border text-foreground flex-1 border`}
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+
       {formOpen && targetId && (
         <VouchForm
           targetId={targetId}

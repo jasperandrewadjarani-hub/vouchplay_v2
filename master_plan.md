@@ -2556,6 +2556,30 @@ by format and team size, and the move path did not re-apply the register-time ru
 in the correct one, which re-runs every eligibility rule. No migration (the `move_player_registration`
 RPC is simply never invoked; it can be dropped in a later cleanup).
 
+## 2Y. Profile, partner-search, pay-later polish + vouch-success fix (2026-09-10)
+
+A batch of UI fixes on the player profile and registration surfaces.
+
+- **Profile header redesigned.** The primary **Vouch/Vouched action now sits top-right** of the header
+  (next to the name) on desktop and as a prominent row under the name on mobile, separated from the
+  secondary actions. Credentials are regrouped into a clear hierarchy: identity → skill/STS/sex chips
+  → verification/role/availability badges → clubs → bio, then the secondary actions (request a vouch /
+  partner / skill review, report, block) below. Long names truncate instead of shoving the layout.
+- **Removed the redundant "You've vouched for…" note.** The green "Vouched" button already says it, and
+  tapping it opens the confirm dialog (§2V) that states the same thing - two copies of one message was
+  one too many.
+- **Vouch success no longer disappears.** After §2V, a successful vouch called `router.refresh()`, which
+  flipped `hasVouched` and switched the button's render branch - remounting the vouch form and wiping
+  its "vouch submitted" confirmation (the form reappeared empty even though the vouch saved). Fixed by
+  rendering the form and confirm dialog in ONE fixed position in `VouchButton`, independent of the
+  hasVouched branch, so the instance persists across the refresh and the confirmation stays.
+- **Partner search result aligned.** The result row was `items-start` with an oversized 44px gradient
+  "Choose" block beside one text line. Now the row is vertically centered, the name and city stack, and
+  Choose is a proportionate, centered button - no longer clunky.
+- **"I'll pay later" restyled.** It was a bare, left-aligned muted text link that read as leftover text.
+  Now a full-width, centered, bordered secondary button under "Submit payment proof" - clearly a
+  deliberate secondary action, not stray copy.
+
 ## 1. Prompt Contract
 
 ### In scope

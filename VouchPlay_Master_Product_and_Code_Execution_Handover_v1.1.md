@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.52
+# VouchPlay Master Product & Code Execution Handover v1.53
 
-_(File retains its `…v1.1.md` name; content is v1.52 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.53 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,19 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.53 (2026-09-10)
+
+_Profile / partner-search / pay-later polish + vouch-success fix (master_plan §2Y). No migration._
+
+- **Profile header redesign:** Vouch/Vouched action moved top-right (prominent row on mobile),
+  credentials regrouped (identity → chips → badges → clubs → bio → secondary actions), names truncate.
+- **Removed the redundant "You've vouched for…" note** (the green button + confirm dialog already say it).
+- **Vouch success fix:** a successful vouch's `router.refresh()` flipped hasVouched and remounted the
+  form, wiping its "submitted" confirmation. `VouchButton` now renders the form + confirm dialog in one
+  fixed position regardless of the hasVouched branch, so the confirmation persists.
+- **Partner search row aligned** (centered, name/city stacked, proportionate Choose button).
+- **"I'll pay later"** restyled as a full-width bordered secondary button instead of stray text.
 
 ## v1.52 (2026-09-10)
 

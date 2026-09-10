@@ -2493,3 +2493,15 @@ tournament page); moveRegistrationDivision neutralized to a rejecting stub (neve
 clients cant exploit it. Intended path: cancel + re-register. No migration; move_player_registration
 RPC now unused (drop later). UI polish (partner search align, pay-later, vouch note/layout) shipping
 next as v1.53.
+
+## 2026-09-10 - Profile/partner/pay-later polish + vouch-success fix (§\&2Y, handover v1.53)
+
+- Profile header ([slug]/page.tsx): Vouch/Share moved to top-right (sm:justify-between), credentials
+  regrouped (chips row, badges row, clubs, bio) below identity; removed redundant "Youve vouched" note
+  (+ dropped CheckCircle2/formatVouchCooldown imports). Names truncate.
+- vouch-button.tsx: unified return - trigger varies by state but Modal + VouchForm render in ONE fixed
+  position, so a successful vouch (router.refresh flips hasVouched) no longer remounts the form and
+  wipes its success confirmation.
+- partner-invite-form.tsx: result row items-center, name/city stacked, Choose button proportionate.
+- payment-modal.tsx: "Ill pay later" -> full-width bordered secondary button.
+Gates: typecheck/lint/format clean. No migration.

@@ -186,14 +186,14 @@ export function PartnerInviteForm({
       />
       {searching && <p className="text-foreground-muted text-xs">Searching...</p>}
       {results.length > 0 && (
-        <ul className="border-border divide-border divide-y rounded-lg border">
+        <ul className="border-border divide-border divide-y overflow-hidden rounded-xl border">
           {results.map((p) => (
-            <li key={p.slug} className="flex items-start justify-between gap-2 p-2">
+            <li key={p.slug} className="flex items-center justify-between gap-3 p-3">
               <span className="min-w-0 flex-1">
-                <span className="text-foreground block text-sm">
-                  {p.name}
-                  {p.city && <span className="text-foreground-muted text-xs"> · {p.city}</span>}
-                </span>
+                <span className="text-foreground block truncate text-sm font-medium">{p.name}</span>
+                {p.city && (
+                  <span className="text-foreground-muted block truncate text-xs">{p.city}</span>
+                )}
                 {/* The reason sits with the person it is about. A player told only "unavailable"
                     tries the same name again; a player told why picks someone else (§2D). */}
                 {p.blockedReason && (
@@ -201,7 +201,7 @@ export function PartnerInviteForm({
                 )}
               </span>
               {p.blockedReason ? (
-                <span className="text-foreground-muted shrink-0 self-center text-xs font-medium">
+                <span className="text-foreground-muted shrink-0 text-xs font-medium">
                   Can&rsquo;t enter
                 </span>
               ) : (
@@ -212,7 +212,7 @@ export function PartnerInviteForm({
                     setMsg(null);
                     setIsError(false);
                   }}
-                  className="vp-gradient min-h-[44px] shrink-0 self-center rounded-lg px-3 text-xs font-semibold text-white"
+                  className="vp-gradient inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-lg px-4 text-sm font-semibold text-white"
                 >
                   Choose
                 </button>
