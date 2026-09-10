@@ -95,6 +95,26 @@ counsel to add one sentence on integrity processing to the Privacy Policy at rev
 - Middleware prefetch-skip and the viewer-mixed caches (§2AC phase 2), the cleanup migration, the
   `LEGAL.version` bump - all still post-event per §2AB/§2AE.
 
-## Deploy verification
+## Deploy verification (done, 2026-09-11 overnight)
 
-_(filled in below after the push)_
+- **Commit:** `e2434ec` on `main` (43 files) → pushed → production deployment
+  `dpl_nzm5RxBDk8exMcVSsCxNcpT3vTA5`, live on BOTH `vouchplayph.vercel.app` and
+  `vouchplay-v2.vercel.app`, functions still in Singapore (`sin1::sin1`).
+- **Gates before push:** typecheck, lint (incl. the migration-grant guard), **422 tests** (232 core,
+  169 web, 21 config), format - all green.
+- **Smoke (both domains, warm):** /players, a profile, the Hermosa detail, /leaderboards, /tournaments,
+  /clubs, /opportunities all 200 in ~0.26-0.76s; no error-boundary text anywhere.
+- **New profile caption renders** ("Based on 4 players" - V1 wording, because the public version is
+  still `STS_V1`; it becomes "independent players" only when you flip).
+- **Moderation page anonymously:** shows only the "Sign in" gate - zero integrity-queue content leaks.
+- **Settings:** the 18 `Vouch integrity` keys are already seeded in production (parsed from the
+  migration itself so they cannot drift), `skill_algorithm_active_version = STS_V1`,
+  `vouch_velocity_guard_enabled = true`.
+- **Player disruption:** none - public CSL/STS/eligibility are byte-identical under `STS_V1`; the only
+  live behaviour change is the velocity hold, which fires only on a low-trust burst (≥8 in 6h, ≥60%
+  low-trust) and is reversible from the queue.
+- **Still pending YOU:** paste `scripts/apply-0034.sql` (until then V2 values are computed but not
+  stored, and the moderation card's "Independent-evidence model" column shows "—"); run the backfill;
+  read the shadow CSV; flip after the Hermosa window.
+
+Files to open first: this brief, then `working/skill-v2-shadow-2026-09-10.csv`, then master_plan §2AF.
