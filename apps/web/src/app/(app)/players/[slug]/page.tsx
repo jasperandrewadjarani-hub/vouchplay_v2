@@ -203,6 +203,7 @@ export default async function PlayerProfilePage({ params }: Params) {
             isOwnProfile={player.isOwnProfile}
             viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
             hasVouched={vouchState.hasVouched}
+            canUpdateInMs={vouchState.canUpdateInMs}
             mode="profile"
           />
           <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />

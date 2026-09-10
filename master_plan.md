@@ -2499,6 +2499,41 @@ Below the actions, when the viewer has vouched: a small line with a success chec
 a friendly rounded-up phrase from a pure, unit-tested `formatVouchCooldown(ms)` (minutes → hours →
 days). This states the one-vouch rule and the cooldown in plain language exactly where the viewer acts.
 
+## 2V. Tapping an already-cast vouch confirms first, instead of reopening the form (2026-09-10)
+
+§2U coloured the button "Vouched" but tapping it still spun a loader and dropped the viewer straight
+into the vouch form - confusing for someone who has already vouched. Now a tap on "Vouched" opens a
+small confirm dialog (the shared **portaled** Modal, so it escapes a card row's `relative z-10`
+stacking context, §1X):
+
+- **Within the update cooldown:** "You've already vouched for {name}. You can change or withdraw your
+  vouch in {N hours/days}." with a single "Got it". No form, no navigation.
+- **Changeable (cooldown lapsed):** "You've already vouched for {name}. Would you like to change or
+  withdraw your vouch?" with "Change my vouch" (opens the form on the profile, or routes to the
+  profile with `?intent=vouch` from a card) and "Not now".
+
+The remaining time comes from the same `canUpdateInMs` now threaded to the button on both surfaces
+(profile via `getViewerVouchState`, cards via `viewerVouchCanUpdateInMs` from the cooldown map). The
+server still authoritatively enforces the cooldown on write, so the dialog is advisory and a slightly
+stale value is harmless.
+
+## 2W. "Request to partner" starts the tournament flow, instead of a dead-end tooltip (2026-09-10)
+
+The profile's "Request to partner" opened a small, often-truncated tooltip explaining that partnering
+happens inside a tournament - information, not an action. Partnering is genuinely tournament-scoped
+(a standalone Partner Finder is still a later phase), so the button now **takes the viewer into that
+flow** rather than describing it:
+
+- Clicking it navigates to the **tournaments list** carrying the intended partner (`/tournaments?partner={slug}`;
+  anonymous gates to signup and resumes there).
+- The tournaments page shows a **contextual banner** - "Partner up with {name}. Pick a tournament
+  below, then invite {name} as your partner during registration." - dismissible, and preserved across
+  search so it survives filtering. From there the existing per-division registration + partner-invite
+  step does the actual pairing.
+- Scope note: this is the guided path (land in the flow with context). Auto-preselecting the partner
+  inside a specific tournament's registration step is a deeper cross-flow change left for the Partner
+  Finder phase; it is not wired here to avoid touching the live registration internals.
+
 ## 1. Prompt Contract
 
 ### In scope

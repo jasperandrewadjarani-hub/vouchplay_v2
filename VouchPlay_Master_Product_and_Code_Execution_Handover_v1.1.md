@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.50
+# VouchPlay Master Product & Code Execution Handover v1.51
 
-_(File retains its `…v1.1.md` name; content is v1.50 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.51 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6152,6 +6152,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.51 (2026-09-10)
+
+_Vouch confirm dialog + "Request to partner" flow (master_plan §2V, §2W). No migration._
+
+- **Tapping "Vouched" now confirms first** instead of reopening the form. Portaled Modal: within the
+  update cooldown it says when the vouch can change ("…in N hours/days"); once changeable it offers
+  "Change my vouch" / "Not now". `canUpdateInMs` is threaded to the button on cards (via the cooldown
+  map) and the profile (via `getViewerVouchState`); the server still enforces the cooldown on write.
+- **"Request to partner" starts the tournament flow.** It replaced a truncated dead-end tooltip: it
+  now links to `/tournaments?partner={slug}` (anonymous gates to signup, resumes there). The
+  tournaments list shows a dismissible banner - "Partner up with {name}. Pick a tournament, then
+  invite them during registration." - preserved across search. The existing per-division registration
+  + partner-invite step does the pairing; auto-preselecting the partner inside a tournament is left
+  for the Partner Finder phase.
 
 ## v1.50 (2026-09-10)
 

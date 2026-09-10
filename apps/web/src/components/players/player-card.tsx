@@ -120,6 +120,7 @@ export function PlayerCard({
             targetName={player.displayName}
             authed={authed}
             hasVouched={player.viewerHasVouched}
+            canUpdateInMs={player.viewerVouchCanUpdateInMs}
             size="sm"
             mode="card"
           />
@@ -204,6 +205,7 @@ export function PlayerCard({
           targetName={player.displayName}
           authed={authed}
           hasVouched={player.viewerHasVouched}
+          canUpdateInMs={player.viewerVouchCanUpdateInMs}
           size="sm"
           mode="card"
         />

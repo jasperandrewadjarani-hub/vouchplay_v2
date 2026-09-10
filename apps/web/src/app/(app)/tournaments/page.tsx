@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { Plus, Handshake, X } from 'lucide-react';
 import {
   listManagedTournaments,
   listTournaments,
   withTournamentCardEngagement,
   type TournamentFilters,
 } from '@/lib/tournaments/queries';
+import { getPlayerMetaBySlug } from '@/lib/players/queries';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { TournamentCard } from '@/components/tournaments/tournament-card';
@@ -89,6 +90,14 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
   const { tournaments: baseTournaments, total, page, pageCount } = await listTournaments(filters);
   const tournaments = await withTournamentCardEngagement(baseTournaments, user?.id ?? null);
 
+  // Arrived from a player's "Request to partner" (§2W): guide the viewer to pick an event and invite
+  // that player during registration. Preserved across search so the banner survives filtering.
+  const partnerSlug = one(sp.partner);
+  const partner = partnerSlug ? await getPlayerMetaBySlug(partnerSlug) : null;
+  const preservedWithPartner = partnerSlug
+    ? { ...managedParams, partner: partnerSlug }
+    : managedParams;
+
   return (
     <div className="flex flex-col gap-5">
       <div className="vp-in flex items-end justify-between gap-3">
@@ -108,12 +117,34 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
         </Link>
       </div>
 
+      {partner && (
+        <div className="border-primary/30 bg-primary/5 flex items-start gap-3 rounded-2xl border p-4">
+          <span className="vp-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white">
+            <Handshake size={18} aria-hidden />
+          </span>
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="text-foreground font-semibold">Partner up with {partner.displayName}</p>
+            <p className="text-foreground-muted mt-0.5">
+              Pick a tournament below, then invite {partner.displayName} as your partner during
+              registration.
+            </p>
+          </div>
+          <Link
+            href="/tournaments"
+            aria-label="Dismiss"
+            className="text-foreground-muted hover:text-foreground shrink-0 rounded-lg p-1"
+          >
+            <X size={16} aria-hidden />
+          </Link>
+        </div>
+      )}
+
       <InstantFilterForm
         basePath="/tournaments"
         initialQ={filters.q ?? ''}
         initialCity={filters.city ?? ''}
         placeholder="Search tournaments"
-        preservedParams={managedParams}
+        preservedParams={preservedWithPartner}
       />
 
       {(canCreate || managedTournaments.length > 0) && (

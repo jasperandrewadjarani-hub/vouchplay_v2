@@ -70,6 +70,11 @@ export interface PlayerCardDTO {
    * "already vouched" state. Never true for an anonymous viewer.
    */
   viewerHasVouched: boolean;
+  /**
+   * When the viewer has vouched, ms remaining on the update cooldown (0 = changeable now); null when
+   * they have not vouched (master_plan §2V). Drives the "Vouched" confirm dialog's copy.
+   */
+  viewerVouchCanUpdateInMs: number | null;
   clubs: ClubRef[];
 }
 
@@ -163,6 +168,7 @@ export function toPlayerCardDTO(
     lookingForPartner: row.looking_for_partner,
     openForSponsorship: row.open_for_sponsorship,
     viewerHasVouched: false,
+    viewerVouchCanUpdateInMs: null,
     clubs: extras.clubs ?? [],
   };
 }

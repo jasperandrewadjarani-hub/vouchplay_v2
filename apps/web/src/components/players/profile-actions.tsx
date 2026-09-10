@@ -48,8 +48,6 @@ export function ProfileActions({
             : null
       : null,
   );
-  const [partnerNote, setPartnerNote] = useState(false);
-
   if (isOwnProfile) {
     return (
       <div className="flex flex-wrap gap-2">
@@ -83,31 +81,24 @@ export function ProfileActions({
           </Link>
         )}
 
-        {/* Request to partner - tournament-scoped today; a standalone finder is a later phase */}
-        <span className="relative inline-flex">
-          <button
-            type="button"
-            onClick={() => setPartnerNote((v) => !v)}
+        {/* Request to partner (§2W): partnering happens inside a tournament, so this takes the viewer
+            straight to the tournament list carrying the intended partner, where they pick an event
+            and invite this player during registration - no dead-end tooltip. Anonymous gates to
+            signup and resumes on the same tournament list. */}
+        {authed ? (
+          <Link href={`/tournaments?partner=${slug}`} className={secondaryBtn}>
+            <Handshake size={15} aria-hidden />
+            Request to partner
+          </Link>
+        ) : (
+          <Link
+            href={`/signup?next=${encodeURIComponent(`/tournaments?partner=${slug}`)}`}
             className={secondaryBtn}
-            aria-expanded={partnerNote}
           >
             <Handshake size={15} aria-hidden />
             Request to partner
-          </button>
-          {partnerNote && (
-            <span
-              role="status"
-              className="border-border bg-surface text-foreground-muted absolute top-full left-0 z-10 mt-2 w-64 rounded-xl border p-3 text-xs shadow-lg"
-            >
-              You partner up inside a tournament: open a{' '}
-              <Link href="/tournaments" className="text-primary font-medium">
-                tournament
-              </Link>{' '}
-              and invite {targetName} as your partner when you register. A profile-level Partner
-              Finder is coming.
-            </span>
-          )}
-        </span>
+          </Link>
+        )}
 
         {authed ? (
           <button type="button" onClick={() => setModal('skill-review')} className={secondaryBtn}>

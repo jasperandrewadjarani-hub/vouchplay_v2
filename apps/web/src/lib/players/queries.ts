@@ -374,21 +374,33 @@ export interface PlayerListPage {
 }
 
 /**
- * The set of target ids the viewer currently has an ACTIVE vouch for (master_plan §2U). One indexed
- * query keyed on the viewer's own id, so it never exposes anyone else's vouching. Service client is
- * safe here: the filter is `voucher_id = viewerId`, so only the viewer's own rows can return.
+ * Map of target id → remaining update-cooldown ms for every player the viewer currently has an ACTIVE
+ * vouch for (master_plan §2U/§2V): 0 means changeable now; a key's absence means "not vouched". One
+ * indexed query keyed on the viewer's own id, so it never exposes anyone else's vouching. Service
+ * client is safe: the filter is `voucher_id = viewerId`, so only the viewer's own rows can return.
  */
-export async function getViewerVouchedTargetIds(viewerId: string): Promise<Set<string>> {
+export async function getViewerVouchCooldownMap(viewerId: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
   try {
-    const { data } = await createServiceClient()
-      .from('vouches')
-      .select('target_id')
-      .eq('voucher_id', viewerId)
-      .eq('status', 'active');
-    return new Set((data ?? []).map((r) => (r as { target_id: string }).target_id));
+    const [{ data }, settings] = await Promise.all([
+      createServiceClient()
+        .from('vouches')
+        .select('target_id, updated_at')
+        .eq('voucher_id', viewerId)
+        .eq('status', 'active'),
+      getVouchSettings(),
+    ]);
+    const cooldownMs = settings.limits.updateCooldownDays * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    for (const r of data ?? []) {
+      const row = r as { target_id: string; updated_at: string };
+      const remaining = cooldownMs - (now - new Date(row.updated_at).getTime());
+      out.set(row.target_id, remaining > 0 ? remaining : 0);
+    }
   } catch {
-    return new Set();
+    // Empty map → no "vouched" state shown; safe default.
   }
+  return out;
 }
 
 /**
@@ -453,13 +465,13 @@ export async function listPlayers(
   const { rows, total } = await cached();
 
   const ids = rows.map((r) => r.id);
-  const [facts, skills, clubs, vouchedSet] = await Promise.all([
+  const [facts, skills, clubs, vouchMap] = await Promise.all([
     fetchBadgeFacts(ids),
     fetchSkillSnapshots(ids),
     getUserClubsBulk(ids),
     viewer.viewerId
-      ? getViewerVouchedTargetIds(viewer.viewerId)
-      : Promise.resolve(new Set<string>()),
+      ? getViewerVouchCooldownMap(viewer.viewerId)
+      : Promise.resolve(new Map<string, number>()),
   ]);
   const players = rows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
@@ -470,7 +482,9 @@ export async function listPlayers(
       clubs: clubs[row.id] ?? [],
     };
     const dto = toPlayerCardDTO(row, extras, viewer);
-    dto.viewerHasVouched = vouchedSet.has(row.id);
+    const cooldown = vouchMap.get(row.id);
+    dto.viewerHasVouched = vouchMap.has(row.id);
+    dto.viewerVouchCanUpdateInMs = cooldown ?? null;
     return dto;
   });
 

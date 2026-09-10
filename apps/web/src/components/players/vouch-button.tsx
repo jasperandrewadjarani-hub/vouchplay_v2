@@ -1,17 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ThumbsUp, CheckCircle2 } from 'lucide-react';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { Modal } from '@/components/ui/modal';
+import { formatVouchCooldown } from '@/lib/vouches/cooldown';
 import { VouchForm } from './vouch-form';
 
 /**
- * Vouch entry point + auth gate (handover §8.1, §9.1; gate "login gate resumes protected action").
+ * Vouch entry point + auth gate (handover §8.1, §9.1; §2U/§2V).
  *  - Anonymous → signup carrying `next=/players/{slug}?intent=vouch` (resumes after auth).
- *  - Signed-in on a card → link to the profile with the vouch intent (the form lives on the profile).
- *  - Signed-in on the profile → opens the real vouch form (auto-opens when arriving with ?intent=vouch).
+ *  - Not yet vouched, on a card → link to the profile with the vouch intent (the form lives there).
+ *  - Not yet vouched, on the profile → opens the vouch form (auto-opens when arriving ?intent=vouch).
+ *  - ALREADY vouched → the button reads "Vouched" and opens a confirm dialog instead of the form:
+ *    within the update cooldown it explains when they can change it; otherwise it offers to change or
+ *    withdraw (which opens the form on the profile, or routes there from a card). This stops a tap on
+ *    an already-cast vouch from dropping straight into the form (§2V).
  */
 export function VouchButton({
   slug,
@@ -21,6 +27,7 @@ export function VouchButton({
   isOwnProfile = false,
   viewerIsCoach = false,
   hasVouched = false,
+  canUpdateInMs = null,
   size = 'md',
   mode = 'card',
 }: {
@@ -33,12 +40,18 @@ export function VouchButton({
   viewerIsCoach?: boolean;
   /** The viewer already has an active vouch for this player - shows the "Vouched" state (§2U). */
   hasVouched?: boolean;
+  /** Ms left on the update cooldown (0 = changeable now, null = n/a); drives the dialog copy (§2V). */
+  canUpdateInMs?: number | null;
   size?: 'sm' | 'md';
   mode?: 'card' | 'profile';
 }) {
+  const router = useRouter();
   const params = useSearchParams();
   const resumed = params.get('intent') === 'vouch';
-  const [open, setOpen] = useState(mode === 'profile' && resumed && authed && !isOwnProfile);
+  const [formOpen, setFormOpen] = useState(
+    mode === 'profile' && resumed && authed && !isOwnProfile,
+  );
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
   const btn = `inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${pad}`;
@@ -47,6 +60,7 @@ export function VouchButton({
   // done rather than a fresh call to action - while staying tappable to change or withdraw (§2U).
   const vouchedCls = 'border border-success/50 bg-success/10 text-success hover:bg-success/15';
   const primaryCls = 'bg-primary text-white hover:opacity-90';
+  const label = targetName ?? 'this player';
 
   if (isOwnProfile) {
     return (
@@ -60,29 +74,101 @@ export function VouchButton({
   if (!authed) {
     const next = `/players/${slug}?intent=vouch`;
     return (
-      <Link
-        href={`/signup?next=${encodeURIComponent(next)}`}
-        className={`${btn} bg-primary text-white hover:opacity-90`}
-      >
+      <Link href={`/signup?next=${encodeURIComponent(next)}`} className={`${btn} ${primaryCls}`}>
         <ThumbsUp size={iconSize} aria-hidden />
         Vouch
       </Link>
     );
   }
 
+  // Already vouched (§2V): a tap opens a confirm dialog, never the form directly. The dialog is the
+  // shared portaled Modal so it escapes a card row's `relative z-10` stacking context (§1X).
+  if (hasVouched) {
+    const inCooldown = typeof canUpdateInMs === 'number' && canUpdateInMs > 0;
+    const startChange = () => {
+      setConfirmOpen(false);
+      if (mode === 'profile' && targetId) setFormOpen(true);
+      else router.push(`/players/${slug}?intent=vouch`);
+    };
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setConfirmOpen(true)}
+          className={`${btn} ${vouchedCls}`}
+          aria-label={`You vouched for ${label}`}
+        >
+          <CheckCircle2 size={iconSize} aria-hidden />
+          Vouched
+        </button>
+
+        {confirmOpen && (
+          <Modal
+            title="You’ve already vouched"
+            onClose={() => setConfirmOpen(false)}
+            align="center"
+          >
+            {inCooldown ? (
+              <div className="space-y-4">
+                <p className="text-foreground-muted text-sm">
+                  You’ve already vouched for {label}. You can change or withdraw your vouch in{' '}
+                  <span className="text-foreground font-semibold">
+                    {formatVouchCooldown(canUpdateInMs as number)}
+                  </span>
+                  .
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setConfirmOpen(false)}
+                  className={`${btn} ${primaryCls} w-full`}
+                >
+                  Got it
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-foreground-muted text-sm">
+                  You’ve already vouched for {label}. Would you like to change or withdraw your
+                  vouch?
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row-reverse">
+                  <button
+                    type="button"
+                    onClick={startChange}
+                    className={`${btn} ${primaryCls} flex-1`}
+                  >
+                    Change my vouch
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmOpen(false)}
+                    className={`${btn} border-border text-foreground flex-1 border`}
+                  >
+                    Not now
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        )}
+
+        {formOpen && targetId && (
+          <VouchForm
+            targetId={targetId}
+            targetName={label}
+            viewerIsCoach={viewerIsCoach}
+            onClose={() => setFormOpen(false)}
+          />
+        )}
+      </>
+    );
+  }
+
   if (mode === 'card') {
     return (
-      <Link
-        href={`/players/${slug}?intent=vouch`}
-        className={`${btn} ${hasVouched ? vouchedCls : primaryCls}`}
-        aria-label={hasVouched ? `You vouched for ${targetName ?? 'this player'}` : undefined}
-      >
-        {hasVouched ? (
-          <CheckCircle2 size={iconSize} aria-hidden />
-        ) : (
-          <ThumbsUp size={iconSize} aria-hidden />
-        )}
-        {hasVouched ? 'Vouched' : 'Vouch'}
+      <Link href={`/players/${slug}?intent=vouch`} className={`${btn} ${primaryCls}`}>
+        <ThumbsUp size={iconSize} aria-hidden />
+        Vouch
         <LinkSpinner size={iconSize} />
       </Link>
     );
@@ -90,24 +176,16 @@ export function VouchButton({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={`${btn} ${hasVouched ? vouchedCls : primaryCls}`}
-      >
-        {hasVouched ? (
-          <CheckCircle2 size={iconSize} aria-hidden />
-        ) : (
-          <ThumbsUp size={iconSize} aria-hidden />
-        )}
-        {hasVouched ? 'Vouched' : 'Vouch'}
+      <button type="button" onClick={() => setFormOpen(true)} className={`${btn} ${primaryCls}`}>
+        <ThumbsUp size={iconSize} aria-hidden />
+        Vouch
       </button>
-      {open && targetId && (
+      {formOpen && targetId && (
         <VouchForm
           targetId={targetId}
-          targetName={targetName ?? 'this player'}
+          targetName={label}
           viewerIsCoach={viewerIsCoach}
-          onClose={() => setOpen(false)}
+          onClose={() => setFormOpen(false)}
         />
       )}
     </>

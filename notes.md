@@ -2465,3 +2465,21 @@ Read-only over existing vouch model, no schema/logic change:
 - profile page: getViewerVouchState + note.
 
 Gates: typecheck/lint/format clean, 197 tests pass (cooldown 4). UI + read-only queries, no migration.
+
+## 2026-09-10 - Vouch confirm dialog + Request-to-partner flow (§2V/§2W, handover v1.51)
+
+§2V: tapping "Vouched" now opens a confirm dialog (shared portaled Modal), not the form. In cooldown:
+"...change or withdraw in {N hrs/days}" + Got it. Changeable: "Change my vouch"/"Not now" (change ->
+form on profile, or router.push /players/slug?intent=vouch from a card). canUpdateInMs threaded to
+VouchButton: cards via viewerVouchCanUpdateInMs (getViewerVouchCooldownMap replaced the Set fn), profile
+via getViewerVouchState. Server still enforces cooldown on write.
+
+§2W: profile "Request to partner" replaced dead-end tooltip -> Link to /tournaments?partner=slug (anon
+gates to signup then resumes). tournaments/page.tsx shows dismissible banner "Partner up with {name}..."
+(getPlayerMetaBySlug), partner param preserved across search. Existing registration partner-invite step
+does the pairing; auto-preselect deferred to Partner Finder phase.
+
+Files: vouch-button.tsx (rewrite), dto.ts (viewerVouchCanUpdateInMs), queries.ts (getViewerVouchCooldownMap),
+player-card.tsx (both pass canUpdateInMs), profile page (pass canUpdateInMs), profile-actions.tsx (partner
+Link, removed tooltip/partnerNote), tournaments/page.tsx (banner).
+Gates: typecheck/lint/format clean, 197 tests. No migration.
