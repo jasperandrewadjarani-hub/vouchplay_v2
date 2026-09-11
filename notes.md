@@ -2708,3 +2708,29 @@ vouches" = given; D5 new-account window 7d tunable; D6 global default sort chang
 filter = staff + that tournament's organizers; D8 city mapping review before DML.
 Phasing: A (UI/read-side, one windowed deploy post-Hermosa window) -> B (cities, DML after D8) -> C
 (identity pipeline, after counsel on ID retention).
+
+## 2026-09-11 - Directory/organizer UX Phase A (§2AG, handover v1.60) - built, gates green
+
+Decisions D1-D8 all at recommended values (Jasper accepted). Orchestrated by Opus, 2x Sonnet executors
+(A1-A4 directory, A5 organizer), non-overlapping files.
+
+A1 sort: PlayerSort (new_unvouched default global / newest / oldest / name / most_vouched; sts_desc
+STAFF-ONLY, server-rechecked §8.4). fetchListRows now fetches full matching set (bounded ~1000-row
+PostgREST cap, cached 60s PLAYERS_LIST_TAG, card columns only) + in-memory order + slice; heavy
+per-player reads stay on the 24 shown ids. Pagination persist: sessionStorage vp:last-players-url,
+BackToPlayersLink on profile, PlayersNavLink on tab.
+A2 dual-range: components/ui/dual-range.tsx; stsMin/stsMax (legacy minSts parses), vouchesMin/Max
+(received), givenMin/Max (given, vouches given = new bounded index read <=10k, in-memory count).
+A3 new: new_account_badge_days=7 (config+catalog 'directory' group, SEEDED LIVE via service role +
+scripts/apply-0035.sql), NewBadge neutral pill, dto.isNew, compact-row GraduationCap coach icon,
+"New this week" filter.
+A4 tournament filter: staff or organizer-of-that-tournament only, server-gated in listPlayers
+(isOrganizerOfTournament uncached identity check); anon gets unfiltered list.
+A5 organizer: EntryFilters -> combinable {divisions[],statuses[],eligibility[],payment[],partner[],
+includeClosed,search} (AND across / OR within); EntrySort (needs_me default unchanged + name/division/
+status/registered_at/amount/eligibility/payment asc/desc); CapacityStrip (registered/capacity·paid·
+pending, warn >=90%, tap-to-filter); manage page builds counts in memory (no new query);
+divisions prop renamed to eligibilityDivisions, new divisions=capacity array.
+
+Gates: typecheck, lint (migration guard OK), 489 tests (236 web / 232 core / 21 config), format - green.
+Deferred: Phase B cities (mapping CSV sign-off), Phase C identity pipeline (counsel on ID retention).

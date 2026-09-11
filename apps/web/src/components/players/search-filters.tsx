@@ -8,6 +8,9 @@ import {
   STS_MAX,
   STS_MIN,
   STS_STEP,
+  VOUCHES_MAX,
+  VOUCHES_MIN,
+  VOUCHES_STEP,
   activeFilterCount,
   clearFilter,
   describeActiveFilters,
@@ -17,6 +20,11 @@ import {
   type PlayerFilters,
 } from '@/lib/players/filters';
 import type { ClubOption } from '@/lib/players/queries';
+import type { TournamentOption } from '@/lib/tournaments/queries';
+import { DualRange } from '@/components/ui/dual-range';
+
+const formatSts = (v: number) => v.toFixed(1);
+const formatVouches = (v: number) => (v >= VOUCHES_MAX ? `${VOUCHES_MAX}+` : String(v));
 
 /**
  * Directory search & filters (handover §8.4, master_plan §2B).
@@ -25,13 +33,15 @@ import type { ClubOption } from '@/lib/players/queries';
  * cache-friendly, and every filter is in the address bar rather than in component state only.
  *
  * The controls are picked per data type rather than by fashion (§2B): named discrete values get
- * chips, a genuinely continuous number gets a single-thumb slider, three options get a segmented
- * control, and the booleans get 44px toggle pills instead of 13px checkboxes - our players span a
- * wide age range and most of them are on a phone. State is never carried by colour alone: a
- * selected chip also shows a check mark and reports `aria-pressed`.
+ * chips, a genuinely continuous two-sided range gets the shared `DualRange` slider (§2AG A2 - STS,
+ * vouches received, vouches given), three options get a segmented control, and the booleans get 44px
+ * toggle pills instead of 13px checkboxes - our players span a wide age range and most of them are
+ * on a phone. State is never carried by colour alone: a selected chip also shows a check mark and
+ * reports `aria-pressed`.
  *
- * Filtering by STS is not ranking by STS. §8.4 forbids ordering the directory by STS and the sort is
- * untouched; a minimum-confidence filter answers a different question from "who is best".
+ * Filtering by STS is not ranking by STS. §8.4 forbids ordering the directory by STS (D3) - the Sort
+ * control lives outside this sheet and never offers a trust-confidence sort to a non-staff viewer; a
+ * range filter here answers a different question from "who is best".
  */
 
 const controlClass =
@@ -78,11 +88,15 @@ export function SearchFilters({
   current,
   cityOptions,
   clubOptions,
+  tournamentOptions,
   compact,
 }: {
   current: PlayerFilters;
   cityOptions: CityOption[];
   clubOptions: ClubOption[];
+  /** Empty for anyone who is neither staff nor an organizer of any tournament (§2AG A4, D7) - the
+   *  select is hidden entirely rather than shown empty. */
+  tournamentOptions: TournamentOption[];
   compact: boolean;
 }) {
   const router = useRouter();
@@ -113,7 +127,7 @@ export function SearchFilters({
   }, [serialized]);
 
   const textTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const stsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rangeTimers = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
   function push(next: PlayerFilters) {
     const qs = serialize(next);
@@ -138,12 +152,14 @@ export function SearchFilters({
     }, 400);
   }
 
-  /** The slider fires continuously while dragging, so it settles before it navigates. */
-  function onStsChange(value: number) {
-    const next = { ...draft, q: q.trim() || undefined, minSts: value > 0 ? value : undefined };
+  /** Every dual-range slider (STS, vouches received, vouches given) fires continuously while
+   *  dragging, so each keeps its OWN debounce timer (`key`) and settles before it navigates. */
+  function onRangeChange(key: string, patch: Partial<PlayerFilters>) {
+    const next = { ...draft, q: q.trim() || undefined, ...patch };
     setDraft(next);
-    if (stsTimer.current) clearTimeout(stsTimer.current);
-    stsTimer.current = setTimeout(() => push(next), 300);
+    const timers = rangeTimers.current;
+    if (timers[key]) clearTimeout(timers[key]!);
+    timers[key] = setTimeout(() => push(next), 300);
   }
 
   function toggleSkill(ordinal: number) {
@@ -176,9 +192,8 @@ export function SearchFilters({
   const count = activeFilterCount(draft);
   const chips = describeActiveFilters(
     { ...draft, q: q.trim() || undefined },
-    { cityOptions, clubOptions },
+    { cityOptions, clubOptions, tournamentOptions },
   );
-  const minSts = draft.minSts ?? STS_MIN;
 
   return (
     <form
@@ -275,34 +290,54 @@ export function SearchFilters({
             </div>
           </div>
 
-          {/* STS: continuous, unnamed - the one control here a slider actually fits. */}
-          <div>
-            <label htmlFor="minSts" className={sectionLabel}>
-              Minimum trust score
-            </label>
-            {/* The slider's height is written as an exact pixel value on purpose: the app sets a
-                14px root font, so `h-11` renders 38.5px here, under the touch minimum. Measured on
-                a real page rather than assumed. */}
-            <div className="mt-2 flex items-center gap-3">
-              <input
-                id="minSts"
-                type="range"
-                min={STS_MIN}
-                max={STS_MAX}
-                step={STS_STEP}
-                value={minSts}
-                onChange={(e) => onStsChange(Number(e.target.value))}
-                aria-valuetext={minSts === 0 ? 'Any' : `${minSts.toFixed(1)} and up`}
-                className="accent-primary h-[44px] flex-1 cursor-pointer"
-              />
-              <span
-                className="border-border text-foreground w-20 shrink-0 rounded-lg border px-2 py-1 text-center text-sm font-semibold tabular-nums"
-                aria-hidden
-              >
-                {minSts === 0 ? 'Any' : `${minSts.toFixed(1)}+`}
-              </span>
-            </div>
-          </div>
+          {/* STS/vouches: genuinely continuous two-sided ranges, so each gets the shared dual-thumb
+              slider (§2AG A2) rather than a single-thumb minimum. Filtering by STS is allowed;
+              ORDERING the directory by it is not (§8.4, D3) - the Sort control above never offers
+              it to a non-staff viewer. */}
+          <DualRange
+            min={STS_MIN}
+            max={STS_MAX}
+            step={STS_STEP}
+            value={[draft.stsMin ?? STS_MIN, draft.stsMax ?? STS_MAX]}
+            onChange={([lo, hi]) =>
+              onRangeChange('sts', {
+                stsMin: lo > STS_MIN ? lo : undefined,
+                stsMax: hi < STS_MAX ? hi : undefined,
+              })
+            }
+            label="Trust score (STS)"
+            format={formatSts}
+          />
+
+          <DualRange
+            min={VOUCHES_MIN}
+            max={VOUCHES_MAX}
+            step={VOUCHES_STEP}
+            value={[draft.vouchesMin ?? VOUCHES_MIN, draft.vouchesMax ?? VOUCHES_MAX]}
+            onChange={([lo, hi]) =>
+              onRangeChange('vouches', {
+                vouchesMin: lo > VOUCHES_MIN ? lo : undefined,
+                vouchesMax: hi < VOUCHES_MAX ? hi : undefined,
+              })
+            }
+            label="Vouches received"
+            format={formatVouches}
+          />
+
+          <DualRange
+            min={VOUCHES_MIN}
+            max={VOUCHES_MAX}
+            step={VOUCHES_STEP}
+            value={[draft.givenMin ?? VOUCHES_MIN, draft.givenMax ?? VOUCHES_MAX]}
+            onChange={([lo, hi]) =>
+              onRangeChange('given', {
+                givenMin: lo > VOUCHES_MIN ? lo : undefined,
+                givenMax: hi < VOUCHES_MAX ? hi : undefined,
+              })
+            }
+            label="Vouches given"
+            format={formatVouches}
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -343,6 +378,30 @@ export function SearchFilters({
               </select>
             </div>
           </div>
+
+          {/* Staff, or a tournament's own organizers, only (§2AG A4, D7) - hidden entirely, not just
+              disabled, when there is nothing this viewer is allowed to filter by. The server gate in
+              `listPlayers` is authoritative regardless; this only controls what is offered. */}
+          {tournamentOptions.length > 0 && (
+            <div>
+              <label htmlFor="tournament" className={sectionLabel}>
+                Registered in tournament
+              </label>
+              <select
+                id="tournament"
+                value={draft.tournament ?? ''}
+                onChange={(e) => apply({ tournament: e.target.value || undefined })}
+                className={`${controlClass} mt-2`}
+              >
+                <option value="">Any tournament</option>
+                {tournamentOptions.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Three options do not need a menu. */}
           <div>
@@ -393,6 +452,12 @@ export function SearchFilters({
                 onClick={() => apply({ openForSponsorship: !draft.openForSponsorship })}
               >
                 Open to sponsorship
+              </TogglePill>
+              <TogglePill
+                selected={!!draft.newOnly}
+                onClick={() => apply({ newOnly: !draft.newOnly })}
+              >
+                New this week
               </TogglePill>
             </div>
           </div>

@@ -3109,7 +3109,7 @@ delegated to Opus (orchestrate/review) + Sonnet (implement) once the decisions b
 | 12 | Default sort = new unvouched first; Excel-like sort options | List is ordered `updated_at desc` (`players/queries.ts:370`), no sort control; **locked §8.4 forbids ordering the directory by STS** |
 | 13 | Organizer registrations: combinable filters, per-division counts vs capacity, column sort | `EntryFilters` = one queue + one division + closed toggle + search; fixed `sortEntries`; counts exist (`getDivisionRegistrationCounts`, `divisions.capacity_teams`) |
 
-### Decisions Jasper must answer before execution (recommendations inline)
+### Decisions (DECIDED 2026-09-11: Jasper accepted ALL recommendations below; Phase A in build)
 
 - **D1 - Identity Verified must be staff-approved, not automatic on upload.** Under STS_V2 (§2AF) an
   approved identity verification is a trust *anchor* (weight 1.0). Auto-badging on upload would let
@@ -3172,6 +3172,10 @@ handles, live value chips and an "Any" state; active filters shown as removable 
 the sort control outside the collapsible filter sheet; everything in the URL so back/refresh/share
 keep state; "Back to players" on the profile that returns to the exact page and filters; badges are
 calm pills, never red; nothing exposes voucher identity or STS internals.
+
+### Phase A - SHIPPED 2026-09-11 (handover v1.60)
+
+A1-A5 built and deployed. Sorts (staff-only STS), pagination persistence, dual-range sliders (STS / vouches received / vouches given), "New" badge+filter (`new_account_badge_days`=7, seeded live), compact-row coach icon, tournament filter (server-gated), and organizer combinable filters + capacity strip + column sort. `scripts/apply-0035.sql` is the reproducible seed. Phases B (cities) and C (identity) still pending their sign-offs.
 
 ### Deferred / not in this batch
 

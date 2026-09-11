@@ -26,7 +26,8 @@ export type SettingGroupKey =
   | 'leaderboards'
   | 'flags'
   | 'announcement'
-  | 'vouch_integrity';
+  | 'vouch_integrity'
+  | 'directory';
 
 export interface SettingGroup {
   key: SettingGroupKey;
@@ -113,6 +114,11 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     key: 'vouch_integrity',
     label: 'Vouch integrity',
     help: 'Rig-resistant Community Skill (STS_V2, master_plan §2AF): the independent-evidence model and the velocity guard.',
+  },
+  {
+    key: 'directory',
+    label: 'Player directory',
+    help: 'Sort, filter and badge windows for the public player directory (master_plan §2AG).',
   },
 ] as const;
 
@@ -1236,6 +1242,17 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     min: 0,
     max: 6,
     help: 'Minimum skill-band gap (V1 vs V2, or community level vs self-rating with thin evidence) before a spike is flagged.',
+  },
+
+  // Player directory
+  {
+    key: 'new_account_badge_days',
+    label: 'New-account badge window (days)',
+    group: 'directory',
+    kind: 'int',
+    min: 0,
+    max: 90,
+    help: 'How recently a player must have onboarded to show the neutral "New" pill and match "New this week" (0 disables it, §2AG D5).',
   },
 ] as const;
 

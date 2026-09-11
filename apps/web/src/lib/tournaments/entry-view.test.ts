@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { OrganizerRegistration } from './registration-queries';
 import {
   amountLabel,
+  clearAllEntryFilters,
+  clearEntryFilter,
   countEntries,
   DEFAULT_FILTERS,
+  DEFAULT_SORT,
+  describeEntryChips,
   filterEntries,
   hasUnconfirmedPartner,
   isClosed,
@@ -11,6 +15,7 @@ import {
   sortEntries,
   statusChip,
   teamLabel,
+  type EntryFilters,
 } from './entry-view';
 
 function entry(over: Partial<OrganizerRegistration> = {}): OrganizerRegistration {
@@ -121,65 +126,7 @@ describe('scanning', () => {
   });
 });
 
-describe('filtering', () => {
-  const rows = [
-    entry({ id: 'a', paymentStatus: 'submitted' }),
-    entry({ id: 'b', status: 'withdrawn' }),
-    entry({
-      id: 'c',
-      divisionName: "Women's Doubles",
-      members: [{ id: 'p9', name: 'Lyn Uy', slug: 'lyn', avatarUrl: null }],
-    }),
-  ];
-
-  it('hides closed entries by default', () => {
-    // The reported complaint: withdrawn entries filled the screen.
-    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a', 'c']);
-  });
-
-  it('shows ONLY the closed ones when asked, not appended to the open list (§2O)', () => {
-    expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, includeClosed: true }).map((r) => r.id),
-    ).toEqual(['b']);
-  });
-
-  it('filters to one queue', () => {
-    expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, queue: 'needs_payment_review' }).map((r) => r.id),
-    ).toEqual(['a']);
-  });
-
-  it('searches by player name, which is the question organizers are actually asked', () => {
-    expect(filterEntries(rows, { ...DEFAULT_FILTERS, search: 'lyn' }).map((r) => r.id)).toEqual([
-      'c',
-    ]);
-    expect(filterEntries(rows, { ...DEFAULT_FILTERS, search: 'MARIA' }).map((r) => r.id)).toEqual([
-      'a',
-    ]);
-  });
-
-  it('filters by division', () => {
-    expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, divisionName: "Women's Doubles" }).map((r) => r.id),
-    ).toEqual(['c']);
-  });
-});
-
-describe('ordering and counts', () => {
-  it('puts entries needing a decision first', () => {
-    const needsWork = entry({
-      id: 'work',
-      paymentStatus: 'submitted',
-      createdAt: '2026-09-01T00:00:00Z',
-    });
-    const routine = entry({
-      id: 'routine',
-      status: 'confirmed',
-      createdAt: '2026-09-08T00:00:00Z',
-    });
-    expect(sortEntries([routine, needsWork]).map((r) => r.id)).toEqual(['work', 'routine']);
-  });
-
+describe('counts', () => {
   it('counts each queue, and excludes closed entries from all of them', () => {
     const counts = countEntries([
       entry({ paymentStatus: 'submitted' }),
@@ -194,5 +141,315 @@ describe('ordering and counts', () => {
       cancellationRequested: 1,
       needsEligibilityReview: 1,
     });
+  });
+});
+
+describe('combinable filters - AND across groups, OR within a group', () => {
+  const rows = [
+    entry({ id: 'a', divisionId: 'd1', divisionName: "Men's Doubles", paymentStatus: 'submitted' }),
+    entry({ id: 'b', divisionId: 'd1', divisionName: "Men's Doubles", status: 'withdrawn' }),
+    entry({
+      id: 'c',
+      divisionId: 'd2',
+      divisionName: "Women's Doubles",
+      members: [{ id: 'p9', name: 'Lyn Uy', slug: 'lyn', avatarUrl: null }],
+    }),
+    entry({
+      id: 'd',
+      divisionId: 'd2',
+      divisionName: "Women's Doubles",
+      status: 'confirmed',
+      eligibilityStatus: 'review',
+      hasProof: true,
+      unconfirmedMemberIds: ['p2'],
+    }),
+    entry({ id: 'e', divisionId: 'd3', divisionName: 'Mixed Doubles', status: 'rejected' }),
+  ];
+
+  it('DEFAULT_FILTERS applies no constraint (every group empty = "Any") except hiding closed', () => {
+    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a', 'c', 'd']);
+  });
+
+  it('the legacy "show closed" switch shows ONLY closed when no Status is picked (§2O, unchanged)', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, includeClosed: true }).map((r) => r.id),
+    ).toEqual(['b', 'e']);
+  });
+
+  it('an explicit Status pick shows a closed status even with "show closed" off', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, statuses: ['withdrawn'] }).map((r) => r.id),
+    ).toEqual(['b']);
+  });
+
+  it('an explicit Status pick is authoritative even with "show closed" on - only that status shows', () => {
+    expect(
+      filterEntries(rows, {
+        ...DEFAULT_FILTERS,
+        statuses: ['confirmed'],
+        includeClosed: true,
+      }).map((r) => r.id),
+    ).toEqual(['d']);
+  });
+
+  it('Status is OR within the group: two picked statuses both show', () => {
+    expect(
+      filterEntries(rows, {
+        ...DEFAULT_FILTERS,
+        statuses: ['withdrawn', 'rejected'],
+      }).map((r) => r.id),
+    ).toEqual(['b', 'e']);
+  });
+
+  it('Division is OR within the group', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, divisions: ['d2', 'd3'] }).map((r) => r.id),
+    ).toEqual(['c', 'd']); // 'e' is closed and hidden by the default closed-gate
+  });
+
+  it('Eligibility filters to the picked kinds', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, eligibility: ['review'] }).map((r) => r.id),
+    ).toEqual(['d']);
+  });
+
+  it('Payment filters to has/no receipt', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: ['has_proof'] }).map((r) => r.id),
+    ).toEqual(['d']);
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: ['no_proof'] }).map((r) => r.id),
+    ).toEqual(['a', 'c']);
+  });
+
+  it('Partner filters to confirmed/unconfirmed', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, partner: ['unconfirmed'] }).map((r) => r.id),
+    ).toEqual(['d']);
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, partner: ['confirmed'] }).map((r) => r.id),
+    ).toEqual(['a', 'c']);
+  });
+
+  it('AND across groups: Division AND Payment both narrow the result', () => {
+    expect(
+      filterEntries(rows, {
+        ...DEFAULT_FILTERS,
+        divisions: ['d2'],
+        payment: ['has_proof'],
+      }).map((r) => r.id),
+    ).toEqual(['d']);
+  });
+
+  it('search still ANDs with the other groups', () => {
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, divisions: ['d2'], search: 'lyn' }).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['c']);
+    // 'd' also has the default "Maria Cruz & Ana Reyes" members, so the un-scoped search matches both.
+    expect(filterEntries(rows, { ...DEFAULT_FILTERS, search: 'MARIA' }).map((r) => r.id)).toEqual([
+      'a',
+      'd',
+    ]);
+  });
+
+  it('every group empty means every group applies no constraint, one at a time', () => {
+    const base: EntryFilters = { ...DEFAULT_FILTERS };
+    expect(filterEntries(rows, { ...base, divisions: [] })).toEqual(filterEntries(rows, base));
+    expect(filterEntries(rows, { ...base, eligibility: [] })).toEqual(filterEntries(rows, base));
+    expect(filterEntries(rows, { ...base, payment: [] })).toEqual(filterEntries(rows, base));
+    expect(filterEntries(rows, { ...base, partner: [] })).toEqual(filterEntries(rows, base));
+  });
+});
+
+describe('chip description + clearing', () => {
+  const divisions = [
+    { id: 'd1', name: "Men's Doubles" },
+    { id: 'd2', name: "Women's Doubles" },
+  ];
+
+  it('describes every active filter as a removable chip, and none when defaults', () => {
+    expect(describeEntryChips(DEFAULT_FILTERS, divisions)).toEqual([]);
+    const filters: EntryFilters = {
+      divisions: ['d1'],
+      statuses: ['confirmed'],
+      eligibility: ['review'],
+      payment: ['has_proof'],
+      partner: ['unconfirmed'],
+      includeClosed: true,
+      search: 'maria',
+    };
+    const chips = describeEntryChips(filters, divisions);
+    expect(chips).toEqual([
+      { group: 'divisions', value: 'd1', label: "Men's Doubles" },
+      { group: 'statuses', value: 'confirmed', label: 'Confirmed' },
+      { group: 'eligibility', value: 'review', label: 'Needs review' },
+      { group: 'payment', value: 'has_proof', label: 'Has receipt' },
+      { group: 'partner', value: 'unconfirmed', label: 'Partner not confirmed' },
+      { group: 'includeClosed', value: '', label: 'Showing closed' },
+      { group: 'search', value: '', label: '"maria"' },
+    ]);
+  });
+
+  it('clears one value from an array group without touching the others', () => {
+    const filters: EntryFilters = {
+      ...DEFAULT_FILTERS,
+      divisions: ['d1', 'd2'],
+      statuses: ['confirmed'],
+    };
+    const next = clearEntryFilter(filters, 'divisions', 'd1');
+    expect(next.divisions).toEqual(['d2']);
+    expect(next.statuses).toEqual(['confirmed']);
+  });
+
+  it('clears the two scalar groups outright', () => {
+    const filters: EntryFilters = { ...DEFAULT_FILTERS, includeClosed: true, search: 'x' };
+    expect(clearEntryFilter(filters, 'includeClosed', '').includeClosed).toBe(false);
+    expect(clearEntryFilter(filters, 'search', '').search).toBe('');
+  });
+
+  it('clearAllEntryFilters resets to defaults', () => {
+    const filters: EntryFilters = {
+      divisions: ['d1'],
+      statuses: ['confirmed'],
+      eligibility: ['review'],
+      payment: ['has_proof'],
+      partner: ['unconfirmed'],
+      includeClosed: true,
+      search: 'x',
+    };
+    expect(clearAllEntryFilters()).toEqual(DEFAULT_FILTERS);
+    expect(filterEntries([entry()], clearAllEntryFilters())).toEqual(
+      filterEntries([entry()], DEFAULT_FILTERS),
+    );
+    void filters;
+  });
+});
+
+describe('sorting - default unchanged, every column key deterministic', () => {
+  it('with no sort argument, still needs-a-decision first then newest (unchanged default)', () => {
+    const needsWork = entry({
+      id: 'work',
+      paymentStatus: 'submitted',
+      createdAt: '2026-09-01T00:00:00Z',
+    });
+    const routine = entry({
+      id: 'routine',
+      status: 'confirmed',
+      createdAt: '2026-09-08T00:00:00Z',
+    });
+    expect(sortEntries([routine, needsWork]).map((r) => r.id)).toEqual(['work', 'routine']);
+    expect(DEFAULT_SORT).toEqual({ key: 'needs_me', dir: 'asc' });
+  });
+
+  it('needs_me desc flips routine entries first', () => {
+    const needsWork = entry({ id: 'work', paymentStatus: 'submitted' });
+    const routine = entry({ id: 'routine', status: 'confirmed' });
+    expect(
+      sortEntries([needsWork, routine], { key: 'needs_me', dir: 'desc' }).map((r) => r.id),
+    ).toEqual(['routine', 'work']);
+  });
+
+  it('name asc/desc', () => {
+    const rows = [
+      entry({ id: 'z', members: [{ id: 'p1', name: 'Zed Cruz', slug: 'z', avatarUrl: null }] }),
+      entry({ id: 'a', members: [{ id: 'p2', name: 'Ana Reyes', slug: 'a', avatarUrl: null }] }),
+    ];
+    expect(sortEntries(rows, { key: 'name', dir: 'asc' }).map((r) => r.id)).toEqual(['a', 'z']);
+    expect(sortEntries(rows, { key: 'name', dir: 'desc' }).map((r) => r.id)).toEqual(['z', 'a']);
+  });
+
+  it('division asc/desc', () => {
+    const rows = [
+      entry({ id: 'w', divisionName: "Women's Doubles" }),
+      entry({ id: 'm', divisionName: "Men's Doubles" }),
+    ];
+    expect(sortEntries(rows, { key: 'division', dir: 'asc' }).map((r) => r.id)).toEqual(['m', 'w']);
+    expect(sortEntries(rows, { key: 'division', dir: 'desc' }).map((r) => r.id)).toEqual([
+      'w',
+      'm',
+    ]);
+  });
+
+  it('status asc/desc sorts by the label the organizer sees, not the raw enum', () => {
+    const rows = [
+      entry({ id: 'confirmed', status: 'confirmed' }),
+      entry({ id: 'awaiting', status: 'payment_pending' }),
+    ];
+    const asc = sortEntries(rows, { key: 'status', dir: 'asc' }).map((r) => r.id);
+    const desc = sortEntries(rows, { key: 'status', dir: 'desc' }).map((r) => r.id);
+    expect(asc).toEqual([...desc].reverse());
+    expect(asc.length).toBe(2);
+  });
+
+  it('registered_at asc/desc', () => {
+    const rows = [
+      entry({ id: 'old', createdAt: '2026-09-01T00:00:00Z' }),
+      entry({ id: 'new', createdAt: '2026-09-08T00:00:00Z' }),
+    ];
+    expect(sortEntries(rows, { key: 'registered_at', dir: 'asc' }).map((r) => r.id)).toEqual([
+      'old',
+      'new',
+    ]);
+    expect(sortEntries(rows, { key: 'registered_at', dir: 'desc' }).map((r) => r.id)).toEqual([
+      'new',
+      'old',
+    ]);
+  });
+
+  it('amount asc/desc, with a free entry (null) sorting as zero', () => {
+    const rows = [
+      entry({ id: 'free', amountDue: null }),
+      entry({ id: 'cheap', amountDue: 500 }),
+      entry({ id: 'pricey', amountDue: 3000 }),
+    ];
+    expect(sortEntries(rows, { key: 'amount', dir: 'asc' }).map((r) => r.id)).toEqual([
+      'free',
+      'cheap',
+      'pricey',
+    ]);
+    expect(sortEntries(rows, { key: 'amount', dir: 'desc' }).map((r) => r.id)).toEqual([
+      'pricey',
+      'cheap',
+      'free',
+    ]);
+  });
+
+  it('eligibility asc/desc', () => {
+    const rows = [
+      entry({ id: 'eligible', eligibilityStatus: 'eligible' }),
+      entry({ id: 'review', eligibilityStatus: 'review' }),
+    ];
+    const asc = sortEntries(rows, { key: 'eligibility', dir: 'asc' }).map((r) => r.id);
+    const desc = sortEntries(rows, { key: 'eligibility', dir: 'desc' }).map((r) => r.id);
+    expect(asc).toEqual([...desc].reverse());
+  });
+
+  it('payment asc/desc, with no payment row (null) sorting first ascending', () => {
+    const rows = [
+      entry({ id: 'none', paymentId: null, paymentStatus: null }),
+      entry({ id: 'verified', paymentId: 'p1', paymentStatus: 'verified' }),
+    ];
+    expect(sortEntries(rows, { key: 'payment', dir: 'asc' }).map((r) => r.id)).toEqual([
+      'none',
+      'verified',
+    ]);
+  });
+
+  it('ties on the chosen column keep a stable, deterministic secondary order by registration date', () => {
+    const rows = [
+      entry({ id: 'newer', status: 'confirmed', createdAt: '2026-09-08T00:00:00Z' }),
+      entry({ id: 'older', status: 'confirmed', createdAt: '2026-09-01T00:00:00Z' }),
+    ];
+    // Both tie on `status`; the secondary tie-break is always newest-first, regardless of dir.
+    expect(sortEntries(rows, { key: 'status', dir: 'asc' }).map((r) => r.id)).toEqual([
+      'newer',
+      'older',
+    ]);
+    expect(sortEntries(rows, { key: 'status', dir: 'desc' }).map((r) => r.id)).toEqual([
+      'newer',
+      'older',
+    ]);
   });
 });

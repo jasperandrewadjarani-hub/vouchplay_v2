@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MapPin, CalendarDays, Facebook, Clock } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
@@ -26,6 +25,7 @@ import {
   OrganizerBadge,
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
+  NewBadge,
 } from '@/components/players/badges';
 import {
   SkillDistribution,
@@ -35,6 +35,7 @@ import {
 import { VouchComments } from '@/components/players/vouch-comments';
 import { AchievementsPanel } from '@/components/players/achievements-panel';
 import { SkillTagsPanel } from '@/components/players/skill-tags-panel';
+import { BackToPlayersLink } from '@/components/players/list-return';
 import {
   getPlayerSkillTags,
   getPlayerAchievements,
@@ -116,9 +117,9 @@ export default async function PlayerProfilePage({ params }: Params) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <Link href="/players" className="text-foreground-muted hover:text-foreground text-sm">
-        ← All players
-      </Link>
+      {/* Returns to the exact list URL (filters/sort/page) the viewer came from (master_plan §2AG
+          A1), falling back to the bare directory when nothing was remembered. */}
+      <BackToPlayersLink className="text-foreground-muted hover:text-foreground text-sm" />
 
       {/* Header (§9.1) */}
       <header className="border-border bg-surface vp-hero relative overflow-hidden rounded-2xl border p-5">
@@ -202,7 +203,8 @@ export default async function PlayerProfilePage({ params }: Params) {
           player.isCoach ||
           player.isOrganizer ||
           player.lookingForPartner ||
-          player.openForSponsorship) && (
+          player.openForSponsorship ||
+          player.isNew) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {player.identityVerified && <IdentityVerifiedBadge />}
             {player.skillVerified && <SkillVerifiedBadge />}
@@ -210,6 +212,7 @@ export default async function PlayerProfilePage({ params }: Params) {
             {player.isOrganizer && <OrganizerBadge />}
             {player.lookingForPartner && <LookingForPartnerBadge />}
             {player.openForSponsorship && <OpenForSponsorshipBadge />}
+            {player.isNew && <NewBadge />}
           </div>
         )}
 

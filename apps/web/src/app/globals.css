@@ -186,3 +186,50 @@ body {
 .vp-in {
   animation: vp-fade-up 0.4s ease both;
 }
+
+/*
+ * Dual-thumb range slider (master_plan §2AG A2, `components/ui/dual-range.tsx`): two native range
+ * inputs stacked on one drawn track. Each input's own runnable track is made transparent (the
+ * visible track/fill is a pair of plain divs the component draws itself) and `pointer-events: none`
+ * on the input lets a click anywhere in the shared strip fall through to whichever thumb is
+ * underneath; `pointer-events: auto` on the thumb itself is what makes it draggable again. 28px
+ * thumbs match the touch-target size used elsewhere in the filter sheet.
+ */
+.dual-range-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  pointer-events: none;
+}
+.dual-range-input::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
+  background: transparent;
+  height: 28px;
+}
+.dual-range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--primary);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.dual-range-input::-moz-range-track {
+  background: transparent;
+  height: 28px;
+  border: none;
+}
+.dual-range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--primary);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}

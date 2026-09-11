@@ -4,16 +4,18 @@ import type { SkillAlgorithmVersion } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
-import { getVouchSettings, getActiveSkillVersion } from '@/lib/settings';
+import { getVouchSettings, getActiveSkillVersion, getNewAccountBadgeDays } from '@/lib/settings';
 import {
   pickActiveSkill,
   selectSkillProfiles,
   type SkillProfileRow,
 } from '@/lib/vouches/active-skill';
 import { CLUBS_LIST_TAG, getUserClubs, getUserClubsBulk } from '@/lib/clubs/queries';
+import { isOrganizerOfTournament } from '@/lib/tournaments/queries';
 import {
   PLAYER_CARD_COLUMNS,
   PLAYER_PROFILE_COLUMNS,
+  fullName,
   toPlayerCardDTO,
   toPlayerProfileDTO,
   type PlayerCardDTO,
@@ -25,11 +27,14 @@ import {
 import {
   buildCityOptions,
   effectiveSkillOrdinal,
-  idsMatchingSkillFilters,
+  idsMatchingIndexFilters,
   intersectIds,
+  orderIdsForSort,
+  resolveSort,
   type CityOption,
   type PlayerFilters,
   type SkillIndexEntry,
+  type SortableRow,
 } from './filters';
 
 export const PLAYERS_LIST_TAG = 'players:list';
@@ -38,21 +43,34 @@ export const commentsTag = (id: string) => `player-comments:${id}`;
 
 export const PAGE_SIZE = 24;
 
-export type { PlayerFilters } from './filters';
+export type { PlayerFilters, PlayerSort } from './filters';
 
-/** Stable, order-independent cache key for a filter set. */
-function filtersKey(f: PlayerFilters): string {
+/**
+ * Stable, order-independent cache key for a filter set. `staff` is passed separately (not read off
+ * `filters`) because it changes what `sort: 'sts_desc'` is even allowed to mean (§2AG A1, D3) - two
+ * requests with identical filters but different viewer privilege must never share a cache entry.
+ */
+function filtersKey(f: PlayerFilters, staff: boolean): string {
   return JSON.stringify({
     q: f.q?.trim().toLowerCase() ?? '',
     city: f.city?.trim().toLowerCase() ?? '',
     sex: f.sex ?? '',
     skills: [...(f.skills ?? [])].sort((a, b) => a - b).join(','),
-    minSts: f.minSts ?? 0,
+    stsMin: f.stsMin ?? 0,
+    stsMax: f.stsMax ?? 0,
+    vouchesMin: f.vouchesMin ?? 0,
+    vouchesMax: f.vouchesMax ?? 0,
+    givenMin: f.givenMin ?? 0,
+    givenMax: f.givenMax ?? 0,
     club: f.club ?? '',
     identityVerified: f.identityVerified ? 1 : 0,
     coach: f.coach ? 1 : 0,
     lfp: f.lookingForPartner ? 1 : 0,
     ofs: f.openForSponsorship ? 1 : 0,
+    newOnly: f.newOnly ? 1 : 0,
+    tournament: f.tournament ?? '',
+    sort: f.sort ?? 'new_unvouched',
+    staff: staff ? 1 : 0,
     page: f.page ?? 1,
   });
 }
@@ -198,19 +216,22 @@ const fetchVerifiedUserIds = unstable_cache(
 // ----------------------------------------------------------------------------
 
 /**
- * Every directory player's filterable skill facts: community skill where the community has rated
- * them, otherwise their self-rating, plus STS (0 for a player with no skill profile - the same
- * value the chip now renders, §2B).
+ * Every directory player's filterable + orderable facts (§2AG A1/A2): community skill where the
+ * community has rated them, otherwise their self-rating, plus STS (0 for a player with no skill
+ * profile - the same value the chip now renders, §2B), vouches RECEIVED (evidence count) and GIVEN
+ * (D4's "total number of vouches"), and the onboarded-at/display-name pair the directory's sort
+ * options need. One bounded read of `vouches` (active rows, ≤10000) is grouped by voucher in memory
+ * alongside the existing profile/skill reads, on the same 60s cache.
  */
 const fetchSkillIndex = unstable_cache(
   async (version: SkillAlgorithmVersion): Promise<Record<string, SkillIndexEntry>> => {
     const out: Record<string, SkillIndexEntry> = {};
     try {
       const supabase = createPublicClient();
-      const [profilesRes, { rows: skillRows }] = await Promise.all([
+      const [profilesRes, { rows: skillRows }, givenRes] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, self_rated_skill')
+          .select('id, self_rated_skill, onboarded_at, first_name, last_name, nickname')
           .eq('account_status', 'active')
           .not('onboarded_at', 'is', null),
         selectSkillProfiles<SkillProfileRow & { player_id: string }>(
@@ -218,20 +239,46 @@ const fetchSkillIndex = unstable_cache(
           (columns) => supabase.from('player_skill_profiles').select(columns),
           'player_id',
         ),
+        supabase.from('vouches').select('voucher_id').eq('status', 'active').limit(10000),
       ]);
 
-      const skills = new Map<string, { csl: number | null; sts: number }>();
+      const skills = new Map<string, { csl: number | null; sts: number; received: number }>();
       for (const row of skillRows) {
         const active = pickActiveSkill(row, version);
-        skills.set(row.player_id, { csl: active.communitySkillLevel, sts: active.sts ?? 0 });
+        skills.set(row.player_id, {
+          csl: active.communitySkillLevel,
+          sts: active.sts ?? 0,
+          received: active.evidenceCount ?? 0,
+        });
+      }
+
+      const given = new Map<string, number>();
+      for (const r of givenRes.data ?? []) {
+        const voucherId = (r as { voucher_id: string }).voucher_id;
+        given.set(voucherId, (given.get(voucherId) ?? 0) + 1);
       }
 
       for (const p of profilesRes.data ?? []) {
-        const row = p as { id: string; self_rated_skill: number | null };
+        const row = p as {
+          id: string;
+          self_rated_skill: number | null;
+          onboarded_at: string | null;
+          first_name: string | null;
+          last_name: string | null;
+          nickname: string | null;
+        };
         const s = skills.get(row.id);
+        const name =
+          [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||
+          row.nickname ||
+          'VouchPlay player';
         out[row.id] = {
           effectiveSkill: effectiveSkillOrdinal(s?.csl ?? null, row.self_rated_skill),
           sts: s?.sts ?? 0,
+          vouchesReceived: s?.received ?? 0,
+          vouchesGiven: given.get(row.id) ?? 0,
+          onboardedAt: row.onboarded_at,
+          displayName: name,
         };
       }
     } catch {
@@ -270,6 +317,64 @@ const fetchClubMemberIds = unstable_cache(
   ['player-club-member-ids'],
   { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
 );
+
+const TOURNAMENT_FILTER_REGISTRATION_STATUSES = [
+  'confirmed',
+  'payment_submitted',
+  'payment_pending',
+  'waitlisted',
+] as const;
+
+/**
+ * Ids of players on a team with a live registration in one tournament (§2AG A4, D7): the id set the
+ * staff/organizer tournament filter restricts to. Service client (bypasses RLS on `registrations`/
+ * `team_members`, neither of which is publicly readable) - safe because only ids are returned, and
+ * this is applied only after the caller has confirmed the viewer may use this filter at all (see
+ * `isOrganizerOfTournament` and the gate in `listPlayers`). Bounded: a tournament's registrations and
+ * team rosters are both small relative to the 1k-player ceiling documented above.
+ */
+const fetchTournamentPlayerIds = unstable_cache(
+  async (tournamentId: string): Promise<string[]> => {
+    try {
+      const svc = createServiceClient();
+      const { data: regs } = await svc
+        .from('registrations')
+        .select('team_id')
+        .eq('tournament_id', tournamentId)
+        .in('status', TOURNAMENT_FILTER_REGISTRATION_STATUSES)
+        .limit(2000);
+      const teamIds = Array.from(
+        new Set((regs ?? []).map((r) => (r as { team_id: string }).team_id)),
+      );
+      if (teamIds.length === 0) return [];
+      const { data: members } = await svc
+        .from('team_members')
+        .select('player_id')
+        .in('team_id', teamIds)
+        .limit(10000);
+      return Array.from(
+        new Set((members ?? []).map((r) => (r as { player_id: string }).player_id)),
+      );
+    } catch {
+      return [];
+    }
+  },
+  ['player-tournament-ids'],
+  { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/**
+ * The "New this week" cutoff instant (§2AG A3, D5), rounded to the current minute so the value -
+ * and therefore the SQL-level cache key that includes it - does not change on every single request
+ * (the 60s list-row cache would otherwise never be reused while the filter is on). A player right at
+ * the boundary can be off by well under the existing 60s cache TTL; that is not a correctness issue
+ * anywhere else in this app and is not one here either.
+ */
+async function newAccountCutoffIso(): Promise<string> {
+  const days = await getNewAccountBadgeDays();
+  const minuteBucket = Math.floor(Date.now() / 60_000) * 60_000;
+  return new Date(minuteBucket - days * 24 * 60 * 60 * 1000).toISOString();
+}
 
 /**
  * The cities that actually have players, grouped across spellings. Offering the whole PH city list
@@ -327,12 +432,21 @@ interface RawListResult {
 }
 
 /**
- * Fetch a page of public directory rows (RLS-enforced anon read). Cached; caller applies the
- * viewer-specific DTO projection OUTSIDE the cache so the cache stays public/shareable.
+ * Fetch every public directory row matching the filters (RLS-enforced anon read) - NOT just one
+ * page. Cached; caller applies the viewer-specific DTO projection OUTSIDE the cache so the cache
+ * stays public/shareable.
+ *
+ * Deliberately un-paginated at the SQL level (§2AG A1): the sort options (new-unvouched-first,
+ * most-vouched, name...) mix a DB column (`onboarded_at`) with cached-index facts (vouches received,
+ * STS) that PostgREST cannot ORDER BY together, so the caller sorts in memory and THEN paginates.
+ * Supabase/PostgREST's own default row cap (1000) is what actually bounds this query - the same
+ * ceiling the skill-index SCALE NOTE above already documents the directory against, so nothing here
+ * is a new limit, just the existing one applied one step earlier in the pipeline.
  */
 async function fetchListRows(
   f: PlayerFilters,
   restrictIds: string[] | null,
+  newSinceIso: string | null,
 ): Promise<RawListResult> {
   try {
     const supabase = createPublicClient();
@@ -360,14 +474,14 @@ async function fetchListRows(
     if (f.sex) query = query.eq('sex', f.sex);
     if (f.lookingForPartner) query = query.eq('looking_for_partner', true);
     if (f.openForSponsorship) query = query.eq('open_for_sponsorship', true);
+    // "New this week" (§2AG A3, D5): onboarded within the admin window. `newSinceIso` is computed by
+    // the caller (minute-bucketed, so this stays cacheable) from `new_account_badge_days`.
+    if (newSinceIso) query = query.gte('onboarded_at', newSinceIso);
 
-    const page = Math.max(1, f.page ?? 1);
-    const from = (page - 1) * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    // Default sort (§8.4): recent activity; verified-first is applied as an in-page tiebreak after
-    // badge facts load. Never rank by STS / popularity.
-    const { data, count } = await query.order('updated_at', { ascending: false }).range(from, to);
+    // Base ordering only - the caller re-sorts in memory per the chosen `sort` before paginating
+    // (§8.4: never rank by STS/popularity at the SQL level; `updated_at desc` here only decides
+    // which rows survive if the true total ever exceeds the row cap above).
+    const { data, count } = await query.order('updated_at', { ascending: false });
     return { rows: (data as ProfileRow[] | null) ?? [], total: count ?? 0 };
   } catch {
     return { rows: [], total: 0 };
@@ -444,10 +558,16 @@ export async function listPlayers(
   filters: PlayerFilters,
   viewer: ViewerContext,
 ): Promise<PlayerListPage> {
-  // Role, identity, club, skill and STS all live outside `profiles`, so each contributes an id set
-  // that is intersected before the page query runs. `null` means "this filter is off", which is not
-  // the same as an empty list - an empty list is a filter that genuinely matched nobody.
+  // Role, identity, club, skill/STS-range, vouches-range and tournament all live outside `profiles`
+  // (or need a server-side gate `profiles` alone cannot express), so each contributes an id set that
+  // is intersected before the page query runs. `null` means "this filter is off", which is not the
+  // same as an empty list - an empty list is a filter that genuinely matched nobody.
   const skillVersion = await getActiveSkillVersion();
+  // D3/§8.4: `sts_desc` is staff-only. `parsePlayerFilters` already gates this at parse time, but a
+  // filter set can reach this function from more than one caller, so it is re-checked here too -
+  // the sort actually applied must never depend on trusting the caller got the gate right.
+  const sort = resolveSort(filters.sort, viewer.isStaff);
+
   let restrictIds: string[] | null = null;
   if (filters.coach) {
     restrictIds = intersectIds(restrictIds, await fetchUserIdsWithRole('coach'));
@@ -458,32 +578,85 @@ export async function listPlayers(
   if (filters.club) {
     restrictIds = intersectIds(restrictIds, await fetchClubMemberIds(filters.club));
   }
-  if ((filters.skills && filters.skills.length > 0) || (filters.minSts && filters.minSts > 0)) {
-    const index = await fetchSkillIndex(skillVersion);
+
+  const indexFilterActive = Boolean(
+    (filters.skills && filters.skills.length > 0) ||
+    (filters.stsMin != null && filters.stsMin > 0) ||
+    filters.stsMax != null ||
+    (filters.vouchesMin != null && filters.vouchesMin > 0) ||
+    filters.vouchesMax != null ||
+    (filters.givenMin != null && filters.givenMin > 0) ||
+    filters.givenMax != null,
+  );
+  // The sort options that need per-player vouches-received/STS facts, not just the DB row.
+  const sortNeedsIndex = sort === 'new_unvouched' || sort === 'most_vouched' || sort === 'sts_desc';
+  // Fetched at most once and reused for both filtering and ordering.
+  const index = indexFilterActive || sortNeedsIndex ? await fetchSkillIndex(skillVersion) : null;
+  if (indexFilterActive && index && Object.keys(index).length > 0) {
     // An index that failed to load is empty, and restricting to nothing would empty the directory
-    // for everyone. Leave the skill filters unapplied rather than lie about the result.
-    if (Object.keys(index).length > 0) {
-      restrictIds = intersectIds(restrictIds, idsMatchingSkillFilters(index, filters));
+    // for everyone. Leave these filters unapplied rather than lie about the result.
+    restrictIds = intersectIds(restrictIds, idsMatchingIndexFilters(index, filters));
+  }
+
+  // §2AG A4 (D7): the tournament filter is SERVER-GATED - never trust `filters.tournament` alone.
+  // An unauthorized (or anonymous) request for it is served the unfiltered list, exactly as if the
+  // param were absent, rather than an error that would confirm the tournament id means anything.
+  let tournamentApplied = false;
+  if (filters.tournament) {
+    const allowed =
+      viewer.isStaff ||
+      (viewer.viewerId
+        ? await isOrganizerOfTournament(viewer.viewerId, filters.tournament)
+        : false);
+    if (allowed) {
+      tournamentApplied = true;
+      restrictIds = intersectIds(restrictIds, await fetchTournamentPlayerIds(filters.tournament));
     }
   }
 
-  const key = filtersKey(filters) + '|restrict:' + (restrictIds ? restrictIds.join(',') : 'none');
-  const cached = unstable_cache(() => fetchListRows(filters, restrictIds), [key], {
+  const newSinceIso = filters.newOnly ? await newAccountCutoffIso() : null;
+
+  const key =
+    filtersKey(filters, viewer.isStaff) +
+    '|restrict:' +
+    (restrictIds ? restrictIds.join(',') : 'none') +
+    '|tournamentApplied:' +
+    (tournamentApplied ? 1 : 0) +
+    '|new:' +
+    (newSinceIso ?? '');
+  const cached = unstable_cache(() => fetchListRows(filters, restrictIds, newSinceIso), [key], {
     revalidate: 60,
     tags: [PLAYERS_LIST_TAG],
   });
   const { rows, total } = await cached();
 
-  const ids = rows.map((r) => r.id);
-  const [facts, skills, clubs, vouchMap] = await Promise.all([
+  // Sort in memory over the full matching set, THEN paginate (§2AG A1) - the chosen `sort` mixes a
+  // DB column (`onboarded_at`) with cached-index facts PostgREST cannot ORDER BY together. See the
+  // comment on `fetchListRows` for the row-count ceiling this relies on.
+  const sortableRows: SortableRow[] = rows.map((row) => ({
+    id: row.id,
+    onboardedAt: row.onboarded_at,
+    displayName: fullName(row) || row.nickname || 'VouchPlay player',
+  }));
+  const orderedIds = orderIdsForSort(sortableRows, index ?? {}, sort);
+  const rowById = new Map(rows.map((row) => [row.id, row]));
+  const orderedRows = orderedIds.map((id) => rowById.get(id)).filter((r): r is ProfileRow => !!r);
+
+  const page = Math.max(1, filters.page ?? 1);
+  const from = (page - 1) * PAGE_SIZE;
+  const pageRows = orderedRows.slice(from, from + PAGE_SIZE);
+
+  const ids = pageRows.map((r) => r.id);
+  const [facts, skills, clubs, vouchMap, newAccountBadgeDays] = await Promise.all([
     fetchBadgeFacts(ids),
     fetchSkillSnapshots(ids, skillVersion),
     getUserClubsBulk(ids),
     viewer.viewerId
       ? getViewerVouchCooldownMap(viewer.viewerId)
       : Promise.resolve(new Map<string, number>()),
+    getNewAccountBadgeDays(),
   ]);
-  const players = rows.map((row) => {
+  const players = pageRows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
     const extras: ProfileExtras = {
       roles: f.roles,
@@ -491,17 +664,13 @@ export async function listPlayers(
       skill: skills[row.id] ?? null,
       clubs: clubs[row.id] ?? [],
     };
-    const dto = toPlayerCardDTO(row, extras, viewer);
+    const dto = toPlayerCardDTO(row, extras, viewer, newAccountBadgeDays);
     const cooldown = vouchMap.get(row.id);
     dto.viewerHasVouched = vouchMap.has(row.id);
     dto.viewerVouchCanUpdateInMs = cooldown ?? null;
     return dto;
   });
 
-  // Verified/high-confidence first within the recency-ordered page (§8.4), no STS ranking.
-  players.sort((a, b) => Number(b.identityVerified) - Number(a.identityVerified));
-
-  const page = Math.max(1, filters.page ?? 1);
   return {
     players,
     total,
@@ -543,10 +712,11 @@ export async function getPlayerBySlug(
   if (!row) return null;
 
   const skillVersion = await getActiveSkillVersion();
-  const [facts, skills, clubs] = await Promise.all([
+  const [facts, skills, clubs, newAccountBadgeDays] = await Promise.all([
     fetchBadgeFacts([row.id]),
     fetchSkillSnapshots([row.id], skillVersion),
     getUserClubs(row.id),
+    getNewAccountBadgeDays(),
   ]);
   const f = facts[row.id] ?? emptyFacts();
   const extras: ProfileExtras = {
@@ -555,7 +725,7 @@ export async function getPlayerBySlug(
     skill: skills[row.id] ?? null,
     clubs,
   };
-  return toPlayerProfileDTO(row, extras, viewer);
+  return toPlayerProfileDTO(row, extras, viewer, newAccountBadgeDays);
 }
 
 /** Lightweight fetch for metadata generation (§28) - reuses the cached profile read. */

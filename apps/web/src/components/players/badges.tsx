@@ -84,6 +84,22 @@ export function CoachBadge() {
   );
 }
 
+/**
+ * "New" pill (master_plan §2AG A3, D5): onboarded within the admin `new_account_badge_days` window.
+ * Deliberately a NEUTRAL border/surface pill, not a semantic colour - it is a welcome, not a warning,
+ * and it fades on its own as the account ages past the window.
+ */
+export function NewBadge() {
+  return (
+    <span
+      className={`${chip} border-border bg-surface text-foreground-muted border`}
+      title="Joined recently"
+    >
+      New
+    </span>
+  );
+}
+
 export function OrganizerBadge() {
   return (
     <span className={`${chip} bg-warning/15 text-warning`} title="Approved Organizer">

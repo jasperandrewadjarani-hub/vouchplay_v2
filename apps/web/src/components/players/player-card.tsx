@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MapPin, UserSearch, Handshake } from 'lucide-react';
+import { MapPin, UserSearch, Handshake, GraduationCap } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { CompactRowPending } from './compact-row-pending';
@@ -16,6 +16,7 @@ import {
   OrganizerBadge,
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
+  NewBadge,
 } from './badges';
 
 /**
@@ -88,6 +89,12 @@ export function PlayerCard({
               </span>
             )}
             <SexBadge sex={player.sex} symbolOnly />
+            {/* Approved-coach marker on the compact row (master_plan §2AG A3): previously only the
+                detailed card and profile showed Coach status. A small icon, same treatment as the
+                partner/sponsorship icons beside it, so line one stays on one line. */}
+            {player.isCoach && (
+              <GraduationCap size={13} className="text-primary shrink-0" aria-label="Coach" />
+            )}
             {/* A small icon, not a pill, so line one still holds the name/nickname/sex without
                 wrapping (§1H/§1T). It marks who is open to a partner at a glance, and it is the same
                 looking_for_partner flag the filter and the profile badge use (§2L). */}
@@ -109,12 +116,13 @@ export function PlayerCard({
               />
             )}
           </span>
-          {/* Line two: the skill pill alone. Club logos used to sit beside it and pushed the
-              longer pills onto a second line, which leaves the whole list ragged (§1H, §1T).
-              A compact row gets one pill per line and nothing beside it. */}
-          {skill && (
-            <span className="mt-1 flex min-w-0 overflow-hidden">
-              <SkillPill band={skill.band} source={skill.source} size="sm" />
+          {/* Line two: the skill pill, plus the neutral "New" pill when it applies (§2AG A3). Club
+              logos used to sit beside the skill pill and pushed longer pills onto a second line,
+              which leaves the whole list ragged (§1H, §1T) - nothing else joins this line. */}
+          {(skill || player.isNew) && (
+            <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+              {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+              {player.isNew && <NewBadge />}
             </span>
           )}
         </span>
@@ -187,7 +195,8 @@ export function PlayerCard({
         player.isCoach ||
         player.isOrganizer ||
         player.lookingForPartner ||
-        player.openForSponsorship) && (
+        player.openForSponsorship ||
+        player.isNew) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {player.identityVerified && <IdentityVerifiedBadge />}
           {player.skillVerified && <SkillVerifiedBadge />}
@@ -195,6 +204,7 @@ export function PlayerCard({
           {player.isOrganizer && <OrganizerBadge />}
           {player.lookingForPartner && <LookingForPartnerBadge />}
           {player.openForSponsorship && <OpenForSponsorshipBadge />}
+          {player.isNew && <NewBadge />}
         </div>
       )}
 

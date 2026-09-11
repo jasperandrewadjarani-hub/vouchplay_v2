@@ -30,6 +30,9 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   skill_verified_min_sts: 3.0,
   skill_verified_min_unique_vouchers: 2,
 
+  // Directory (master_plan §2AG A3, D5). Neutral "New" badge / "New this week" filter window.
+  new_account_badge_days: 7,
+
   // Tournament defaults (handover §21.3, §22.1).
   default_max_divisions_per_player: 3,
   default_max_clubs_per_player: 3,

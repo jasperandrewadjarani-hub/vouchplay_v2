@@ -76,6 +76,12 @@ export interface PlayerCardDTO {
   lookingForPartner: boolean;
   openForSponsorship: boolean;
   /**
+   * Onboarded within the admin `new_account_badge_days` window (master_plan §2AG A3, D5). A neutral
+   * "New" pill, never a warning - it fades on its own once the account ages past the window, and
+   * moves instantly when Admin changes the setting (no deploy).
+   */
+  isNew: boolean;
+  /**
    * Whether the viewing user already has an active vouch for this player (master_plan §2U). Defaults
    * to false; listPlayers sets it for the signed-in viewer so the card's Vouch button can show the
    * "already vouched" state. Never true for an anonymous viewer.
@@ -103,9 +109,23 @@ export interface PlayerProfileDTO extends PlayerCardDTO {
   distribution: Record<string, number>;
 }
 
-function fullName(row: ProfileRow): string {
+/** Exported for reuse by the directory sort (master_plan §2AG A1): the same "First Last" (falling
+ *  back to the nickname elsewhere) that every card and profile shows, so name-sort orders players
+ *  the same way their name actually renders. */
+export function fullName(row: ProfileRow): string {
   const parts = [row.first_name, row.last_name].filter(Boolean) as string[];
   return parts.join(' ').trim();
+}
+
+/** Whether `onboardedAt` falls within `days` of now (master_plan §2AG A3, D5). `days <= 0` disables
+ *  the badge outright (an Admin setting of 0 means "never show New"), and an invalid/absent date is
+ *  never "new". */
+function isRecentlyOnboarded(onboardedAt: string | null, days: number): boolean {
+  if (!onboardedAt || !Number.isFinite(days) || days <= 0) return false;
+  const onboarded = new Date(onboardedAt).getTime();
+  if (Number.isNaN(onboarded)) return false;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return onboarded >= cutoff;
 }
 
 function initialsFrom(row: ProfileRow): string {
@@ -157,6 +177,9 @@ export function toPlayerCardDTO(
   row: ProfileRow,
   extras: ProfileExtras,
   viewer: ViewerContext,
+  /** Admin `new_account_badge_days` (default 7 - the seeded default - when the caller has not yet
+   *  loaded the live setting). */
+  newAccountBadgeDays = 7,
 ): PlayerCardDTO {
   const visibility = parseVisibility(row.profile_visibility);
   const privileged = viewer.isStaff || viewer.viewerId === row.id;
@@ -184,6 +207,7 @@ export function toPlayerCardDTO(
     isClubOwner: (extras.clubs ?? []).some((c) => c.relationship === 'owner'),
     lookingForPartner: row.looking_for_partner,
     openForSponsorship: row.open_for_sponsorship,
+    isNew: isRecentlyOnboarded(row.onboarded_at, newAccountBadgeDays),
     viewerHasVouched: false,
     viewerVouchCanUpdateInMs: null,
     clubs: extras.clubs ?? [],
@@ -194,13 +218,14 @@ export function toPlayerProfileDTO(
   row: ProfileRow,
   extras: ProfileExtras,
   viewer: ViewerContext,
+  newAccountBadgeDays = 7,
 ): PlayerProfileDTO {
   const visibility = parseVisibility(row.profile_visibility);
   const privileged = viewer.isStaff || viewer.viewerId === row.id;
   const showAge = privileged || fieldVisible(visibility, 'age');
 
   return {
-    ...toPlayerCardDTO(row, extras, viewer),
+    ...toPlayerCardDTO(row, extras, viewer, newAccountBadgeDays),
     id: row.id,
     bio: row.bio ?? null,
     facebookUrl: row.facebook_url ?? null,

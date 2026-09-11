@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.59
+# VouchPlay Master Product & Code Execution Handover v1.60
 
-_(File retains its `…v1.1.md` name; content is v1.59 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.60 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6202,6 +6202,36 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.60 (2026-09-11)
+
+_Directory & organizer UX batch, Phase A (master_plan §2AG, decisions D1-D8 all at the recommended
+setting). No DDL; one seeded setting (`new_account_badge_days`)._
+
+- **Player directory sorting (§8.4-safe).** A "Sort by" control beside the result count (outside the
+  filter sheet): New & unvouched first (the new global default - a community nudge to get newcomers
+  vouched), Newest, Oldest, Name A-Z, Most vouches received. Trust-score sort is STAFF-ONLY (public
+  STS ordering stays forbidden per §8.4); the server re-checks the staff gate, never trusting the
+  URL. Sorting mixes a DB column with cached-index facts, so the matching set is fetched (bounded by
+  the ~1000-row cap already documented, cached 60s) and ordered + paginated in memory; the heavy
+  per-player reads still run only on the 24 shown rows.
+- **Pagination survives vouch-and-return.** The list remembers its URL; the profile gains a
+  "Back to players" link and the Players tab both restore the exact page + filters after vouching.
+- **Range filters.** STS, vouches received, and vouches given are now dual-thumb range sliders
+  (accessible two-input control, "Any" when full-span); legacy `?minSts=` still parses.
+- **"New" badge + filter.** A neutral "New" pill and a "New this week" filter, windowed by the Admin
+  setting `new_account_badge_days` (default 7). The approved-coach icon now also shows on the compact
+  directory row.
+- **Tournament filter (staff + that tournament's organizers).** Filter the directory to players with
+  a live registration in a chosen tournament; server-gated (anonymous/unauthorized requests get the
+  unfiltered list).
+- **Organizer registrations: combinable filters, capacity strip, column sort.** Division / Status /
+  Eligibility / Payment / Partner are multi-select chip groups combined AND-across / OR-within; a
+  per-division capacity strip shows "registered / capacity · paid · pending" with a bar (warn tint at
+  ≥90%) and taps to filter; a Sort control (name / division / status / registered-at / amount /
+  eligibility / payment, asc-desc) with the previous "needs-me-first" order as the default.
+- **Deferred to later phases:** city normalization + PH-city autocomplete (Phase B, needs the mapping
+  CSV signed off) and the identity-verification pipeline (Phase C, needs counsel on ID retention).
 
 ## v1.59 (2026-09-11)
 

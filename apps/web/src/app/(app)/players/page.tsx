@@ -7,6 +7,11 @@ import {
   listPlayers,
 } from '@/lib/players/queries';
 import {
+  getStaffTournamentOptions,
+  listManagedTournaments,
+  type TournamentOption,
+} from '@/lib/tournaments/queries';
+import {
   parsePlayerFilters,
   playerFiltersToQuery,
   type PlayerFilters,
@@ -18,6 +23,8 @@ import { PlayerListSkeleton } from '@/components/players/player-list-skeleton';
 import { SearchFilters } from '@/components/players/search-filters';
 import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
+import { SortSelect } from '@/components/players/sort-select';
+import { RememberListUrl } from '@/components/players/list-return';
 import { Pagination } from '@/components/ui/pagination';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
 import { getLeaderboardSettings } from '@/lib/settings';
@@ -55,13 +62,19 @@ async function PlayersResults({
   const { players, total, page, pageCount } = await listPlayers(filters, viewer);
   return (
     <div className="space-y-5">
+      {/* Records the exact list URL (filters/sort/page) so a later "Back to players" or Players-tab
+          tap can restore this same view after a vouch-and-return trip (master_plan §2AG A1). */}
+      <RememberListUrl />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-foreground-muted text-sm" aria-live="polite">
           {total === 0
             ? 'No players match your search yet.'
             : `${total} player${total === 1 ? '' : 's'}`}
         </p>
-        <PlayerViewToggle compact={compact} />
+        <div className="flex flex-wrap items-center gap-2">
+          <SortSelect sort={filters.sort ?? 'new_unvouched'} staff={viewer.isStaff} />
+          <PlayerViewToggle compact={compact} />
+        </div>
       </div>
 
       {players.length > 0 ? (
@@ -90,16 +103,29 @@ async function PlayersResults({
 
 export default async function PlayersPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
+  const viewer = await getViewerContext();
   // Parsing, serialising and describing filters all live in one pure module, so the URL, the chips
-  // and the pagination links cannot drift apart (master_plan §2B).
-  const filters: PlayerFilters = parsePlayerFilters(sp);
+  // and the pagination links cannot drift apart (master_plan §2B). `staff` gates `sort=sts_desc`
+  // (D3, §8.4) - a non-staff request for it is silently coerced back to the public default.
+  const filters: PlayerFilters = parsePlayerFilters(sp, { staff: viewer.isStaff });
   // Compact is the default directory view (§1S): a directory is for scanning names, and the
   // detailed card spends a whole screen on three players. Detailed keeps its existing URL.
   const compact = one(sp.view) !== 'detailed';
-  const viewer = await getViewerContext();
-  const [cityOptions, clubOptions] = await Promise.all([
+  const authed = viewer.viewerId !== null;
+  const [cityOptions, clubOptions, tournamentOptions] = await Promise.all([
     getDirectoryCityOptions(),
     getDirectoryClubOptions(),
+    // The tournament filter (§2AG A4, D7) is offered only to staff or a tournament's own
+    // organizers - everyone else gets an empty list, and `SearchFilters` hides the control
+    // entirely when it is empty. The server-side gate in `listPlayers` is authoritative either
+    // way; this is only about which options make sense to SHOW.
+    viewer.isStaff
+      ? getStaffTournamentOptions()
+      : authed
+        ? listManagedTournaments(viewer.viewerId as string, {}).then((rows): TournamentOption[] =>
+            rows.map((t) => ({ id: t.id, name: t.name })),
+          )
+        : Promise.resolve<TournamentOption[]>([]),
   ]);
   // The entry card names the current leader, so it needs the board it points at. Cached read; a
   // failure here must never take down the directory, so it degrades to the invitation variant.
@@ -108,7 +134,6 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
       settings.enabled ? getLeaderboard('community', 'global', null, 'all_time', 3) : null,
     )
     .catch(() => null);
-  const authed = viewer.viewerId !== null;
   // The viewer's own "looking for a partner" status, so the Players tab can offer a one-tap toggle
   // right where people browse for partners (§2M). Signed-in only.
   const myProfile = authed ? await getMyProfile() : null;
@@ -137,11 +162,14 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         current={filters}
         cityOptions={cityOptions}
         clubOptions={clubOptions}
+        tournamentOptions={tournamentOptions}
         compact={compact}
       />
 
-      {/* Keyed on the filters + view so any search/filter/page/view change remounts the boundary and
-          shows the skeleton while the new query resolves (§2Z). The shell above stays put. */}
+      {/* Keyed on the filters + view so any search/filter/sort/page/view change remounts the
+          boundary and shows the skeleton while the new query resolves (§2Z, §2AG A1 - `sort` is a
+          field on `filters`, so it is already covered by this same JSON key). The shell above stays
+          put. */}
       <Suspense
         key={`${JSON.stringify(filters)}|${compact ? 'c' : 'd'}`}
         fallback={<PlayerListSkeleton compact={compact} />}

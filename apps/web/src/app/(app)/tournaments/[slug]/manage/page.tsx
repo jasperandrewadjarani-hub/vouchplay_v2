@@ -9,6 +9,7 @@ import {
   getOrganizerRegistrations,
   getClubOverrideParticipants,
 } from '@/lib/tournaments/registration-queries';
+import { isClosed } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
@@ -97,6 +98,29 @@ export default async function ManageTournamentPage({ params }: Params) {
     t.divisions.map((d) => ({ id: d.id, name: d.name, capacityTeams: d.capacityTeams })),
   );
 
+  // Division capacity strip (master_plan §2AG/A5) - counted in memory over the registrations this
+  // page already loaded via getOrganizerRegistrations, so no new query. "Live" reuses the same
+  // isClosed() the filters use (withdrawn/cancelled/rejected/refunded), not a second definition of
+  // it. "Paid" is deliberately narrow: an entry the organizer has already locked in (`confirmed`), or
+  // one that submitted a receipt and is waiting on verification (`payment_submitted` + hasProof).
+  // Everything else live counts as "pending".
+  const divisionCounts = new Map<string, { registered: number; paid: number; pending: number }>();
+  for (const r of registrations) {
+    if (isClosed(r)) continue;
+    const bucket = divisionCounts.get(r.divisionId) ?? { registered: 0, paid: 0, pending: 0 };
+    bucket.registered += 1;
+    const paid = r.status === 'confirmed' || (r.status === 'payment_submitted' && r.hasProof);
+    if (paid) bucket.paid += 1;
+    else bucket.pending += 1;
+    divisionCounts.set(r.divisionId, bucket);
+  }
+  const divisionCapacity = t.divisions.map((d) => ({
+    id: d.id,
+    name: d.name,
+    capacity: d.capacityTeams,
+    ...(divisionCounts.get(d.id) ?? { registered: 0, paid: 0, pending: 0 }),
+  }));
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
       <div>
@@ -123,12 +147,13 @@ export default async function ManageTournamentPage({ params }: Params) {
         <OrganizerRegistrations
           tournamentId={t.id}
           registrations={registrations}
-          divisions={t.divisions.map((d) => ({
+          eligibilityDivisions={t.divisions.map((d) => ({
             id: d.id,
             name: d.name,
             format: d.format,
             teamSize: d.teamSize,
           }))}
+          divisions={divisionCapacity}
         />
       </ManageSection>
 

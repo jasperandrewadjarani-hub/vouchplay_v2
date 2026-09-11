@@ -233,6 +233,14 @@ export async function getTournamentDemandSettings(): Promise<{ enabled: boolean 
   return { enabled: await loadSettingFlag('tournament_demand_interest_enabled', false) };
 }
 
+/**
+ * The "New" badge / "New this week" filter window in days (master_plan §2AG A3, D5). Admin-tunable,
+ * no deploy required to move the boundary - `loadSettings` already revalidates every 5 minutes.
+ */
+export async function getNewAccountBadgeDays(): Promise<number> {
+  return loadSettingNumber('new_account_badge_days', 7);
+}
+
 export async function getContributionSettings(): Promise<{
   enabled: boolean;
   activeVersion: string;

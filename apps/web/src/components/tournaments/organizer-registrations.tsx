@@ -2,7 +2,17 @@
 
 import { useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Clock, Receipt, Search, TriangleAlert } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Receipt,
+  Search,
+  SlidersHorizontal,
+  TriangleAlert,
+  X,
+} from 'lucide-react';
 import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
 import { formatDate } from '@/lib/format-date';
 import {
@@ -28,14 +38,24 @@ import {
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
 import {
   amountLabel,
-  countEntries,
+  clearAllEntryFilters,
+  clearEntryFilter,
   DEFAULT_FILTERS,
+  DEFAULT_SORT,
+  describeEntryChips,
+  ELIGIBILITY_LABELS,
   filterEntries,
   hasUnconfirmedPartner,
   sortEntries,
+  STATUS_LABELS,
   statusChip,
   teamLabel,
+  type EligKind,
+  type EntryFilterGroup,
   type EntryFilters,
+  type EntrySort,
+  type EntrySortKey,
+  type RegStatus,
   type StatusChip,
 } from '@/lib/tournaments/entry-view';
 import { Modal } from '@/components/ui/modal';
@@ -47,10 +67,155 @@ export interface EligibilityDivisionOption {
   teamSize: number;
 }
 
+/** One division's slot picture for the capacity strip (master_plan §2AG/A5) - "where do we stand?" */
+export interface DivisionCapacityRow {
+  id: string;
+  name: string;
+  capacity: number;
+  registered: number;
+  paid: number;
+  pending: number;
+}
+
 type ActionResult = { ok?: boolean; error?: string; message?: string };
 
+const SORT_OPTIONS: { key: EntrySortKey; label: string }[] = [
+  { key: 'needs_me', label: 'Needs me first' },
+  { key: 'name', label: 'Name' },
+  { key: 'division', label: 'Division' },
+  { key: 'status', label: 'Status' },
+  { key: 'registered_at', label: 'Registered at' },
+  { key: 'amount', label: 'Amount' },
+  { key: 'eligibility', label: 'Eligibility' },
+  { key: 'payment', label: 'Payment' },
+];
+
+const STATUS_OPTIONS: RegStatus[] = [
+  'payment_pending',
+  'payment_submitted',
+  'confirmed',
+  'waitlisted',
+  'withdrawn',
+  'rejected',
+];
+const ELIGIBILITY_OPTIONS: EligKind[] = [
+  'eligible',
+  'review',
+  'skill_mismatch',
+  'ineligible_hard_rule',
+];
+
+/** Toggles `value` into/out of an array - the OR-within-a-group building block every chip uses. */
+function toggleIn<T>(list: readonly T[], value: T): T[] {
+  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/** One labelled group of multi-select chips (Division/Status/Eligibility/Payment/Partner). Reuses
+ *  the app's chip visual (see `search-filters.tsx` `TogglePill`/removable-chip pattern) so this
+ *  filter bar reads as the same control language as the players directory. */
+function ChipGroup<T extends string>({
+  label,
+  options,
+  selected,
+  onToggle,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  selected: readonly T[];
+  onToggle: (value: T) => void;
+}) {
+  return (
+    <div>
+      <span className="text-foreground-muted flex items-center gap-1.5 text-xs font-semibold">
+        {label}
+        {selected.length > 0 && (
+          <span className="bg-primary inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white">
+            {selected.length}
+          </span>
+        )}
+      </span>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {options.map((o) => {
+          const active = selected.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggle(o.value)}
+              className={`inline-flex min-h-11 items-center gap-1 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
+                active
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-border text-foreground-muted hover:border-primary/40 hover:text-foreground'
+              }`}
+            >
+              {active && <Check size={12} aria-hidden className="text-primary shrink-0" />}
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /**
- * Organizer registrations (handover §26.4, master_plan §1Z).
+ * Division capacity strip: one glance at "where do we stand on slots" per division. Tapping a row
+ * toggles that division into the filter, the same as tapping a Division chip.
+ */
+function CapacityStrip({
+  divisions,
+  activeIds,
+  onToggle,
+}: {
+  divisions: DivisionCapacityRow[];
+  activeIds: readonly string[];
+  onToggle: (id: string) => void;
+}) {
+  if (divisions.length === 0) return null;
+  return (
+    <ul className="border-border divide-border divide-y overflow-hidden rounded-2xl border">
+      {divisions.map((d) => {
+        const pct = d.capacity > 0 ? Math.min(100, (d.registered / d.capacity) * 100) : 0;
+        const warn = d.capacity > 0 && d.registered / d.capacity >= 0.9;
+        const active = activeIds.includes(d.id);
+        return (
+          <li key={d.id}>
+            <button
+              type="button"
+              aria-pressed={active}
+              onClick={() => onToggle(d.id)}
+              className={`hover:bg-surface-muted flex min-h-11 w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors ${
+                active ? 'bg-primary/5' : ''
+              }`}
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-foreground truncate text-sm font-medium">{d.name}</span>
+                <span className="text-foreground shrink-0 text-sm font-bold tabular-nums">
+                  {d.registered} / {d.capacity}
+                </span>
+              </span>
+              <span className="text-foreground-muted flex items-center justify-between gap-2 text-[11px]">
+                <span>
+                  {d.registered} registered · {d.paid} paid · {d.pending} pending
+                </span>
+              </span>
+              <span className="bg-surface-muted h-1.5 w-full overflow-hidden rounded-full">
+                <span
+                  className={`block h-full rounded-full ${warn ? 'bg-warning' : 'bg-primary'}`}
+                  style={{ width: `${pct}%` }}
+                />
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Organizer registrations (handover §26.4, master_plan §1Z, §2AG/A5).
  *
  * Rebuilt as a list of rows plus a detail sheet, the shape a form-response tool uses, because the
  * previous screen expanded every entry inline: withdrawn entries filled the page by default, the
@@ -60,35 +225,51 @@ type ActionResult = { ok?: boolean; error?: string; message?: string };
  * The organising principle is: the list answers "who is here and what needs me?", and the sheet
  * answers "everything about this one entry". Nothing that needs a decision is more than two taps
  * away, and nothing that does not need a decision takes up space.
+ *
+ * A5 replaced the single queue-tab row with combinable filter chips (Division/Status/Eligibility/
+ * Payment/Partner - AND across groups, OR within one), a division capacity strip ("where do we
+ * stand on slots"), and an explicit Sort control. The default view - nothing filtered, sorted
+ * "Needs me first" - is unchanged from before this batch.
  */
 export function OrganizerRegistrations({
   tournamentId,
   registrations,
+  eligibilityDivisions,
   divisions,
 }: {
   tournamentId: string;
   registrations: OrganizerRegistration[];
-  divisions: EligibilityDivisionOption[];
+  /** Divisions for the reclassify control in the detail sheet - unrelated to the filter bar. */
+  eligibilityDivisions: EligibilityDivisionOption[];
+  /** Per-division capacity + counts for the strip and the Division filter chips. */
+  divisions: DivisionCapacityRow[];
 }) {
   const [filters, setFilters] = useState<EntryFilters>(DEFAULT_FILTERS);
+  const [sort, setSort] = useState<EntrySort>(DEFAULT_SORT);
+  const [showFilters, setShowFilters] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
   if (registrations.length === 0) {
     return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
   }
 
-  const counts = countEntries(registrations);
-  const visible = sortEntries(filterEntries(registrations, filters));
+  const visible = sortEntries(filterEntries(registrations, filters), sort);
   const selected = registrations.find((r) => r.id === openId) ?? null;
+  const chips = describeEntryChips(filters, divisions);
+  const activeGroupCount =
+    Number(filters.divisions.length > 0) +
+    Number(filters.statuses.length > 0) +
+    Number(filters.eligibility.length > 0) +
+    Number(filters.payment.length > 0) +
+    Number(filters.partner.length > 0) +
+    Number(filters.includeClosed);
 
-  // Queues, not statuses. A status list makes an organizer translate database words into decisions;
-  // these are the decisions, each with a live count so an empty queue is visibly empty.
-  const queues: { key: EntryFilters['queue']; label: string; count: number }[] = [
-    { key: 'all', label: 'All open', count: counts.open },
-    { key: 'needs_payment_review', label: 'Check payment', count: counts.needsPaymentReview },
-    { key: 'cancellation_requested', label: 'Cancellations', count: counts.cancellationRequested },
-    { key: 'needs_eligibility_review', label: 'Eligibility', count: counts.needsEligibilityReview },
-  ];
+  function toggleDivision(id: string) {
+    setFilters((f) => ({ ...f, divisions: toggleIn(f.divisions, id) }));
+  }
+  function removeChip(group: EntryFilterGroup, value: string) {
+    setFilters((f) => clearEntryFilter(f, group, value));
+  }
 
   return (
     <div className="space-y-3">
@@ -103,66 +284,152 @@ export function OrganizerRegistrations({
           onChange={(e) => setFilters({ ...filters, search: e.target.value })}
           placeholder="Search a player or team"
           aria-label="Search registrations by player name"
-          className="border-border bg-background text-foreground placeholder:text-foreground-muted min-h-[44px] w-full rounded-xl border pr-3 pl-9 text-sm"
+          className="border-border bg-background text-foreground placeholder:text-foreground-muted min-h-11 w-full rounded-xl border pr-3 pl-9 text-sm"
         />
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {queues.map((q) => {
-          const active = filters.queue === q.key;
-          const urgent = q.key !== 'all' && q.count > 0;
-          return (
-            <button
-              key={q.key}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setFilters({ ...filters, queue: q.key })}
-              className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors ${
-                active
-                  ? 'vp-gradient border-transparent text-white'
-                  : urgent
-                    ? 'border-warning/40 bg-warning/10 text-foreground'
-                    : 'border-border text-foreground-muted'
-              }`}
-            >
-              {q.label}
-              <span className={active ? 'text-white/80' : 'text-foreground-muted'}>{q.count}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Division capacity strip - the "where do we stand on slots" view (§2AG/A5). */}
+      <CapacityStrip
+        divisions={divisions}
+        activeIds={filters.divisions}
+        onToggle={toggleDivision}
+      />
 
+      {/* Sort - outside the collapsible filter sheet, an organizer should always be able to reorder. */}
       <div className="flex flex-wrap items-center gap-2">
+        <label htmlFor="entry-sort" className="text-foreground-muted text-xs font-semibold">
+          Sort
+        </label>
         <select
-          value={filters.divisionName}
-          onChange={(e) => setFilters({ ...filters, divisionName: e.target.value })}
-          className="border-border bg-background text-foreground min-h-[44px] rounded-xl border px-3 text-xs"
+          id="entry-sort"
+          value={sort.key}
+          onChange={(e) => setSort({ ...sort, key: e.target.value as EntrySortKey })}
+          className="border-border bg-background text-foreground min-h-11 rounded-xl border px-3 text-xs"
         >
-          <option value="all">All divisions</option>
-          {divisions.map((d) => (
-            <option key={d.id} value={d.name}>
-              {d.name}
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
             </option>
           ))}
         </select>
-        {/* Closed entries are history, not work, so they are out of the way until asked for. */}
-        <label className="text-foreground-muted flex min-h-[44px] cursor-pointer items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={filters.includeClosed}
-            onChange={(e) => setFilters({ ...filters, includeClosed: e.target.checked })}
-            className="h-4 w-4"
+        <button
+          type="button"
+          onClick={() => setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }))}
+          aria-label={
+            sort.dir === 'asc'
+              ? 'Sort ascending, tap for descending'
+              : 'Sort descending, tap for ascending'
+          }
+          className="border-border text-foreground-muted hover:text-foreground inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border px-2.5"
+        >
+          <ChevronDown
+            size={16}
+            aria-hidden
+            className={`transition-transform ${sort.dir === 'asc' ? 'rotate-180' : ''}`}
           />
-          Show cancelled and withdrawn ({counts.closed})
-        </label>
-        <span className="text-foreground-muted ml-auto text-xs">{visible.length} shown</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowFilters((v) => !v)}
+          aria-expanded={showFilters}
+          className="border-border bg-surface text-foreground hover:bg-surface-muted ml-auto inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium"
+        >
+          <SlidersHorizontal size={15} aria-hidden />
+          Filters
+          {activeGroupCount > 0 && (
+            <span
+              className="bg-primary inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white"
+              aria-label={`${activeGroupCount} filter group${activeGroupCount === 1 ? '' : 's'} applied`}
+            >
+              {activeGroupCount}
+            </span>
+          )}
+        </button>
       </div>
 
+      {/* Active filters, individually removable - a filter you cannot see is a filter you cannot
+          undo. Rendered above the list regardless of whether the sheet is open. */}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {chips.map((chip) => (
+            <button
+              key={`${chip.group}:${chip.value}`}
+              type="button"
+              onClick={() => removeChip(chip.group, chip.value)}
+              className="border-primary/40 bg-primary/10 text-foreground hover:border-primary inline-flex min-h-11 items-center gap-1 rounded-full border px-2.5 text-xs font-medium"
+            >
+              {chip.label}
+              <X size={12} aria-hidden />
+              <span className="sr-only">Remove filter</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFilters(clearAllEntryFilters())}
+            className="text-foreground-muted hover:text-foreground min-h-11 px-1.5 text-xs font-medium underline underline-offset-2"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {/* Filter groups - collapsed into a disclosure so the default screen stays short on a phone. */}
+      {showFilters && (
+        <div className="border-border space-y-4 rounded-2xl border border-dashed p-3">
+          <ChipGroup
+            label="Division"
+            options={divisions.map((d) => ({ value: d.id, label: d.name }))}
+            selected={filters.divisions}
+            onToggle={toggleDivision}
+          />
+          <ChipGroup
+            label="Status"
+            options={STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_LABELS[s] }))}
+            selected={filters.statuses}
+            onToggle={(s) => setFilters((f) => ({ ...f, statuses: toggleIn(f.statuses, s) }))}
+          />
+          <ChipGroup
+            label="Eligibility"
+            options={ELIGIBILITY_OPTIONS.map((k) => ({ value: k, label: ELIGIBILITY_LABELS[k] }))}
+            selected={filters.eligibility}
+            onToggle={(k) => setFilters((f) => ({ ...f, eligibility: toggleIn(f.eligibility, k) }))}
+          />
+          <ChipGroup
+            label="Payment"
+            options={[
+              { value: 'has_proof' as const, label: 'Has receipt' },
+              { value: 'no_proof' as const, label: 'No receipt' },
+            ]}
+            selected={filters.payment}
+            onToggle={(p) => setFilters((f) => ({ ...f, payment: toggleIn(f.payment, p) }))}
+          />
+          <ChipGroup
+            label="Partner confirmed"
+            options={[
+              { value: 'confirmed' as const, label: 'Confirmed' },
+              { value: 'unconfirmed' as const, label: 'Not confirmed' },
+            ]}
+            selected={filters.partner}
+            onToggle={(p) => setFilters((f) => ({ ...f, partner: toggleIn(f.partner, p) }))}
+          />
+          {/* Legacy switch, kept alongside Status (handover A5): only decides visibility when no
+              Status chip is picked - picking one is a more specific ask and wins outright. */}
+          <label className="text-foreground-muted flex min-h-11 cursor-pointer items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={filters.includeClosed}
+              onChange={(e) => setFilters({ ...filters, includeClosed: e.target.checked })}
+              className="h-4 w-4"
+            />
+            Show cancelled and withdrawn
+          </label>
+        </div>
+      )}
+
+      <p className="text-foreground-muted text-xs">{visible.length} shown</p>
+
       {visible.length === 0 ? (
-        <p className="text-foreground-muted text-sm">
-          Nothing here.{' '}
-          {filters.queue !== 'all' ? 'That queue is clear.' : 'Try a different filter.'}
-        </p>
+        <p className="text-foreground-muted text-sm">Nothing here. Try a different filter.</p>
       ) : (
         <ul className="border-border divide-border divide-y overflow-hidden rounded-2xl border">
           {visible.map((r) => (
@@ -178,7 +445,7 @@ export function OrganizerRegistrations({
           onClose={() => setOpenId(null)}
           align="center"
         >
-          <RegRow tournamentId={tournamentId} reg={selected} divisions={divisions} />
+          <RegRow tournamentId={tournamentId} reg={selected} divisions={eligibilityDivisions} />
         </Modal>
       )}
     </div>

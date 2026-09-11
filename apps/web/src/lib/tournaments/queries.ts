@@ -342,6 +342,77 @@ export async function listManagedTournaments(
   }
 }
 
+/** Minimal tournament reference for a `<select>` option (master_plan §2AG A4). */
+export interface TournamentOption {
+  id: string;
+  name: string;
+}
+
+/** Statuses a staff moderator can filter the player directory by (§2AG A4, D7): active/near-active
+ *  events only - draft is unpublished and completed/archived/cancelled are stale for "who's in this
+ *  event right now". */
+const STAFF_TOURNAMENT_FILTER_STATUSES: TournamentStatus[] = [
+  'registration_open',
+  'registration_closed',
+  'locked',
+  'live',
+];
+
+/**
+ * Tournament options for the STAFF tournament filter (§2AG A4, D7). Service client: staff-only UI,
+ * and this returns only id/name (no viewer-scoped fields), so a shared 60s cache is safe. Bounded to
+ * 200 - the tournament list itself is documented as sound to a similar order of magnitude.
+ */
+export const getStaffTournamentOptions = unstable_cache(
+  async (): Promise<TournamentOption[]> => {
+    try {
+      const svc = createServiceClient();
+      const { data } = await svc
+        .from('tournaments')
+        .select('id, name')
+        .in('status', STAFF_TOURNAMENT_FILTER_STATUSES)
+        .order('name', { ascending: true })
+        .limit(200);
+      return (data ?? []) as TournamentOption[];
+    } catch {
+      return [];
+    }
+  },
+  ['staff-tournament-options'],
+  { revalidate: 60, tags: [TOURNAMENTS_LIST_TAG] },
+);
+
+/**
+ * Whether `userId` owns or co-organizes `tournamentId` (master_plan §2AG A4, D7). Used to gate the
+ * player-directory tournament filter server-side - the client's `?tournament=` param alone is never
+ * trusted. Deliberately UNCACHED: this is an identity check (per viewer, per tournament), not
+ * shareable public data, and the two lookups are single indexed rows.
+ */
+export async function isOrganizerOfTournament(
+  userId: string,
+  tournamentId: string,
+): Promise<boolean> {
+  try {
+    const svc = createServiceClient();
+    const { data: t } = await svc
+      .from('tournaments')
+      .select('owner_organizer_id')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if ((t as { owner_organizer_id: string } | null)?.owner_organizer_id === userId) return true;
+    const { data: co } = await svc
+      .from('tournament_organizers')
+      .select('id')
+      .eq('tournament_id', tournamentId)
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .maybeSingle();
+    return Boolean(co);
+  } catch {
+    return false;
+  }
+}
+
 interface MiniProfile {
   id: string;
   name: string;
