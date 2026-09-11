@@ -12,8 +12,10 @@ import {
 import { isClosed } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
+import { getPendingReceiptNotificationCount } from '@/lib/actions/payment';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
 import { PaymentNotificationTestButton } from '@/components/tournaments/payment-notification-test-button';
+import { PaymentReceiptBackfillButton } from '@/components/tournaments/payment-receipt-backfill-button';
 import { emailChannelEnabled } from '@/lib/notifications/email';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
 import { DivisionBuilder } from '@/components/tournaments/division-builder';
@@ -27,6 +29,9 @@ import { computeOverview } from '@/lib/tournaments/overview';
 import { ArchiveControls } from '@/components/tournaments/archive-controls';
 
 export const metadata: Metadata = { title: 'Manage tournament' };
+// §2AL: the receipt backfill can send up to a few dozen emails in one tap - give it real headroom
+// above the platform's default route timeout.
+export const maxDuration = 60;
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -84,9 +89,12 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t) notFound();
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
-  const [registrations, clubOverrideParticipants] = await Promise.all([
+  const [registrations, clubOverrideParticipants, pendingReceiptCount] = await Promise.all([
     getOrganizerRegistrations(t.id),
     getClubOverrideParticipants(t.id),
+    // §2AL: only meaningful once an organizer has saved a notification address - otherwise there is
+    // nothing to backfill into, so skip the read entirely.
+    t.paymentNotificationEmail ? getPendingReceiptNotificationCount(t.id) : Promise.resolve(0),
   ]);
   const overview = computeOverview(
     registrations.map((r) => ({
@@ -173,7 +181,16 @@ export default async function ManageTournamentPage({ params }: Params) {
           submitLabel="Save details"
           refreshOnSuccess
           emailDeliveryReady={emailChannelEnabled()}
-          testButton={<PaymentNotificationTestButton tournamentId={t.id} />}
+          testButton={
+            <>
+              <PaymentNotificationTestButton tournamentId={t.id} />
+              <PaymentReceiptBackfillButton
+                tournamentId={t.id}
+                pendingCount={pendingReceiptCount}
+                email={t.paymentNotificationEmail ?? ''}
+              />
+            </>
+          }
           initial={{
             name: t.name,
             city: t.city ?? '',

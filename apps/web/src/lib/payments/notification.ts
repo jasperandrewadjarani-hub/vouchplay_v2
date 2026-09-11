@@ -37,6 +37,8 @@ export interface PaymentNotificationInput {
   receiptUrl: string | null;
   receiptExpiresDays: number;
   manageUrl: string;
+  /** §2AL: live paid-teams standing, appended below the payment details when present. */
+  summary?: PaymentSummary;
 }
 
 /** Pure builder (unit tested) - the exact subject/text/html shipped for every receipt. */
@@ -56,6 +58,17 @@ export function buildPaymentNotificationEmail(input: PaymentNotificationInput): 
     ? `Receipt: ${input.receiptUrl} (link works for ${input.receiptExpiresDays} days)`
     : 'Receipt: -';
 
+  // §2AL: the running paid-teams standing, appended below the payment details on every email that
+  // carries one (both the live send and the backfill) - a blank line, the total, then one indented
+  // line per division, ordered by count desc / name asc (see `gatherPaymentSummary`).
+  const summaryTextLines = input.summary
+    ? [
+        '',
+        `Paid teams so far: ${input.summary.total}`,
+        ...input.summary.perDivision.map((d) => `  ${d.division}: ${d.count}`),
+      ]
+    : [];
+
   const text = [
     `Tournament: ${input.tournamentName}`,
     `Submitted by: ${input.submittedByEmail ?? '-'}`,
@@ -68,6 +81,7 @@ export function buildPaymentNotificationEmail(input: PaymentNotificationInput): 
     `Payment reference / transaction no.: ${input.transactionReference ?? '-'}`,
     receiptTextLine,
     `Open in Manage: ${input.manageUrl}`,
+    ...summaryTextLines,
   ].join('\n');
 
   const htmlRow = (label: string, value: string) =>
@@ -94,17 +108,128 @@ export function buildPaymentNotificationEmail(input: PaymentNotificationInput): 
     ? `<a href="${escapeHtml(input.receiptUrl)}" style="display:inline-block;background:#4f46e5;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:8px;">View receipt</a><p style="margin:8px 0 0;font-size:12px;color:#6b7280;">Link works for ${input.receiptExpiresDays} days.</p>`
     : `<p style="margin:0;font-size:13px;color:#6b7280;">No receipt link available.</p>`;
 
+  // §2AL: a light separator, a heading naming the total, then a tight division · count list - kept
+  // compact and mobile-friendly, matching the inline-style aesthetic above. Every division name is
+  // escaped like every other field in this email.
+  const summaryHtml = input.summary
+    ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
+<h3 style="font-size:14px;margin:0 0 8px;">Paid teams so far — ${input.summary.total}</h3>
+<table role="presentation" style="width:100%;border-collapse:collapse;">${input.summary.perDivision
+        .map(
+          (d) =>
+            `<tr><td style="padding:3px 0;font-size:13px;color:#111827;">${escapeHtml(d.division)}</td><td style="padding:3px 0;font-size:13px;color:#6b7280;text-align:right;white-space:nowrap;">${d.count}</td></tr>`,
+        )
+        .join('')}</table>`
+    : '';
+
   const html = `<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#111827;">
 <h2 style="font-size:16px;margin:0 0 12px;">Registration payment notification</h2>
 <table role="presentation" style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">${htmlRows}</table>
 <div style="margin-top:16px;">${receiptButtonHtml}</div>
 <p style="margin:16px 0 0;"><a href="${escapeHtml(input.manageUrl)}" style="color:#4f46e5;font-weight:600;font-size:14px;text-decoration:none;">Open in Manage &rarr;</a></p>
+${summaryHtml}
 </div>`;
 
   return { subject, text, html };
 }
 
 type DivisionNameRow = Parameters<typeof divisionName>[0];
+
+// ---------------------------------------------------------------------------
+// §2AL: the shared "paid / receipt-uploaded" definition - one definition, used by both the running
+// summary below and the backfill (`sendAllPaymentReceipts` in lib/actions/payment.ts) so the two
+// never drift apart.
+// ---------------------------------------------------------------------------
+export interface PaidReceiptRegistration {
+  registrationId: string;
+  divisionId: string;
+  teamId: string;
+}
+
+/** §2AL: an ACTIVE registration (status not withdrawn/rejected) whose payment has a stored proof and
+ *  status 'submitted' or 'verified'. */
+export async function getPaidReceiptRegistrations(
+  tournamentId: string,
+): Promise<PaidReceiptRegistration[]> {
+  const svc = createServiceClient();
+
+  // Bounded page of 1000, like the other organizer registration reads (registration-queries.ts) - a
+  // tournament genuinely holding more entries than that is not a case this dashboard handles today.
+  const { data: regRows } = await svc
+    .from('registrations')
+    .select('id, division_id, team_id, status')
+    .eq('tournament_id', tournamentId)
+    .limit(1000);
+  const regs = (regRows ?? []) as {
+    id: string;
+    division_id: string;
+    team_id: string;
+    status: string;
+  }[];
+  const active = regs.filter((r) => r.status !== 'withdrawn' && r.status !== 'rejected');
+  if (active.length === 0) return [];
+
+  const { data: payRows } = await svc
+    .from('payments')
+    .select('registration_id, status, proof_storage_path')
+    .in(
+      'registration_id',
+      active.map((r) => r.id),
+    )
+    .limit(1000);
+  const payByReg = new Map(
+    (
+      (payRows ?? []) as {
+        registration_id: string;
+        status: string;
+        proof_storage_path: string | null;
+      }[]
+    ).map((p) => [p.registration_id, p]),
+  );
+
+  return active
+    .filter((r) => {
+      const pay = payByReg.get(r.id);
+      return !!pay?.proof_storage_path && (pay.status === 'submitted' || pay.status === 'verified');
+    })
+    .map((r) => ({ registrationId: r.id, divisionId: r.division_id, teamId: r.team_id }));
+}
+
+export interface PaymentSummary {
+  total: number;
+  perDivision: { division: string; count: number }[];
+}
+
+/** §2AL: live paid-teams standing for a tournament (total + per-division), from
+ *  `getPaidReceiptRegistrations`. Ordered by count desc, then division name asc. */
+export async function gatherPaymentSummary(tournamentId: string): Promise<PaymentSummary> {
+  const paid = await getPaidReceiptRegistrations(tournamentId);
+  if (paid.length === 0) return { total: 0, perDivision: [] };
+
+  const svc = createServiceClient();
+  const divisionIds = Array.from(new Set(paid.map((r) => r.divisionId)));
+  const { data: divRows } = await svc
+    .from('divisions')
+    .select(
+      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+    )
+    .in('id', divisionIds);
+  const nameByDivisionId = new Map(
+    ((divRows ?? []) as ({ id: string } & DivisionNameRow)[]).map((d) => [d.id, divisionName(d)]),
+  );
+
+  const countByLabel = new Map<string, number>();
+  for (const r of paid) {
+    const label = nameByDivisionId.get(r.divisionId) ?? 'Division';
+    countByLabel.set(label, (countByLabel.get(label) ?? 0) + 1);
+  }
+
+  const perDivision = Array.from(countByLabel.entries())
+    .map(([division, count]) => ({ division, count }))
+    .sort((a, b) => b.count - a.count || a.division.localeCompare(b.division));
+
+  return { total: paid.length, perDivision };
+}
 
 /** Shared by the real send and the organizer's "send a test email" button context lookup. */
 export async function buildPaymentNotificationForRegistration(
@@ -247,6 +372,8 @@ export async function buildPaymentNotificationForRegistration(
     receiptUrl,
     receiptExpiresDays: RECEIPT_EXPIRES_DAYS,
     manageUrl: `${publicEnv.siteUrl}/tournaments/${tournament.slug ?? ''}/manage`,
+    // §2AL: one extra bounded read set so every live send carries the current standing.
+    summary: await gatherPaymentSummary(reg.tournament_id),
   };
 }
 
@@ -296,6 +423,21 @@ export async function notifyPaymentReceiptUploaded(
       text,
       idempotencyKey: `payment-notify:${registrationId}:${submittedAt}`,
     });
+
+    // §2AL: stamp the idempotency marker right after a successful send, so a later backfill tap
+    // never re-emails this receipt. Best-effort and isolated from the outer try/catch on purpose -
+    // a stamp failure must not turn an actually-sent email into a reported 'failed'/unaudited send.
+    if (ok) {
+      try {
+        await svc
+          .from('payments')
+          .update({ notification_sent_at: new Date().toISOString() })
+          .eq('registration_id', registrationId);
+      } catch {
+        // Non-fatal: worst case a future backfill re-sends this one receipt.
+      }
+    }
+
     // Never log the receipt URL itself in the audit trail (§2AK).
     await writeAudit({
       actorId: actorUserId,

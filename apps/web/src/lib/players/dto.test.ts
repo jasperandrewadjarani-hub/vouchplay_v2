@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ProfileRow } from '@vouchplay/db';
 import { ANON_VIEWER, toPlayerCardDTO, type ProfileExtras } from './dto';
 
@@ -53,8 +53,16 @@ describe('toPlayerCardDTO isNew', () => {
   });
 
   it('is inclusive right at the boundary', () => {
-    const dto = toPlayerCardDTO(row(daysAgo(7)), extras, ANON_VIEWER, 7);
-    expect(dto.isNew).toBe(true);
+    // Freeze the clock: `daysAgo(7)` and the `Date.now()` inside `toPlayerCardDTO` must observe the
+    // same instant, or the `>=` boundary races on the few ms between them (a pre-existing flake).
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-11T00:00:00.000Z'));
+    try {
+      const dto = toPlayerCardDTO(row(daysAgo(7)), extras, ANON_VIEWER, 7);
+      expect(dto.isNew).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('moves the boundary when the setting changes, without any other change', () => {

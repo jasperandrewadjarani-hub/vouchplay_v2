@@ -18,7 +18,10 @@ import { emailChannelEnabled, sendEmail } from '@/lib/notifications/email';
 import {
   notifyPaymentReceiptUploaded,
   buildPaymentNotificationEmail,
+  getPaidReceiptRegistrations,
+  gatherPaymentSummary,
   type PaymentNotificationInput,
+  type PaidReceiptRegistration,
 } from '@/lib/payments/notification';
 import { publicEnv } from '@/lib/env';
 
@@ -158,6 +161,8 @@ export async function submitPayment(
         status: 'submitted',
         submitted_at: new Date().toISOString(),
         rejection_reason: null,
+        // §2AL: a fresh/resubmitted receipt must be eligible to notify again.
+        notification_sent_at: null,
       },
       { onConflict: 'registration_id' },
     );
@@ -464,6 +469,8 @@ export async function sendPaymentNotificationTest(
       receiptUrl: null,
       receiptExpiresDays: 7,
       manageUrl: `${publicEnv.siteUrl}/tournaments/${t.slug ?? ''}/manage`,
+      // §2AL: the test email also previews the live paid-teams standing for this tournament.
+      summary: await gatherPaymentSummary(tournamentId),
     };
     const { subject, text, html } = buildPaymentNotificationEmail(sample);
     const ok = await sendEmail({
@@ -482,6 +489,165 @@ export async function sendPaymentNotificationTest(
     });
     if (!ok) return { error: 'Could not send the test email. Please try again.' };
     return { ok: true, message: `Test email sent to ${to}.` };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Backfill past receipts (master_plan §2AL) - "email every uploaded receipt not yet emailed".
+// ---------------------------------------------------------------------------
+
+/**
+ * §2AL: the paid registrations for this tournament that have not yet been emailed
+ * (`payments.notification_sent_at` is null). Reads that column defensively - a pre-0039 deploy
+ * degrades to "nothing pending" instead of breaking Manage (same pattern as
+ * `getPaymentNotificationEmail` in tournaments/queries.ts).
+ */
+async function getPendingReceiptRegistrations(
+  tournamentId: string,
+): Promise<PaidReceiptRegistration[]> {
+  const paid = await getPaidReceiptRegistrations(tournamentId);
+  if (paid.length === 0) return [];
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('payments')
+      .select('registration_id, notification_sent_at')
+      .in(
+        'registration_id',
+        paid.map((r) => r.registrationId),
+      )
+      .limit(1000);
+    if (error) throw error;
+    const sentAtByReg = new Map(
+      ((data ?? []) as { registration_id: string; notification_sent_at: string | null }[]).map(
+        (p) => [p.registration_id, p.notification_sent_at],
+      ),
+    );
+    return paid.filter((r) => !sentAtByReg.get(r.registrationId));
+  } catch {
+    return [];
+  }
+}
+
+/** §2AL: how many uploaded receipts for this tournament have NOT been emailed yet (notification_sent_at null). */
+export async function getPendingReceiptNotificationCount(tournamentId: string): Promise<number> {
+  return (await getPendingReceiptRegistrations(tournamentId)).length;
+}
+
+/** Resolve who to credit as the sender of a backfilled receipt: the actor on its most recent
+ *  `payment_submitted` event, falling back to the team's first member by `member_order` (§2AL). */
+async function resolveReceiptActorId(
+  registrationId: string,
+  teamId: string,
+): Promise<string | null> {
+  const svc = createServiceClient();
+  const { data: eventRow } = await svc
+    .from('registration_events')
+    .select('actor_id')
+    .eq('registration_id', registrationId)
+    .eq('event_type', 'payment_submitted')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const actorId = (eventRow as { actor_id: string | null } | null)?.actor_id;
+  if (actorId) return actorId;
+
+  const { data: memberRow } = await svc
+    .from('team_members')
+    .select('player_id')
+    .eq('team_id', teamId)
+    .order('member_order', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (memberRow as { player_id: string } | null)?.player_id ?? null;
+}
+
+/** A tiny inline concurrency-limited pool - no dependency, just `limit` workers pulling from a shared
+ *  cursor until the queue is drained (§2AL: keep 28 sends well inside a 60s route budget). */
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  async function pull(): Promise<void> {
+    for (;;) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      const item = items[i] as T;
+      await worker(item);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, pull));
+}
+
+/** §2AL: email the receipt notification for every paid receipt not yet emailed. Organizer manage_payments
+ *  only. Concurrency-limited, idempotent (stamps notification_sent_at), audited. */
+export async function sendAllPaymentReceipts(
+  tournamentId: string,
+): Promise<{ ok?: boolean; error?: string; message?: string; sent?: number; failed?: number }> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { error: 'You cannot manage this tournament.' };
+  }
+  if (!emailChannelEnabled()) {
+    return { error: 'Email delivery is not configured on this server yet.' };
+  }
+
+  let to: string | null = null;
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from('tournaments')
+      .select('payment_notification_email')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    to =
+      (data as { payment_notification_email: string | null } | null)?.payment_notification_email ??
+      null;
+  } catch {
+    to = null;
+  }
+  if (!to) return { error: 'Save an email address first.' };
+
+  try {
+    const pending = await getPendingReceiptRegistrations(tournamentId);
+    if (pending.length === 0) {
+      return {
+        ok: true,
+        sent: 0,
+        failed: 0,
+        message: 'All uploaded receipts have already been emailed.',
+      };
+    }
+
+    let sent = 0;
+    let failed = 0;
+    await runWithConcurrency(pending, 3, async (reg) => {
+      const actorId = await resolveReceiptActorId(reg.registrationId, reg.teamId);
+      if (!actorId) {
+        failed += 1;
+        return;
+      }
+      const result = await notifyPaymentReceiptUploaded(reg.registrationId, actorId);
+      if (result === 'sent') sent += 1;
+      else failed += 1;
+    });
+
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.notifications_backfill',
+      entityType: 'tournament',
+      entityId: tournamentId,
+      after: { sent, failed, total: pending.length },
+    });
+
+    const message =
+      `Emailed ${sent} receipt(s) to ${to}.` + (failed > 0 ? ` ${failed} failed.` : '');
+    return { ok: true, sent, failed, message };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }

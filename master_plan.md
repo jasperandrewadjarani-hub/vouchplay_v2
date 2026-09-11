@@ -3442,6 +3442,60 @@ reference, and a clickable link that shows the uploaded receipt.
 - **Main:** docs (this section, handover v1.64 §24), review, gates, deploy with §2AJ. Jasper applies
   `0038` before the push and sets the SMTP env.
 
+## 2AL. Backfill past receipts + a running paid-teams summary in the email (2026-09-11)
+
+Jasper (after the test email worked): (1) send the payment notification for every team that ALREADY
+uploaded a receipt for Hermosa before this feature existed (~28), so Kathrina has a copy of each with a
+clickable, viewable receipt link; (2) below the payment details in every notification email, show a
+running summary - total teams that have registered with a receipt uploaded, then a per-division
+breakdown.
+
+### The paid-team definition (one definition, used by the summary AND the backfill)
+
+A "paid / receipt-uploaded" team = a registration that is **active** (status NOT in `withdrawn` /
+`rejected`) whose payment has a stored proof and a payment status of `submitted` or `verified`. Live
+check on the real Hermosa row (`35f9d85b…`, slug `b-steel-hermosa-2026-…-b5301d`, the one where
+Kathrina's address is already set - two empty duplicate drafts exist and are ignored): **28** teams -
+exactly Jasper's estimate. (There are 29 submitted payments; one belongs to a withdrawn/rejected
+registration and is correctly excluded.) Per division: men doubles 12, mixed doubles 5, women doubles
+4, Men's Doubles Advanced 3, Women's Doubles High Intermediate 2, Mixed Doubles Advanced 1, 45 and Up
+Men 1. All 28 have a `payment_submitted` event carrying the submitter's id, so "submitted by" resolves.
+
+### Decisions
+
+1. **Running summary block, on every notification email** (backfill and going-forward). Below the
+   payment details, a separator then "Paid teams so far — {total}" and a compact per-division list
+   (division · count, ordered by count desc). Computed live at send time from the definition above, so
+   each email Kathrina gets shows the current standing (e.g. the backfilled emails all read "28"). One
+   small heading + a list; no clutter.
+2. **Backfill = a reusable organizer button, not a throwaway script.** SMTP only runs in the deployed
+   Vercel runtime (creds are not local), and a button is the cleanest trigger and reusable for any
+   tournament. Manage → Payment: "Email {N} uploaded receipts to {address}" with a confirm dialog (a
+   bulk external send), then an inline result. It sends only receipts **not yet emailed**, so it is
+   safe to tap and safe to re-tap.
+3. **Idempotency so Kathrina is never double-emailed** (migration `0039`): `payments.notification_sent_at`.
+   The backfill targets only rows where it is null; a successful send stamps it. The going-forward
+   `notifyPaymentReceiptUploaded` also stamps it, and a fresh (re)submission clears it so a resubmitted
+   receipt re-notifies. Net: the 28 historical receipts (never emailed → null) are sent once by the
+   button; every new upload is emailed live and never re-sent by a later button tap.
+4. **Receipt link stays the 7-day signed URL** (§2AK) - clickable and viewable by Kathrina with no
+   login, generated fresh at send. For the backfill that is 7 days from the tap, enough to reconcile a
+   batch. (A longer-lived or re-send-ignoring-the-stamp path is deferred; rare, Jasper can handle.)
+5. **Concurrency + time budget:** send with a small concurrency limit (3) and `maxDuration=60` on the
+   Manage route; 28 sends land in well under that. Every send audited exactly as the live path.
+
+### Execution
+
+- **Subagent:** migration `0039` + `scripts/apply-0039.sql` (`payments.notification_sent_at`);
+  `lib/payments/notification.ts` - `PaymentSummary` type + `gatherPaymentSummary(tournamentId)`, summary
+  rendered in the pure `buildPaymentNotificationEmail` (text + html), and `notifyPaymentReceiptUploaded`
+  stamps `notification_sent_at`; `lib/actions/payment.ts` - `sendAllPaymentReceipts(tournamentId)`
+  (concurrency-limited, idempotent, audited) + reset the stamp on (re)submission; a Manage button
+  component with confirm + result; `maxDuration` on the Manage route; unit tests for the summary
+  rendering and the paid-set selector.
+- **Main:** docs (this section, handover v1.65), review, gates, deploy. Jasper applies `0039`, pushes,
+  then taps the button once; I verify all 28 get `notification_sent_at` stamped.
+
 ## 1. Prompt Contract
 
 ### In scope

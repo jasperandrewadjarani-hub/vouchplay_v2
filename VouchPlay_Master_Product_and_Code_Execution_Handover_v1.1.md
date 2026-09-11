@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.64
+# VouchPlay Master Product & Code Execution Handover v1.65
 
-_(File retains its `…v1.1.md` name; content is v1.64 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.65 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -2531,6 +2531,15 @@ deviation) to that address:
   the receipt URL is never logged. "Send a test email" on Manage lets the organizer confirm delivery.
 - Inert until `SMTP_USER` / `SMTP_PASS` exist in the server env (the form says so in one line).
   Deferred: daily digest mode, outbox/retry worker (§34A.13), dedicated provider before real volume.
+
+**Running summary + backfill (v1.65, master_plan §2AL).** Every notification email carries, below the
+payment details, a live "Paid teams so far — {total}" line plus a per-division breakdown. A *paid team*
+is an active registration (status not `withdrawn`/`rejected`) with a stored receipt and payment status
+`submitted`/`verified`. A reusable **Manage → Payment button** emails the notification for every such
+receipt that has not been emailed yet (`payments.notification_sent_at IS NULL`, migration `0039`) -
+confirm dialog, concurrency-limited, audited; used once to backfill the receipts uploaded before the
+feature existed. `notification_sent_at` is stamped on each successful send and cleared on a fresh
+(re)submission, so no address is ever double-emailed.
 
 ## 24.5 Future Gateway
 
@@ -6231,6 +6240,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.65 (2026-09-11)
+
+_Payment-receipt email: backfill past receipts + a running paid-teams summary (master_plan §2AL).
+Migration `0039` (`payments.notification_sent_at`)._
+
+- **Running summary in every notification email.** Below the payment details, "Paid teams so far —
+  {total}" plus a per-division breakdown, computed live at send. Paid team = an active registration
+  (not withdrawn/rejected) with a stored receipt and payment status `submitted`/`verified`.
+- **Backfill button** (Manage → Payment): "Email {N} uploaded receipts to {address}" sends the
+  notification for every already-uploaded receipt that has not been emailed yet - confirm dialog,
+  concurrency-limited, audited, idempotent. For Hermosa that is the 28 receipts uploaded before the
+  feature existed. Receipt links are the same clickable 7-day signed URLs.
+- **Idempotency:** `payments.notification_sent_at` - stamped on every successful send, cleared on a new
+  submission; the backfill only ever sends rows where it is null, so no one is double-emailed.
 
 ## v1.64 (2026-09-11)
 

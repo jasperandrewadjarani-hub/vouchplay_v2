@@ -2840,3 +2840,27 @@ emails, amount, mode, reference, 7-day signed receipt link, Manage link. "Send a
 Audited (payment.notification_sent/_failed/_test). PREREQ: SMTP_USER=vouchplay@gmail.com + SMTP_PASS
 (Gmail App Password, 2FA) in Vercel env - channel is inert without them. Hermosa recipient:
 kathrina.malinao@gmail.com (organizer enters it in the form; not hardcoded).
+
+## 2026-09-11 - Backfill past receipts + running paid-teams summary (§2AL, handover v1.65)
+Jasper: email Kathrina every already-uploaded Hermosa receipt (~28) + show a running paid-teams summary
+in each notification. Live check on the real Hermosa (35f9d85b, slug b-steel-...-b5301d; 2 empty
+duplicate drafts ignored): exactly 28 active receipt-uploaded teams (29 submitted payments minus 1 on a
+withdrawn/rejected reg). Per div: men doubles 12, mixed 5, women 4, MD Advanced 3, WD High Int 2, Mixed
+Adv 1, 45&Up Men 1.
+- Paid-team def (shared, notification.ts getPaidReceiptRegistrations): active reg (not
+  withdrawn/rejected) + payment proof + status submitted|verified.
+- Running summary: gatherPaymentSummary(tournamentId) -> total + per-division (count desc, name asc);
+  rendered below payment details in buildPaymentNotificationEmail (text + html), included on live sends
+  and the test email.
+- Backfill: sendAllPaymentReceipts(tournamentId) - organizer manage_payments, concurrency 3, idempotent
+  (only notification_sent_at IS NULL), one audit payment.notifications_backfill; Manage button
+  "Email {N} uploaded receipts to {email}" with inline confirm. getPendingReceiptNotificationCount for
+  the label; maxDuration=60 on the manage route.
+- Idempotency: migration 0039 payments.notification_sent_at (+ scripts/apply-0039.sql). Stamped on each
+  successful send; submitPayment resets it to null on (re)submission. No double-emails.
+- Receipt links = same clickable 7-day signed URLs.
+Also fixed a PRE-EXISTING flaky test (players/dto.test.ts "is inclusive right at the boundary"): it
+raced two Date.now() calls across the 7-day >= boundary; now frozen via vi.setSystemTime. Unrelated to
+this feature; was intermittently red-gating deploys.
+DEFERRED: delete the 2 empty duplicate Hermosa drafts (Jasper/dashboard); longer-lived or
+resend-ignoring-stamp receipt links if Kathrina needs a batch after 7 days.
