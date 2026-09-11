@@ -7,6 +7,7 @@ import { ClubCard } from '@/components/clubs/club-card';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { InstantFilterForm } from '@/components/ui/instant-filter-form';
 import { Pagination } from '@/components/ui/pagination';
+import { SignupWall } from '@/components/ui/signup-wall';
 
 export const metadata: Metadata = {
   title: 'Clubs',
@@ -39,10 +40,30 @@ function qs(f: ClubFilters, page: number): string {
 export default async function ClubsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const filters = parseFilters(sp);
-  const [{ clubs, total, page, pageCount }, user] = await Promise.all([
-    listClubs(filters),
-    getOptionalUser(),
-  ]);
+  const user = await getOptionalUser();
+
+  // Signup wall (master_plan §2AH): clubs are not browsable by anonymous visitors, and we do NOT
+  // fetch any club data for them (skips the listClubs query to save egress). Just the page heading
+  // and one warm, consistent prompt. Signed-in visitors fall through to the full listing below.
+  if (!user) {
+    return (
+      <div className="space-y-5">
+        <div className="vp-in space-y-1">
+          <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
+            <span className="vp-gradient-text">Clubs</span>
+          </h1>
+          <p className="text-foreground-muted text-sm">Find your community and represent it.</p>
+        </div>
+        <SignupWall
+          title="Sign up to discover clubs"
+          message="Create a free account to find clubs, join a community, and represent it."
+          next="/clubs"
+        />
+      </div>
+    );
+  }
+
+  const { clubs, total, page, pageCount } = await listClubs(filters);
 
   return (
     <div className="space-y-5">

@@ -8,8 +8,11 @@ import { LinkSpinner } from '@/components/ui/link-spinner';
 import { formatDate } from '@/lib/format-date';
 import { boardMeta, hasCompetitiveEvidence, podiumStyle } from '@/lib/leaderboards/board-meta';
 
-function subjectHref(entry: LeaderboardDTO['entries'][number]): string {
-  return `/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`;
+function subjectHref(entry: LeaderboardDTO['entries'][number], authed: boolean): string {
+  const href = `/${entry.subjectType === 'club' ? 'clubs' : 'players'}/${entry.slug}`;
+  // Anonymous visitors can look at the boards but not open a profile or club (master_plan §2AH):
+  // every entry link becomes a signup prompt that resumes on the destination after they join.
+  return authed ? href : `/signup?next=${encodeURIComponent(href)}`;
 }
 
 function subjectImage(entry: LeaderboardDTO['entries'][number]): string | null {
@@ -18,6 +21,7 @@ function subjectImage(entry: LeaderboardDTO['entries'][number]): string | null {
 
 export function LeaderboardPanel({
   board,
+  authed,
   compact = false,
   category,
   error = false,
@@ -26,6 +30,8 @@ export function LeaderboardPanel({
   hideSubtitle = false,
 }: {
   board: LeaderboardDTO | null;
+  /** Whether the viewer is signed in. Anonymous visitors get signup-gated entry links (§2AH). */
+  authed: boolean;
   compact?: boolean;
   category?: LeaderboardDTO['category'];
   error?: boolean;
@@ -142,6 +148,7 @@ export function LeaderboardPanel({
               <Podium
                 key={entry.subjectId}
                 entry={entry}
+                authed={authed}
                 isViewer={viewerId != null && entry.subjectId === viewerId}
               />
             ))}
@@ -157,7 +164,7 @@ export function LeaderboardPanel({
                 return (
                   <li key={entry.subjectId}>
                     <Link
-                      href={subjectHref(entry)}
+                      href={subjectHref(entry, authed)}
                       prefetch={false}
                       className={`flex min-h-14 items-center gap-3 px-4 py-3 ${
                         isViewer
@@ -232,9 +239,11 @@ export function LeaderboardPanel({
 
 function Podium({
   entry,
+  authed,
   isViewer,
 }: {
   entry: LeaderboardDTO['entries'][number];
+  authed: boolean;
   isViewer: boolean;
 }) {
   const style = podiumStyle(entry.rank);
@@ -271,7 +280,7 @@ function Podium({
         />
       </div>
       <Link
-        href={subjectHref(entry)}
+        href={subjectHref(entry, authed)}
         prefetch={false}
         className={`text-foreground mt-2 inline-flex items-center gap-1 font-bold hover:underline ${
           first ? 'text-lg' : ''

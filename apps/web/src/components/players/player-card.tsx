@@ -32,7 +32,12 @@ export function PlayerCard({
   authed: boolean;
   compact?: boolean;
 }) {
-  const profileHref = `/players/${player.slug}`;
+  // Anonymous visitors get one warm, consistent signup prompt whenever they reach for depth
+  // (master_plan §2AH): every directory card click (overlay, name, avatar - compact and detailed)
+  // routes to signup with a `next` that resumes on the profile after they join. Signed-in unchanged.
+  const profileHref = authed
+    ? `/players/${player.slug}`
+    : `/signup?next=${encodeURIComponent(`/players/${player.slug}`)}`;
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
     : player.selfRatedSkill

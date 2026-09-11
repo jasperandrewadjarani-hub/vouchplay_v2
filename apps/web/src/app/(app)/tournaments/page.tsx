@@ -13,6 +13,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { TournamentCard } from '@/components/tournaments/tournament-card';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { InstantFilterForm } from '@/components/ui/instant-filter-form';
+import { GuestBanner } from '@/components/ui/signup-wall';
 import {
   ManagedTournamentFilters,
   type ManagedVisibilityStatus,
@@ -147,6 +148,15 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
         preservedParams={preservedWithPartner}
       />
 
+      {/* Tournaments stay the public front door (master_plan §2AH): a guest still sees the first page
+          of cards and every full detail page. This slim nudge invites them without a wall. */}
+      {!user && (
+        <GuestBanner
+          message="Create a free account to register and unlock players, clubs and profiles."
+          next="/tournaments"
+        />
+      )}
+
       {(canCreate || managedTournaments.length > 0) && (
         <section className="order-3 space-y-3" aria-labelledby="managed-tournaments-heading">
           <details className="group border-border bg-surface rounded-2xl border p-4">
@@ -215,7 +225,9 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
           </div>
         )}
 
-        {pageCount > 1 && (
+        {/* Pagination is hidden for anonymous visitors (master_plan §2AH): they get the first page as
+            a preview and a signup nudge, not the full paged catalogue. Signed-in unchanged. */}
+        {user && pageCount > 1 && (
           <nav className="flex items-center justify-between gap-2 pt-2" aria-label="Pagination">
             {page > 1 ? (
               <Link

@@ -26,6 +26,7 @@ import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
 import { Pagination } from '@/components/ui/pagination';
+import { SignupWall } from '@/components/ui/signup-wall';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
 import { getLeaderboardSettings } from '@/lib/settings';
 import { getLeaderboard } from '@/lib/leaderboards/queries';
@@ -59,7 +60,10 @@ async function PlayersResults({
   compact: boolean;
   authed: boolean;
 }) {
-  const { players, total, page, pageCount } = await listPlayers(filters, viewer);
+  const { players: allPlayers, total, page, pageCount } = await listPlayers(filters, viewer);
+  // Signup wall (master_plan §2AH): anonymous visitors get a taste - the first 10 players, compact,
+  // no pagination - then one warm prompt to join. Signed-in visitors are byte-identical to before.
+  const players = authed ? allPlayers : allPlayers.slice(0, 10);
   return (
     <div className="space-y-5">
       {/* Records the exact list URL (filters/sort/page) so a later "Back to players" or Players-tab
@@ -67,14 +71,19 @@ async function PlayersResults({
       <RememberListUrl />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-foreground-muted text-sm" aria-live="polite">
-          {total === 0
-            ? 'No players match your search yet.'
-            : `${total} player${total === 1 ? '' : 's'}`}
+          {authed
+            ? total === 0
+              ? 'No players match your search yet.'
+              : `${total} player${total === 1 ? '' : 's'}`
+            : `A few of our ${total.toLocaleString()}+ players`}
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <SortSelect sort={filters.sort ?? 'new_unvouched'} staff={viewer.isStaff} />
-          <PlayerViewToggle compact={compact} />
-        </div>
+        {/* Sort and view controls are signed-in features - a guest sees a fixed compact preview. */}
+        {authed && (
+          <div className="flex flex-wrap items-center gap-2">
+            <SortSelect sort={filters.sort ?? 'new_unvouched'} staff={viewer.isStaff} />
+            <PlayerViewToggle compact={compact} />
+          </div>
+        )}
       </div>
 
       {players.length > 0 ? (
@@ -91,12 +100,20 @@ async function PlayersResults({
         </div>
       )}
 
-      <Pagination
-        page={page}
-        pageCount={pageCount}
-        hrefFor={(n) => `/players${playerFiltersToQuery(filters, { page: n, compact })}`}
-        label="Player pages"
-      />
+      {authed ? (
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          hrefFor={(n) => `/players${playerFiltersToQuery(filters, { page: n, compact })}`}
+          label="Player pages"
+        />
+      ) : (
+        <SignupWall
+          title="See every player"
+          message={`Sign up to search ${total.toLocaleString()}+ players, filter, and open profiles.`}
+          next="/players"
+        />
+      )}
     </div>
   );
 }
@@ -108,10 +125,12 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // and the pagination links cannot drift apart (master_plan §2B). `staff` gates `sort=sts_desc`
   // (D3, §8.4) - a non-staff request for it is silently coerced back to the public default.
   const filters: PlayerFilters = parsePlayerFilters(sp, { staff: viewer.isStaff });
-  // Compact is the default directory view (§1S): a directory is for scanning names, and the
-  // detailed card spends a whole screen on three players. Detailed keeps its existing URL.
-  const compact = one(sp.view) !== 'detailed';
   const authed = viewer.viewerId !== null;
+  // Compact is the default directory view (§1S): a directory is for scanning names, and the
+  // detailed card spends a whole screen on three players. Detailed keeps its existing URL. Anonymous
+  // visitors get the fixed compact preview (master_plan §2AH) - the view toggle is hidden for them,
+  // so the skeleton and the cards stay compact even if `?view=detailed` is typed manually.
+  const compact = authed ? one(sp.view) !== 'detailed' : true;
   const [cityOptions, clubOptions, tournamentOptions] = await Promise.all([
     getDirectoryCityOptions(),
     getDirectoryClubOptions(),
@@ -158,13 +177,17 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         />
       )}
 
-      <SearchFilters
-        current={filters}
-        cityOptions={cityOptions}
-        clubOptions={clubOptions}
-        tournamentOptions={tournamentOptions}
-        compact={compact}
-      />
+      {/* Search, filters, sort and the availability card are signed-in features (master_plan §2AH):
+          a guest sees the header, the leaders card and a fixed 10-player preview, nothing to tune. */}
+      {authed && (
+        <SearchFilters
+          current={filters}
+          cityOptions={cityOptions}
+          clubOptions={clubOptions}
+          tournamentOptions={tournamentOptions}
+          compact={compact}
+        />
+      )}
 
       {/* Keyed on the filters + view so any search/filter/sort/page/view change remounts the
           boundary and shows the skeleton while the new query resolves (§2Z, §2AG A1 - `sort` is a

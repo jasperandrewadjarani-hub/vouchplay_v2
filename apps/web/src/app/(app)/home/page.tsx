@@ -87,6 +87,7 @@ export default async function HomePage() {
               <div className="vp-gradient absolute inset-x-0 top-0 z-10 h-1" aria-hidden />
               <LeaderboardPanel
                 board={community.board}
+                authed={Boolean(user)}
                 error={community.error}
                 category="community"
                 paused={settings.paused.community}
@@ -107,6 +108,7 @@ export default async function HomePage() {
             </h2>
             <LeaderboardPanel
               board={clubs.board}
+              authed={Boolean(user)}
               error={clubs.error}
               category="clubs"
               paused={settings.paused.clubs}
@@ -116,6 +118,7 @@ export default async function HomePage() {
             />
             <LeaderboardPanel
               board={players.board}
+              authed={Boolean(user)}
               error={players.error}
               category="players"
               paused={settings.paused.players}

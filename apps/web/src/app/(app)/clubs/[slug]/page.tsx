@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { Shield, MapPin, BadgeCheck, Users, Settings, ExternalLink } from 'lucide-react';
-import { getViewerContext } from '@/lib/auth';
+import { getViewerContext, getOptionalUser } from '@/lib/auth';
 import { getClubBySlug, getClubMembers } from '@/lib/clubs/queries';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
@@ -32,6 +32,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function ClubPage({ params }: Params) {
   const { slug } = await params;
+  // Signup wall (master_plan §2AH): club detail is not public to anonymous visitors. Redirect them to
+  // signup with a `next` that resumes here after they join. `generateMetadata` above is untouched, so
+  // a shared link's OG preview card still renders. Signed-in path unchanged.
+  if (!(await getOptionalUser())) {
+    redirect(`/signup?next=${encodeURIComponent(`/clubs/${slug}`)}`);
+  }
   const viewer = await getViewerContext();
   const club = await getClubBySlug(slug, { viewerId: viewer.viewerId, isStaff: viewer.isStaff });
   if (!club) notFound();

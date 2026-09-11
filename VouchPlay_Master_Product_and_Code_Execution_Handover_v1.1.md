@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.61
+# VouchPlay Master Product & Code Execution Handover v1.62
 
-_(File retains its `…v1.1.md` name; content is v1.61 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.62 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6202,6 +6202,25 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.62 (2026-09-11)
+
+_Signup wall: gated preview for anonymous visitors (master_plan §2AH). AMENDS §2.1 "Public Access":
+profiles and clubs are no longer public; a not-signed-in visitor gets a preview + a prompt to create a
+free account. Signed-in users unchanged. No migration._
+
+- **Anonymous preview + prompt:** Tournaments list shows the first page (pagination hidden) and full
+  tournament detail (register → signup, unchanged); Players list shows the first 10 cards with search /
+  filters / sort / pagination hidden and a "Sign up to search {N}+ players and open profiles" wall;
+  Home + /leaderboards show the boards but every entry's profile link prompts signup; Clubs list is a
+  "Sign up to discover clubs" wall.
+- **Gates:** a shared `SignupWall` (Create-a-free-account + Log-in, both carrying `?next`); player
+  cards route anon clicks to `/signup?next=/players/{slug}`; leaderboard `subjectHref` does the same;
+  page-level backstops redirect anon on `/players/[slug]` and `/clubs/[slug]` and wall `/clubs`. Every
+  prompt resumes at the intended page after signup.
+- **Trade-off (flagged):** profiles/clubs are now non-public - shared links funnel to signup (the OG
+  preview card still renders). Dampens profile SEO / viral sharing; the deliberate cost of a signup
+  funnel. Tournaments stay public as the discovery hook.
 
 ## v1.61 (2026-09-11)
 

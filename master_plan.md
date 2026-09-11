@@ -3183,6 +3183,65 @@ STS as a public sort (D3), a public "unverified" marker (D2), and any ID auto-ve
 recommendation. The middleware prefetch-skip, phase-2 caches, cleanup migration and `LEGAL.version`
 bump remain post-event as before.
 
+## 2AH. Signup wall: gated preview for anonymous visitors (2026-09-11, urgent)
+
+Jasper wants the app to convert browsers into members: an anonymous (not-signed-in) visitor gets a
+TASTE of each surface and a friendly prompt to create a free account for anything deeper. Signed-in
+users are completely unaffected. This reverses the handover's original "fully public" access (§2.1) in
+favour of a gated-preview funnel - a deliberate product decision (see the trade-off note).
+
+### The rules, per surface (anonymous only)
+
+| Surface | Anonymous sees | Gated (prompts signup) |
+|---|---|---|
+| **Tournaments list** `/tournaments` (the front door) | First page of tournament cards | Pagination hidden; Register already routes to signup (`register-cta.tsx`); a slim "create a free account" banner |
+| **Tournament detail** `/tournaments/[slug]` | Full detail (the conversion surface - entices registration) | Register → signup (unchanged) |
+| **Players list** `/players` | First **10** cards, compact | Search, filters, sort, view toggle, availability card, pagination all hidden; each card links to signup; a `SignupWall` below the 10: "Sign up to search {total}+ players and open profiles" |
+| **Player profile** `/players/[slug]` | Nothing | Redirect to `/signup?next=/players/{slug}` (OG metadata still computes, so a shared link's preview card is intact and the click lands on signup) |
+| **Clubs list** `/clubs` | Nothing (no club data fetched) | A full `SignupWall`: "Sign up to discover clubs" |
+| **Club detail** `/clubs/[slug]` | Nothing | Redirect to `/signup?next=/clubs/{slug}` |
+| **Home** `/home` | Leaderboards | Every leaderboard entry's profile link → `/signup?next=/players/{slug}` (can look, can't open a profile) |
+| **Leaderboards** `/leaderboards` | The boards | Same entry-link gating as Home (same panel) |
+
+### Mechanism (few, central changes)
+
+- **Shared `SignupWall`** (`components/ui/signup-wall.tsx`): a calm, warm card - short headline, one line
+  of why, a big "Create a free account" button (`/signup?next=<path>`), and "Already have an account?
+  Log in" (`/login?next=<path>`). One component, reused everywhere. Plain language, big tap target,
+  works for a non-technical, mixed-age audience; never a hard, cold paywall.
+- **One card gate covers most clicks:** `player-card.tsx` builds `profileHref` as
+  `authed ? /players/{slug} : /signup?next=/players/{slug}`. Every directory card click for an anon
+  becomes a signup prompt (which resumes on the profile after signup). `authed` is already threaded.
+- **Leaderboard entry gate:** `LeaderboardPanel` takes `authed`; `subjectHref` returns the signup URL
+  for anon. Home and /leaderboards pass it.
+- **Page-level backstops (authoritative, cover direct URLs):** `/players/[slug]`, `/clubs`,
+  `/clubs/[slug]` gate at the top via `getOptionalUser()` - redirect (profile, club detail) or wall
+  (clubs list). Never rely on the link alone.
+- **List caps:** `/players` PlayersResults slices to 10 and renders the wall instead of pagination
+  when anon; the shell hides SearchFilters/SortSelect/AvailabilityCard for anon. `/tournaments` hides
+  pagination for anon.
+
+### UX
+
+A guest sees enough to believe the app is alive (a full tournament page, real leaderboards, ten real
+players) and hits ONE warm, consistent prompt whenever they reach for depth. Every prompt carries a
+`next` so signup drops them exactly where they were headed. No dead ends, no cold walls, one message.
+
+### Trade-off to be aware of (flagged, not blocking)
+
+This makes player profiles and clubs non-public: a shared profile/club link now funnels to signup
+instead of showing content (the OG preview card still renders from `generateMetadata`, so the share
+still looks right; the click converts). That reverses §2.1 "Public Access" and dampens profile SEO and
+frictionless viral sharing - the deliberate cost of a signup funnel. If viral profile sharing later
+matters more than the wall, a "one free profile view, then sign up" softening is the natural next
+step. Tournaments stay public (list preview + full detail) precisely because they are the discovery
+hook.
+
+### Not in this change
+
+The Me tab and auth pages are unchanged. Rate-of-conversion analytics, a "continue as guest" cookie,
+and any partial-blur teaser styling are deferred - this ships the clean gate first.
+
 ## 1. Prompt Contract
 
 ### In scope

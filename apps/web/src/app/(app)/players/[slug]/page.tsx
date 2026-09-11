@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { MapPin, CalendarDays, Facebook, Clock } from 'lucide-react';
-import { getViewerContext } from '@/lib/auth';
+import { getViewerContext, getOptionalUser } from '@/lib/auth';
 import {
   getPlayerBySlug,
   getPlayerMetaBySlug,
@@ -84,6 +84,12 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 
 export default async function PlayerProfilePage({ params }: Params) {
   const { slug } = await params;
+  // Signup wall (master_plan §2AH): profiles are not public to anonymous visitors. Redirect them to
+  // signup with a `next` that resumes here after they join. `generateMetadata` above is untouched, so
+  // a shared link's OG preview card still renders and the click converts. Signed-in path unchanged.
+  if (!(await getOptionalUser())) {
+    redirect(`/signup?next=${encodeURIComponent(`/players/${slug}`)}`);
+  }
   const viewer = await getViewerContext();
   const player = await getPlayerBySlug(slug, viewer);
   if (!player) notFound();

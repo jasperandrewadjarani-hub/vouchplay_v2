@@ -2757,3 +2757,24 @@ wording (flagged).
 Gates: typecheck, lint (migration guard OK), 563 tests (241 web/232 core/85 config/5 validation),
 format - green. Deferred: document_delete_after sweeper job (later phase).
 JASPER TODO: apply scripts/apply-0036.sql (bucket+RLS+2 settings); then push.
+
+## 2026-09-11 - Signup wall: gated preview for anonymous visitors (§2AH, handover v1.62) - URGENT
+
+Jasper: convert browsers to members. Anon gets a preview + a Create-free-account prompt; signed-in
+users unchanged. AMENDS §2.1 Public Access (profiles+clubs no longer public).
+
+Rules (anon only): Tournaments list = first page, no pagination, register→signup (unchanged), detail
+still public. Players list = first 10 compact, no search/filters/sort/pagination, cards→signup,
+SignupWall below. Player profile /players/[slug] = redirect to /signup?next. Clubs list = SignupWall
+only (no data fetched). Club detail = redirect. Home + /leaderboards = boards visible, entry profile
+links → signup.
+
+Mechanism: new components/ui/signup-wall.tsx (SignupWall + GuestBanner, both carry ?next);
+player-card profileHref = authed ? profile : /signup?next=profile (one gate covers all card clicks);
+LeaderboardPanel gets authed, subjectHref→signup for anon; page-level backstops (getOptionalUser
+redirect/wall) on players/[slug], clubs, clubs/[slug]. Every prompt resumes via ?next.
+
+Trade-off flagged: profiles/clubs now non-public → shared links funnel to signup (OG card still
+renders via generateMetadata); dampens profile SEO/viral sharing - deliberate funnel cost. Tournaments
+stay public as the hook. Deferred: conversion analytics, continue-as-guest cookie, blur-teaser style.
+Executor (1x Sonnet) building; gates+deploy after.

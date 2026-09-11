@@ -134,6 +134,7 @@ export default async function LeaderboardsPage({ searchParams }: { searchParams:
       ) : (
         <LeaderboardPanel
           board={board}
+          authed={Boolean(user)}
           category={category}
           paused={settings.paused[category]}
           viewerId={user?.id ?? null}
