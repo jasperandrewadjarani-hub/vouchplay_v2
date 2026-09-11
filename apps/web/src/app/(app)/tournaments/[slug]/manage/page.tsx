@@ -9,7 +9,7 @@ import {
   getOrganizerRegistrations,
   getClubOverrideParticipants,
 } from '@/lib/tournaments/registration-queries';
-import { isClosed } from '@/lib/tournaments/entry-view';
+import { isClosed, hasOpenSeat, hasUnconfirmedPartner } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
 import { getPendingReceiptNotificationCount } from '@/lib/actions/payment';
@@ -25,6 +25,7 @@ import { OrganizerRegistrations } from '@/components/tournaments/organizer-regis
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
 import { isoToPhInput, isoToPhDateInput } from '@vouchplay/core';
+import { formatDateTime } from '@/lib/format-date';
 import { computeOverview } from '@/lib/tournaments/overview';
 import { ArchiveControls } from '@/components/tournaments/archive-controls';
 
@@ -104,9 +105,16 @@ export default async function ManageTournamentPage({ params }: Params) {
       paymentStatus: r.paymentStatus,
       amountDue: r.amountDue,
       currency: r.currency,
+      hasOpenSeat: hasOpenSeat(r),
+      partnerUnconfirmed: hasUnconfirmedPartner(r),
     })),
     t.divisions.map((d) => ({ id: d.id, name: d.name, capacityTeams: d.capacityTeams })),
   );
+  const partnerLockLabel = t.partnerLockAt
+    ? `${formatDateTime(t.partnerLockAt)}, PH time`
+    : t.partnerLockEffectiveAt
+      ? `${formatDateTime(t.partnerLockEffectiveAt)}, PH time`
+      : null;
 
   // Division capacity strip (master_plan §2AG/A5) - counted in memory over the registrations this
   // page already loaded via getOrganizerRegistrations, so no new query. "Live" reuses the same
@@ -150,7 +158,7 @@ export default async function ManageTournamentPage({ params }: Params) {
       </ManageSection>
 
       <ManageSection title="Overview" defaultOpen>
-        <TournamentOverview overview={overview} />
+        <TournamentOverview overview={overview} partnerLockLabel={partnerLockLabel} />
       </ManageSection>
 
       <ManageSection title="Registrations">
@@ -230,6 +238,12 @@ export default async function ManageTournamentPage({ params }: Params) {
             coverUrl: t.coverUrl ?? '',
             paymentQrUrl: t.paymentQrUrl ?? '',
             clubLockAt: toLocalInput(t.clubLockAt),
+            partnerLockAt: toLocalInput(t.partnerLockAt),
+            partnerLockEffectiveLabel: t.partnerLockAt
+              ? undefined
+              : t.partnerLockEffectiveAt
+                ? `${formatDateTime(t.partnerLockEffectiveAt)}, PH time`
+                : undefined,
             enforceSkillFloor: t.enforceSkillFloor,
             requireSkillVerified: t.requireSkillVerified,
             requireOrganizerApproval: t.requireOrganizerApproval,

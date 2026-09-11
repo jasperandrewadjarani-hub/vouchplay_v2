@@ -81,6 +81,13 @@ export function hasUnconfirmedPartner(entry: OrganizerRegistration): boolean {
   return entry.unconfirmedMemberIds.length > 0;
 }
 
+/** True when the team is short a player against its division's team size (master_plan §2AM decision
+ *  2/3): never named, declined, expired, or the invite cancelled. Singles teams (teamSize 1) can
+ *  never have an open seat. */
+export function hasOpenSeat(entry: OrganizerRegistration): boolean {
+  return entry.teamSize > 1 && entry.members.length < entry.teamSize;
+}
+
 export interface StatusChip {
   label: string;
   /** Semantic tone. Never the only signal: the label always carries the meaning too (§34A). */
@@ -158,7 +165,7 @@ export interface EntryFilters {
   statuses: RegStatus[];
   eligibility: EligKind[];
   payment: ('has_proof' | 'no_proof')[];
-  partner: ('confirmed' | 'unconfirmed')[];
+  partner: ('confirmed' | 'unconfirmed' | 'none')[];
   /** Legacy single toggle, kept alongside the Status group (handover A5). Only decides visibility
    *  when `statuses` is empty - an explicit Status pick is a more specific ask and wins outright. */
   includeClosed: boolean;
@@ -210,9 +217,11 @@ export function filterEntries(
     }
 
     if (filters.partner.length > 0) {
-      const key: 'confirmed' | 'unconfirmed' = hasUnconfirmedPartner(e)
-        ? 'unconfirmed'
-        : 'confirmed';
+      const key: 'confirmed' | 'unconfirmed' | 'none' = hasOpenSeat(e)
+        ? 'none'
+        : hasUnconfirmedPartner(e)
+          ? 'unconfirmed'
+          : 'confirmed';
       if (!filters.partner.includes(key)) return false;
     }
 
@@ -240,9 +249,10 @@ const PAYMENT_LABELS: Record<'has_proof' | 'no_proof', string> = {
   has_proof: 'Has receipt',
   no_proof: 'No receipt',
 };
-const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed', string> = {
+const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed' | 'none', string> = {
   confirmed: 'Partner confirmed',
   unconfirmed: 'Partner not confirmed',
+  none: 'No partner yet',
 };
 
 /**

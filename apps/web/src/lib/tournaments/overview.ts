@@ -11,6 +11,10 @@ export interface OverviewRegInput {
   paymentStatus: string | null;
   amountDue: number | null;
   currency: string | null;
+  /** The team is short a player against its division's team size (master_plan §2AM). */
+  hasOpenSeat?: boolean;
+  /** A named partner has not confirmed yet. */
+  partnerUnconfirmed?: boolean;
 }
 
 export interface OverviewDivisionInput {
@@ -34,6 +38,8 @@ export interface OrganizerOverview {
   revenueCollected: number; // sum of verified payment amounts
   currency: string | null;
   nearingCapacity: DivisionCapacity[]; // >= 80% of capacity
+  /** Active (non-terminal) entries with an open seat OR an unconfirmed partner (master_plan §2AM). */
+  incompleteTeams: number;
 }
 
 const TERMINAL = new Set(['withdrawn', 'cancelled', 'rejected']);
@@ -53,11 +59,13 @@ export function computeOverview(
   let revenueCollected = 0;
   let totalRegistrations = 0;
   let currency: string | null = null;
+  let incompleteTeams = 0;
 
   const activeByDivision = new Map<string, number>();
 
   for (const r of registrations) {
     if (!TERMINAL.has(r.status)) totalRegistrations++;
+    if (!TERMINAL.has(r.status) && (r.hasOpenSeat || r.partnerUnconfirmed)) incompleteTeams++;
     if (r.status === 'confirmed') confirmedTeams++;
     if (r.status === 'waitlisted') waitlistCount++;
     if (r.paymentStatus === 'submitted') paymentsToReview++;
@@ -91,5 +99,6 @@ export function computeOverview(
     revenueCollected,
     currency,
     nearingCapacity,
+    incompleteTeams,
   };
 }

@@ -13,6 +13,8 @@
  * very reason to pay.
  */
 
+import { formatMonthDay } from '@/lib/format-date';
+
 export type SlotTone = 'action' | 'waiting' | 'done';
 
 export interface RegistrationFacts {
@@ -24,8 +26,16 @@ export interface RegistrationFacts {
   fee: number;
   /** Doubles: a named partner has not accepted yet. */
   partnerUnconfirmed?: boolean;
-  /** Doubles: the seat is empty because the last named partner declined (§1U). */
+  /** Doubles: the seat is empty because the last named partner declined (§1U). Kept for
+   *  compatibility - treated as an alias for `seatOpen` when that is not supplied (§2AM). */
   seatVacantAfterDecline?: boolean;
+  /** Doubles: the team is short a player, for any reason - never named, declined, expired, or the
+   *  invite cancelled (master_plan §2AM decision 2/3). */
+  seatOpen?: boolean;
+  /** The effective partner lock-in, ISO, or null/undefined when there is none to show. */
+  partnerLockAt?: string | null;
+  /** Whether the partner lock-in has already passed. */
+  partnerLockPassed?: boolean;
 }
 
 export interface RegistrationStatusView {
@@ -54,7 +64,9 @@ const NOT_SECURED = 'Your slot is not secured yet';
 export function describeRegistrationStatus(facts: RegistrationFacts): RegistrationStatusView {
   const { regStatus, paymentStatus, fee } = facts;
   const partnerUnconfirmed = Boolean(facts.partnerUnconfirmed);
-  const seatVacant = Boolean(facts.seatVacantAfterDecline);
+  // General truth: the team is short a player, for any reason (§2AM decision 2/3). `seatVacantAfterDecline`
+  // is kept as the fallback so a caller that has not been updated yet still gets the old behaviour.
+  const seatOpen = Boolean(facts.seatOpen ?? facts.seatVacantAfterDecline);
   const feeOwed = fee > 0;
 
   // Confirmed is the ONLY secured state.
@@ -90,8 +102,16 @@ export function describeRegistrationStatus(facts: RegistrationFacts): Registrati
     }
   }
 
-  if (seatVacant) {
-    steps.push('Name a new partner to fill the empty seat.');
+  // §2AM decision 5: the deadline replaces the generic "name a new partner" line once it is known,
+  // so the applicant sees the same date the organizer set rather than an open-ended ask.
+  if (seatOpen) {
+    if (facts.partnerLockPassed) {
+      steps.push('The partner lock-in has passed - contact the organizer about your partner.');
+    } else if (facts.partnerLockAt) {
+      steps.push(`Choose your partner before ${formatMonthDay(facts.partnerLockAt)}.`);
+    } else {
+      steps.push('Name a new partner to fill the empty seat.');
+    }
   } else if (partnerUnconfirmed) {
     steps.push('Your partner still needs to confirm the team.');
   }
@@ -143,10 +163,28 @@ export function describeRegistrationStatus(facts: RegistrationFacts): Registrati
     return {
       tone: 'waiting',
       secured: false,
-      shortLabel: partnerUnconfirmed ? 'Partner not confirmed' : 'Under review',
+      // Payment still wins the headline over "Under review" when neither partner fact applies; an
+      // open seat is the more actionable of the two partner states, so it takes priority (§2AM).
+      shortLabel: seatOpen
+        ? 'No partner yet'
+        : partnerUnconfirmed
+          ? 'Partner not confirmed'
+          : 'Under review',
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until the organizer confirms it.',
+      needsPayment: false,
+    };
+  }
+
+  if (seatOpen) {
+    return {
+      tone: 'waiting',
+      secured: false,
+      shortLabel: 'No partner yet',
+      title: NOT_SECURED,
+      steps,
+      assurance: NOT_SECURED + ' until you choose a partner.',
       needsPayment: false,
     };
   }

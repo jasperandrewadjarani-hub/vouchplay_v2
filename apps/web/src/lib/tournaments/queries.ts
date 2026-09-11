@@ -1,6 +1,6 @@
 import { unstable_cache } from 'next/cache';
 import type { TournamentRow, DivisionRow, TournamentStatus } from '@vouchplay/db';
-import { sortDivisions } from '@vouchplay/core';
+import { sortDivisions, partnerLockEffectiveAt } from '@vouchplay/core';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -82,6 +82,26 @@ async function getPaymentNotificationEmail(tournamentId: string): Promise<string
       (data as { payment_notification_email: string | null } | null)?.payment_notification_email ??
       null
     );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Organizer-set partner lock-in (migration 0040; §2AM). Read defensively, the same pattern as
+ * `getPaymentNotificationEmail`: before 0040 is applied the column does not exist, and this degrades
+ * to null rather than failing the whole tournament detail read - the app then treats partner changes
+ * as always open until the migration and its helpers land.
+ */
+export async function getPartnerLockAt(tournamentId: string): Promise<string | null> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('partner_lock_at')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as { partner_lock_at: string | null } | null)?.partner_lock_at ?? null;
   } catch {
     return null;
   }
@@ -563,6 +583,11 @@ export async function getTournamentBySlug(
     // unstable_cache returns a plain record (JSON); rebuild the Map the downstream code expects.
     const registeredByDivision = new Map<string, number>(Object.entries(countsRecord));
 
+    // Partner lock-in (migration 0040; §2AM). Public, like the club lock - a player choosing a
+    // partner needs the same deadline the form shows the organizer.
+    const partnerLockAt = await getPartnerLockAt(row.id);
+    const partnerLockEffAt = partnerLockEffectiveAt(row.start_at, partnerLockAt);
+
     const [demand, rules] = await Promise.all([
       getDemandSummary(row.id),
       getTournamentRules(row.id),
@@ -688,6 +713,8 @@ export async function getTournamentBySlug(
       paymentQrUrl,
       paymentNotificationEmail,
       clubLockAt: row.club_lock_at ?? null,
+      partnerLockAt,
+      partnerLockEffectiveAt: partnerLockEffAt,
       enforceSkillFloor: rules.enforceSkillFloor,
       requireSkillVerified: rules.requireSkillVerified,
       requireOrganizerApproval: rules.requireOrganizerApproval,

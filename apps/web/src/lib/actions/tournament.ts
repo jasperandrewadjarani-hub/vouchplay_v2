@@ -154,6 +154,7 @@ export async function createTournament(
     paymentInstructions: formData.get('paymentInstructions') ?? '',
     paymentMethods: formData.get('paymentMethods') ?? '',
     paymentNotificationEmail: formData.get('paymentNotificationEmail') ?? '',
+    partnerLockAt: formData.get('partnerLockAt') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -219,6 +220,18 @@ export async function createTournament(
       // Column not present yet (migration 0038 pending). The rest of the save already succeeded.
     }
 
+    // Partner lock-in (migration 0040; §2AM). Saved defensively, separate from the main insert, so
+    // a pre-migration deploy still creates the tournament - the app is fail-open on this column and
+    // treats partner changes as always open until the migration and its helpers land.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ partner_lock_at: toIso(formData.get('partnerLockAt')) })
+        .eq('id', t.id);
+    } catch {
+      // Column not present yet (migration 0040 pending). The rest of the save already succeeded.
+    }
+
     const [configuredCapacity, configuredFee] = await Promise.all([
       loadSettingNumber(
         'default_division_capacity_teams',
@@ -279,6 +292,7 @@ export async function updateTournament(
     paymentMethods: formData.get('paymentMethods') ?? '',
     paymentNotificationEmail: formData.get('paymentNotificationEmail') ?? '',
     clubLockAt: formData.get('clubLockAt') ?? '',
+    partnerLockAt: formData.get('partnerLockAt') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -382,6 +396,17 @@ export async function updateTournament(
         .eq('id', tournamentId);
     } catch {
       // Columns not present yet (migration 0022 pending). The rest of the save already succeeded.
+    }
+
+    // Partner lock-in (migration 0040; §2AM). Saved defensively, separate from the main patch, so
+    // an update deploy before the migration lands still saves the rest of the form.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ partner_lock_at: toIso(formData.get('partnerLockAt')) })
+        .eq('id', tournamentId);
+    } catch {
+      // Column not present yet (migration 0040 pending). The rest of the save already succeeded.
     }
     invalidate(slug, tournamentId);
   } catch {

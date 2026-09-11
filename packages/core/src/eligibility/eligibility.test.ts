@@ -239,8 +239,10 @@ describe('hard rules (§25.2) short-circuit to INELIGIBLE_HARD_RULE', () => {
 
 describe('evaluateTeamEligibility (§25.1 team = worst-of-members)', () => {
   it('worst member drives the team result', () => {
+    // Opposite sexes so this mixed-doubles team stays composition-valid - the point under test is
+    // worst-of-members skill aggregation, not §2AM's MIXED_COMPOSITION rule (covered separately below).
     const eligible = strongPlayer({ playerId: 'a' });
-    const mismatch = strongPlayer({ playerId: 'b', communitySkillLevel: 5 });
+    const mismatch = strongPlayer({ playerId: 'b', communitySkillLevel: 5, sex: 'female' });
     const t = evaluateTeamEligibility({
       players: [eligible, mismatch],
       rules: band,
@@ -282,12 +284,112 @@ describe('evaluateTeamEligibility (§25.1 team = worst-of-members)', () => {
   });
 
   it('all-clean team -> ELIGIBLE', () => {
+    // Opposite sexes: a same-sex pair in this mixed division would now correctly fail
+    // MIXED_COMPOSITION (§2AM decision 1) - see the dedicated describe block below.
     const t = evaluateTeamEligibility({
-      players: [strongPlayer({ playerId: 'a' }), strongPlayer({ playerId: 'b' })],
+      players: [strongPlayer({ playerId: 'a' }), strongPlayer({ playerId: 'b', sex: 'female' })],
       rules: band,
       thresholds: TH,
     });
     expect(t.result).toBe('ELIGIBLE');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2AM decision 2 - "enter now, choose a partner later": a team can be short a member without
+// that being INVALID_TEAM_SIZE, when the missing seat is a known open state.
+// ---------------------------------------------------------------------------
+describe('evaluateTeamEligibility - seatOpen (§2AM decision 2)', () => {
+  it("seatOpen: a lone member is not INVALID_TEAM_SIZE, and the team takes that member's status", () => {
+    const t = evaluateTeamEligibility({
+      players: [strongPlayer()],
+      rules: band,
+      thresholds: TH,
+      hardContext: { seatOpen: true },
+    });
+    expect(t.hardRuleCodes).not.toContain('INVALID_TEAM_SIZE');
+    expect(t.result).toBe('ELIGIBLE');
+    expect(t.players).toHaveLength(1);
+  });
+
+  it('without seatOpen, a lone member is still INVALID_TEAM_SIZE as before', () => {
+    const t = evaluateTeamEligibility({
+      players: [strongPlayer()],
+      rules: band,
+      thresholds: TH,
+      hardContext: { seatOpen: false },
+    });
+    expect(t.result).toBe('INELIGIBLE_HARD_RULE');
+    expect(t.hardRuleCodes).toContain('INVALID_TEAM_SIZE');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2AM decision 1(d) - the ELIG_V1 twin of the division-fit.ts mixed_pair picker check: a mixed
+// division team must be one male + one female, enforced from the team snapshot itself.
+// ---------------------------------------------------------------------------
+describe('evaluateTeamEligibility - MIXED_COMPOSITION (§2AM decision 1)', () => {
+  it('one male + one female in a mixed division -> eligible (no MIXED_COMPOSITION)', () => {
+    const t = evaluateTeamEligibility({
+      players: [
+        strongPlayer({ playerId: 'a', sex: 'male' }),
+        strongPlayer({ playerId: 'b', sex: 'female' }),
+      ],
+      rules: band,
+      thresholds: TH,
+    });
+    expect(t.result).toBe('ELIGIBLE');
+    expect(t.hardRuleCodes).not.toContain('MIXED_COMPOSITION');
+  });
+
+  it('two males in a mixed division -> INELIGIBLE_HARD_RULE (MIXED_COMPOSITION)', () => {
+    const t = evaluateTeamEligibility({
+      players: [
+        strongPlayer({ playerId: 'a', sex: 'male' }),
+        strongPlayer({ playerId: 'b', sex: 'male' }),
+      ],
+      rules: band,
+      thresholds: TH,
+    });
+    expect(t.result).toBe('INELIGIBLE_HARD_RULE');
+    expect(t.hardRuleCodes).toContain('MIXED_COMPOSITION');
+  });
+
+  it('two females in a mixed division -> INELIGIBLE_HARD_RULE (MIXED_COMPOSITION)', () => {
+    const t = evaluateTeamEligibility({
+      players: [
+        strongPlayer({ playerId: 'a', sex: 'female' }),
+        strongPlayer({ playerId: 'b', sex: 'female' }),
+      ],
+      rules: band,
+      thresholds: TH,
+    });
+    expect(t.result).toBe('INELIGIBLE_HARD_RULE');
+    expect(t.hardRuleCodes).toContain('MIXED_COMPOSITION');
+  });
+
+  it('does not fire when a sex is unknown - per-player rules handle that, not composition', () => {
+    const t = evaluateTeamEligibility({
+      players: [
+        strongPlayer({ playerId: 'a', sex: null }),
+        strongPlayer({ playerId: 'b', sex: 'male' }),
+      ],
+      rules: band,
+      thresholds: TH,
+    });
+    expect(t.hardRuleCodes).not.toContain('MIXED_COMPOSITION');
+  });
+
+  it('does not fire for a non-mixed division', () => {
+    const t = evaluateTeamEligibility({
+      players: [
+        strongPlayer({ playerId: 'a', sex: 'male' }),
+        strongPlayer({ playerId: 'b', sex: 'male' }),
+      ],
+      rules: { ...band, sexClassification: 'men' },
+      thresholds: TH,
+    });
+    expect(t.hardRuleCodes).not.toContain('MIXED_COMPOSITION');
   });
 });
 

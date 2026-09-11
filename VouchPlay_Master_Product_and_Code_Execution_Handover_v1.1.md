@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.65
+# VouchPlay Master Product & Code Execution Handover v1.66
 
-_(File retains its `…v1.1.md` name; content is v1.65 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.66 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -2058,6 +2058,10 @@ Architecture supports future team formats.
 
 Mixed Doubles default rule in V1:
 - one Male + one Female.
+- **Enforced since v1.66 (master_plan §2AM):** at every door a player is seated through - the partner
+  picker (same-sex candidates greyed with the reason), the server gate, the seating RPCs
+  (`team_partner_composition_ok`), and ELIG_V1 (`MIXED_COMPOSITION` hard rule). Before v1.66 this rule
+  was specified but not implemented.
 
 Genderless:
 - no sex restriction.
@@ -2235,10 +2239,15 @@ Fields:
 
 Before invitation:
 - validate division format,
-- sex eligibility,
+- sex eligibility (incl. mixed-doubles composition against the inviter, v1.66),
+- skill cap (playing up allowed; the floor only when `enforce_skill_floor`),
 - age eligibility where possible,
 - account active status,
-- no conflicting locked team.
+- no conflicting locked team,
+- the partner lock-in has not passed (v1.66, §21.5).
+
+The same checks run again at ACCEPTANCE (v1.66): a community skill level can move between the invite
+and the answer, so an acceptance that would seat an ineligible player is refused with the reason.
 
 ## 20.4 Simultaneous Cross-Invite
 
@@ -2314,6 +2323,34 @@ Block:
 - duplicate same pair in same division,
 - conflicting partner teams in same division,
 - registration after lock/close unless organizer override.
+
+## 21.5 Open seat, consented partner change, and the partner lock-in (v1.66, master_plan §2AM)
+
+Doubles entries carry a **team-level partner state** alongside the registration status above:
+`open seat` (one confirmed member, nobody named), `partner pending` (named, not yet accepted),
+`partner confirmed`. The registration status machine itself is unchanged - a paid entry with an open
+seat is `payment_submitted`/`confirmed` exactly like any other, and holds its slot.
+
+- **Enter now, choose a partner later.** `create_solo_doubles_team` creates a `forming` team with one
+  confirmed member; `register_team`, the slot hold and payment then run unchanged. ELIG_V1 evaluates
+  the present member and defers `INVALID_TEAM_SIZE` while the seat is open; the snapshot is recomputed
+  when a partner is seated and when they accept.
+- **Filling the seat.** `replace_pending_partner` names a partner into ANY open seat (never named,
+  declined, expired, or the invite cancelled). Fit and composition are checked for the invitee at invite
+  and again at acceptance. `cancel_partner_invitation` withdraws an unanswered invite and frees the seat
+  atomically (the invitee is told).
+- **Changing a confirmed partner requires the other's consent.** `partner_release_requests` records who
+  will LEAVE and who must APPROVE (always the other confirmed member); either member may start one
+  ("ask them to release the seat" / "leave this team"). On approval the leaving member is removed, the
+  seat opens, open invites are cancelled, and the registration, slot and payment stay with the entry.
+  One open request per team. Unilateral `change_partner` is limited to swapping an unconfirmed invitee.
+- **Partner lock-in.** `tournaments.partner_lock_at`; effective lock =
+  `coalesce(partner_lock_at, start_at - 7 days)`, computed live. `partner_changes_are_open()` =
+  tournament status in (`registration_open`, `registration_closed`) AND now < effective lock. After the
+  lock no player may invite, accept, request a release or swap; a decline is always allowed; organizer
+  confirm / reject / refund are untouched. Registration close (§21.4) does not gate partner actions.
+- **Organizer:** partner filter `none` ("No partner yet"), "Incomplete teams" count and the lock date on
+  the Overview. Nothing is auto-cancelled at the lock - paid entries are the organizer's call.
 
 ---
 
@@ -6240,6 +6277,31 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.66 (2026-09-11)
+
+_Mixed-doubles composition (bug), pay-before-partner with an open seat, consented partner changes, and
+an organizer partner lock-in (master_plan §2AM). Migration `0040`._
+
+- **Mixed doubles = one male + one female (§18.4, now ENFORCED).** Checked in the partner picker, the
+  server gate, every seating RPC, and as ELIG_V1 hard rule `MIXED_COMPOSITION`. Was never implemented
+  before; all 17 live mixed teams already comply.
+- **Open seat (§21.5).** A doubles player can enter and pay before naming a partner
+  (`create_solo_doubles_team`); the seat is a first-class state shown as "No partner yet" with the lock
+  date. Naming a partner into any open seat reuses `replace_pending_partner` (fit + composition checked
+  at invite AND at acceptance). Cancelling an invite now frees the seat atomically
+  (`cancel_partner_invitation`).
+- **Changing a confirmed partner needs consent (§21.5).** `partner_release_requests`: the leaving
+  member and the approving member are explicit; the approver gets a critical notification and an inline
+  Approve/Decline; on approval the seat opens and the registration/slot/payment stay with the entry.
+  `change_partner` is now limited to swapping an unconfirmed invitee.
+- **Partner lock-in (§21.5).** `tournaments.partner_lock_at`, effective =
+  `coalesce(partner_lock_at, start_at - 7 days)` (organizer form: "Leave blank for 7 days before the
+  start date"). After it, players cannot invite, accept, request a release or swap; declines and all
+  organizer tools still work. Gated by the partner lock only - registration close does not affect it.
+- Organizer: "No partner yet" partner filter, "Incomplete teams" count + lock date on Overview.
+- Deferred (phase 2): lock reminder notification 3 days before, organizer assign-partner override,
+  dead-code cleanup (`move_player_registration`, `registration_lock_at`).
 
 ## v1.65 (2026-09-11)
 

@@ -26,7 +26,15 @@ function Tile({
   );
 }
 
-export function TournamentOverview({ overview }: { overview: OrganizerOverview }) {
+export function TournamentOverview({
+  overview,
+  partnerLockLabel,
+}: {
+  overview: OrganizerOverview;
+  /** Pre-formatted effective partner lock-in date (PH time), or null when there is none to show
+   *  (master_plan §2AM). Rendered only alongside the incomplete-teams count, never alone. */
+  partnerLockLabel?: string | null;
+}) {
   const money =
     overview.currency && overview.revenueCollected > 0
       ? `${overview.currency} ${overview.revenueCollected.toLocaleString()}`
@@ -52,6 +60,13 @@ export function TournamentOverview({ overview }: { overview: OrganizerOverview }
         />
         <Tile label="Revenue collected" value={money} />
       </div>
+
+      {overview.incompleteTeams > 0 && (
+        <p className="text-foreground-muted text-xs">
+          Incomplete teams: {overview.incompleteTeams}
+          {partnerLockLabel ? ` · Partner lock-in: ${partnerLockLabel}` : ''}
+        </p>
+      )}
 
       {overview.nearingCapacity.length > 0 && (
         <div className="border-warning/30 bg-warning/5 rounded-xl border p-3">

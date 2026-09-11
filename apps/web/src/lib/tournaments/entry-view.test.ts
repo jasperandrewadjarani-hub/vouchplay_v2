@@ -9,6 +9,7 @@ import {
   DEFAULT_SORT,
   describeEntryChips,
   filterEntries,
+  hasOpenSeat,
   hasUnconfirmedPartner,
   isClosed,
   queuesFor,
@@ -34,6 +35,7 @@ function entry(over: Partial<OrganizerRegistration> = {}): OrganizerRegistration
       { id: 'p2', name: 'Ana Reyes', slug: 'ana', avatarUrl: null },
     ],
     unconfirmedMemberIds: [],
+    teamSize: 2,
     cancellationRequest: null,
     paymentId: null,
     paymentStatus: null,
@@ -119,6 +121,26 @@ describe('scanning', () => {
     expect(hasUnconfirmedPartner(entry())).toBe(false);
   });
 
+  it('flags a genuinely open seat - short a player against the division team size', () => {
+    expect(
+      hasOpenSeat(
+        entry({ members: [{ id: 'p1', name: 'Maria Cruz', slug: 'maria', avatarUrl: null }] }),
+      ),
+    ).toBe(true);
+    expect(hasOpenSeat(entry())).toBe(false);
+  });
+
+  it('a singles team (team size 1) never has an open seat', () => {
+    expect(
+      hasOpenSeat(
+        entry({
+          teamSize: 1,
+          members: [{ id: 'p1', name: 'Maria Cruz', slug: 'maria', avatarUrl: null }],
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it('shows money only when there is money', () => {
     expect(amountLabel(entry({ amountDue: 3000, currency: 'PHP' }))).toBe('PHP 3,000');
     expect(amountLabel(entry({ amountDue: 0, currency: 'PHP' }))).toBeNull();
@@ -152,7 +174,10 @@ describe('combinable filters - AND across groups, OR within a group', () => {
       id: 'c',
       divisionId: 'd2',
       divisionName: "Women's Doubles",
-      members: [{ id: 'p9', name: 'Lyn Uy', slug: 'lyn', avatarUrl: null }],
+      members: [
+        { id: 'p9', name: 'Lyn Uy', slug: 'lyn', avatarUrl: null },
+        { id: 'p10', name: 'Rica Santos', slug: 'rica', avatarUrl: null },
+      ],
     }),
     entry({
       id: 'd',
@@ -229,6 +254,21 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     expect(
       filterEntries(rows, { ...DEFAULT_FILTERS, partner: ['confirmed'] }).map((r) => r.id),
     ).toEqual(['a', 'c']);
+  });
+
+  it('Partner filters to "no partner yet" - an open seat wins over unconfirmed/confirmed', () => {
+    const withOpenSeat = [
+      ...rows,
+      entry({
+        id: 'f',
+        divisionId: 'd1',
+        divisionName: "Men's Doubles",
+        members: [{ id: 'p1', name: 'Maria Cruz', slug: 'maria', avatarUrl: null }],
+      }),
+    ];
+    expect(
+      filterEntries(withOpenSeat, { ...DEFAULT_FILTERS, partner: ['none'] }).map((r) => r.id),
+    ).toEqual(['f']);
   });
 
   it('AND across groups: Division AND Payment both narrow the result', () => {

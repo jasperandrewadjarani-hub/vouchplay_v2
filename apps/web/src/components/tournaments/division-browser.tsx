@@ -12,6 +12,7 @@ import { PartnerInviteForm } from './partner-invite-form';
 import { quoteFee, formatFee } from '@vouchplay/core';
 import { InvitationActions } from './invitation-actions';
 import { PartnerChangeActions } from './partner-change-actions';
+import { EnterDoublesSoloAction } from './enter-doubles-solo-action';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
 
 /** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). */
@@ -248,7 +249,9 @@ export function DivisionBrowser({
                   paymentStatus: reg.paymentStatus,
                   fee: d.feeAmount,
                   partnerUnconfirmed: Boolean(team?.pendingPartner),
-                  seatVacantAfterDecline: Boolean(team?.seatVacantAfterDecline),
+                  seatOpen: Boolean(team?.seatOpen),
+                  partnerLockAt: state?.partnerLockAt,
+                  partnerLockPassed: state?.partnerLockPassed,
                 })
               : null;
             return (
@@ -328,6 +331,16 @@ export function DivisionBrowser({
                           divisionId={d.id}
                           viewerLookingForPartner={state?.viewerLookingForPartner ?? false}
                         />
+                        {/* §2AM decision 2: pay for the slot now, name a partner any time before
+                            the lock-in. Hidden once partner changes are closed - there would be
+                            nothing to choose later. */}
+                        {state?.partnerChangesOpen && (
+                          <EnterDoublesSoloAction
+                            tournamentId={tournamentId}
+                            divisionId={d.id}
+                            partnerLockAt={state.partnerLockAt}
+                          />
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -342,13 +355,19 @@ export function DivisionBrowser({
                         {/* Shown only when there is something to do about the partner: a vacant
                             seat to fill, or a wait to explain. No disclosure to open and no
                             control that cannot succeed (§1U). */}
-                        {d.format === 'doubles' && team && (
+                        {d.format === 'doubles' && team && state && (
                           <PartnerChangeActions
                             teamId={team.teamId}
                             tournamentId={tournamentId}
                             divisionId={d.id}
+                            viewerId={state.viewerId}
                             pendingPartnerName={team.pendingPartner?.name ?? null}
-                            seatVacantAfterDecline={team.seatVacantAfterDecline}
+                            pendingInvitationId={team.pendingInvitationId}
+                            confirmedPartner={team.confirmedPartner}
+                            seatOpen={team.seatOpen}
+                            releaseRequest={team.releaseRequest}
+                            partnerLockAt={state.partnerLockAt}
+                            partnerChangesOpen={state.partnerChangesOpen}
                           />
                         )}
                       </div>

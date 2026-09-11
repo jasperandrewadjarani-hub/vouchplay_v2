@@ -33,7 +33,8 @@ export type HardRuleCode =
   | 'ACCOUNT_NOT_ACTIVE'
   | 'INVALID_TEAM_SIZE'
   | 'REGISTRATION_CLOSED'
-  | 'DUPLICATE_REGISTRATION';
+  | 'DUPLICATE_REGISTRATION'
+  | 'MIXED_COMPOSITION';
 
 /** Neutral, evidence-based reason codes that explain a REVIEW / SKILL_MISMATCH (§25.4, §25.6). */
 export type EligibilityReasonCode =
@@ -179,6 +180,14 @@ export interface TeamHardContext {
   registrationClosed?: boolean;
   /** This team duplicates/conflicts with an existing registration (§21.4). */
   duplicateRegistration?: boolean;
+  /**
+   * §2AM decision 2: this team is deliberately short a member because the second seat is open
+   * ("enter now, choose a partner later" - a solo-paid doubles entry, or a confirmed partner who
+   * just left). A team fewer than `rules.teamSize` is normally INVALID_TEAM_SIZE; when the missing
+   * seat is a known, first-class open state rather than a data problem, that hard rule must not fire
+   * - the present member(s) are still evaluated and aggregated exactly as today.
+   */
+  seatOpen?: boolean;
 }
 
 export interface TeamEligibility {
@@ -299,9 +308,25 @@ export function evaluateTeamEligibility(args: {
   const perPlayer = players.map((p) => evaluatePlayerEligibility(p, rules, thresholds));
 
   const teamHard: HardRuleCode[] = [];
-  if (players.length !== rules.teamSize) teamHard.push('INVALID_TEAM_SIZE');
+  // §2AM decision 2: a team short of `teamSize` is normally invalid, EXCEPT when the missing seat
+  // is a known, first-class open state (seatOpen) rather than a data problem - the present member(s)
+  // are still evaluated above. A team that is the WRONG size the other way (too many, or too few
+  // without an open seat) still hard-fails exactly as before.
+  const short = players.length < rules.teamSize;
+  if (players.length !== rules.teamSize && !(hardContext?.seatOpen && short)) {
+    teamHard.push('INVALID_TEAM_SIZE');
+  }
   if (hardContext?.registrationClosed) teamHard.push('REGISTRATION_CLOSED');
   if (hardContext?.duplicateRegistration) teamHard.push('DUPLICATE_REGISTRATION');
+
+  // §2AM decision 1(d): the ELIG_V1 twin of the picker-side mixed_pair check (division-fit.ts) - the
+  // line of defence that fires from the team's own snapshot, independent of whether the picker was
+  // used at all. Only fires once both seats are filled and both sexes are actually known; an unknown
+  // sex is a per-player REVIEW/hard-rule concern already handled above, not a composition failure.
+  if (rules.sexClassification === 'mixed' && rules.teamSize >= 2 && players.length === 2) {
+    const [a, b] = players;
+    if (a?.sex && b?.sex && a.sex === b.sex) teamHard.push('MIXED_COMPOSITION');
+  }
 
   let result: EligibilityResult = 'ELIGIBLE';
   for (const p of perPlayer) result = worst(result, p.result);

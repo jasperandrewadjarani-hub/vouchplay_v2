@@ -32,6 +32,11 @@ export interface TournamentFormInitial {
   paymentQrUrl?: string;
   /** Single tournament-wide club representation lock, as a datetime-local string. */
   clubLockAt?: string;
+  /** Partner lock-in, as a datetime-local string; blank means the 7-day default applies (§2AM). */
+  partnerLockAt?: string;
+  /** Pre-formatted "Currently {date}" label for the effective default lock, shown only when
+   *  `partnerLockAt` is blank and a start date exists. Computed by the caller (PH time). */
+  partnerLockEffectiveLabel?: string;
   /** Organizer global rules (migration 0022). */
   enforceSkillFloor?: boolean;
   requireSkillVerified?: boolean;
@@ -274,6 +279,25 @@ export function TournamentForm({
             type="datetime-local"
             defaultValue={initial.clubLockAt ?? ''}
           />
+        </Field>
+      )}
+      {!minimal && (
+        <Field
+          label="Partner lock-in"
+          htmlFor="partnerLockAt"
+          hint="Players must have a confirmed partner by then. Leave blank for 7 days before the start date."
+        >
+          <Input
+            id="partnerLockAt"
+            name="partnerLockAt"
+            type="datetime-local"
+            defaultValue={initial.partnerLockAt ?? ''}
+          />
+          {!initial.partnerLockAt && initial.partnerLockEffectiveLabel && (
+            <p className="text-foreground-muted mt-1 text-xs">
+              Currently {initial.partnerLockEffectiveLabel}
+            </p>
+          )}
         </Field>
       )}
       {!minimal && (

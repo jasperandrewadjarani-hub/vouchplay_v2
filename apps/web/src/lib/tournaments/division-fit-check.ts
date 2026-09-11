@@ -56,6 +56,13 @@ export interface FitCandidate {
   subject: 'you' | 'partner';
   /** Shown in the message when the subject is a partner. */
   name?: string | null;
+  /**
+   * The sex of the OTHER seat on this team, when this candidate is being checked against a specific
+   * partner (master_plan §2AM decision 1). Composition (one male + one female in a mixed division) is
+   * a property of the PAIR, so pass this only when a real partner is known; omitting it leaves the
+   * per-player sex/skill check unchanged.
+   */
+  partnerSex?: 'male' | 'female' | null;
 }
 
 /**
@@ -126,6 +133,8 @@ export async function checkDivisionFit(
       divisionMinimumSkill: div.minimum_skill,
       divisionMaximumSkill: div.maximum_skill,
       enforceSkillFloor,
+      partnerSex: c.partnerSex,
+      format: div.format,
     });
     if (!verdict.fits && verdict.reason) {
       return describeDivisionFit(verdict.reason, {

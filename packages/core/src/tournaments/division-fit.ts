@@ -12,9 +12,16 @@
  * The one rule that reads oddly and is correct: **an unknown skill never blocks.** A player who has
  * neither a community skill nor a self-rating has nothing to compare, and refusing them would lock
  * new players out of the tournament they joined VouchPlay to enter.
+ *
+ * §2AM decision 1 adds mixed-doubles COMPOSITION on top of the existing per-player sex check: a
+ * mixed division must end up with one male and one female player. That is a property of the PAIR,
+ * so it only fires when the caller is checking a candidate against a specific other seat
+ * (`partnerSex` provided) - the same ELIG_V1-mirrored rule lives at the team level as
+ * `MIXED_COMPOSITION` in `eligibility.ts`, which is the line of defence that does not depend on the
+ * picker having been used at all.
  */
 
-export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_too_high';
+export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_too_high' | 'mixed_pair';
 
 export interface DivisionFitInput {
   /** 'male' | 'female' | anything else | null when the player has not said. */
@@ -30,6 +37,15 @@ export interface DivisionFitInput {
    * off, skill never blocks at all. It is the only thing that governs the skill rule.
    */
   enforceSkillFloor: boolean;
+  /**
+   * §2AM decision 1: the sex of the player ALREADY on the team, supplied when this check is for the
+   * OTHER seat of a mixed doubles team. Composition (one male + one female) is a PAIR rule, not a
+   * per-player one - so when this is undefined, a mixed division still accepts anyone per player, on
+   * purpose. Pass it only when a partner is actually being checked against.
+   */
+  partnerSex?: 'male' | 'female' | null;
+  /** 'singles' | 'doubles' | etc. Composition only applies to doubles; singles has no partner. */
+  format?: string;
 }
 
 export interface DivisionFitResult {
@@ -55,6 +71,17 @@ export function evaluateDivisionFit(input: DivisionFitInput): DivisionFitResult 
   if (singleSex && !input.playerSex) return { fits: false, reason: 'sex_unknown' };
   if (sex === 'men' && input.playerSex !== 'male') return { fits: false, reason: 'sex' };
   if (sex === 'women' && input.playerSex !== 'female') return { fits: false, reason: 'sex' };
+
+  // §2AM decision 1: mixed doubles is one male + one female, not "anyone". `partnerSex` is only
+  // present when this check is FOR a specific other seat (the picker, an invite, an acceptance) -
+  // singles has no partner, and a bare per-player fit check (partnerSex undefined) still accepts
+  // anyone, because composition is a property of the PAIR, not of either player alone.
+  if (sex === 'mixed' && input.partnerSex !== undefined && input.format !== 'singles') {
+    if (!input.playerSex) return { fits: false, reason: 'sex_unknown' };
+    if (input.partnerSex && input.playerSex === input.partnerSex) {
+      return { fits: false, reason: 'mixed_pair' };
+    }
+  }
 
   // Playing UP is allowed, always. A Low Intermediate entering a High Intermediate division is
   // choosing a harder game, which no rule should stand in the way of. Only playing DOWN is refused,
@@ -111,6 +138,12 @@ export function describeDivisionFit(reason: DivisionFitReason, ctx: FitMessageCo
     return ctx.subject === 'you'
       ? `${ctx.divisionName} is for ${forWhom}. Look for a division that matches your profile, or a mixed one.`
       : `${who} cannot play in ${ctx.divisionName}, which is for ${forWhom}. Pick a partner who can, or choose a mixed division.`;
+  }
+
+  // §2AM decision 1. Plain and nameless on purpose - this is a rule about the PAIR, not about
+  // either player individually, so it would be wrong to single one of them out as "the problem".
+  if (reason === 'mixed_pair') {
+    return 'Mixed doubles needs one male and one female player.';
   }
 
   const band = ctx.bandLabel ?? 'this level';

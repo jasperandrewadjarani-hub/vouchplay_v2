@@ -6,6 +6,7 @@ import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/reg
 import { RegisterActions } from './register-actions';
 import { PayNowCell } from './payment-modal';
 import { PaidEntryActions } from './paid-entry-actions';
+import { PartnerChangeActions } from './partner-change-actions';
 
 /**
  * Default-collapsed "My registrations (N)" manager shown immediately after the tournament details
@@ -74,7 +75,9 @@ export function MyRegistrations({
             paymentStatus: reg.paymentStatus,
             fee: division.feeAmount,
             partnerUnconfirmed: Boolean(team?.pendingPartner),
-            seatVacantAfterDecline: Boolean(team?.seatVacantAfterDecline),
+            seatOpen: Boolean(team?.seatOpen),
+            partnerLockAt: state.partnerLockAt,
+            partnerLockPassed: state.partnerLockPassed,
           })
         : null;
       return { division, reg, divisionId, status };
@@ -225,6 +228,25 @@ export function MyRegistrations({
                   flow that no longer exists: under pay-first a team always carries a registration,
                   so that path could never run (§1V). PartnerChangeActions and PaidEntryActions now
                   each state the one thing that is true for the state the player is actually in. */}
+              {/* One compact Partner block per doubles entry (§2AM): open seat, pending invite,
+                  confirmed partner (change/leave), an outgoing or incoming release request, or the
+                  lock notice - exactly one at a time, and team is always set for a doubles division
+                  (a paid entry always has at least one confirmed member). */}
+              {d.format === 'doubles' && team && (
+                <PartnerChangeActions
+                  teamId={team.teamId}
+                  tournamentId={tournamentId}
+                  divisionId={divisionId}
+                  viewerId={state.viewerId}
+                  pendingPartnerName={team.pendingPartner?.name ?? null}
+                  pendingInvitationId={team.pendingInvitationId}
+                  confirmedPartner={team.confirmedPartner}
+                  seatOpen={team.seatOpen}
+                  releaseRequest={team.releaseRequest}
+                  partnerLockAt={state.partnerLockAt}
+                  partnerChangesOpen={state.partnerChangesOpen}
+                />
+              )}
             </li>
           );
         })}

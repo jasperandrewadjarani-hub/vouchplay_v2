@@ -122,6 +122,34 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `Form a new team for ${tour(p)} if you still want to join.`,
   ),
 
+  // --- Partner release / lock-in (§2AM decision 4, 5) ---
+  // Critical: it blocks the recipient's team (no invites/swaps until they answer) and asks them to
+  // approve giving up money-adjacent standing on a paid entry, same category as partner_named_paid.
+  partner_release_requested: t(
+    'partners',
+    true,
+    (p) => `${who(p)} asked to change partners`,
+    (p) => `Approve to free the seat for ${tour(p)}. The entry and payment stay with the team.`,
+  ),
+  partner_release_accepted: t(
+    'partners',
+    false,
+    (p) => `${who(p)} agreed to leave the team`,
+    (p) => `The seat is open - choose a new partner for ${tour(p)} before the partner lock-in.`,
+  ),
+  partner_release_declined: t(
+    'partners',
+    false,
+    (p) => `${who(p)} kept the team as it is`,
+    (p) => `Your partner change request for ${tour(p)} was declined.`,
+  ),
+  partner_invite_withdrawn: t(
+    'partners',
+    false,
+    (p) => `${who(p)} withdrew their partner invite`,
+    (p) => `You are no longer named on their entry for ${tour(p)}.`,
+  ),
+
   // --- Registrations (§27.1 / §27.3) ---
   // Critical: a player has asked to undo a payment that reached the organizer directly, so it must
   // not be mutable and must be able to reach them by email (master_plan §1Y).

@@ -62,8 +62,19 @@ const RPC_ERRORS: Record<string, string> = {
     'That player does not fit this division. They need the same skill level and the same gender the division is for.',
   no_partner_to_replace: 'There is no partner on this team to change.',
   same_partner: 'That is already your partner.',
-  seat_not_vacant: 'Your partner has not left this team.',
+  seat_not_vacant: 'This team already has a partner.',
   no_declined_invitation: 'You can only name a replacement after your partner declines.',
+  // master_plan §2AM - open seats, mixed-doubles composition, and consented partner release.
+  partner_lock_passed:
+    'The partner lock-in for this tournament has passed. Contact the organizer to change partners.',
+  mixed_pair: 'Mixed doubles needs one male and one female player.',
+  partner_confirmed_needs_release:
+    'Your partner has already confirmed. Ask them to release the seat first.',
+  release_already_pending: 'A partner change is already waiting for an answer.',
+  not_approver: 'Only your partner can answer this request.',
+  invitation_pending: 'Your invited partner has not answered yet. Withdraw that invite first.',
+  player_does_not_fit: "That player does not meet this division's rules.",
+  no_partner_to_release: 'There is no confirmed partner on this team yet.',
 };
 function friendly(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
@@ -72,6 +83,15 @@ function friendly(msg: string | undefined): string {
 }
 
 const ELIG_REVIEW = new Set(['review', 'skill_mismatch', 'ineligible_hard_rule']);
+
+/** One player's `sex`, for the mixed-doubles composition check (§2AM decision 1). */
+async function getPlayerSex(
+  svc: ReturnType<typeof createServiceClient>,
+  playerId: string,
+): Promise<'male' | 'female' | null> {
+  const { data } = await svc.from('profiles').select('sex').eq('id', playerId).maybeSingle();
+  return (data as { sex: 'male' | 'female' | null } | null)?.sex ?? null;
+}
 
 /** Fan out registration notifications after a team registers (§27.1, §27.3). Best-effort. */
 async function notifyAfterRegister(
@@ -292,10 +312,21 @@ export async function enterWithPendingPartner(
 
     // Both players are checked against the division's skill floor before anyone pays.
     // The division rules - who it is for, and the band it is for - checked for BOTH players before
-    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why.
+    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why. Each
+    // candidate also carries the OTHER seat's sex, so a mixed-doubles composition mismatch is caught
+    // here too (§2AM decision 1), not only at the SQL backstop.
+    const [actorSex, inviteeSex] = await Promise.all([
+      getPlayerSex(svc, user.id),
+      getPlayerSex(svc, inv.id),
+    ]);
     const fitError = await checkDivisionFit(v.divisionId, [
-      { playerId: user.id, subject: 'you' },
-      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
+      { playerId: user.id, subject: 'you', partnerSex: inviteeSex },
+      {
+        playerId: inv.id,
+        subject: 'partner',
+        name: (await getActorMini(inv.id)).name,
+        partnerSex: actorSex,
+      },
     ]);
     if (fitError) return { error: fitError };
 
@@ -392,10 +423,21 @@ export async function replacePendingPartner(
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
     // The division rules - who it is for, and the band it is for - checked for BOTH players before
-    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why.
+    // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why. Each
+    // candidate carries the OTHER seat's sex, so a mixed-doubles same-sex pair is refused here too
+    // (§2AM decision 1), not only at the SQL backstop.
+    const [actorSex, inviteeSex] = await Promise.all([
+      getPlayerSex(svc, user.id),
+      getPlayerSex(svc, inv.id),
+    ]);
     const fitError = await checkDivisionFit(v.divisionId, [
-      { playerId: user.id, subject: 'you' },
-      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
+      { playerId: user.id, subject: 'you', partnerSex: inviteeSex },
+      {
+        playerId: inv.id,
+        subject: 'partner',
+        name: (await getActorMini(inv.id)).name,
+        partnerSex: actorSex,
+      },
     ]);
     if (fitError) return { error: fitError };
 
@@ -476,6 +518,25 @@ export async function changePartner(
       };
     if (await isBlockedBetween(user.id, inv.id)) return { error: 'That partner is unavailable.' };
 
+    // Same TS gate as the other partner paths (§2AM decision 1): each candidate carries the OTHER
+    // seat's sex, so a mixed-doubles same-sex pair is refused here too. The RPC call itself is
+    // unchanged - it now also refuses a CONFIRMED partner with `partner_confirmed_needs_release`,
+    // mapped by `friendly()` below.
+    const [actorSex, inviteeSex] = await Promise.all([
+      getPlayerSex(svc, user.id),
+      getPlayerSex(svc, inv.id),
+    ]);
+    const fitError = await checkDivisionFit(v.divisionId, [
+      { playerId: user.id, subject: 'you', partnerSex: inviteeSex },
+      {
+        playerId: inv.id,
+        subject: 'partner',
+        name: (await getActorMini(inv.id)).name,
+        partnerSex: actorSex,
+      },
+    ]);
+    if (fitError) return { error: fitError };
+
     const { data, error } = await svc.rpc('change_partner', {
       p_team_id: teamId,
       p_actor: user.id,
@@ -555,9 +616,13 @@ interface DivisionRuleShape {
 export async function searchInvitablePlayers(
   q: string,
   divisionId?: string,
+  /** The acting/inviting player, for the mixed-doubles composition check below (§2AM decision 1).
+   *  Defaults to the signed-in user - the acting user is the inviter on every current caller. */
+  inviterId?: string,
 ): Promise<PlayerSearchResult[]> {
   const user = await getOptionalUser();
   if (!user) return [];
+  const actorId = inviterId ?? user.id;
   const term = q.trim();
   if (term.length < 2) return [];
   const svc = createServiceClient();
@@ -593,7 +658,7 @@ export async function searchInvitablePlayers(
 
   const reasons = new Map<string, string>();
   if (divisionId && named.length > 0) {
-    const [{ data: divRow }, { data: skillRows }] = await Promise.all([
+    const [{ data: divRow }, { data: skillRows }, { data: actorRow }] = await Promise.all([
       svc
         .from('divisions')
         .select(
@@ -608,8 +673,12 @@ export async function searchInvitablePlayers(
           'player_id',
           named.map((p) => p.id),
         ),
+      // §2AM decision 1: the acting player's own sex, so a same-sex candidate in a mixed doubles
+      // division is greyed with the composition reason instead of being offered and refused on pick.
+      svc.from('profiles').select('sex').eq('id', actorId).maybeSingle(),
     ]);
     const div = divRow as DivisionRuleShape | null;
+    const actorSex = (actorRow as { sex: 'male' | 'female' | null } | null)?.sex ?? null;
     if (div) {
       const { enforceSkillFloor } = await getTournamentRules(div.tournament_id);
       const community = new Map(
@@ -636,6 +705,8 @@ export async function searchInvitablePlayers(
           divisionMinimumSkill: div.minimum_skill,
           divisionMaximumSkill: div.maximum_skill,
           enforceSkillFloor,
+          partnerSex: actorSex,
+          format: div.format,
         });
         if (!verdict.fits && verdict.reason) {
           reasons.set(
@@ -674,13 +745,14 @@ export async function respondInvitation(
   try {
     const { data: inv } = await svc
       .from('partner_invitations')
-      .select('id, inviter_id, invitee_id, tournament_id, status')
+      .select('id, inviter_id, invitee_id, tournament_id, team_id, status')
       .eq('id', invitationId)
       .maybeSingle();
     const row = inv as {
       inviter_id: string;
       invitee_id: string;
       tournament_id: string;
+      team_id: string | null;
       status: string;
     } | null;
     if (!row || row.invitee_id !== user.id) return { error: 'Invitation not found.' };
@@ -692,6 +764,18 @@ export async function respondInvitation(
         p_actor: user.id,
       });
       if (error) return { error: friendly(error.message) };
+      // The snapshot now covers both members - re-check fit + composition at acceptance, not only
+      // at invite (a community skill level can move between the two, §2AM decision 3).
+      if (row.team_id) {
+        const { data: regRows } = await svc
+          .from('registrations')
+          .select('id')
+          .eq('team_id', row.team_id)
+          .not('status', 'in', '(withdrawn,cancelled,rejected)');
+        for (const r of (regRows ?? []) as { id: string }[]) {
+          await computeRegistrationEligibility(r.id);
+        }
+      }
       // Notify the inviter that their invite was accepted and the team is formed (§27.1).
       const [me, tm] = await Promise.all([
         getActorMini(user.id),
@@ -739,6 +823,14 @@ export async function respondInvitation(
   };
 }
 
+/**
+ * Withdraw an unanswered invite and free the seat, atomically (master_plan §2AM decision 3/4).
+ *
+ * Withdrawing an UNCONFIRMED invitee stays unilateral - they consented to nothing. The previous
+ * version only flipped the invitation row and left the zombie unconfirmed team_members row behind,
+ * so the seat read "not vacant" and nobody could be named into it. The RPC removes both in one
+ * transaction; the invitee is told either way.
+ */
 export async function cancelInvitation(invitationId: string): Promise<RegistrationActionState> {
   const user = await getOptionalUser();
   if (!user) return { error: 'Please sign in.' };
@@ -752,12 +844,219 @@ export async function cancelInvitation(invitationId: string): Promise<Registrati
     const row = inv as { inviter_id: string; tournament_id: string; status: string } | null;
     if (!row || row.inviter_id !== user.id) return { error: 'Invitation not found.' };
     if (row.status !== 'sent') return { error: 'This invitation is no longer pending.' };
-    await svc.from('partner_invitations').update({ status: 'cancelled' }).eq('id', invitationId);
+
+    const { data, error } = await svc.rpc('cancel_partner_invitation', {
+      p_invitation_id: invitationId,
+      p_actor: user.id,
+    });
+    if (error) return { error: friendly(error.message) };
+    const inviteeId = (data as { invitee_id?: string } | null)?.invitee_id;
+
+    if (inviteeId) {
+      const [me, tm] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(row.tournament_id),
+      ]);
+      await notify({
+        recipientId: inviteeId,
+        type: 'partner_invite_withdrawn',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: row.tournament_id,
+      });
+    }
     await revalTournament(row.tournament_id);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Invitation cancelled.' };
+  return { ok: true, message: 'Invite withdrawn - the seat is open again.' };
+}
+
+// ---------------------------------------------------------------------------
+// Consented partner change on a CONFIRMED team (master_plan §2AM decision 4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Start a partner-release request: either member may ask to remove the OTHER confirmed member
+ * ("ask them to release the seat") or themselves ("leave this team"). The approver is always the
+ * other confirmed member - the one being asked to agree, whichever direction the request runs.
+ * Nothing changes until they answer: the registration, slot and payment stay with the entry.
+ */
+export async function requestPartnerRelease(
+  teamId: string,
+  leavingPlayerId: string,
+  message?: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data, error } = await svc.rpc('request_partner_release', {
+      p_team_id: teamId,
+      p_actor: user.id,
+      p_leaving_player: leavingPlayerId,
+      p_message: message?.trim() || null,
+    });
+    if (error) return { error: friendly(error.message) };
+    const approverId = (data as { approver_id?: string } | null)?.approver_id;
+    const leavingPlayer =
+      (data as { leaving_player?: string } | null)?.leaving_player ?? leavingPlayerId;
+
+    const { data: teamRow } = await svc
+      .from('teams')
+      .select('tournament_id')
+      .eq('id', teamId)
+      .maybeSingle();
+    const tournamentId = (teamRow as { tournament_id: string } | null)?.tournament_id;
+
+    let approverName = 'your partner';
+    if (approverId && tournamentId) {
+      const [me, tm, approver] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(tournamentId),
+        getActorMini(approverId),
+      ]);
+      approverName = approver.name;
+      await notify({
+        recipientId: approverId,
+        type: 'partner_release_requested',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+      await revalTournament(tournamentId);
+    }
+    return {
+      ok: true,
+      message:
+        leavingPlayer === user.id
+          ? `Your request to leave the team was sent to ${approverName}.`
+          : `We asked ${approverName} to release the seat. Nothing changes until they answer.`,
+    };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/** Answer an incoming partner-release request. Accepting removes the leaving member and opens the
+ *  seat; declining leaves the team exactly as it was. Either way the requester is told. */
+export async function respondPartnerRelease(
+  requestId: string,
+  accept: boolean,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: reqRow } = await svc
+      .from('partner_release_requests')
+      .select('id, team_id, tournament_id, requested_by, leaving_player')
+      .eq('id', requestId)
+      .maybeSingle();
+    const row = reqRow as {
+      id: string;
+      team_id: string;
+      tournament_id: string;
+      requested_by: string;
+      leaving_player: string;
+    } | null;
+    if (!row) return { error: 'That request could not be found.' };
+
+    const { data, error } = await svc.rpc('respond_partner_release', {
+      p_request_id: requestId,
+      p_actor: user.id,
+      p_accept: accept,
+    });
+    if (error) return { error: friendly(error.message) };
+
+    const [me, tm] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(row.tournament_id),
+    ]);
+    const link = tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments';
+
+    if (accept) {
+      await notify({
+        recipientId: row.requested_by,
+        type: 'partner_release_accepted',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link,
+        entityType: 'tournament',
+        entityId: row.tournament_id,
+      });
+      // §1D: tell the person actually removed too, when that is neither the actor nor the
+      // requester who already got the notice above (the two-player common case has nobody left).
+      const removedPlayer =
+        (data as { removed_player?: string } | null)?.removed_player ?? row.leaving_player;
+      if (removedPlayer && removedPlayer !== user.id && removedPlayer !== row.requested_by) {
+        await notify({
+          recipientId: removedPlayer,
+          type: 'partner_removed',
+          actorId: user.id,
+          params: { actorName: me.name, tournamentName: tm.name },
+          link,
+          entityType: 'tournament',
+          entityId: row.tournament_id,
+        });
+      }
+      // The team now has an open seat - recompute every active registration so the snapshot stops
+      // demanding a second player who is no longer there.
+      const { data: regRows } = await svc
+        .from('registrations')
+        .select('id')
+        .eq('team_id', row.team_id)
+        .not('status', 'in', '(withdrawn,cancelled,rejected)');
+      for (const r of (regRows ?? []) as { id: string }[]) {
+        await computeRegistrationEligibility(r.id);
+      }
+    } else {
+      await notify({
+        recipientId: row.requested_by,
+        type: 'partner_release_declined',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link,
+        entityType: 'tournament',
+        entityId: row.tournament_id,
+      });
+    }
+    await revalTournament(row.tournament_id);
+    return {
+      ok: true,
+      message: accept ? 'Accepted. The seat is now open.' : 'Declined. Nothing changed.',
+    };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/** Withdraw an outgoing partner-release request before it is answered. */
+export async function cancelPartnerRelease(requestId: string): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: reqRow } = await svc
+      .from('partner_release_requests')
+      .select('tournament_id')
+      .eq('id', requestId)
+      .maybeSingle();
+    const tournamentId = (reqRow as { tournament_id: string } | null)?.tournament_id;
+    const { error } = await svc.rpc('cancel_partner_release', {
+      p_request_id: requestId,
+      p_actor: user.id,
+    });
+    if (error) return { error: friendly(error.message) };
+    if (tournamentId) await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Request withdrawn.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -891,6 +1190,69 @@ export async function registerSolo(
     };
   } catch {
     return { error: 'Registration is temporarily unavailable.' };
+  }
+}
+
+/**
+ * "Enter now, choose a partner later" (master_plan §2AM decision 2).
+ *
+ * Creates a `forming` doubles team with ONE confirmed member (the actor) and registers it
+ * immediately - the slot hold, and then payment, run exactly like any other entry. The open second
+ * seat is a first-class state (`seatOpen`): ELIG_V1 evaluates the present member and does not demand
+ * a partner that does not exist yet. A partner can be named any time before the lock-in.
+ */
+export async function enterDoublesSolo(
+  tournamentId: string,
+  divisionId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const statusErr = await checkActorCanInteract(user.id);
+  if (statusErr) return { error: statusErr };
+  const svc = createServiceClient();
+  try {
+    const { data: division } = await svc
+      .from('divisions')
+      .select('format, status')
+      .eq('id', divisionId)
+      .maybeSingle();
+    const div = division as { format: string; status: string } | null;
+    if (!div) return { error: 'Division not found.' };
+    if (div.format !== 'doubles')
+      return { error: 'This is a singles division - use Register instead.' };
+
+    const fitError = await checkDivisionFit(divisionId, [{ playerId: user.id, subject: 'you' }]);
+    if (fitError) return { error: fitError };
+
+    const { data: created, error: teamError } = await svc.rpc('create_solo_doubles_team', {
+      p_tournament_id: tournamentId,
+      p_division_id: divisionId,
+      p_actor: user.id,
+    });
+    if (teamError) return { error: friendly(teamError.message) };
+    const teamId = (created as { team_id?: string } | null)?.team_id;
+    if (!teamId) return { error: 'Could not start your entry. Please try again.' };
+
+    const { data: reg, error: regError } = await svc.rpc('register_team', {
+      p_team_id: teamId,
+      p_actor: user.id,
+    });
+    if (regError) return { error: friendly(regError.message) };
+    const regId = (reg as { registration_id?: string } | null)?.registration_id;
+    const status = (reg as { status?: string } | null)?.status;
+    if (regId) await computeRegistrationEligibility(regId);
+    if (regId) await notifyAfterRegister(tournamentId, teamId, regId, status);
+    await revalTournament(tournamentId);
+    return {
+      ok: true,
+      registrationId: regId,
+      message:
+        status === 'waitlisted'
+          ? 'This division is full, so you joined the waitlist. Choose a partner any time before the lock-in.'
+          : 'Your slot is held. Pay now to reserve it - then choose your partner before the lock-in.',
+    };
+  } catch {
+    return { error: 'Registration is temporarily unavailable. Please try again shortly.' };
   }
 }
 

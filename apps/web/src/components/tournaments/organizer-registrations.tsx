@@ -45,6 +45,7 @@ import {
   describeEntryChips,
   ELIGIBILITY_LABELS,
   filterEntries,
+  hasOpenSeat,
   hasUnconfirmedPartner,
   sortEntries,
   STATUS_LABELS,
@@ -408,6 +409,7 @@ export function OrganizerRegistrations({
             options={[
               { value: 'confirmed' as const, label: 'Confirmed' },
               { value: 'unconfirmed' as const, label: 'Not confirmed' },
+              { value: 'none' as const, label: 'No partner yet' },
             ]}
             selected={filters.partner}
             onToggle={(p) => setFilters((f) => ({ ...f, partner: toggleIn(f.partner, p) }))}
@@ -510,7 +512,8 @@ function eligibilityReasonLines(entry: OrganizerRegistration): string[] {
 function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () => void }) {
   const chip = statusChip(entry);
   const amount = amountLabel(entry);
-  const unconfirmed = hasUnconfirmedPartner(entry);
+  const openSeat = hasOpenSeat(entry);
+  const unconfirmed = !openSeat && hasUnconfirmedPartner(entry);
   const reasonLines = entry.eligibilityStatus !== 'eligible' ? eligibilityReasonLines(entry) : [];
   return (
     <li>
@@ -533,6 +536,12 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
             >
               {chip.label}
             </span>
+            {openSeat && (
+              <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
+                <Clock size={10} aria-hidden />
+                No partner yet
+              </span>
+            )}
             {unconfirmed && (
               <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
                 <Clock size={10} aria-hidden />

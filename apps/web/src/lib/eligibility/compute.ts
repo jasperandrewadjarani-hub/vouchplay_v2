@@ -110,17 +110,19 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     getTournamentRules(reg.tournament_id),
   ]);
 
-  const [{ data: divData }, { data: tournData }, { data: memberData }] = await Promise.all([
-    svc
-      .from('divisions')
-      .select(
-        'skill_policy, minimum_skill, maximum_skill, sex_classification, minimum_age, maximum_age, team_size, skill_verified_required, minimum_sts',
-      )
-      .eq('id', reg.division_id)
-      .maybeSingle(),
-    svc.from('tournaments').select('start_at').eq('id', reg.tournament_id).maybeSingle(),
-    svc.from('team_members').select('player_id, member_order').eq('team_id', reg.team_id),
-  ]);
+  const [{ data: divData }, { data: tournData }, { data: memberData }, { data: teamData }] =
+    await Promise.all([
+      svc
+        .from('divisions')
+        .select(
+          'skill_policy, minimum_skill, maximum_skill, sex_classification, minimum_age, maximum_age, team_size, skill_verified_required, minimum_sts',
+        )
+        .eq('id', reg.division_id)
+        .maybeSingle(),
+      svc.from('tournaments').select('start_at').eq('id', reg.tournament_id).maybeSingle(),
+      svc.from('team_members').select('player_id, member_order').eq('team_id', reg.team_id),
+      svc.from('teams').select('status').eq('id', reg.team_id).maybeSingle(),
+    ]);
 
   const div = divData as {
     skill_policy: string;
@@ -141,6 +143,12 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
   );
   const memberIds = members.map((m) => m.player_id);
   if (memberIds.length === 0) return;
+  const teamStatus = (teamData as { status: string } | null)?.status ?? null;
+  // §2AM decision 2: a team deliberately short a player - "enter now, choose a partner later", or a
+  // confirmed partner who just left - is a known open seat, not a data problem. INVALID_TEAM_SIZE
+  // must not fire while the team is still `forming`; once it is `formed`/`locked` a short team is
+  // back to being a genuine size problem.
+  const seatOpen = teamStatus === 'forming' && memberIds.length < div.team_size;
 
   const skillVersion = await getActiveSkillVersion();
   const [{ data: profileData }, { rows: skillRows }, { data: fraudData }] = await Promise.all([
@@ -232,6 +240,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     players,
     rules: eligibilityRules,
     thresholds: settings.thresholds,
+    hardContext: { seatOpen },
   });
 
   // Organizer-approval-required (migration 0022): no entry is auto-eligible; the organizer must

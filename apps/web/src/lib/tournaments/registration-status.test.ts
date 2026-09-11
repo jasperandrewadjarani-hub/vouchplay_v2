@@ -95,7 +95,7 @@ describe('describeRegistrationStatus', () => {
     expect(v.steps.some((s) => /partner/i.test(s))).toBe(true);
   });
 
-  it('a vacant seat after a decline asks for a new partner', () => {
+  it('a vacant seat after a decline asks for a new partner when no lock date is known', () => {
     const v = describeRegistrationStatus({
       ...base,
       regStatus: 'payment_submitted',
@@ -103,6 +103,41 @@ describe('describeRegistrationStatus', () => {
       seatVacantAfterDecline: true,
     });
     expect(v.steps.some((s) => /new partner/i.test(s))).toBe(true);
+  });
+
+  it('an open seat with a known lock date asks to choose a partner before it (§2AM)', () => {
+    const v = describeRegistrationStatus({
+      ...base,
+      regStatus: 'payment_submitted',
+      paymentStatus: 'pending',
+      seatOpen: true,
+      partnerLockAt: '2026-10-09T16:00:00.000Z',
+      partnerLockPassed: false,
+    });
+    expect(v.steps.some((s) => /choose your partner before/i.test(s))).toBe(true);
+    expect(v.shortLabel).toBe('No partner yet');
+  });
+
+  it('an open seat past the lock points the applicant at the organizer', () => {
+    const v = describeRegistrationStatus({
+      regStatus: 'payment_pending',
+      paymentStatus: null,
+      fee: 0,
+      seatOpen: true,
+      partnerLockPassed: true,
+    });
+    expect(v.steps.some((s) => /lock-in has passed/i.test(s))).toBe(true);
+  });
+
+  it('an open seat gives the free-division "awaiting confirmation" state a "No partner yet" label', () => {
+    const v = describeRegistrationStatus({
+      regStatus: 'payment_pending',
+      paymentStatus: null,
+      fee: 0,
+      seatOpen: true,
+    });
+    expect(v.shortLabel).toBe('No partner yet');
+    expect(v.secured).toBe(false);
   });
 
   it('waitlisted is its own honest state - not holding a slot', () => {

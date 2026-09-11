@@ -44,6 +44,7 @@ export const HARD_RULE_LABELS: Record<HardRuleCode, string> = {
   INVALID_TEAM_SIZE: 'Team size does not match the division',
   REGISTRATION_CLOSED: 'Registration is closed for this division',
   DUPLICATE_REGISTRATION: 'Conflicts with an existing registration',
+  MIXED_COMPOSITION: 'Mixed doubles needs one male and one female player',
 };
 
 export const REASON_LABELS: Record<EligibilityReasonCode, string> = {

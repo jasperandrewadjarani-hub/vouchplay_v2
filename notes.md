@@ -2864,3 +2864,26 @@ raced two Date.now() calls across the 7-day >= boundary; now frozen via vi.setSy
 this feature; was intermittently red-gating deploys.
 DEFERRED: delete the 2 empty duplicate Hermosa drafts (Jasper/dashboard); longer-lived or
 resend-ignoring-stamp receipt links if Kathrina needs a batch after 7 days.
+
+## 2026-09-11 - Mixed composition + open seat + consented partner change + partner lock-in (§2AM, handover v1.66)
+Jasper: (bug) mixed divisions accept M+M / F+F; (feature) pay for the slot before choosing a partner,
+partner must accept + fit rules, either player can change partner WITH the other's acceptance
+(vacant seat -> re-pick), organizer "partner lock-in" default 7 days before start.
+Audit: mixed composition enforced NOWHERE (SQL player_fits_division, TS evaluateDivisionFit, ELIG_V1;
+spec §18.4 required it since v1.1). No true empty-seat state (§1U needs a named partner); cancelInvitation
+left a zombie unconfirmed member (seat never re-vacated). change_partner swapped CONFIRMED partners
+unilaterally (contradicts §1U lock paragraph). registration_lock_at is dead. Live: 17 mixed teams all
+M+F; 21/57 active entries have an unconfirmed partner; Hermosa starts Oct 16 -> default lock Oct 9
+(= club_lock_at already); registration closes Sep 16 => partner actions MUST be gated by the partner
+lock only, never by registration status.
+Design (contracts in master_plan §2AM): migration 0040 (tournaments.partner_lock_at; plain helpers
+partner_lock_effective_at / partner_changes_are_open / team_partner_composition_ok; RPCs
+create_solo_doubles_team, cancel_partner_invitation, request/respond/cancel_partner_release; table
+partner_release_requests; re-created create_team_with_pending_partner / replace_pending_partner (any
+open seat) / accept_partner_invitation (lock + re-fit) / change_partner (unconfirmed only)). Core:
+evaluateDivisionFit partnerSex + 'mixed_pair'; ELIG seatOpen + MIXED_COMPOSITION; partner-lock.ts;
+4 notification types. Web: enterDoublesSolo, release request actions, partner block states on the
+entry card, "Enter now, choose partner later", organizer 'none' filter + Incomplete teams + lock date,
+form field "Partner lock-in".
+Deferred (phase 2): lock reminder notification 3 days before (cron), organizer assign-partner override,
+dead-code cleanup (move_player_registration, registration_lock_at).

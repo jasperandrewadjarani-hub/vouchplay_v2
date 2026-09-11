@@ -32,10 +32,47 @@ describe('evaluateDivisionFit - sex classification', () => {
     expect(r).toEqual({ fits: false, reason: 'sex' });
   });
 
-  it('lets anyone into a mixed division', () => {
+  it('lets anyone into a mixed division when no partner is being checked against', () => {
+    // partnerSex omitted (undefined): composition is a PAIR rule, so a bare per-player fit check
+    // still accepts anyone - deliberate, per §2AM decision 1.
     for (const playerSex of ['male', 'female', 'other', null]) {
       expect(evaluateDivisionFit(input({ sexClassification: 'mixed', playerSex })).fits).toBe(true);
     }
+  });
+
+  it('rejects a same-sex mixed pair (the bug this phase fixes)', () => {
+    const r = evaluateDivisionFit(
+      input({ sexClassification: 'mixed', playerSex: 'male', partnerSex: 'male' }),
+    );
+    expect(r).toEqual({ fits: false, reason: 'mixed_pair' });
+  });
+
+  it('lets an opposite-sex mixed pair through', () => {
+    expect(
+      evaluateDivisionFit(
+        input({ sexClassification: 'mixed', playerSex: 'female', partnerSex: 'male' }),
+      ).fits,
+    ).toBe(true);
+  });
+
+  it('asks an unknown-gender player to fill in their profile before checking a mixed pair', () => {
+    const r = evaluateDivisionFit(
+      input({ sexClassification: 'mixed', playerSex: null, partnerSex: 'male' }),
+    );
+    expect(r).toEqual({ fits: false, reason: 'sex_unknown' });
+  });
+
+  it('singles ignores partnerSex - there is no partner to pair against', () => {
+    expect(
+      evaluateDivisionFit(
+        input({
+          sexClassification: 'mixed',
+          playerSex: 'male',
+          partnerSex: 'male',
+          format: 'singles',
+        }),
+      ).fits,
+    ).toBe(true);
   });
 
   it('tells a player with no recorded gender to fill it in, not that they are the wrong one', () => {
@@ -144,6 +181,15 @@ describe('describeDivisionFit', () => {
   it('falls back to a neutral noun when the partner has no name', () => {
     const msg = describeDivisionFit('sex', { ...base, subject: 'partner', partnerName: '  ' });
     expect(msg.startsWith('That player')).toBe(true);
+  });
+
+  it('describes a mixed_pair refusal plainly, with no names on either side', () => {
+    const msg = describeDivisionFit('mixed_pair', {
+      ...base,
+      subject: 'partner',
+      partnerName: 'Maria',
+    });
+    expect(msg).toBe('Mixed doubles needs one male and one female player.');
   });
 
   it('states the division band and the player level for a skill refusal', () => {

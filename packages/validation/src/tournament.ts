@@ -39,6 +39,9 @@ export const tournamentCreateSchema = z.object({
   // Single tournament-wide club representation lock (handover Phase 13.5). Optional date/time; no
   // per-division exception. Empty clears the lock.
   clubLockAt: optionalDate,
+  // Partner lock-in (master_plan §2AM). Optional date/time; empty means the default (7 days before
+  // the start date) applies. The column arrives with migration 0040 and is saved defensively.
+  partnerLockAt: optionalDate,
 });
 export type TournamentCreateInput = z.infer<typeof tournamentCreateSchema>;
 

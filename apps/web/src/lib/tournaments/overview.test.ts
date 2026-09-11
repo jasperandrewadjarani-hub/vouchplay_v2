@@ -72,4 +72,17 @@ describe('computeOverview (§26.1)', () => {
     expect(o.nearingCapacity.map((n) => n.name)).toEqual(['Near']);
     expect(o.nearingCapacity[0]).toMatchObject({ active: 4, capacity: 5 });
   });
+
+  it('counts active entries with an open seat or an unconfirmed partner as incomplete teams (§2AM)', () => {
+    const o = computeOverview(
+      [
+        reg({ hasOpenSeat: true }),
+        reg({ partnerUnconfirmed: true }),
+        reg({ hasOpenSeat: true, status: 'withdrawn' }), // terminal - excluded
+        reg({}), // neither flag - complete
+      ],
+      [],
+    );
+    expect(o.incompleteTeams).toBe(2);
+  });
 });

@@ -1,7 +1,9 @@
 import 'server-only';
+import { partnerLockEffectiveAt, isPartnerLockPassed } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { divisionName } from './dto';
+import { getPartnerLockAt } from './queries';
 
 /**
  * Viewer-specific + organizer registration reads (handover §20–§23, §26.4). Not cached (per-viewer).
@@ -45,14 +47,39 @@ async function resolve(ids: string[]): Promise<Map<string, Mini>> {
   return map;
 }
 
+export interface ReleaseRequestView {
+  id: string;
+  status: 'sent';
+  leavingName: string;
+  /** True when the viewer is the one who must answer this request. */
+  iAmApprover: boolean;
+  /** True when the viewer is the one who started this request. */
+  iRequested: boolean;
+  /** True when the viewer themselves is the player who would leave. */
+  iAmLeaving: boolean;
+}
+
 export interface ViewerTeam {
   teamId: string;
   status: string;
   members: Mini[];
   /** A named partner who has not answered yet, or null. */
   pendingPartner: Mini | null;
-  /** True when the seat is empty because the last named partner said no (§1U). */
+  /** The id of that pending (`sent`) invitation, for a Withdraw-invite control. Null when there is
+   *  no pending invitation. */
+  pendingInvitationId: string | null;
+  /** True when the seat is empty because the last named partner said no (§1U). Kept for
+   *  compatibility; `seatOpen` below is the general truth (never named, declined, expired, or the
+   *  invite cancelled - master_plan §2AM). */
   seatVacantAfterDecline: boolean;
+  /** The team is short a player, for any reason (§2AM decision 2/3): never named, declined, expired,
+   *  or the invite cancelled. The general truth `seatVacantAfterDecline` used to approximate. */
+  seatOpen: boolean;
+  /** The other member who has confirmed, or null (nobody confirmed yet, or the viewer plays solo). */
+  confirmedPartner: Mini | null;
+  /** The team's open (`sent`) partner-release request, or null. Read defensively - null before
+   *  migration 0040 is applied. */
+  releaseRequest: ReleaseRequestView | null;
 }
 export interface ViewerRegistration {
   id: string;
@@ -109,6 +136,14 @@ export interface ViewerRegistrationState {
   viewerOpenForSponsorship: boolean;
   /** Whether the viewer has finished onboarding, so the availability card only shows if usable. */
   viewerOnboarded: boolean;
+  /** Effective partner lock-in (`coalesce(partner_lock_at, start_at - 7 days)`), or null when there
+   *  is neither an explicit lock nor a start date (master_plan §2AM). Read defensively. */
+  partnerLockAt: string | null;
+  /** Whether the effective lock has already passed (time only, no tournament-status factor). */
+  partnerLockPassed: boolean;
+  /** Tournament status in (registration_open, registration_closed) AND now < the effective lock.
+   *  Registration close does NOT gate partner actions - only this flag does. */
+  partnerChangesOpen: boolean;
 }
 
 export async function getViewerRegistrationState(
@@ -237,16 +272,77 @@ export async function getViewerRegistrationState(
       for (const r of (declRows ?? []) as { team_id: string | null }[])
         if (r.team_id) declinedTeamIds.add(r.team_id);
     }
+
+    // The team's current pending ('sent') invitation id, if any - so the entry card can offer a
+    // Withdraw-invite control without a second round trip per team.
+    const pendingInvitationByTeam = new Map<string, string>();
+    if (activeTeamIds.length) {
+      const { data: pendingRows } = await svc
+        .from('partner_invitations')
+        .select('id, team_id')
+        .in('team_id', activeTeamIds)
+        .eq('status', 'sent');
+      for (const r of (pendingRows ?? []) as { id: string; team_id: string | null }[])
+        if (r.team_id) pendingInvitationByTeam.set(r.team_id, r.id);
+    }
+
+    // The team's open (`sent`) partner-release request, if any (master_plan §2AM decision 4). Read
+    // defensively - table arrives with migration 0040, and null degrades to no request rather than
+    // failing the whole registration state.
+    const releaseByTeam = new Map<
+      string,
+      { id: string; requested_by: string; leaving_player: string; approver: string }
+    >();
+    if (activeTeamIds.length) {
+      try {
+        const { data: relRows, error } = await svc
+          .from('partner_release_requests')
+          .select('id, team_id, requested_by, leaving_player, approver, status')
+          .in('team_id', activeTeamIds)
+          .eq('status', 'sent');
+        if (error) throw error;
+        for (const r of (relRows ?? []) as {
+          id: string;
+          team_id: string;
+          requested_by: string;
+          leaving_player: string;
+          approver: string;
+        }[]) {
+          releaseByTeam.set(r.team_id, r);
+        }
+      } catch {
+        // Table not present yet (migration 0040 pending) - no open requests.
+      }
+    }
+
     for (const t of teamRows) {
       if (retiredTeamIds.has(t.id)) continue;
       const teamMembers = members.filter((m) => m.team_id === t.id);
       const pending = teamMembers.find((m) => !m.confirmed_at && m.player_id !== userId);
-      const hasOpenSeat = teamMembers.length < 2 && declinedTeamIds.has(t.id);
+      const confirmedOther = teamMembers.find((m) => m.confirmed_at && m.player_id !== userId);
+      // General truth: this team is short a player, for whatever reason (never named, declined,
+      // expired, or the invite cancelled) - a first-class state since §2AM decision 2.
+      const seatOpen = teamMembers.length < 2;
+      const hasOpenSeat = seatOpen && declinedTeamIds.has(t.id);
+      const rel = releaseByTeam.get(t.id);
       teamsByDivision[t.division_id] = {
         teamId: t.id,
         status: t.status,
         pendingPartner: pending ? (profiles.get(pending.player_id) ?? null) : null,
+        pendingInvitationId: pendingInvitationByTeam.get(t.id) ?? null,
         seatVacantAfterDecline: hasOpenSeat,
+        seatOpen,
+        confirmedPartner: confirmedOther ? (profiles.get(confirmedOther.player_id) ?? null) : null,
+        releaseRequest: rel
+          ? {
+              id: rel.id,
+              status: 'sent',
+              leavingName: profiles.get(rel.leaving_player)?.name ?? 'player',
+              iAmApprover: rel.approver === userId,
+              iRequested: rel.requested_by === userId,
+              iAmLeaving: rel.leaving_player === userId,
+            }
+          : null,
         members: members
           .filter((m) => m.team_id === t.id)
           .sort((a, b) => a.member_order - b.member_order)
@@ -424,6 +520,28 @@ export async function getViewerRegistrationState(
     name: clubNames.get(id) ?? 'Club',
   }));
 
+  // Partner lock-in + the derived "changes open" gate (master_plan §2AM decision 5). `status` and
+  // `start_at` always exist; the lock column is read defensively via `getPartnerLockAt` so the app
+  // degrades to "partner changes open" until migration 0040 and its helpers land.
+  const { data: tournStatusRow } = await svc
+    .from('tournaments')
+    .select('status, start_at')
+    .eq('id', tournamentId)
+    .maybeSingle();
+  const tournStatus = tournStatusRow as { status: string; start_at: string | null } | null;
+  const rawPartnerLockAt = await getPartnerLockAt(tournamentId);
+  const partnerLockAt = partnerLockEffectiveAt(tournStatus?.start_at ?? null, rawPartnerLockAt);
+  const partnerLockPassed = isPartnerLockPassed(
+    new Date().toISOString(),
+    tournStatus?.start_at ?? null,
+    rawPartnerLockAt,
+  );
+  const partnerChangesOpen = Boolean(
+    tournStatus &&
+    ['registration_open', 'registration_closed'].includes(tournStatus.status) &&
+    !partnerLockPassed,
+  );
+
   return {
     teamsByDivision,
     registrationsByDivision,
@@ -436,6 +554,9 @@ export async function getViewerRegistrationState(
     viewerLookingForPartner: Boolean(viewerProfile?.looking_for_partner),
     viewerOpenForSponsorship: Boolean(viewerProfile?.open_for_sponsorship),
     viewerOnboarded: Boolean(viewerProfile?.onboarded_at),
+    partnerLockAt,
+    partnerLockPassed,
+    partnerChangesOpen,
   };
 }
 
@@ -455,6 +576,9 @@ export interface OrganizerRegistration {
   members: Mini[];
   /** Player ids whose team membership is still unconfirmed (pay-first, §1U). */
   unconfirmedMemberIds: string[];
+  /** The division's team size, so `hasOpenSeat` can tell a genuinely empty seat from a full team
+   *  (master_plan §2AM). 1 for singles. */
+  teamSize: number;
   /** An open player request for the organizer to cancel this entry (§1Y), newest first. */
   cancellationRequest: { reason: string; requestedAt: string } | null;
   paymentId: string | null;
@@ -491,13 +615,15 @@ export async function getOrganizerRegistrations(
   const { data: divs } = await svc
     .from('divisions')
     .select(
-      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age, team_size',
     )
     .eq('tournament_id', tournamentId);
   const divName = new Map<string, string>();
-  type DivNameRow = { id: string } & Parameters<typeof divisionName>[0];
+  const divTeamSize = new Map<string, number>();
+  type DivNameRow = { id: string; team_size: number } & Parameters<typeof divisionName>[0];
   for (const d of (divs ?? []) as DivNameRow[]) {
     divName.set(d.id, divisionName(d));
+    divTeamSize.set(d.id, d.team_size);
   }
 
   const teamIds = regRows.map((r) => r.team_id);
@@ -585,6 +711,7 @@ export async function getOrganizerRegistrations(
       unconfirmedMemberIds: members
         .filter((m) => m.team_id === r.team_id && !m.confirmed_at)
         .map((m) => m.player_id),
+      teamSize: divTeamSize.get(r.division_id) ?? 2,
       cancellationRequest: cancelByReg.get(r.id) ?? null,
       paymentId: pay?.id ?? null,
       paymentStatus: pay?.status ?? null,

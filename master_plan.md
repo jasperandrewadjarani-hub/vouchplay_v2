@@ -3499,6 +3499,145 @@ Men 1. All 28 have a `payment_submitted` event carrying the submitter's id, so "
 - **Main:** docs (this section, handover v1.65), review, gates, deploy. Jasper applies `0039`, pushes,
   then taps the button once; I verify all 28 get `notification_sent_at` stamped.
 
+## 2AM. Mixed-doubles composition, pay-before-partner, consented partner changes, partner lock-in (2026-09-11)
+
+Jasper: (1) BUG - mixed divisions accept two males or two females; must be one male + one female.
+(2) Let a player register and pay for the slot BEFORE choosing a partner; show clearly that the partner
+is pending and must be chosen before the partner lock-in. (3) A chosen partner must still accept, and
+must fit the division's rules (skill cap, sex). (4) Existing partnerships can be changed by either
+player: remove the current partner WITH the other's acceptance, leave the seat open, then pick someone
+else - within the skill/sex rules. (5) Organizer: a "partner lock-in" setting, default 7 days before the
+first tournament day.
+
+### Findings (audited - code, SQL, spec, and live data)
+
+- **Mixed composition is enforced nowhere.** `player_fits_division()` (SQL), `evaluateDivisionFit`
+  (TS, drives the partner picker) and ELIG_V1 all check sex per player and only for men/women divisions;
+  the SQL comment literally says "'mixed' and 'genderless' accept anyone", and a unit test asserts it.
+  Handover §18.4 has required "one Male + one Female" since v1.1 and §53.1 lists "mixed-team
+  eligibility" as a mandatory test - never built. Live: 17 active mixed-doubles teams, all M+F today, so
+  the fix breaks nothing existing. Every onboarded profile has a sex (0 nulls).
+- **A genuinely empty second seat does not exist yet.** §1U's pay-first flow requires naming a real
+  partner up front; the only vacant-seat state is "the named partner declined". `cancelInvitation`
+  only flips the invitation row and leaves a zombie unconfirmed member, so after cancelling an invite
+  the seat reads "not vacant" and nobody can be named - a latent bug this phase fixes.
+- **Partner swaps are unilateral and contradict §1U's own lock paragraph.** `change_partner` (0027/0031)
+  swaps the other member "whether confirmed or not", gated only by the generic 24h-before-start
+  self-service window - not by acceptance, payment, `club_lock_at` or registration close. The displaced
+  player is only *told* (`partner_removed`), never asked.
+- **No partner deadline exists.** `registration_lock_at` is a dead column (never read or written);
+  `club_lock_at` gates club choice only; the 24h `player_registration_change_lock_hours_before_start`
+  is one generic switch for cancel/swap.
+- **Timing that matters for Hermosa:** starts 2026-10-16 → a 7-day default lock lands 2026-10-09
+  (the organizer already set `club_lock_at` to Oct 9 - consistent). But **registration closes Sep 16**,
+  and `create_team_with_pending_partner` / `replace_pending_partner` currently require
+  `tournament.status='registration_open'`. If partner actions stayed gated by registration status, every
+  partner selection would die on Sep 16 while 21 of 57 active entries still have an unconfirmed
+  partner. So partner actions must be gated by the **partner lock only**, never by registration close.
+
+### Decisions
+
+1. **One composition rule, enforced at every door.** A mixed doubles team must be one male + one
+   female. Checked (a) in the picker so same-sex candidates are greyed with a reason, (b) in the TS gate
+   `checkDivisionFit` (with the partner's sex), (c) in SQL inside every RPC that seats a player
+   (`create_team_with_pending_partner`, `replace_pending_partner`, `change_partner`,
+   `accept_partner_invitation`), (d) as an ELIG_V1 hard rule `MIXED_COMPOSITION` on the team snapshot.
+   Singles, men, women, genderless: unchanged. Existing teams are re-evaluated only when they next
+   change (all 17 are valid anyway).
+2. **"Enter now, choose a partner later" (doubles).** A new RPC creates a `forming` team with ONE
+   confirmed member and registers it (`register_team`, slot hold, then pay - unchanged). The open seat
+   is a first-class state (`seatOpen`), shown as "No partner yet - choose one before {lock date}". ELIG_V1
+   evaluates the present member and does NOT fire `INVALID_TEAM_SIZE` while the seat is open; the
+   snapshot is recomputed when the partner is seated and again when they accept. A solo-paid team holds
+   a division slot exactly like any paid entry (that is the point of paying early).
+3. **Filling the seat = the existing "name a partner" path, generalised.** `replace_pending_partner`
+   now works for any open seat (declined, expired, cancelled, or never named), re-checks fit + composition
+   for the invitee, and is gated by the partner lock, not registration status. The invitee still accepts
+   or declines (`partner_named_paid` notification, unchanged), and **fit + composition are re-checked at
+   acceptance** (a community skill level can move between invite and accept).
+4. **Changing a CONFIRMED partner needs their consent - a release request.** New table
+   `partner_release_requests`: the request names who will LEAVE and who must APPROVE (always the other
+   confirmed member). Either player can start it ("ask {name} to release the seat" or "leave this team");
+   the approver gets a critical notification and an inline Approve / Decline on their own entry card. On
+   approval the leaving member is removed, the seat opens, invitations for the team are cancelled, and
+   **the registration, slot and payment stay with the entry** (money between the two people is theirs
+   and the organizer's to settle - the dialog says so plainly). One open request per team. Withdrawing an
+   UNCONFIRMED invitee stays unilateral (they consented to nothing): a new atomic
+   `cancel_partner_invitation` RPC cancels the invite AND removes the zombie member row, and tells them.
+   `change_partner` is restricted to swapping an unconfirmed invitee; for a confirmed partner it refuses
+   with a message pointing at the release flow.
+5. **Partner lock-in.** `tournaments.partner_lock_at` (nullable). Effective lock =
+   `coalesce(partner_lock_at, start_at - 7 days)` - computed live (`partner_lock_effective_at()` in SQL,
+   twin in core) so an organizer who moves the start date never carries a stale default; the form field
+   reads "Leave blank for 7 days before the start date" and shows the effective date. After the lock:
+   no new invites, no acceptances, no release requests, no swaps by players; declines still work (nobody
+   is forced to play) and the organizer's existing tools (confirm / reject / refund) are untouched.
+   Player-side gate: `partner_changes_are_open()` = tournament status in (registration_open,
+   registration_closed) AND now < effective lock. Registration close does not touch partner actions.
+6. **Organizer visibility, not automation, at the lock.** Nothing is auto-cancelled when the lock
+   passes - paid entries have money in them. The organizer's registrations view gains a "No partner yet"
+   partner filter and an "Incomplete teams" count with the lock date on the Overview, so acting on the
+   stragglers is one filter away.
+
+### Better-suggestions folded in (and what is deferred)
+
+- Re-validate fit at acceptance (not just at invite) - cheap, closes a real hole.
+- Atomic invite-cancel that frees the seat - fixes the zombie-member bug the audit found.
+- "Payment stays with the entry" stated in the release dialog - avoids the most predictable dispute.
+- **Deferred to phase 2 (told to Jasper):** a partner-lock reminder notification 3 days before the lock
+  to entries with an open/unconfirmed seat (piggybacks the daily cron); an organizer "assign partner"
+  override with reason + audit; deleting dead code (`move_player_registration`, `registration_lock_at`).
+
+### Contracts (three subagents build in parallel against these exact names)
+
+**SQL - migration `0040_partner_lock_and_open_seats.sql` + `scripts/apply-0040.sql`:**
+- `tournaments.partner_lock_at timestamptz` (+ comment).
+- Plain `stable` helpers (no SECURITY DEFINER, so they are outside the grant lint):
+  `partner_lock_effective_at(p_tournament_id uuid) returns timestamptz`;
+  `partner_changes_are_open(p_tournament_id uuid) returns boolean`;
+  `team_partner_composition_ok(p_division_id uuid, p_player_a uuid, p_player_b uuid) returns boolean`
+  (true unless the division is mixed doubles and both sexes are equal or unknown).
+- New SECURITY DEFINER RPCs (each followed by the revoke/grant pair):
+  `create_solo_doubles_team(p_tournament_id uuid, p_division_id uuid, p_actor uuid) returns jsonb` →
+  `{team_id}`; `cancel_partner_invitation(p_invitation_id uuid, p_actor uuid) returns jsonb`;
+  `request_partner_release(p_team_id uuid, p_actor uuid, p_leaving_player uuid, p_message text) returns jsonb`
+  → `{request_id, approver_id}`; `respond_partner_release(p_request_id uuid, p_actor uuid, p_accept boolean) returns jsonb`
+  → `{status, removed_player}`; `cancel_partner_release(p_request_id uuid, p_actor uuid) returns jsonb`.
+- Re-created (same signatures, new rules): `create_team_with_pending_partner` (+composition),
+  `replace_pending_partner` (any open seat; `partner_changes_are_open`; division status in open/closed;
+  fit + composition for invitee), `accept_partner_invitation` (lock + re-fit + composition on the
+  team branch), `change_partner` (unconfirmed invitee only, else `partner_confirmed_needs_release`;
+  `partner_changes_are_open`; composition).
+- Table `partner_release_requests(id, team_id, tournament_id, requested_by, leaving_player, approver,
+  status partner_release_status ('sent','accepted','declined','cancelled'), message, created_at,
+  resolved_at)`, RLS read for the two players / organizers / staff, writes via service role only.
+- Error codes (raised text, mapped by `friendly()`): `partner_lock_passed`, `mixed_pair`,
+  `partner_confirmed_needs_release`, `release_already_pending`, `not_approver`, `seat_not_vacant`.
+
+**Core (`@vouchplay/core`):** `evaluateDivisionFit` gains `partnerSex?` and reason `'mixed_pair'`;
+`describeDivisionFit('mixed_pair')` = "Mixed doubles needs one male and one female player.";
+ELIG_V1 `evaluateTeamEligibility` gains `seatOpen` (skips `INVALID_TEAM_SIZE`) and hard rule
+`MIXED_COMPOSITION`; `tournaments/partner-lock.ts`: `PARTNER_LOCK_DEFAULT_DAYS = 7`,
+`partnerLockEffectiveAt(startAt, partnerLockAt)`, `isPartnerLockPassed(now, ...)`; notification
+catalog: `partner_release_requested` (critical), `partner_release_accepted`,
+`partner_release_declined`, `partner_invite_withdrawn`.
+
+**Web:** actions `enterDoublesSolo`, `requestPartnerRelease`, `respondPartnerRelease`,
+`cancelPartnerRelease`; `cancelInvitation` → RPC + notify; `respondInvitation` recomputes eligibility
+on accept; `searchInvitablePlayers` / `checkDivisionFit` take the inviter's sex; ViewerTeam gains
+`seatOpen`, `confirmedPartner`, `releaseRequest`; state gains `partnerLockAt` (effective) +
+`partnerChangesOpen`; `describeRegistrationStatus` facts gain `seatOpen`, `partnerLockAt`,
+`partnerLockPassed`; tournament DTO/form/validation gain `partnerLockAt`; register surface gains
+"Enter now, choose a partner later"; entry card partner block (open / pending / confirmed / incoming
+release / locked); organizer partner filter `none` + Overview "Incomplete teams" + lock date.
+
+### Execution
+
+Docs (this section, handover v1.66) → SQL subagent (Opus) ∥ core subagent ∥ web subagent → my review,
+full gates, deploy. Jasper applies `0040` before the push (the app is fail-open on the new column and
+degrades to "partner changes open" until the helpers exist). Hermosa's effective lock will read
+2026-10-09 16:00 UTC (Oct 10 00:00 PH) unless the organizer sets it explicitly.
+
 ## 1. Prompt Contract
 
 ### In scope
