@@ -36,6 +36,19 @@ export const PAYMENT_PROOF_IMAGE_PROFILE: ImageNormalizationProfile = {
   qualities: [88, 80, 72, 64],
 };
 
+/**
+ * Identity-verification document images (master_plan §2AG Phase C). Same bound as payment-proof
+ * images - a government ID needs to stay readable for staff review, but the private bucket still
+ * needs a sane cap. The source image is deleted on decision regardless (§13.3); this only bounds
+ * what is stored between submission and review.
+ */
+export const ID_DOCUMENT_IMAGE_PROFILE: ImageNormalizationProfile = {
+  maxSourceBytes: 5 * 1024 * 1024,
+  maxOutputBytes: 1_500_000,
+  dimensions: [2048, 1800, 1600, 1280],
+  qualities: [88, 80, 72, 64],
+};
+
 export type ImageNormalizationError =
   'empty' | 'source_too_large' | 'unsupported_type' | 'invalid_image' | 'output_too_large';
 

@@ -203,6 +203,29 @@ const fetchVerifiedUserIds = unstable_cache(
   { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
 );
 
+/**
+ * Whether a player has an identity verification currently pending or under review (master_plan
+ * §2AG Phase C). Deliberately NOT cached via `unstable_cache`: it is read for at most one profile
+ * per request - the player's OWN profile, for the "ID pending review" chip - never for anyone
+ * else's, and never exposes the document path. Fails open to false so a missing bucket/table state
+ * before migration 0036 never breaks the profile page.
+ */
+export async function hasPendingIdentityVerification(userId: string): Promise<boolean> {
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from('identity_verifications')
+      .select('id')
+      .eq('user_id', userId)
+      .in('status', ['pending', 'reviewing'])
+      .limit(1)
+      .maybeSingle();
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Filter option sources and the skill index (master_plan §2B)
 //

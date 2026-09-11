@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import { isCurrentLegalVersion } from '@vouchplay/config';
 import { createClient } from '@/lib/supabase/server';
+import { loadSettingFlag } from '@/lib/settings';
 
 /**
  * Request-memoised user lookup (master_plan §2AB). A signed-in page previously validated the session
@@ -194,3 +195,45 @@ export const getViewerReputationNudge = cache(
     }
   },
 );
+
+/**
+ * Whether to nudge the signed-in viewer to add their ID for the "ID Verified" badge (master_plan
+ * §2AG Phase C, D2). True only for an onboarded player who is not yet identity-approved and has no
+ * verification currently pending/reviewing, and only while the feature flag is on. The app shell
+ * shows at most one self-nudge at a time and picks the unvouched nudge first (§2AG Phase C UX), so
+ * the caller is expected to skip calling this when that one is already showing. Fails open to false
+ * on any error, including before migration 0036 seeds `identity_verification_enabled` (the setting
+ * loader's code-side default is `true`, so this still reflects live verification status even before
+ * that migration is applied).
+ */
+export const getViewerIdentityNudge = cache(async (): Promise<{ show: boolean }> => {
+  try {
+    const user = await getCachedUser();
+    if (!user) return { show: false };
+    const enabled = await loadSettingFlag('identity_verification_enabled', true);
+    if (!enabled) return { show: false };
+    const supabase = await createClient();
+    const { data: profileRow } = await supabase
+      .from('profiles')
+      .select('onboarded_at')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!(profileRow as { onboarded_at: string | null } | null)?.onboarded_at) {
+      return { show: false };
+    }
+    const { data: verificationRow } = await supabase
+      .from('identity_verifications')
+      .select('status')
+      .eq('user_id', user.id)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const status = (verificationRow as { status: string } | null)?.status ?? null;
+    if (status === 'approved' || status === 'pending' || status === 'reviewing') {
+      return { show: false };
+    }
+    return { show: true };
+  } catch {
+    return { show: false };
+  }
+});

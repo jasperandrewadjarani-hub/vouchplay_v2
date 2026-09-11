@@ -62,6 +62,13 @@ export const DEFAULT_SYSTEM_SETTINGS = {
 
   // Privacy (handover §13.3).
   identity_file_retention_days_after_decision: 30,
+  // Identity verification pipeline (master_plan §2AG Phase C). Staff-approved only, never
+  // auto-verified on upload (D1). Retention is the most privacy-protective default: the ID image is
+  // deleted on decision (approve or reject) by the review action; `identity_doc_retention_days` is
+  // only the pre-decision backstop (document_delete_after = submitted_at + N days) for the case
+  // staff never decide.
+  identity_verification_enabled: true,
+  identity_doc_retention_days: 7,
 
   // Safety & moderation abuse limits (handover §14, §11.3, §30.7). Rolling 24h windows.
   reports_per_24h: 10,

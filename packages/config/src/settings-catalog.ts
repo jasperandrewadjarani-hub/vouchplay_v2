@@ -386,6 +386,22 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     min: 1,
     max: 3650,
   },
+  {
+    key: 'identity_verification_enabled',
+    label: 'Identity verification enabled',
+    group: 'privacy',
+    kind: 'bool',
+    help: 'Feature flag for the identity verification pipeline (master_plan §2AG Phase C).',
+  },
+  {
+    key: 'identity_doc_retention_days',
+    label: 'Identity document backstop (days from submission)',
+    group: 'privacy',
+    kind: 'int',
+    min: 1,
+    max: 365,
+    help: 'Pre-decision backstop only - the ID image is deleted on decision either way.',
+  },
 
   // Safety
   {

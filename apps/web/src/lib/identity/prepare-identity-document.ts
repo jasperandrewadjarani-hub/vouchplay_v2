@@ -1,0 +1,68 @@
+import { PDFDocument } from 'pdf-lib';
+import {
+  normalizeUploadedImage,
+  ID_DOCUMENT_IMAGE_PROFILE,
+  type ImageUploadSource,
+} from '../images/normalize-upload-image';
+
+export type IdentityDocumentSource = ImageUploadSource;
+
+export type PreparedIdentityDocument =
+  | {
+      ok: true;
+      bytes: Uint8Array;
+      mimeType: 'image/webp' | 'application/pdf';
+      extension: 'webp' | 'pdf';
+    }
+  | {
+      ok: false;
+      error: 'empty' | 'too_large' | 'unsupported_type' | 'invalid_image' | 'invalid_pdf';
+    };
+
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Prepare an uploaded identity document for the private `identity-docs` bucket (master_plan §2AG
+ * Phase C, handover §13.3). Keeps a scanned PDF private and intact; normalizes an image document to
+ * a readable, bounded, metadata-free WebP - the same "keep documents private and intact" contract
+ * as `preparePaymentProof`, reused here rather than duplicated with different bytes.
+ */
+export async function prepareIdentityDocument(
+  source: IdentityDocumentSource,
+): Promise<PreparedIdentityDocument> {
+  if (!Number.isFinite(source.size) || source.size <= 0) return { ok: false, error: 'empty' };
+  if (source.size > MAX_DOCUMENT_BYTES) return { ok: false, error: 'too_large' };
+
+  if (source.type === 'application/pdf') {
+    try {
+      const bytes = new Uint8Array(await source.arrayBuffer());
+      if (new TextDecoder().decode(bytes.subarray(0, 5)) !== '%PDF-') {
+        return { ok: false, error: 'invalid_pdf' };
+      }
+      const document = await PDFDocument.load(bytes, {
+        ignoreEncryption: false,
+        updateMetadata: false,
+      });
+      if (document.getPageCount() < 1) return { ok: false, error: 'invalid_pdf' };
+      return { ok: true, bytes, mimeType: 'application/pdf', extension: 'pdf' };
+    } catch {
+      return { ok: false, error: 'invalid_pdf' };
+    }
+  }
+
+  const image = await normalizeUploadedImage(source, ID_DOCUMENT_IMAGE_PROFILE);
+  if (!image.ok) {
+    return {
+      ok: false,
+      error:
+        image.error === 'empty'
+          ? 'empty'
+          : image.error === 'source_too_large'
+            ? 'too_large'
+            : image.error === 'unsupported_type'
+              ? 'unsupported_type'
+              : 'invalid_image',
+    };
+  }
+  return image;
+}

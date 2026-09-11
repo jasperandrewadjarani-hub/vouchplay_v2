@@ -8,9 +8,15 @@ import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
 import { LegalConsentGate } from './legal/legal-consent-gate';
 import { SiteFooter } from './site-footer';
+import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
-import { getOptionalUser, getViewerReputationNudge, getViewerLegalStatus } from '@/lib/auth';
+import {
+  getOptionalUser,
+  getViewerReputationNudge,
+  getViewerLegalStatus,
+  getViewerIdentityNudge,
+} from '@/lib/auth';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -31,6 +37,10 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
   // have played with vouch for them (§2O). Skipped under maintenance gating.
   const nudge = gated ? { unvouched: false, slug: null } : await getViewerReputationNudge();
+  // Identity self-nudge (master_plan §2AG Phase C, D2): only one self-nudge strip is ever visible at
+  // a time, and the unvouched nudge wins when both would otherwise show - so this is skipped
+  // entirely whenever that one is already showing.
+  const identityNudge = gated || nudge.unvouched ? { show: false } : await getViewerIdentityNudge();
   // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
   // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
   const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
@@ -113,6 +123,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
+      {identityNudge.show && !gated && <IdentityNudgeBanner />}
       <div className="mx-auto flex w-full max-w-6xl">
         <Sidebar />
         <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">

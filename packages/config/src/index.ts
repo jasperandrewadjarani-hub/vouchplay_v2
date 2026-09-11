@@ -13,6 +13,6 @@ export * from './settings-catalog';
 export * from './brand';
 export * from './legal';
 export * from './visibility';
-export * from './geo';
+export * from './ph-cities';
 export * from './moderation';
 export * from './achievements';

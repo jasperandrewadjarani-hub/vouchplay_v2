@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.60
+# VouchPlay Master Product & Code Execution Handover v1.61
 
-_(File retains its `…v1.1.md` name; content is v1.60 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.61 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6202,6 +6202,29 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.61 (2026-09-11)
+
+_Cities canonicalized (Phase B) + identity-verification pipeline (Phase C) of the §2AG batch.
+Migration 0036 (private bucket + settings); one-time city data fix applied. Handover §13.3 identity
+flow now implemented._
+
+- **Cities (Phase B).** New canonical `PH_CITIES` list (150 places) + pure idempotent `normalizeCity()`
+  in `@vouchplay/config`; the profile city field is a native `<datalist>` autocomplete (zero-JS, free
+  text still allowed) and every save normalizes on write. A one-time fix canonicalized 179 of 367 live
+  profiles (36 spellings to 14; Zamboanga's 8 spellings to "Zamboanga City"), reversible from a saved
+  backup; 2 test rows nulled.
+- **Identity verification (Phase C).** Staff-approved (NEVER auto on upload, so a fake account cannot
+  self-anchor under STS_V2). Me -> Settings -> "Verify my identity": requires a profile photo, then
+  upload one ID image to a PRIVATE `identity-docs` bucket (migration 0036, owner/staff-only RLS).
+  Staff -> Moderation -> Identity queue: a 5-minute staff-only signed URL to view, Approve/Reject with
+  reason. On decision the image is DELETED (only the outcome kept); `document_delete_after` is a
+  pre-decision backstop. Approval auto-lights the "ID Verified" badge AND makes the player a V2 trust
+  anchor (both already key off status=approved). A dismissible self-nudge (one nudge at a time) and an
+  own-profile "ID pending review" chip. Flags: `identity_verification_enabled`,
+  `identity_doc_retention_days`. Fails open until 0036 is applied.
+- **Privacy/legal:** no ID image ever reaches a non-staff client; deleted on decision. Counsel still
+  owes the Privacy Policy wording on identity processing + retention (flagged, not a code blocker).
 
 ## v1.60 (2026-09-11)
 

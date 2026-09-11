@@ -8,6 +8,7 @@ import type {
   SupportTicketRow,
   FraudFlagRow,
   FraudStatus,
+  IdentityVerificationStatus,
 } from '@vouchplay/db';
 
 /**
@@ -325,6 +326,76 @@ export async function listSupportTickets(includeResolved = false): Promise<Suppo
   }));
 }
 
+// ---------------------------------------------------------------------------
+// Identity verification queue (master_plan §2AG Phase C, handover §13.3). Staff-only (page-guarded).
+// NEVER returns the document storage path to the client - the signed URL is fetched on demand by
+// the panel via the staff-gated `getIdentityDocSignedUrl` action, not read here.
+// ---------------------------------------------------------------------------
+const OPEN_IDENTITY = ['pending', 'reviewing'];
+
+export interface IdentityQueueItem {
+  id: string;
+  userId: string;
+  subject: { slug: string | null; name: string; hasAvatar: boolean };
+  documentType: string | null;
+  submittedAt: string;
+  status: IdentityVerificationStatus;
+}
+
+/** Pending/reviewing identity verifications, newest first, staff-only (page-guarded). */
+export async function loadIdentityQueue(): Promise<IdentityQueueItem[]> {
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('identity_verifications')
+    .select('id, user_id, document_type, status, submitted_at')
+    .in('status', OPEN_IDENTITY)
+    .order('submitted_at', { ascending: false })
+    .limit(100);
+  const rows = (data ?? []) as {
+    id: string;
+    user_id: string;
+    document_type: string | null;
+    status: IdentityVerificationStatus;
+    submitted_at: string;
+  }[];
+  if (rows.length === 0) return [];
+
+  const userIds = Array.from(new Set(rows.map((r) => r.user_id)));
+  const { data: profileRows } = await svc
+    .from('profiles')
+    .select('id, first_name, last_name, nickname, slug, avatar_path')
+    .in('id', userIds)
+    .limit(1000);
+  const profileById = new Map(
+    (
+      (profileRows ?? []) as {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+        nickname: string | null;
+        slug: string | null;
+        avatar_path: string | null;
+      }[]
+    ).map((p) => [p.id, p]),
+  );
+
+  return rows.map((row) => {
+    const p = profileById.get(row.user_id);
+    const name =
+      [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
+      p?.nickname ||
+      'VouchPlay player';
+    return {
+      id: row.id,
+      userId: row.user_id,
+      subject: { slug: p?.slug ?? null, name, hasAvatar: !!p?.avatar_path },
+      documentType: row.document_type,
+      submittedAt: row.submitted_at,
+      status: row.status,
+    };
+  });
+}
+
 export interface ModerationCounts {
   reports: number;
   skillReviews: number;
@@ -332,32 +403,38 @@ export interface ModerationCounts {
   supportTickets: number;
   clubs: number;
   roleApps: number;
+  identity: number;
 }
 
 export async function getModerationCounts(): Promise<ModerationCounts> {
   const svc = createServiceClient();
-  const [reports, skillReviews, fraudFlags, supportTickets, clubs, roleApps] = await Promise.all([
-    svc.from('reports').select('id', { count: 'exact', head: true }).in('status', OPEN_REPORT),
-    svc
-      .from('skill_reviews')
-      .select('id', { count: 'exact', head: true })
-      .in('status', OPEN_REVIEW),
-    svc.from('fraud_flags').select('id', { count: 'exact', head: true }).in('status', OPEN_FLAG),
-    svc
-      .from('support_tickets')
-      .select('id', { count: 'exact', head: true })
-      .in('status', OPEN_TICKET),
-    svc
-      .from('clubs')
-      .select('id', { count: 'exact', head: true })
-      .eq('verification_status', 'pending')
-      .neq('activity_status', 'deleted'),
-    svc
-      .from('role_applications')
-      .select('id', { count: 'exact', head: true })
-      .eq('role_requested', 'organizer')
-      .in('status', ['pending', 'reviewing']),
-  ]);
+  const [reports, skillReviews, fraudFlags, supportTickets, clubs, roleApps, identity] =
+    await Promise.all([
+      svc.from('reports').select('id', { count: 'exact', head: true }).in('status', OPEN_REPORT),
+      svc
+        .from('skill_reviews')
+        .select('id', { count: 'exact', head: true })
+        .in('status', OPEN_REVIEW),
+      svc.from('fraud_flags').select('id', { count: 'exact', head: true }).in('status', OPEN_FLAG),
+      svc
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .in('status', OPEN_TICKET),
+      svc
+        .from('clubs')
+        .select('id', { count: 'exact', head: true })
+        .eq('verification_status', 'pending')
+        .neq('activity_status', 'deleted'),
+      svc
+        .from('role_applications')
+        .select('id', { count: 'exact', head: true })
+        .eq('role_requested', 'organizer')
+        .in('status', ['pending', 'reviewing']),
+      svc
+        .from('identity_verifications')
+        .select('id', { count: 'exact', head: true })
+        .in('status', OPEN_IDENTITY),
+    ]);
   return {
     reports: reports.count ?? 0,
     skillReviews: skillReviews.count ?? 0,
@@ -365,6 +442,7 @@ export async function getModerationCounts(): Promise<ModerationCounts> {
     supportTickets: supportTickets.count ?? 0,
     clubs: clubs.count ?? 0,
     roleApps: roleApps.count ?? 0,
+    identity: identity.count ?? 0,
   };
 }
 

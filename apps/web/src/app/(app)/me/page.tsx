@@ -121,6 +121,7 @@ export default async function MePage({
       <nav className="border-border bg-surface divide-border divide-y rounded-2xl border text-sm">
         <SettingsLink href="/me/blocked" label="Blocked users" />
         <SettingsLink href="/me/support" label="Support & appeals" />
+        <SettingsLink href="/me/settings/identity" label="Verify my identity" />
         <SettingsLink href="/me/settings/privacy" label="Privacy & leaderboard visibility" />
         <SettingsLink href="/me/settings/notifications" label="Notification preferences" />
         <SettingsLink href="/me/settings/security" label="Security & two-factor" />

@@ -5,6 +5,7 @@ import {
   UserSearch,
   GraduationCap,
   Trophy,
+  Clock,
 } from 'lucide-react';
 import type { SkillBand } from '@vouchplay/config';
 
@@ -96,6 +97,23 @@ export function NewBadge() {
       title="Joined recently"
     >
       New
+    </span>
+  );
+}
+
+/**
+ * Own-profile-only chip (master_plan §2AG Phase C): a submitted identity verification is waiting on
+ * staff review. Never rendered for anyone but the player themself - the caller gates this, the chip
+ * itself carries no privacy logic - and never reveals the document.
+ */
+export function PendingIdentityBadge() {
+  return (
+    <span
+      className={`${chip} border-border bg-surface text-foreground-muted border`}
+      title="Only you can see this - your ID is waiting for staff review"
+    >
+      <Clock size={12} aria-hidden />
+      ID pending review
     </span>
   );
 }

@@ -7,6 +7,7 @@ import {
   getPlayerMetaBySlug,
   getPlayerComments,
   getViewerVouchState,
+  hasPendingIdentityVerification,
 } from '@/lib/players/queries';
 import { hasViewerBlocked } from '@/lib/moderation/enforcement';
 import { publicEnv } from '@/lib/env';
@@ -26,6 +27,7 @@ import {
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
   NewBadge,
+  PendingIdentityBadge,
 } from '@/components/players/badges';
 import {
   SkillDistribution,
@@ -87,15 +89,25 @@ export default async function PlayerProfilePage({ params }: Params) {
   if (!player) notFound();
 
   const comments = await getPlayerComments(player.id);
-  const [skillTags, achievements, history, contribution, vouchSettings, heldVouchCount] =
-    await Promise.all([
-      getPlayerSkillTags(player.id, viewer.viewerId),
-      getPlayerAchievements(player.id, viewer.viewerId),
-      getPlayerHistory(player.id),
-      getContributionProgress(player.id),
-      getVouchSettings(),
-      countHeldVouchesForTarget(player.id),
-    ]);
+  const [
+    skillTags,
+    achievements,
+    history,
+    contribution,
+    vouchSettings,
+    heldVouchCount,
+    identityPending,
+  ] = await Promise.all([
+    getPlayerSkillTags(player.id, viewer.viewerId),
+    getPlayerAchievements(player.id, viewer.viewerId),
+    getPlayerHistory(player.id),
+    getContributionProgress(player.id),
+    getVouchSettings(),
+    countHeldVouchesForTarget(player.id),
+    // Own-profile-only, cheap bounded read (master_plan §2AG Phase C); never shown on anyone
+    // else's profile and never exposes the document itself.
+    player.isOwnProfile ? hasPendingIdentityVerification(player.id) : Promise.resolve(false),
+  ]);
   const authed = viewer.viewerId !== null;
   const iBlocked =
     authed && !player.isOwnProfile
@@ -204,7 +216,8 @@ export default async function PlayerProfilePage({ params }: Params) {
           player.isOrganizer ||
           player.lookingForPartner ||
           player.openForSponsorship ||
-          player.isNew) && (
+          player.isNew ||
+          (player.isOwnProfile && identityPending)) && (
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {player.identityVerified && <IdentityVerifiedBadge />}
             {player.skillVerified && <SkillVerifiedBadge />}
@@ -213,6 +226,9 @@ export default async function PlayerProfilePage({ params }: Params) {
             {player.lookingForPartner && <LookingForPartnerBadge />}
             {player.openForSponsorship && <OpenForSponsorshipBadge />}
             {player.isNew && <NewBadge />}
+            {/* Own-profile-only chip (master_plan §2AG Phase C) - never rendered for a viewer other
+                than the player themself, and never reveals the document. */}
+            {player.isOwnProfile && identityPending && <PendingIdentityBadge />}
           </div>
         )}
 

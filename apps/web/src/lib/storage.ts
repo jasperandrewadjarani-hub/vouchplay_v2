@@ -10,6 +10,13 @@ export const PAYMENT_PROOFS_BUCKET = 'payment-proofs';
 export const ROLE_EVIDENCE_BUCKET = 'role-evidence';
 
 /**
+ * PRIVATE identity-verification document bucket (handover §13.3, §38; master_plan §2AG Phase C;
+ * created in migration 0036). Never a public URL - staff-only 5-minute signed URLs, and the object
+ * is deleted the moment a reviewer decides (approve or reject).
+ */
+export const IDENTITY_DOCS_BUCKET = 'identity-docs';
+
+/**
  * Resolve a stored avatar path to a public URL. Avatars live in a PUBLIC bucket, so the URL is
  * derived without a network call. Returns null when there is no avatar (caller renders initials).
  * A value that is already an absolute URL (e.g. a Google profile photo) is returned unchanged.

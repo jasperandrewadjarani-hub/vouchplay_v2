@@ -1,9 +1,14 @@
 import { z } from 'zod';
+import { normalizeCity } from '@vouchplay/config';
 
 /**
  * Profile onboarding (handover §7.3). Required: first/last name, nickname, sex, self-rated skill.
  * City is required for the V1 launch region (Admin can relax later). self_rated_skill is a canonical
  * skill-band ordinal 0..6 (§3.1 - order is LOCKED; mirrored in @vouchplay/config SKILL_BANDS).
+ *
+ * City (master_plan §2AG Phase B): `normalizeCity` runs in the transform so every NEW save (onboarding
+ * AND edit, both go through `onboardingSchema`) stores the canonical PH spelling - free text is still
+ * accepted, `normalizeCity` never blanks or drops an unrecognised place.
  */
 
 export const SEX_VALUES = ['male', 'female'] as const;
@@ -18,7 +23,12 @@ export const onboardingSchema = z.object({
     .int()
     .min(0, 'Select your skill level')
     .max(6, 'Invalid skill level'),
-  city: z.string().trim().min(1, 'City is required').max(80),
+  city: z
+    .string()
+    .trim()
+    .min(1, 'City is required')
+    .max(80)
+    .transform((city) => normalizeCity(city)),
   facebookUrl: z.string().trim().url('Enter a valid URL').max(300).optional().or(z.literal('')),
   bio: z.string().trim().max(300).optional().or(z.literal('')),
   // Player availability flags (§2L). Set by the player; read by the directory badge and filter.

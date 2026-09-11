@@ -2734,3 +2734,26 @@ divisions prop renamed to eligibilityDivisions, new divisions=capacity array.
 
 Gates: typecheck, lint (migration guard OK), 489 tests (236 web / 232 core / 21 config), format - green.
 Deferred: Phase B cities (mapping CSV sign-off), Phase C identity pipeline (counsel on ID retention).
+
+## 2026-09-11 - §2AG Phase B (cities) + Phase C (identity) - built, gates green
+
+Phase B: @vouchplay/config ph-cities.ts (PH_CITIES 150 + idempotent normalizeCity, never blanks),
+validation profile.ts normalize-on-save, onboarding/edit <datalist> autocomplete, city report script.
+Deleted dead geo.ts (only exported PH_CITIES, no other importers). Applied one-time DML via
+scripts/apply-city-normalization.ts (vite-node, real normalizeCity): 179/367 profiles canonicalized,
+2 test rows nulled, 36->14 distinct city strings (Zamboanga City x326 etc.). Reversible:
+working/city-backup-2026-09-11.csv. Mapping: working/city-mapping + city-normalization CSVs.
+
+Phase C: identity_verifications table already complete (0001) - only added private identity-docs
+bucket + RLS (migration 0036 + apply-0036.sql, PENDING Jasper SQL editor) + settings
+identity_verification_enabled/identity_doc_retention_days. actions/identity.ts (submit requires
+avatar+ID per D1; getIdentityDocSignedUrl staff-only 5min; reviewIdentityVerification staff approve/
+reject, DELETES image on decision, keeps decision row). Me->Settings->Verify identity page + form;
+Staff->Moderation Identity queue/panel; app-shell self-nudge (one-at-a-time, snooze 7d); own-profile
+pending chip. Badge + STS_V2 anchor auto-activate on status=approved (existing logic). Fails open
+until 0036. Privacy: image never reaches non-staff, deleted on decision; counsel owes Privacy Policy
+wording (flagged).
+
+Gates: typecheck, lint (migration guard OK), 563 tests (241 web/232 core/85 config/5 validation),
+format - green. Deferred: document_delete_after sweeper job (later phase).
+JASPER TODO: apply scripts/apply-0036.sql (bucket+RLS+2 settings); then push.

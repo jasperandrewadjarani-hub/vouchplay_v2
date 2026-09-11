@@ -3175,7 +3175,7 @@ calm pills, never red; nothing exposes voucher identity or STS internals.
 
 ### Phase A - SHIPPED 2026-09-11 (handover v1.60)
 
-A1-A5 built and deployed. Sorts (staff-only STS), pagination persistence, dual-range sliders (STS / vouches received / vouches given), "New" badge+filter (`new_account_badge_days`=7, seeded live), compact-row coach icon, tournament filter (server-gated), and organizer combinable filters + capacity strip + column sort. `scripts/apply-0035.sql` is the reproducible seed. Phases B (cities) and C (identity) still pending their sign-offs.
+A1-A5 built and deployed. Sorts (staff-only STS), pagination persistence, dual-range sliders (STS / vouches received / vouches given), "New" badge+filter (`new_account_badge_days`=7, seeded live), compact-row coach icon, tournament filter (server-gated), and organizer combinable filters + capacity strip + column sort. `scripts/apply-0035.sql` is the reproducible seed. Phases B (cities) and C (identity) SHIPPED 2026-09-11 (handover v1.61): normalizeCity + PH_CITIES autocomplete + one-time data fix (36->14 city strings, reversible backup); identity pipeline (private identity-docs bucket migration 0036, staff-approved, 5-min signed URLs, delete-on-decision, badge+V2-anchor on approval). Migration 0036 pending Jasper SQL-editor apply; app fails open until then.
 
 ### Deferred / not in this batch
 
