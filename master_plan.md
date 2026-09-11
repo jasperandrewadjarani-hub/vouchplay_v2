@@ -3470,9 +3470,12 @@ Men 1. All 28 have a `payment_submitted` event carrying the submitter's id, so "
    small heading + a list; no clutter.
 2. **Backfill = a reusable organizer button, not a throwaway script.** SMTP only runs in the deployed
    Vercel runtime (creds are not local), and a button is the cleanest trigger and reusable for any
-   tournament. Manage → Payment: "Email {N} uploaded receipts to {address}" with a confirm dialog (a
-   bulk external send), then an inline result. It sends only receipts **not yet emailed**, so it is
-   safe to tap and safe to re-tap.
+   tournament. It lives in its **own "Payment notifications" Manage section** (NOT buried inside the
+   Details form, where the first cut hid it and Jasper could not find it) - the section auto-opens when
+   receipts are still pending, so the "Email {N} uploaded receipts to {address}" button (with a confirm
+   step, a bulk external send) is the first thing the organizer sees. It sends only receipts **not yet
+   emailed**, so it is safe to tap and safe to re-tap. The email address itself stays a setting under
+   Details → Payment.
 3. **Idempotency so Kathrina is never double-emailed** (migration `0039`): `payments.notification_sent_at`.
    The backfill targets only rows where it is null; a successful send stamps it. The going-forward
    `notifyPaymentReceiptUploaded` also stamps it, and a fresh (re)submission clears it so a resubmitted

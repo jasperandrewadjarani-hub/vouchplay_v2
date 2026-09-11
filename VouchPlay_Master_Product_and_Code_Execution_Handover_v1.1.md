@@ -2535,10 +2535,10 @@ deviation) to that address:
 **Running summary + backfill (v1.65, master_plan §2AL).** Every notification email carries, below the
 payment details, a live "Paid teams so far — {total}" line plus a per-division breakdown. A *paid team*
 is an active registration (status not `withdrawn`/`rejected`) with a stored receipt and payment status
-`submitted`/`verified`. A reusable **Manage → Payment button** emails the notification for every such
-receipt that has not been emailed yet (`payments.notification_sent_at IS NULL`, migration `0039`) -
-confirm dialog, concurrency-limited, audited; used once to backfill the receipts uploaded before the
-feature existed. `notification_sent_at` is stamped on each successful send and cleared on a fresh
+`submitted`/`verified`. A reusable button in its own **"Payment notifications" Manage section**
+(auto-opens when receipts are pending) emails the notification for every such receipt that has not been
+emailed yet (`payments.notification_sent_at IS NULL`, migration `0039`) - confirm dialog,
+concurrency-limited, audited; used once to backfill the receipts uploaded before the feature existed. `notification_sent_at` is stamped on each successful send and cleared on a fresh
 (re)submission, so no address is ever double-emailed.
 
 ## 24.5 Future Gateway

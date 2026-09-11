@@ -167,6 +167,35 @@ export default async function ManageTournamentPage({ params }: Params) {
         />
       </ManageSection>
 
+      {/* Payment notifications (§2AK/§2AL) as its own visible section - the receipt-email actions were
+          buried inside the Details form, where an organizer could not find them. Auto-opens when there
+          are uploaded receipts still to email, so the backfill is the first thing the organizer sees. */}
+      <ManageSection title="Payment notifications" defaultOpen={pendingReceiptCount > 0}>
+        {t.paymentNotificationEmail ? (
+          <div className="space-y-3">
+            <p className="text-foreground-muted text-sm">
+              Every uploaded payment receipt is emailed to{' '}
+              <span className="text-foreground font-medium">{t.paymentNotificationEmail}</span>.
+              Change the address in{' '}
+              <span className="text-foreground font-medium">Details → Payment</span>.
+            </p>
+            <PaymentReceiptBackfillButton
+              tournamentId={t.id}
+              pendingCount={pendingReceiptCount}
+              email={t.paymentNotificationEmail}
+            />
+            <PaymentNotificationTestButton tournamentId={t.id} />
+          </div>
+        ) : (
+          <p className="text-foreground-muted text-sm">
+            No receipt notifications yet. Add an email under{' '}
+            <span className="text-foreground font-medium">Details → Payment</span> (&ldquo;Send
+            receipt notifications to&rdquo;) to email every uploaded receipt to whoever checks the
+            bank account.
+          </p>
+        )}
+      </ManageSection>
+
       <ManageSection title="Export">
         <TournamentExport slug={slug} />
       </ManageSection>
@@ -181,16 +210,6 @@ export default async function ManageTournamentPage({ params }: Params) {
           submitLabel="Save details"
           refreshOnSuccess
           emailDeliveryReady={emailChannelEnabled()}
-          testButton={
-            <>
-              <PaymentNotificationTestButton tournamentId={t.id} />
-              <PaymentReceiptBackfillButton
-                tournamentId={t.id}
-                pendingCount={pendingReceiptCount}
-                email={t.paymentNotificationEmail ?? ''}
-              />
-            </>
-          }
           initial={{
             name: t.name,
             city: t.city ?? '',
