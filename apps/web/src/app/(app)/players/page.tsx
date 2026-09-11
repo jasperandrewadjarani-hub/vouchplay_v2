@@ -126,6 +126,11 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // (D3, §8.4) - a non-staff request for it is silently coerced back to the public default.
   const filters: PlayerFilters = parsePlayerFilters(sp, { staff: viewer.isStaff });
   const authed = viewer.viewerId !== null;
+  // Guest teaser order (master_plan §2AH): a signed-out visitor sees the first 10 by MOST VOUCHED, so
+  // the preview shows real, well-established players rather than empty new profiles. Signed-in users
+  // keep the "New & unvouched first" default (and their own chosen sort); a guest has no sort control
+  // anyway, so this only ever sets what the ten preview cards are.
+  if (!authed) filters.sort = 'most_vouched';
   // Compact is the default directory view (§1S): a directory is for scanning names, and the
   // detailed card spends a whole screen on three players. Detailed keeps its existing URL. Anonymous
   // visitors get the fixed compact preview (master_plan §2AH) - the view toggle is hidden for them,

@@ -2778,3 +2778,14 @@ Trade-off flagged: profiles/clubs now non-public → shared links funnel to sign
 renders via generateMetadata); dampens profile SEO/viral sharing - deliberate funnel cost. Tournaments
 stay public as the hook. Deferred: conversion analytics, continue-as-guest cookie, blur-teaser style.
 Executor (1x Sonnet) building; gates+deploy after.
+
+## 2026-09-11 - Guest players preview = most-vouched (§2AH follow-up)
+players/page.tsx: for anon (!authed) force filters.sort='most_vouched' so the 10-card guest teaser
+shows established players, not empty new accounts. Signed-in users unchanged (keep new_unvouched
+default + their own sort). One line; most_vouched is a public sort (no staff gate). Gates + deploy.
+
+## 2026-09-11 - Guest Home = Community + Clubs top 3, then signup prompt (§2AH follow-up)
+home/page.tsx: anon Home now = hero -> Community Champions top 3 -> Top clubs top 3 -> SignupWall.
+Players board, momentum, RankingsExplanation, and feature cards hidden for guests. Community + clubs
+fetched at limit 3 for guests (players read skipped). Signed-in Home fully unchanged. Bundled with the
+guest players preview=most_vouched tweak. Gates + one deploy.

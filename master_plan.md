@@ -3196,11 +3196,11 @@ favour of a gated-preview funnel - a deliberate product decision (see the trade-
 |---|---|---|
 | **Tournaments list** `/tournaments` (the front door) | First page of tournament cards | Pagination hidden; Register already routes to signup (`register-cta.tsx`); a slim "create a free account" banner |
 | **Tournament detail** `/tournaments/[slug]` | Full detail (the conversion surface - entices registration) | Register → signup (unchanged) |
-| **Players list** `/players` | First **10** cards, compact | Search, filters, sort, view toggle, availability card, pagination all hidden; each card links to signup; a `SignupWall` below the 10: "Sign up to search {total}+ players and open profiles" |
+| **Players list** `/players` | First **10** cards, compact, ordered MOST VOUCHED (guest teaser shows established players, not empty new profiles; signed-in users keep the New & unvouched default) | Search, filters, sort, view toggle, availability card, pagination all hidden; each card links to signup; a `SignupWall` below the 10: "Sign up to search {total}+ players and open profiles" |
 | **Player profile** `/players/[slug]` | Nothing | Redirect to `/signup?next=/players/{slug}` (OG metadata still computes, so a shared link's preview card is intact and the click lands on signup) |
 | **Clubs list** `/clubs` | Nothing (no club data fetched) | A full `SignupWall`: "Sign up to discover clubs" |
 | **Club detail** `/clubs/[slug]` | Nothing | Redirect to `/signup?next=/clubs/{slug}` |
-| **Home** `/home` | Leaderboards | Every leaderboard entry's profile link → `/signup?next=/players/{slug}` (can look, can't open a profile) |
+| **Home** `/home` | Community Champions top 3 + Clubs top 3 only, then a signup prompt (players board, momentum, product cards hidden for guests) | Entry links prompt signup |
 | **Leaderboards** `/leaderboards` | The boards | Same entry-link gating as Home (same panel) |
 
 ### Mechanism (few, central changes)

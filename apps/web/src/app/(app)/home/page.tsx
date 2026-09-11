@@ -9,6 +9,7 @@ import {
   MomentumCard,
   RankingsExplanation,
 } from '@/components/leaderboards/leaderboard-panel';
+import { SignupWall } from '@/components/ui/signup-wall';
 
 export default async function HomePage() {
   const user = await getOptionalUser();
@@ -20,19 +21,21 @@ export default async function HomePage() {
       return { board: null, error: true };
     }
   };
+  const empty = { board: null, error: false } as const;
+  // Guest Home (master_plan §2AH): a signed-out visitor sees the Community Champions top 3 and the
+  // Clubs top 3, then a signup prompt - the players board, momentum and the product cards are for
+  // members. So for a guest we fetch community + clubs at limit 3 and skip the players read (egress).
+  const homeBoardLimit = user ? settings.homeLimit : 3;
   const [players, community, clubs, momentum] = settings.enabled
     ? await Promise.all([
-        safeBoard(getLeaderboard('players', 'global', null, 'all_time', settings.homeLimit)),
-        safeBoard(getLeaderboard('community', 'global', null, 'all_time', settings.homeLimit)),
-        safeBoard(getLeaderboard('clubs', 'global', null, 'all_time', settings.homeLimit)),
+        user
+          ? safeBoard(getLeaderboard('players', 'global', null, 'all_time', settings.homeLimit))
+          : Promise.resolve(empty),
+        safeBoard(getLeaderboard('community', 'global', null, 'all_time', homeBoardLimit)),
+        safeBoard(getLeaderboard('clubs', 'global', null, 'all_time', homeBoardLimit)),
         user ? getMyMomentum(user.id).catch(() => []) : Promise.resolve([]),
       ])
-    : [
-        { board: null, error: false },
-        { board: null, error: false },
-        { board: null, error: false },
-        [],
-      ];
+    : [empty, empty, empty, []];
 
   return (
     <div className="space-y-6">
@@ -98,61 +101,93 @@ export default async function HomePage() {
             </div>
           </section>
 
-          {/* Everything else, clearly secondary. */}
-          <section className="space-y-3" aria-labelledby="home-more-rankings-title">
-            <h2
-              id="home-more-rankings-title"
-              className="text-foreground-muted vp-label flex items-center gap-2"
-            >
-              More rankings
-            </h2>
-            <LeaderboardPanel
-              board={clubs.board}
-              authed={Boolean(user)}
-              error={clubs.error}
-              category="clubs"
-              paused={settings.paused.clubs}
-              compact
-              viewerId={user?.id ?? null}
-              hideSubtitle
-            />
-            <LeaderboardPanel
-              board={players.board}
-              authed={Boolean(user)}
-              error={players.error}
-              category="players"
-              paused={settings.paused.players}
-              compact
-              viewerId={user?.id ?? null}
-              hideSubtitle
-            />
-            {/* Below the boards, not above them: the middle of Home belongs to the community, and
-                this is where you stand in it (§1T). Collapsed, with the rank still in the summary. */}
-            {user && <MomentumCard rows={momentum} />}
-            <RankingsExplanation />
-          </section>
+          {/* Guests get the Clubs top 3 too, then a signup prompt (master_plan §2AH); the players
+              board, momentum and the explainer are for members. Signed-in visitors keep the full
+              "More rankings" section unchanged. */}
+          {user ? (
+            <section className="space-y-3" aria-labelledby="home-more-rankings-title">
+              <h2
+                id="home-more-rankings-title"
+                className="text-foreground-muted vp-label flex items-center gap-2"
+              >
+                More rankings
+              </h2>
+              <LeaderboardPanel
+                board={clubs.board}
+                authed
+                error={clubs.error}
+                category="clubs"
+                paused={settings.paused.clubs}
+                compact
+                viewerId={user.id}
+                hideSubtitle
+              />
+              <LeaderboardPanel
+                board={players.board}
+                authed
+                error={players.error}
+                category="players"
+                paused={settings.paused.players}
+                compact
+                viewerId={user.id}
+                hideSubtitle
+              />
+              {/* Below the boards, not above them: the middle of Home belongs to the community, and
+                  this is where you stand in it (§1T). Collapsed, with the rank still in the summary. */}
+              <MomentumCard rows={momentum} />
+              <RankingsExplanation />
+            </section>
+          ) : (
+            <section className="space-y-3" aria-label="Top clubs">
+              <h2 className="text-foreground-muted vp-label flex items-center gap-2">Top clubs</h2>
+              <LeaderboardPanel
+                board={clubs.board}
+                authed={false}
+                error={clubs.error}
+                category="clubs"
+                paused={settings.paused.clubs}
+                compact
+                hideSubtitle
+              />
+            </section>
+          )}
         </>
       )}
 
+      {/* Guest signup prompt, right below the two spotlight boards (master_plan §2AH). */}
+      {!user && (
+        <SignupWall
+          title="See everyone, and join in"
+          message="Create a free account to see the full rankings, discover players and clubs, and build your own trusted profile."
+          next="/home"
+        />
+      )}
+
       {/* What you can do, after the proof rather than before it: the cards describe the product, the
-          board demonstrates it, and evidence persuades a newcomer more than a description (§1R). */}
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="What you can do here">
-        <FeatureCard
-          icon={<Users size={18} aria-hidden />}
-          title="Discover players"
-          body="Find people to play with by skill, city, and role."
-        />
-        <FeatureCard
-          icon={<ShieldCheck size={18} aria-hidden />}
-          title="Build trust"
-          body="Share real vouches from players and coaches who know your game."
-        />
-        <FeatureCard
-          icon={<Trophy size={18} aria-hidden />}
-          title="Play more"
-          body="Join clubs and register for tournaments when they open."
-        />
-      </section>
+          board demonstrates it, and evidence persuades a newcomer more than a description (§1R). For a
+          guest, Home ends at the signup prompt above (§2AH), so these member-oriented cards are hidden. */}
+      {user && (
+        <section
+          className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          aria-label="What you can do here"
+        >
+          <FeatureCard
+            icon={<Users size={18} aria-hidden />}
+            title="Discover players"
+            body="Find people to play with by skill, city, and role."
+          />
+          <FeatureCard
+            icon={<ShieldCheck size={18} aria-hidden />}
+            title="Build trust"
+            body="Share real vouches from players and coaches who know your game."
+          />
+          <FeatureCard
+            icon={<Trophy size={18} aria-hidden />}
+            title="Play more"
+            body="Join clubs and register for tournaments when they open."
+          />
+        </section>
+      )}
     </div>
   );
 }
