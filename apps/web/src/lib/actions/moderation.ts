@@ -16,7 +16,7 @@ import { notify } from '@/lib/notifications/create';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
 import { CLUBS_LIST_TAG, clubTag } from '@/lib/clubs/queries';
 import { listActiveVouchesForModeration, type ModerationVouch } from '@/lib/moderation/queries';
-import { isHoldFlagType, isHoldReason } from '@/lib/vouches/hold-reasons';
+import { ACCOUNT_DISABLED_PREFIX, isHoldFlagType, isHoldReason } from '@/lib/vouches/hold-reasons';
 import type { SafetyActionState } from './report';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -619,10 +619,146 @@ export async function loadActiveVouchesForTarget(targetId: string): Promise<Mode
 }
 
 // ---------------------------------------------------------------------------
-// Account actions (§47) - warn / restrict vouching / restrict account / suspend / ban / lift.
+// Disabled-account vouch retraction, reversibly (master_plan §2AN decision 4). A troll's given vouches
+// stayed active at full weight forever once suspended/banned before this - only NEW vouches were
+// blocked. `retractVouchesForDisabledAccount` runs from `applyAccountAction` on suspend/ban/deactivate;
+// `reinstateVouchesForRestoredAccount` runs on `lift_status`, undoing exactly that (a moderator's
+// separate for-cause invalidation of one of those vouches, in the meantime, is left alone). Neither
+// touches content (comments) - deferred (§2AN "Better suggestions ... deferred"). Both best-effort:
+// never throw into the caller, and return a count so the action's success message can report it.
+// ---------------------------------------------------------------------------
+
+/** Every ACTIVE vouch GIVEN by `userId` is retracted (`status='invalidated'`) with a reversible,
+ *  non-hold `account_disabled:<status>` reason (§2AN decision 4). Bounded to 1000 vouches. */
+export async function retractVouchesForDisabledAccount(
+  userId: string,
+  status: string,
+  actorId: string,
+): Promise<{ retracted: number }> {
+  const svc = createServiceClient();
+  try {
+    const { data: rows } = await svc
+      .from('vouches')
+      .select('id, target_id')
+      .eq('voucher_id', userId)
+      .eq('status', 'active')
+      .limit(1000);
+    const active = (rows ?? []) as { id: string; target_id: string }[];
+    if (active.length === 0) return { retracted: 0 };
+
+    const reason = `${ACCOUNT_DISABLED_PREFIX}${status}`;
+    const targets = new Set<string>();
+    let retracted = 0;
+
+    for (const v of active) {
+      const { error } = await svc
+        .from('vouches')
+        .update({ status: 'invalidated', invalidated_by: actorId, invalidation_reason: reason })
+        .eq('id', v.id);
+      if (error) continue;
+      await svc.from('vouch_revisions').insert({
+        vouch_id: v.id,
+        changed_by: actorId,
+        change_type: 'invalidated',
+      });
+      targets.add(v.target_id);
+      retracted += 1;
+    }
+
+    for (const targetId of targets) await recomputePlayerSkillProfile(targetId);
+    await recomputePlayerContribution(userId);
+    if (retracted > 0) {
+      await writeAudit({
+        actorId,
+        action: 'moderation.account.vouches_retracted',
+        entityType: 'profile',
+        entityId: userId,
+        after: { count: retracted },
+        reason,
+      });
+    }
+    return { retracted };
+  } catch {
+    return { retracted: 0 };
+  }
+}
+
+/** Reinstates exactly the vouches the retraction above quarantined for `userId`, skipping any target
+ *  pair that already gained a newer active vouch in the meantime (§2AN decision 4). Bounded to 1000. */
+export async function reinstateVouchesForRestoredAccount(
+  userId: string,
+  actorId: string,
+): Promise<{ reinstated: number }> {
+  const svc = createServiceClient();
+  try {
+    const { data: rows } = await svc
+      .from('vouches')
+      .select('id, target_id, invalidation_reason')
+      .eq('voucher_id', userId)
+      .eq('status', 'invalidated')
+      .like('invalidation_reason', `${ACCOUNT_DISABLED_PREFIX}%`)
+      .limit(1000);
+    const candidates = (rows ?? []) as { id: string; target_id: string }[];
+    if (candidates.length === 0) return { reinstated: 0 };
+
+    const targetIds = candidates.map((c) => c.target_id);
+    const { data: activeNowRows } = await svc
+      .from('vouches')
+      .select('target_id')
+      .eq('voucher_id', userId)
+      .eq('status', 'active')
+      .in('target_id', targetIds)
+      .limit(1000);
+    const alreadyActive = new Set(
+      ((activeNowRows ?? []) as { target_id: string }[]).map((r) => r.target_id),
+    );
+
+    const targets = new Set<string>();
+    let reinstated = 0;
+    for (const c of candidates) {
+      if (alreadyActive.has(c.target_id)) continue; // would collide with uq_vouches_active_pair
+      const { error } = await svc
+        .from('vouches')
+        .update({ status: 'active', invalidated_by: null, invalidation_reason: null })
+        .eq('id', c.id);
+      if (error) continue;
+      await svc.from('vouch_revisions').insert({
+        vouch_id: c.id,
+        changed_by: actorId,
+        change_type: 'reinstated',
+      });
+      targets.add(c.target_id);
+      reinstated += 1;
+    }
+
+    for (const targetId of targets) await recomputePlayerSkillProfile(targetId);
+    if (reinstated > 0) {
+      await writeAudit({
+        actorId,
+        action: 'moderation.account.vouches_reinstated',
+        entityType: 'profile',
+        entityId: userId,
+        after: { count: reinstated },
+      });
+    }
+    return { reinstated };
+  } catch {
+    return { reinstated: 0 };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account actions (§47) - warn / restrict vouching / restrict account / suspend / ban / deactivate /
+// lift.
 // ---------------------------------------------------------------------------
 export type AccountAction =
-  'warn' | 'restrict_vouching' | 'restrict_account' | 'suspend' | 'ban' | 'lift_status';
+  | 'warn'
+  | 'restrict_vouching'
+  | 'restrict_account'
+  | 'suspend'
+  | 'ban'
+  | 'deactivate'
+  | 'lift_status';
 
 export async function applyAccountAction(
   userId: string,
@@ -703,6 +839,10 @@ export async function applyAccountAction(
       case 'ban':
         patch.account_status = 'banned';
         break;
+      case 'deactivate':
+        patch.account_status = 'deactivated';
+        patch.suspended_until = null;
+        break;
       case 'lift_status':
         patch.account_status = 'active';
         patch.suspended_until = null;
@@ -712,6 +852,23 @@ export async function applyAccountAction(
 
     const { error } = await svc.from('profiles').update(patch).eq('id', userId);
     if (error) return { error: 'Could not apply the account action.' };
+
+    // Disabled-account vouch retraction, reversibly (§2AN decision 4) - after the profile patch
+    // succeeds. Best-effort; the count (when non-zero) is folded into the success message below.
+    let retractedCount = 0;
+    let reinstatedCount = 0;
+    if (action === 'suspend' || action === 'ban' || action === 'deactivate') {
+      const patchedStatus = (patch.account_status as string | undefined) ?? action;
+      const { retracted } = await retractVouchesForDisabledAccount(
+        userId,
+        patchedStatus,
+        actor.viewerId,
+      );
+      retractedCount = retracted;
+    } else if (action === 'lift_status') {
+      const { reinstated } = await reinstateVouchesForRestoredAccount(userId, actor.viewerId);
+      reinstatedCount = reinstated;
+    }
 
     await writeAudit({
       actorId: actor.viewerId,
@@ -734,6 +891,7 @@ export async function applyAccountAction(
       restrict_account: 'Your account has been restricted',
       suspend: 'Your account has been suspended',
       ban: 'Your account has been banned',
+      deactivate: 'Your account has been deactivated',
       lift_status: 'A restriction on your account has been lifted',
     };
     await notify({
@@ -750,9 +908,17 @@ export async function applyAccountAction(
     // Status affects directory visibility + the public profile.
     revalidateTag(PLAYERS_LIST_TAG);
     if (b.slug) revalidateTag(playerTag(b.slug));
+
+    const suffix =
+      retractedCount > 0
+        ? ` ${retractedCount} vouch${retractedCount === 1 ? '' : 'es'} retracted.`
+        : reinstatedCount > 0
+          ? ` ${reinstatedCount} vouch${reinstatedCount === 1 ? '' : 'es'} reinstated.`
+          : '';
+    return { ok: true, message: `Account action applied.${suffix}` };
   } catch {
     return { error: 'Moderation action failed. Please try again.' };
+  } finally {
+    revalidatePath('/staff/moderation');
   }
-  revalidatePath('/staff/moderation');
-  return { ok: true, message: 'Account action applied.' };
 }

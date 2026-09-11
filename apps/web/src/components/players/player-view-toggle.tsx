@@ -18,7 +18,11 @@ export function PlayerViewToggle({ compact }: { compact: boolean }) {
     if (nextCompact) params.delete('view');
     else params.set('view', 'detailed');
     const query = params.toString();
-    startTransition(() => router.push(query ? `${pathname}?${query}` : pathname));
+    // scroll:false (master_plan §2AN decision 1): switching compact/detailed swaps the list in place
+    // right below this control - the App Router's default scroll-to-top reads as a jump.
+    startTransition(() =>
+      router.push(query ? `${pathname}?${query}` : pathname, { scroll: false }),
+    );
   }
 
   return (

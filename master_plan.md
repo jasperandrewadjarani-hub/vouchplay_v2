@@ -3638,6 +3638,110 @@ full gates, deploy. Jasper applies `0040` before the push (the app is fail-open 
 degrades to "partner changes open" until the helpers exist). Hermosa's effective lock will read
 2026-10-09 16:00 UTC (Oct 10 00:00 PH) unless the organizer sets it explicitly.
 
+## 2AN. Directory UX quirks, verified-avatar check, disabled-account vouch retraction, minimal vouching power, staff activity view (2026-09-12)
+
+Jasper's six: (1) adding a filter scrolls back up to the Filters button; (2) coming back to Players
+from another tab reopens the filter sheet when filters are set - it should show the list with the
+filters still applied, sheet closed; (3) a small check mark on the avatar of ID-verified players
+(profile + cards), like verified accounts on Facebook; (4) when super admins disable/deactivate a
+reported troll, all their vouches are retracted; (5) no photo + no ID + no vouches received = less
+vouching power, quantified, with a small banner telling them why; (6) admins can open a player's full
+vouch/comment activity from the Players tab for review.
+
+### Findings (audited)
+
+1. `search-filters.tsx` `push()` is a bare `router.push()` - App Router scrolls to top by default; the
+   Filters control sits at the top, hence the "jump". No `scroll:false` anywhere in the directory.
+2. `useState(activeFilterCount(current) > 0)` seeds the sheet OPEN on every mount when filters are
+   active. The §2AG A1 `sessionStorage` return-URL already brings the filters back; only the sheet's
+   default is wrong.
+3. `PlayerAvatar` has no overlay slot; `IdentityVerifiedBadge` is a separate pill and the compact card
+   row never shows it at all.
+4. `applyAccountAction` (suspend/ban/restrict/lift) touches only `profiles`. A banned troll's given
+   vouches stay `active` at full weight forever; only NEW vouches are blocked. There is no
+   `deactivate` action - the enum value is dead.
+5. `effective_weight` is written once at `submitVouch` and never re-derived - even when the voucher
+   later verifies their ID (a pre-existing unfairness). Avatar presence is a display fact only. The
+   §10.5 table is LOCKED and lists exactly four weights.
+6. No staff per-player page. `VouchModerationPanel` (active vouches only) is reachable only from inside
+   a flag/report/review. `getVouchAuthorForModeration` is the single sanctioned de-anonymisation path.
+
+### Decisions
+
+1. **Scroll:** `router.push(url, { scroll: false })` for every filter/sort/page change in the directory.
+   The keyed Suspense skeleton still swaps the list in place; the viewport stays put.
+2. **Sheet default:** always mount CLOSED; the Filters button shows the active count ("Filters · 3")
+   and the existing chip row keeps the applied filters visible. Filters themselves are untouched.
+3. **Verified check on the avatar:** `PlayerAvatar` gains `verified?: boolean` → a small filled check
+   disc pinned bottom-right (sized per avatar size, `ring-2` in the surface colour so it reads on any
+   photo; `title="Identity verified"`). Shown on the profile header, the detailed card and the compact
+   row. On CARDS the separate "Identity verified" pill is removed (the check replaces it - less
+   clutter); the pill stays on the full profile where its hover text explains what it means.
+4. **Disabled account ⇒ vouches retracted, reversibly.** On `suspend`, `ban` and a NEW `deactivate`
+   staff action, every `active` vouch GIVEN by that account is set `status='invalidated'` with
+   `invalidation_reason='account_disabled:<status>'` (+ revision rows, `changed_by` = the staff actor),
+   each affected target's skill profile is recomputed, and the actor's contribution recomputed. On
+   `lift_status` those exact vouches (that prefix only, skipping any pair that gained a newer active
+   vouch) are reinstated and targets recomputed - so a mistaken ban is fully undoable. `restrict_*`
+   does NOT retract (the account is still a person with limited features). The prefix is a sibling
+   constant of the hold prefixes but deliberately NOT a hold: the target's profile must not say "being
+   reviewed" about a troll's retracted vouch. Comments by the disabled account are deferred (below).
+5. **Minimal vouching power (owner-directed amendment of LOCKED §10.5, v1.67).** A voucher is a
+   *minimal account* while ALL three hold: no profile photo, no approved identity verification, and no
+   active vouch received from anyone. Their vouches carry the §10.5 weight × `weight_minimal_account_multiplier`
+   (admin setting, default **0.5**). This is a fifth row, not a change to the four; Skill-Verified and
+   Facebook still never affect weight (CLAUDE.md non-negotiable intact). `WEIGHT_RULE_VERSION` →
+   `WEIGHT_V1.1`. **Weight follows the person, not the moment:** when a voucher stops being minimal
+   (adds a photo, ID approved, receives their first vouch) their given vouches are re-weighted and
+   every target recomputed (`reweightGivenVouches`, system revision rows with `changed_by` null so they
+   never count against the 24h cap). The same routine finally fixes the pre-existing gap where an ID
+   approval did not lift past vouches to 1.25. Why these three signals: they are the cheapest honest
+   things a real player does and the three things a throwaway account never does; it composes with
+   §2AJ (caps) and STS_V2 (trust) rather than replacing either.
+   **Banner:** a third strip in `app-shell`'s mutually-exclusive nudge chain, winning over the generic
+   "unvouched" nudge: "Your vouches count at half strength right now." + two links (Add a photo ·
+   Verify your ID) and the words "or get vouched by someone" - one line, not dismissible (it is a
+   status, and it disappears the moment any one of the three is true). The vouch form adds one muted
+   line only for minimal accounts.
+6. **Staff activity view.** New page `/staff/players/[slug]` (`requireStaffPage`): header (avatar,
+   name, account status, ID status, newcomer/minimal flags), **Vouches given** (every status incl.
+   retracted/withdrawn: target, level, weight, anonymous?, status + reason, dates), **Vouches received**
+   (voucher identity shown - this is the sanctioned de-anonymised view, so the page says so at the top
+   and every open is audited `staff.player_activity.view`), **Comments** given and received (status),
+   **Integrity flags** on the player, and **Account history** (audit rows where the player is actor or
+   entity). Bounded lists (newest 200 each). The existing `VouchModerationPanel` (invalidate with
+   reason) is embedded under "Vouches received" so review and action live on one screen. Entry points:
+   a staff-only "Activity" link on every player card and on the profile header; the page decides
+   staff-ness (`viewer.isStaff`), never the DTO.
+
+### Better suggestions folded in / deferred
+
+- Folded in: re-weighting on ID approval (fixes the old unfairness); the reversible retraction; the
+  audited de-anonymised view; the count-on-button so a closed sheet still tells you filters are on.
+- Deferred (phase 2): hiding a disabled account's COMMENTS with the same reversal (needs a marker the
+  `vouch_comments` table does not have - a migration); a "minimal" indicator visible to staff on cards;
+  export of the activity view.
+
+### Contracts
+
+**Core/config:** `effectiveWeight(inputs, weights)` gains `inputs.voucherMinimalAccount?: boolean` and
+`weights.minimalAccountMultiplier` (default 0.5; `weight_minimal_account_multiplier`, group
+`vouch_weights`, float 0.05..1). `WEIGHT_RULE_VERSION='WEIGHT_V1.1'`.
+**Web:** `lib/vouches/voucher-power.ts` → `getVoucherPower(userId): {minimal, reasons:{noPhoto,noId,noVouches}, multiplier}` (+cached);
+`lib/vouches/reweight.ts` → `reweightGivenVouches(voucherId)`; hooks: `updateProfile`/`completeOnboarding`
+(avatar set), `reviewIdentityVerification` (approve), `submitVouch` (target received);
+`lib/vouches/hold-reasons.ts` → `ACCOUNT_DISABLED_PREFIX='account_disabled:'` (not in HOLD prefixes);
+`moderation.ts` → `retractVouchesForDisabledAccount(userId, status, actorId)`, `reinstateVouchesForRestoredAccount(userId, actorId)`,
+`AccountAction` gains `'deactivate'`; `PlayerAvatar` gains `verified`; `search-filters` scroll:false +
+closed default; `components/staff/staff-player-activity-link.tsx`; route `app/(app)/staff/players/[slug]/page.tsx`
+with queries in `lib/moderation/player-activity.ts`.
+
+### Execution
+
+Docs (this, handover v1.67) → three Sonnet builders in parallel: **A** directory + avatar (1-3),
+**B** retraction + minimal power (4-5), **C** staff activity (6) → my review, full gates, deploy. No
+migration (the new setting has a code default; `0041` seeds it for Admin visibility - optional).
+
 ## 1. Prompt Contract
 
 ### In scope

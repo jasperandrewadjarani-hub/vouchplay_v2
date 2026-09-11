@@ -11,6 +11,7 @@ import { writeAudit } from '@/lib/moderation/audit';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { prepareIdentityDocument } from '@/lib/identity/prepare-identity-document';
 import { IDENTITY_DOCUMENT_TYPES, type IdentityDocumentType } from '@/lib/identity/document-types';
+import { reweightGivenVouches } from '@/lib/vouches/reweight';
 
 /**
  * Identity verification pipeline (master_plan §2AG Phase C, handover §13.3). Staff-approved ONLY -
@@ -287,6 +288,14 @@ export async function reviewIdentityVerification(
       after: { status: nextStatus },
       reason: decision === 'reject' ? reason.trim() : null,
     });
+
+    // "Weight follows the person" (§2AN decision 5, v1.67): an identity approval also fixes the
+    // pre-existing gap where a voucher's PAST vouches never got lifted to the identity-verified row,
+    // and lifts them out of the minimal-account multiplier if this was their last minimal signal.
+    // Best-effort - reweightGivenVouches never throws, but this decision must never fail either way.
+    if (decision === 'approve') {
+      await reweightGivenVouches(row.user_id);
+    }
 
     revalidateTag(PLAYERS_LIST_TAG);
     if (subjectSlug) revalidateTag(playerTag(subjectSlug));

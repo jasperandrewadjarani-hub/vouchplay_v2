@@ -95,6 +95,10 @@ export default async function StaffHome() {
       >
         Open the moderation queue → <LinkSpinner size={16} />
       </Link>
+
+      <p className="text-foreground-muted text-xs">
+        Player activity: open any player&apos;s card → Activity.
+      </p>
     </section>
   );
 }

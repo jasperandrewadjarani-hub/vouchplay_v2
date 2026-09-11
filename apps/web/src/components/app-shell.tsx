@@ -13,10 +13,12 @@ import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import {
   getOptionalUser,
+  getMyProfile,
   getViewerReputationNudge,
   getViewerLegalStatus,
   getViewerIdentityNudge,
 } from '@/lib/auth';
+import { getVoucherPowerCached, type VoucherPower } from '@/lib/vouches/voucher-power';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -37,10 +39,23 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
   // have played with vouch for them (§2O). Skipped under maintenance gating.
   const nudge = gated ? { unvouched: false, slug: null } : await getViewerReputationNudge();
+  // Minimal vouching power (master_plan §2AN decision 5, handover §10.5 v1.67): a signed-in, onboarded
+  // viewer with no photo, no approved ID and no vouch received yet. This is the top of the
+  // mutually-exclusive nudge chain - it explains WHY the generic "unvouched" nudge would otherwise show
+  // (and wins over it), rather than stacking a second strip that says the same thing two ways.
+  const minimalPower: VoucherPower | null = gated
+    ? null
+    : await (async () => {
+        const profile = await getMyProfile();
+        if (!profile?.onboarded_at) return null;
+        const power = await getVoucherPowerCached(profile.id);
+        return power.minimal ? power : null;
+      })();
   // Identity self-nudge (master_plan §2AG Phase C, D2): only one self-nudge strip is ever visible at
-  // a time, and the unvouched nudge wins when both would otherwise show - so this is skipped
-  // entirely whenever that one is already showing.
-  const identityNudge = gated || nudge.unvouched ? { show: false } : await getViewerIdentityNudge();
+  // a time, and the minimal/unvouched nudges win when either would otherwise show - so this is skipped
+  // entirely whenever one of those is already showing.
+  const identityNudge =
+    gated || nudge.unvouched || minimalPower ? { show: false } : await getViewerIdentityNudge();
   // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
   // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
   const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
@@ -102,26 +117,33 @@ export async function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <Header />
-      {/* A quiet amber strip just below the logo for a player with no vouches yet - a nudge, not an
-          interruption. It links to their profile so they can share it and ask for vouches (§2O). */}
-      {nudge.unvouched && !gated && (
-        <div className="border-warning/40 bg-warning/10 border-b">
-          <div className="text-foreground mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
-            <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1">
-              Your profile has no vouches yet. Ask players you&rsquo;ve played with to vouch for you
-              so your skill is trusted.
-            </span>
-            {nudge.slug && (
-              <Link
-                href={`/players/${nudge.slug}`}
-                className="text-warning shrink-0 font-semibold underline underline-offset-2"
-              >
-                My profile
-              </Link>
-            )}
+      {/* Mutually-exclusive self-nudge chain: minimal power wins over the generic unvouched nudge,
+          which wins over the identity self-nudge (§2AN decision 5, §2AG Phase C D2). */}
+      {minimalPower && !gated ? (
+        <MinimalPowerStrip multiplier={minimalPower.multiplier} />
+      ) : (
+        nudge.unvouched &&
+        !gated && (
+          // A quiet amber strip just below the logo for a player with no vouches yet - a nudge, not
+          // an interruption. It links to their profile so they can share it and ask for vouches (§2O).
+          <div className="border-warning/40 bg-warning/10 border-b">
+            <div className="text-foreground mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
+              <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">
+                Your profile has no vouches yet. Ask players you&rsquo;ve played with to vouch for
+                you so your skill is trusted.
+              </span>
+              {nudge.slug && (
+                <Link
+                  href={`/players/${nudge.slug}`}
+                  className="text-warning shrink-0 font-semibold underline underline-offset-2"
+                >
+                  My profile
+                </Link>
+              )}
+            </div>
           </div>
-        </div>
+        )
       )}
       {identityNudge.show && !gated && <IdentityNudgeBanner />}
       <div className="mx-auto flex w-full max-w-6xl">
@@ -133,6 +155,40 @@ export async function AppShell({ children }: { children: ReactNode }) {
       </div>
       <BottomNav />
       {legal.needsAcceptance && <LegalConsentGate />}
+    </div>
+  );
+}
+
+/**
+ * Minimal-power strip (master_plan §2AN decision 5, handover §10.5 v1.67): a status, not an
+ * interruption - one line, not dismissible, disappears the moment any one of the three signals
+ * (photo/ID/first vouch received) is true. Wins over the generic "unvouched" nudge above it.
+ */
+function MinimalPowerStrip({ multiplier }: { multiplier: number }) {
+  const strength =
+    multiplier === 0.5 ? 'half strength' : `at ${Math.round(multiplier * 100)}% strength`;
+  return (
+    <div className="border-warning/40 bg-warning/10 border-b">
+      <div className="text-foreground mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 text-xs sm:text-sm">
+        <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
+        <span className="min-w-0">
+          Your vouches count at {strength} right now.{' '}
+          <Link
+            href="/me/edit"
+            className="text-warning inline-flex min-h-11 items-center font-semibold underline underline-offset-2"
+          >
+            Add a photo
+          </Link>{' '}
+          ·{' '}
+          <Link
+            href="/me/settings/identity"
+            className="text-warning inline-flex min-h-11 items-center font-semibold underline underline-offset-2"
+          >
+            Verify your ID
+          </Link>{' '}
+          or get vouched by someone.
+        </span>
+      </div>
     </div>
   );
 }

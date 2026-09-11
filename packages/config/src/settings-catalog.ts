@@ -246,6 +246,16 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     max: 10,
     step: 0.05,
   },
+  {
+    key: 'weight_minimal_account_multiplier',
+    label: 'Minimal-account multiplier',
+    group: 'vouch_weights',
+    kind: 'float',
+    min: 0.05,
+    max: 1,
+    step: 0.05,
+    help: 'Applied to a voucher with no profile photo, no approved ID and no vouch received yet. 1 turns it off (§2AN).',
+  },
 
   // Skill Verified
   {

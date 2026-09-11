@@ -10,6 +10,8 @@ import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { runVelocityGuard } from '@/lib/vouches/velocity-guard';
 import { getVoucherTier } from '@/lib/vouches/newcomer';
 import { effectiveVouchLimit } from '@/lib/vouches/limits';
+import { getVoucherPower } from '@/lib/vouches/voucher-power';
+import { reweightGivenVouches } from '@/lib/vouches/reweight';
 import { recomputePlayerContribution } from '@/lib/contribution/recompute';
 import { checkActorCanVouch } from '@/lib/moderation/enforcement';
 import { notify } from '@/lib/notifications/create';
@@ -125,7 +127,13 @@ export async function submitVouch(
       return { error: 'Coach-weighted vouches are currently disabled.' };
     }
     const usedCoachWeight = v.asCoach && isCoach && settings.coachWeightEnabled;
-    const weight = effectiveWeight({ usedCoachWeight, voucherIdentityVerified }, settings.weights);
+    // Minimal-account factor (§2AN decision 5, v1.67): a fresh read of the VOUCHER's own current power,
+    // never the target's - fifth source-credibility input alongside identity verification.
+    const power = await getVoucherPower(user.id);
+    const weight = effectiveWeight(
+      { usedCoachWeight, voucherIdentityVerified, voucherMinimalAccount: power.minimal },
+      settings.weights,
+    );
 
     // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window. A limit of 0 (or
     // less) means unlimited - the default (JT 2026-09-07); the one-active-vouch-per-pair rule below
@@ -243,6 +251,15 @@ export async function submitVouch(
     const guard = await runVelocityGuard(v.targetId);
     await recomputePlayerSkillProfile(v.targetId, { facts: guard.facts });
     await recomputePlayerContribution(user.id);
+
+    // The target just received a vouch, so they may have just stopped being a minimal account
+    // themselves (§2AN decision 5) - re-weight whatever THEY have given, best-effort, never fail the
+    // vouch that was just successfully saved.
+    try {
+      await reweightGivenVouches(v.targetId);
+    } catch {
+      /* best effort only */
+    }
 
     // Notify the target (§27.1). Vouches are ANONYMOUS - never reveal the voucher's identity here.
     const { data: tp } = await svc

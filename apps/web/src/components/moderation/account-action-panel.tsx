@@ -9,6 +9,9 @@ const ACTIONS: { value: AccountAction; label: string; timed?: boolean; danger?: 
   { value: 'restrict_account', label: 'Restrict account' },
   { value: 'suspend', label: 'Suspend', timed: true, danger: true },
   { value: 'ban', label: 'Ban', danger: true },
+  // Deactivate retracts every vouch this account has GIVEN, reversibly (§2AN decision 4) - same
+  // "material action" tier as suspend/ban below.
+  { value: 'deactivate', label: 'Deactivate (retracts given vouches)', danger: true },
   { value: 'lift_status', label: 'Lift restriction / reinstate' },
 ];
 
@@ -28,14 +31,12 @@ export function AccountActionPanel({ userId, userName }: { userId: string; userN
 
   function apply() {
     setMsg(null);
-    const dangerous = action === 'ban' || action === 'suspend';
-    if (
-      dangerous &&
-      !confirm(
-        `${action === 'ban' ? 'Ban' : 'Suspend'} ${userName}? This is a material account action.`,
-      )
-    ) {
-      return;
+    const dangerous = action === 'ban' || action === 'suspend' || action === 'deactivate';
+    if (dangerous) {
+      const verb = action === 'ban' ? 'Ban' : action === 'suspend' ? 'Suspend' : 'Deactivate';
+      const extra =
+        action === 'deactivate' ? ' This also retracts every vouch they have given.' : '';
+      if (!confirm(`${verb} ${userName}? This is a material account action.${extra}`)) return;
     }
     start(async () => {
       const res = await applyAccountAction(

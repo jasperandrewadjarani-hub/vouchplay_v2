@@ -7,11 +7,14 @@
  *  - Skill Verified status does NOT affect weight (avoids circular scoring).
  *  - Facebook does NOT affect weight.
  *  - Organizer role does NOT affect weight.
- * Only two inputs move weight: whether the vouch used an approved-Coach toggle, and whether the
- * voucher's IDENTITY is verified (identity affects source credibility, not skill).
+ * The four base rows above are unchanged. A fifth, admin-tunable factor on the same *source
+ * credibility* axis was added in v1.67 (owner-directed amendment, master_plan §2AN, handover §10.5):
+ * whether the voucher is a MINIMAL account - no profile photo, no approved identity verification, and
+ * no active vouch received from anyone yet (`lib/vouches/voucher-power.ts`). Skill-Verified, Facebook,
+ * and Organizer role still never affect weight - nothing above changes that.
  */
 
-export const WEIGHT_RULE_VERSION = 'WEIGHT_V1';
+export const WEIGHT_RULE_VERSION = 'WEIGHT_V1.1';
 
 export interface WeightSettings {
   /** Normal player. Default 1.00. */
@@ -22,6 +25,11 @@ export interface WeightSettings {
   coach: number;
   /** Identity-verified coach using the coach toggle. Default 2.50. */
   identityVerifiedCoach: number;
+  /**
+   * Fifth source-credibility factor (v1.67, §2AN). Multiplies whichever of the four rows above
+   * applies when the voucher is a minimal account. Default 0.50; 1 disables it.
+   */
+  minimalAccountMultiplier: number;
 }
 
 export interface WeightInputs {
@@ -32,12 +40,24 @@ export interface WeightInputs {
   usedCoachWeight: boolean;
   /** The VOUCHER's identity-verification status (not the target's). */
   voucherIdentityVerified: boolean;
+  /**
+   * True when the voucher is currently a MINIMAL account (v1.67, §2AN): no profile photo, no approved
+   * identity verification, and no active vouch received from anyone yet. See
+   * `lib/vouches/voucher-power.ts`. Optional/undefined behaves exactly like `false`.
+   */
+  voucherMinimalAccount?: boolean;
 }
 
 /** Resolve the effective weight for a vouch from its inputs + the Admin weight settings. */
 export function effectiveWeight(inputs: WeightInputs, weights: WeightSettings): number {
-  if (inputs.usedCoachWeight) {
-    return inputs.voucherIdentityVerified ? weights.identityVerifiedCoach : weights.coach;
-  }
-  return inputs.voucherIdentityVerified ? weights.identityVerified : weights.normal;
+  const base = inputs.usedCoachWeight
+    ? inputs.voucherIdentityVerified
+      ? weights.identityVerifiedCoach
+      : weights.coach
+    : inputs.voucherIdentityVerified
+      ? weights.identityVerified
+      : weights.normal;
+  if (!inputs.voucherMinimalAccount) return base;
+  // The vouches.effective_weight column is numeric(4,2) - round to match what is actually stored.
+  return Math.round(base * weights.minimalAccountMultiplier * 100) / 100;
 }

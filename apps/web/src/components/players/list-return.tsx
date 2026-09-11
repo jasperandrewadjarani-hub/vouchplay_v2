@@ -90,7 +90,9 @@ export function PlayersNavLink({
     const stored = readStoredListUrl();
     if (stored && stored !== href) {
       e.preventDefault();
-      router.push(stored);
+      // scroll:false (master_plan §2AN decision 1): this restores the viewer's own remembered list
+      // position - jumping to the top would undo the "return to where you were" point of §2AG A1.
+      router.push(stored, { scroll: false });
     }
   }
 

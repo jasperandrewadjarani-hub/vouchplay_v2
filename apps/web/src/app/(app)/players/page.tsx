@@ -54,11 +54,15 @@ async function PlayersResults({
   viewer,
   compact,
   authed,
+  staffLinks,
 }: {
   filters: PlayerFilters;
   viewer: ViewerContext;
   compact: boolean;
   authed: boolean;
+  /** Staff-only "Activity" entry point on every card (master_plan §2AN decision 6) - derived from
+   *  `viewer.isStaff` up in the page, never from the player DTO. */
+  staffLinks: boolean;
 }) {
   const { players: allPlayers, total, page, pageCount } = await listPlayers(filters, viewer);
   // Signup wall (master_plan §2AH): anonymous visitors get a taste - the first 10 players, compact,
@@ -91,7 +95,13 @@ async function PlayersResults({
           className={compact ? 'space-y-2' : 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3'}
         >
           {players.map((player) => (
-            <PlayerCard key={player.slug} player={player} authed={authed} compact={compact} />
+            <PlayerCard
+              key={player.slug}
+              player={player}
+              authed={authed}
+              compact={compact}
+              staffLinks={staffLinks}
+            />
           ))}
         </div>
       ) : (
@@ -202,7 +212,13 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         key={`${JSON.stringify(filters)}|${compact ? 'c' : 'd'}`}
         fallback={<PlayerListSkeleton compact={compact} />}
       >
-        <PlayersResults filters={filters} viewer={viewer} compact={compact} authed={authed} />
+        <PlayersResults
+          filters={filters}
+          viewer={viewer}
+          compact={compact}
+          authed={authed}
+          staffLinks={viewer.isStaff}
+        />
       </Suspense>
     </div>
   );

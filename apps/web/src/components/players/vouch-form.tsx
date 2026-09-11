@@ -22,6 +22,7 @@ export function VouchForm({
   targetName,
   viewerIsCoach,
   newcomerLimit = 0,
+  minimalPower = false,
   onClose,
 }: {
   targetId: string;
@@ -30,6 +31,11 @@ export function VouchForm({
   /** > 0 when the viewer is a newcomer (master_plan §2AJ) and a newcomer cap is in force: shows the
    *  one-line rule up front so the cap is never a surprise. 0 = nothing shown. */
   newcomerLimit?: number;
+  /** True when the VIEWER (the person about to vouch) is currently a minimal account (master_plan
+   *  §2AN decision 5, v1.67 - no photo, no approved ID, no vouch received yet). Shows one muted line
+   *  explaining why their vouch counts for less right now. Caller-supplied; this component does not
+   *  fetch it itself. */
+  minimalPower?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -63,6 +69,12 @@ export function VouchForm({
               <p className="text-foreground-muted mt-1 text-xs">
                 New here? You can vouch for up to {newcomerLimit} players a day until other players
                 vouch for you, or you register for a tournament or verify your ID.
+              </p>
+            )}
+            {minimalPower && (
+              <p className="text-foreground-muted mt-1 text-xs">
+                Your vouch counts at half strength until you add a photo, verify your ID, or receive
+                a vouch.
               </p>
             )}
           </div>

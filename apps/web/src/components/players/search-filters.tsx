@@ -107,7 +107,11 @@ export function SearchFilters({
 
   const [draft, setDraft] = useState<PlayerFilters>(current);
   const [q, setQ] = useState(current.q ?? '');
-  const [showFilters, setShowFilters] = useState(activeFilterCount(current) > 0);
+  // Always mounts CLOSED (master_plan §2AN decision 2): the §2AG A1 sessionStorage return-URL already
+  // brings filters back on the list, so reopening the sheet on every mount was redundant AND
+  // surprising - the Filters button's count badge and the chip row below keep the applied filters
+  // visible without forcing the sheet open.
+  const [showFilters, setShowFilters] = useState(false);
 
   const serialized = serialize(current);
   const lastPushed = useRef<string | null>(null);
@@ -132,7 +136,10 @@ export function SearchFilters({
   function push(next: PlayerFilters) {
     const qs = serialize(next);
     lastPushed.current = qs;
-    startTransition(() => router.push(`/players${qs}`));
+    // scroll:false (master_plan §2AN decision 1): this changes the list IN PLACE - the Filters
+    // control sits at the top of the page, so the App Router default (scroll to top on push) reads
+    // as an unwanted jump back to the same spot the viewer just tapped from.
+    startTransition(() => router.push(`/players${qs}`, { scroll: false }));
   }
 
   /** Discrete controls apply on the tap: there is nothing to finish typing. */
@@ -224,14 +231,19 @@ export function SearchFilters({
           className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium"
         >
           <SlidersHorizontal size={16} aria-hidden />
-          Filters
-          {count > 0 && (
-            <span
-              className="bg-primary inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold text-white"
-              aria-label={`${count} filter${count === 1 ? '' : 's'} applied`}
-            >
-              {count}
-            </span>
+          {/* Closed-by-default sheet still needs to say what's applied (master_plan §2AN decision 2):
+              "Filters · 3" rather than a separate badge, matching the " · " count/label convention
+              used across the app (e.g. SkillPill's source suffix). */}
+          {count > 0 ? (
+            <>
+              Filters
+              <span aria-hidden className="opacity-70">
+                · {count}
+              </span>
+              <span className="sr-only">{`, ${count} filter${count === 1 ? '' : 's'} applied`}</span>
+            </>
+          ) : (
+            'Filters'
           )}
         </button>
         <button

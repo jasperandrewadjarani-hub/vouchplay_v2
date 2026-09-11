@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.66
+# VouchPlay Master Product & Code Execution Handover v1.67
 
-_(File retains its `…v1.1.md` name; content is v1.66 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.67 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -1320,6 +1320,14 @@ Default weights:
 | Identity Verified player | 1.25 |
 | Approved Coach using Coach toggle | 2.00 |
 | Identity Verified Coach using Coach toggle | 2.50 |
+| **Minimal account** (v1.67): no profile photo AND no approved identity verification AND no vouch received yet | × `weight_minimal_account_multiplier` (default **0.50**) applied to the row above that matches |
+
+**v1.67 amendment (owner-directed, 2026-09-12, master_plan §2AN):** the four base rows are unchanged;
+the minimal-account multiplier is a fifth factor on the *source credibility* axis, exactly like
+identity verification is. It is admin-tunable (`weight_minimal_account_multiplier`, 0.05-1; 1 disables
+it). Weight follows the person: when a voucher stops being minimal, their given vouches are re-weighted
+and targets recomputed (`reweightGivenVouches`); the same routine applies a later identity approval to
+past vouches. `WEIGHT_RULE_VERSION` is `WEIGHT_V1.1` from v1.67.
 
 Important:
 - `Skill Verified` status does **not** increase vouch weight. This avoids a circular scoring system.
@@ -1468,6 +1476,10 @@ and the STS structure, and changes only **what feeds them**: a vouch's influence
 - duplicate-account tools,
 - block controls,
 - account restrictions,
+- (v1.67) **disabled-account vouch retraction:** suspending, banning or deactivating an account
+  invalidates every vouch it has given (`invalidation_reason = account_disabled:<status>`), recomputes
+  every affected player, and lifting the status reinstates exactly those vouches - reversible by design
+  (master_plan §2AN). Vouching restrictions do not retract,
 - vouch invalidation,
 - full vouch revision history.
 
@@ -6277,6 +6289,31 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.67 (2026-09-12)
+
+_Directory UX quirks, verified-avatar check, disabled-account vouch retraction, minimal vouching power
+(owner-directed amendment of §10.5), staff per-player activity view (master_plan §2AN). No required
+migration (`0041` optionally seeds the new weight setting for Admin visibility)._
+
+- **Directory:** filter/sort/page changes no longer scroll to the top (`scroll:false`); the filter
+  sheet always opens CLOSED - the Filters button shows the active count and the chip row keeps the
+  applied filters visible when returning from another tab.
+- **Verified check on the avatar** (§9.1): ID-verified players show a small check disc on their avatar
+  on the profile header and both card layouts; on cards it replaces the separate pill.
+- **Disabled account ⇒ vouches retracted (§11.1, §47):** `suspend`, `ban` and the new `deactivate`
+  staff action invalidate every vouch the account has GIVEN (`account_disabled:<status>`), recompute
+  every affected target, and `lift_status` reinstates exactly those - fully reversible. Restrictions do
+  not retract.
+- **Minimal vouching power (§10.5 amendment):** a voucher with no profile photo, no approved ID and no
+  vouch received counts at ×`weight_minimal_account_multiplier` (default 0.5). Given vouches are
+  re-weighted the moment any of the three changes (photo added, ID approved, first vouch received) -
+  which also finally applies the 1.25 ID weight to past vouches. `WEIGHT_RULE_VERSION = WEIGHT_V1.1`.
+  A one-line status banner tells the player and links the two fixes.
+- **Staff activity view:** `/staff/players/[slug]` - vouches given/received (received shows voucher
+  identity: the sanctioned de-anonymised view, audited per open), comments, integrity flags, account
+  history, with the invalidate panel inline. "Activity" link on player cards and the profile header,
+  staff only.
 
 ## v1.66 (2026-09-11)
 

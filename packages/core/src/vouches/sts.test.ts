@@ -30,6 +30,7 @@ const W: WeightSettings = {
   identityVerified: DEFAULT_SYSTEM_SETTINGS.weight_identity_verified,
   coach: DEFAULT_SYSTEM_SETTINGS.weight_coach,
   identityVerifiedCoach: DEFAULT_SYSTEM_SETTINGS.weight_identity_verified_coach,
+  minimalAccountMultiplier: DEFAULT_SYSTEM_SETTINGS.weight_minimal_account_multiplier,
 };
 
 const v = (skillOrdinal: number, effectiveWeightValue: number, voucherId: string): VouchInput => ({
@@ -55,6 +56,7 @@ describe('effectiveWeight (§10.5)', () => {
       identityVerified: 1.25,
       coach: 2.0,
       identityVerifiedCoach: 2.5,
+      minimalAccountMultiplier: 0.5,
     });
     expect(T).toEqual({ minSts: 3.0, minUniqueVouchers: 2 });
     expect(C.countDivisor).toBe(5);

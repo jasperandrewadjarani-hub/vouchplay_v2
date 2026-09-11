@@ -48,6 +48,8 @@ export interface VouchSettings {
     identityVerified: number;
     coach: number;
     identityVerifiedCoach: number;
+    /** Fifth source-credibility factor (v1.67, §2AN) - see `lib/vouches/voucher-power.ts`. */
+    minimalAccountMultiplier: number;
   };
   limits: {
     playerPer24h: number;
@@ -148,6 +150,7 @@ export async function getVouchSettings(): Promise<VouchSettings> {
       identityVerified: num(m, 'weight_identity_verified'),
       coach: num(m, 'weight_coach'),
       identityVerifiedCoach: num(m, 'weight_identity_verified_coach'),
+      minimalAccountMultiplier: num(m, 'weight_minimal_account_multiplier'),
     },
     limits: {
       playerPer24h: num(m, 'player_vouches_per_24h'),

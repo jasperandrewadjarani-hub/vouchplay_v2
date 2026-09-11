@@ -33,6 +33,10 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   weight_identity_verified: 1.25,
   weight_coach: 2.0,
   weight_identity_verified_coach: 2.5,
+  // Fifth source-credibility factor (v1.67, master_plan §2AN, handover §10.5 amendment): multiplies
+  // whichever base weight row above applies when the voucher is a minimal account (no profile photo,
+  // no approved identity verification, no active vouch received yet). 1 disables it.
+  weight_minimal_account_multiplier: 0.5,
 
   // Skill Verified rule (handover §10.8).
   skill_verified_min_sts: 3.0,

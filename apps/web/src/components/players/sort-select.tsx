@@ -40,7 +40,9 @@ export function SortSelect({ sort, staff }: { sort: PlayerSort; staff: boolean }
     // viewer was looking at (the same rule `clearFilter` applies to every other filter change).
     params.delete('page');
     const qs = params.toString();
-    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname));
+    // scroll:false (master_plan §2AN decision 1): re-sorting swaps the list in place, right below
+    // this control - scrolling to the top would jump the viewer away from where they just clicked.
+    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
   }
 
   const options = staff ? [...PUBLIC_OPTIONS, STAFF_OPTION] : PUBLIC_OPTIONS;

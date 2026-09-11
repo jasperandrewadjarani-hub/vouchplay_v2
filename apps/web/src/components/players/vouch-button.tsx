@@ -27,6 +27,7 @@ export function VouchButton({
   isOwnProfile = false,
   viewerIsCoach = false,
   newcomerLimit = 0,
+  minimalPower = false,
   hasVouched = false,
   canUpdateInMs = null,
   size = 'md',
@@ -41,6 +42,8 @@ export function VouchButton({
   viewerIsCoach?: boolean;
   /** Newcomer vouch cap to show in the form (§2AJ); 0 = viewer is established / no cap. */
   newcomerLimit?: number;
+  /** The viewer is a minimal account right now (§2AN d5) - the form shows one line explaining why their vouch counts for less. */
+  minimalPower?: boolean;
   /** The viewer already has an active vouch for this player - shows the "Vouched" state (§2U). */
   hasVouched?: boolean;
   /** Ms left on the update cooldown (0 = changeable now, null = n/a); drives the dialog copy (§2V). */
@@ -173,6 +176,7 @@ export function VouchButton({
           targetName={label}
           viewerIsCoach={viewerIsCoach}
           newcomerLimit={newcomerLimit}
+          minimalPower={minimalPower}
           onClose={() => setFormOpen(false)}
         />
       )}

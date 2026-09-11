@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { MapPin, UserSearch, Handshake, GraduationCap } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { StaffPlayerActivityLink } from '@/components/staff/staff-player-activity-link';
 import { CompactRowPending } from './compact-row-pending';
 import { PlayerAvatar } from './player-avatar';
 import { ClubStack } from './club-stack';
@@ -10,7 +11,6 @@ import {
   SkillPill,
   StsChip,
   SexBadge,
-  IdentityVerifiedBadge,
   SkillVerifiedBadge,
   CoachBadge,
   OrganizerBadge,
@@ -27,10 +27,15 @@ export function PlayerCard({
   player,
   authed,
   compact = false,
+  staffLinks = false,
 }: {
   player: PlayerCardDTO;
   authed: boolean;
   compact?: boolean;
+  /** Staff-only "Activity" entry point (master_plan §2AN decision 6) - the caller derives this from
+   *  `viewer.isStaff`, never from the DTO, so a cached/shared card can never leak it to a non-staff
+   *  viewer. */
+  staffLinks?: boolean;
 }) {
   // Anonymous visitors get one warm, consistent signup prompt whenever they reach for depth
   // (master_plan §2AH): every directory card click (overlay, name, avatar - compact and detailed)
@@ -75,6 +80,7 @@ export function PlayerCard({
           initials={player.initials}
           name={player.displayName}
           size="sm"
+          verified={player.identityVerified}
           className="ring-primary/15 shrink-0 ring-2 ring-offset-0"
         />
         {/* NOT positioned: a positioned sibling after the overlay in DOM order would paint
@@ -143,6 +149,9 @@ export function PlayerCard({
             size="sm"
             mode="card"
           />
+          {/* Staff-only review entry point (master_plan §2AN decision 6), end of the action cluster
+              so it never competes with the Vouch button for the first tap. */}
+          {staffLinks && <StaffPlayerActivityLink slug={player.slug} size="sm" />}
         </span>
       </div>
     );
@@ -157,6 +166,7 @@ export function PlayerCard({
             initials={player.initials}
             name={player.displayName}
             size="sm"
+            verified={player.identityVerified}
             className="ring-primary/20 ring-2 ring-offset-0"
           />
         </Link>
@@ -195,15 +205,16 @@ export function PlayerCard({
         <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
       </div>
 
-      {(player.identityVerified ||
-        player.skillVerified ||
+      {/* No IdentityVerifiedBadge pill here (master_plan §2AN decision 3): the check on the avatar
+          above replaces it on cards - less clutter. The pill stays on the full profile page, where
+          its hover text explains what it means. */}
+      {(player.skillVerified ||
         player.isCoach ||
         player.isOrganizer ||
         player.lookingForPartner ||
         player.openForSponsorship ||
         player.isNew) && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {player.identityVerified && <IdentityVerifiedBadge />}
           {player.skillVerified && <SkillVerifiedBadge />}
           {player.isCoach && <CoachBadge />}
           {player.isOrganizer && <OrganizerBadge />}
@@ -221,15 +232,20 @@ export function PlayerCard({
           View profile
           <LinkSpinner />
         </Link>
-        <VouchButton
-          slug={player.slug}
-          targetName={player.displayName}
-          authed={authed}
-          hasVouched={player.viewerHasVouched}
-          canUpdateInMs={player.viewerVouchCanUpdateInMs}
-          size="sm"
-          mode="card"
-        />
+        <span className="flex items-center gap-2">
+          <VouchButton
+            slug={player.slug}
+            targetName={player.displayName}
+            authed={authed}
+            hasVouched={player.viewerHasVouched}
+            canUpdateInMs={player.viewerVouchCanUpdateInMs}
+            size="sm"
+            mode="card"
+          />
+          {/* Staff-only review entry point (master_plan §2AN decision 6), end of the action cluster
+              so it never competes with the Vouch button for the first tap. */}
+          {staffLinks && <StaffPlayerActivityLink slug={player.slug} size="sm" />}
+        </span>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { safeNext } from '@/lib/auth';
 import { AVATARS_BUCKET } from '@/lib/storage';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { AVATAR_IMAGE_PROFILE, normalizeUploadedImage } from '@/lib/images/normalize-upload-image';
+import { reweightGivenVouches } from '@/lib/vouches/reweight';
 
 type AvatarUploadResult = { path?: string; error?: string };
 
@@ -147,6 +148,11 @@ export async function completeOnboarding(
     }
     savedSlug = slug;
 
+    // "Weight follows the person" (§2AN decision 5, v1.67): adding a photo may be the last minimal-
+    // account signal this voucher had, so re-weight whatever they have already given. Best effort -
+    // reweightGivenVouches never throws.
+    if (avatarPath) await reweightGivenVouches(user!.id);
+
     // Record the Terms/Privacy consent the player just gave via the required onboarding checkbox
     // (§2AB; we already refused above if it was unchecked) so they are not shown the in-app gate
     // right after onboarding. Its own try/catch: if migration 0032 were ever missing this no-ops and
@@ -242,6 +248,9 @@ export async function updateProfile(
     const currentRow = current as { slug: string | null; avatar_path: string | null };
     if (avatarPath) await cleanupGeneratedAvatar(user.id, currentRow.avatar_path);
     savedSlug = currentRow.slug;
+
+    // "Weight follows the person" (§2AN decision 5, v1.67): see completeOnboarding above.
+    if (avatarPath) await reweightGivenVouches(user.id);
   } catch {
     return { error: 'Profile editing is temporarily unavailable. Please try again shortly.' };
   }

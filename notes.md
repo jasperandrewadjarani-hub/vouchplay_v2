@@ -2365,6 +2365,24 @@ it done. Several fixes in this session were found only that way.
   were proportionally placed at lower right; the B-STEEL badge and all other post content remain
   unchanged. Saved as the `Exact_Tournament_Lockup` revision (1254 x 1254 PNG).
 
+- **2026-09-11** - Added a square Facebook conversion post announcing that players without a
+  partner can register and pay to reserve their tournament slot, then choose their partner by
+  October 10. The post highlights the early-bird reduction from PHP 1,500 to PHP 1,299 and the
+  smaller advanced reduction from PHP 2,000 to PHP 1,799. It follows the established futuristic,
+  gamified VouchPlay visual system and includes the B-STEEL Sports badge plus the exact supplied
+  Rise of the Empires / Hermosa Grand tournament lockup. Saved under `deliverables/facebook-posts/`
+  as `P_006b_VouchPlay_Early_Bird_Reserve_Slot_Partner_Later_(2026-09).png` (1254 x 1254 PNG).
+
+- **2026-09-12** - Revised the early-bird reservation post by removing the `CHOOSE YOUR PARTNER BY
+  OCT 10` deadline line and promoting `CHOOSE YOUR PARTNER LATER` into the main headline hierarchy.
+  All pricing, CTA, VouchPlay styling, B-STEEL branding, and tournament identity remain unchanged.
+  Saved non-destructively as the `_Partner_Later_Emphasis` revision (1254 x 1254 PNG).
+
+- **2026-09-12** - Clarified the reservation-post pricing basis: PHP 1,299 is labelled per player,
+  with the two-player team total shown as PHP 2,598. The Advanced rate is likewise shown as PHP
+  1,799 per player and PHP 3,598 per two-player team. Saved non-destructively as the
+  `_Per_Player_Team_Rates` revision (1254 x 1254 PNG).
+
 ## 2026-09-10 - Deployment-skew self-healing (§2Q, handover v1.45)
 
 Players reported two error screens as common: "VouchPlay hit a snag" (global-error, no chrome) and
@@ -2887,3 +2905,21 @@ entry card, "Enter now, choose partner later", organizer 'none' filter + Incompl
 form field "Partner lock-in".
 Deferred (phase 2): lock reminder notification 3 days before (cron), organizer assign-partner override,
 dead-code cleanup (move_player_registration, registration_lock_at).
+
+## 2026-09-12 - Directory quirks, verified avatar check, disabled-account retraction, minimal vouching power, staff activity (§2AN, handover v1.67)
+Six from Jasper. Causes found: filter changes = bare router.push (scrolls to top; no scroll:false
+anywhere); filter sheet seeded open from activeFilterCount; PlayerAvatar has no overlay slot and the
+compact row never shows the ID pill; applyAccountAction only patches profiles (a banned troll's given
+vouches stay active forever; no 'deactivate' write path); effective_weight is never re-derived after
+write (an ID approval never lifted past vouches to 1.25); no staff per-player page.
+Decisions: scroll:false everywhere in the directory; sheet always closed + count on the button;
+`verified` prop on PlayerAvatar (check disc bottom-right; replaces the pill on cards, pill stays on
+profile); suspend/ban/new deactivate retract all given vouches (account_disabled:<status>, targets
+recomputed) and lift_status reinstates exactly those; MINIMAL ACCOUNT (no photo AND no approved ID AND
+no vouch received) => weight x weight_minimal_account_multiplier (0.5) - owner-directed amendment of
+LOCKED §10.5 (fifth factor; Skill-Verified/Facebook still never affect weight), WEIGHT_V1.1,
+reweightGivenVouches on photo/ID/first-vouch (also fixes the ID-approval gap), one-line amber banner
+winning over the unvouched nudge; /staff/players/[slug] activity view (de-anonymised received vouches,
+audited per open) + staff-only "Activity" link on cards/profile.
+Deferred (phase 2): hide a disabled account's comments reversibly (needs a marker column), staff
+"minimal" indicator on cards, activity export.

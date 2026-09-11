@@ -16,6 +16,7 @@ import { ClubStack } from '@/components/players/club-stack';
 import { VouchButton } from '@/components/players/vouch-button';
 import { ShareButton } from '@/components/players/share-button';
 import { ProfileActions } from '@/components/players/profile-actions';
+import { StaffPlayerActivityLink } from '@/components/staff/staff-player-activity-link';
 import {
   SkillPill,
   StsChip,
@@ -48,6 +49,7 @@ import { getVouchSettings } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
 import { countHeldVouchesForTarget } from '@/lib/vouches/held';
 import { getVoucherTierCached } from '@/lib/vouches/newcomer';
+import { getVoucherPowerCached } from '@/lib/vouches/voucher-power';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -123,13 +125,15 @@ export default async function PlayerProfilePage({ params }: Params) {
   // The viewer's own vouch state for this player (§2U): colours the button and drives the note below.
   // The viewer's newcomer tier (§2AJ, cached 60s) only decides whether the form shows its one-line cap
   // note - the server action enforces the cap on fresh facts regardless.
-  const [vouchState, viewerTier] =
+  const [vouchState, viewerTier, viewerPower] =
     authed && !player.isOwnProfile
       ? await Promise.all([
           getViewerVouchState(player.id, viewer.viewerId as string),
           getVoucherTierCached(viewer.viewerId as string),
+          // §2AN d5: the VIEWER's own vouching power (cached 60s) - only to word the form's one-line note.
+          getVoucherPowerCached(viewer.viewerId as string),
         ])
-      : [{ hasVouched: false, canUpdateInMs: null }, null];
+      : [{ hasVouched: false, canUpdateInMs: null }, null, null];
   const newcomerLimit = viewerTier?.tier === 'newcomer' ? viewerTier.newcomerCaps.per24h : 0;
   const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
   const skill = player.communitySkill
@@ -158,6 +162,7 @@ export default async function PlayerProfilePage({ params }: Params) {
               initials={player.initials}
               name={player.displayName}
               size="lg"
+              verified={player.identityVerified}
               className="ring-primary/25 shrink-0 ring-4"
             />
             <div className="min-w-0">
@@ -192,11 +197,15 @@ export default async function PlayerProfilePage({ params }: Params) {
               isOwnProfile={player.isOwnProfile}
               viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
               newcomerLimit={newcomerLimit}
+              minimalPower={viewerPower?.minimal ?? false}
               hasVouched={vouchState.hasVouched}
               canUpdateInMs={vouchState.canUpdateInMs}
               mode="profile"
             />
             <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
+            {/* Staff-only review entry point (master_plan §2AN decision 6) - the page decides
+                staff-ness from `viewer.isStaff`, never from the player DTO. */}
+            {viewer.isStaff && <StaffPlayerActivityLink slug={slug} size="sm" />}
           </div>
         </div>
 

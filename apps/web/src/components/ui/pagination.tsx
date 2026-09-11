@@ -16,6 +16,9 @@ import { PageLinkLabel } from './page-link-label';
  *    out 0.875x (`min-h-11` is 38.5px); these are pixel values on purpose.
  *  - Long lists collapse to first / current-1 / current / current+1 / last with ellipses, and the
  *    outer jump links hide below `sm` so the row can never wrap or overflow on a phone.
+ *  - Every page link carries `scroll={false}` (master_plan §2AN decision 1): pagination changes the
+ *    list IN PLACE, so the App Router default of scrolling to the top on navigation would jump the
+ *    viewer away from the row of numbers they just tapped.
  */
 
 const GAP = 'gap' as const;
@@ -74,7 +77,7 @@ export function Pagination({
               <span className="sr-only">First page</span>
             </span>
           ) : (
-            <Link href={hrefFor(1)} className={STEP} aria-label="First page">
+            <Link href={hrefFor(1)} className={STEP} aria-label="First page" scroll={false}>
               <ChevronsLeft size={16} aria-hidden />
               <LinkSpinner />
             </Link>
@@ -82,7 +85,7 @@ export function Pagination({
         </li>
         <li>
           {page > 1 ? (
-            <Link href={hrefFor(page - 1)} className={STEP} rel="prev">
+            <Link href={hrefFor(page - 1)} className={STEP} rel="prev" scroll={false}>
               <ChevronLeft size={16} aria-hidden />
               <span className="hidden sm:inline">Previous</span>
               <span className="sr-only sm:hidden">Previous page</span>
@@ -117,6 +120,7 @@ export function Pagination({
                   href={hrefFor(slot)}
                   aria-label={`Page ${slot}`}
                   className={`${BOX} border-border bg-surface text-foreground hover:bg-surface-muted border px-3`}
+                  scroll={false}
                 >
                   <PageLinkLabel page={slot} />
                 </Link>
@@ -127,7 +131,7 @@ export function Pagination({
 
         <li>
           {page < pageCount ? (
-            <Link href={hrefFor(page + 1)} className={STEP} rel="next">
+            <Link href={hrefFor(page + 1)} className={STEP} rel="next" scroll={false}>
               <span className="hidden sm:inline">Next</span>
               <span className="sr-only sm:hidden">Next page</span>
               <ChevronRight size={16} aria-hidden />
@@ -150,7 +154,7 @@ export function Pagination({
               <span className="sr-only">Last page</span>
             </span>
           ) : (
-            <Link href={hrefFor(pageCount)} className={STEP} aria-label="Last page">
+            <Link href={hrefFor(pageCount)} className={STEP} aria-label="Last page" scroll={false}>
               <ChevronsRight size={16} aria-hidden />
               <LinkSpinner />
             </Link>

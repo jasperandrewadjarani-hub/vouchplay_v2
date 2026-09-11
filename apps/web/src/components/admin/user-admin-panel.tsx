@@ -23,6 +23,8 @@ const ACCOUNT_ACTIONS: {
   { action: 'restrict_account', label: 'Restrict account' },
   { action: 'suspend', label: 'Suspend', timed: true, danger: true },
   { action: 'ban', label: 'Ban', danger: true },
+  // §2AN d4: deactivating retracts every vouch the account has GIVEN, reversibly via Lift.
+  { action: 'deactivate', label: 'Deactivate', danger: true },
   { action: 'lift_status', label: 'Lift restriction' },
 ];
 

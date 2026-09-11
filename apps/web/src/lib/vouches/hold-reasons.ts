@@ -36,3 +36,22 @@ export function isHoldReason(reason: string | null | undefined): boolean {
 export const HOLD_REASON_OR_FILTER = Object.values(HOLD_REASON_PREFIXES)
   .map((prefix) => `invalidation_reason.like.${prefix}%`)
   .join(',');
+
+/**
+ * A disabled-account vouch retraction (master_plan §2AN decision 4): every ACTIVE vouch GIVEN by an
+ * account a staff action suspends/bans/deactivates is set `status='invalidated'` with this prefix +
+ * the resulting account status, reversibly (`lift_status` reinstates that exact prefix, skipping any
+ * pair that gained a newer active vouch). Deliberately a SIBLING of the hold prefixes above, NOT a
+ * hold itself, and deliberately NOT added to `HOLD_REASON_PREFIXES`: a hold means "an automatic guard
+ * is quarantining this pending review," and the target's profile/moderation surfaces read
+ * `isHoldReason` to say so. A troll's retracted vouch is not pending anything - it was removed because
+ * the ACCOUNT was disabled, and saying "under review" about it would be misleading (and reversing it
+ * needs the account restored, not a moderator clearing a flag).
+ */
+export const ACCOUNT_DISABLED_PREFIX = 'account_disabled:';
+
+/** True when an `invalidation_reason` was written by the disabled-account retraction above. */
+export function isAccountDisabledReason(reason: string | null | undefined): boolean {
+  if (!reason) return false;
+  return reason.startsWith(ACCOUNT_DISABLED_PREFIX);
+}
