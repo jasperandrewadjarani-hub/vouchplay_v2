@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.62
+# VouchPlay Master Product & Code Execution Handover v1.63
 
-_(File retains its `…v1.1.md` name; content is v1.62 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.63 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6202,6 +6202,20 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.63 (2026-09-11)
+
+_City is now a required, validated Philippine place (master_plan �2AI). No migration; config + validation + a new picker component. International/geolocation deferred (see �2AI)._
+
+- **Strict city validation.** Registration and profile edit now REQUIRE a real Philippine city or
+  municipality: `onboardingSchema` rejects free text like "Za" (`isValidPhCity` over the complete
+  PSGC cities+municipalities list in `@vouchplay/config`). Server-authoritative - no client can save
+  an invalid city.
+- **City picker.** A `CityCombobox` (type-to-filter, select-from-list, keyboard + screen-reader
+  accessible) replaces the free-text field on the onboarding/edit form; native `normalizeCity` still
+  canonicalises spelling on save. Existing non-matching values self-correct on the user next edit.
+- **Deferred:** other countries + geolocation - needs a Country field, a Places-API/GeoNames-backed
+  combobox, a schema migration, and (for geolocation) consent under RA 10173. Not built here.
 
 ## v1.62 (2026-09-11)
 

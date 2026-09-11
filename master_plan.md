@@ -3242,6 +3242,62 @@ hook.
 The Me tab and auth pages are unchanged. Rate-of-conversion analytics, a "continue as guest" cookie,
 and any partial-blur teaser styling are deferred - this ships the clean gate first.
 
+## 2AI. City is a required, validated Philippine place (2026-09-11)
+
+Jasper: players can still type a garbage city ("Za"), and City must be REQUIRED at registration and
+validated against the real list of Philippine places. (Live data confirms it: "Za", plus provinces
+like "Bulacan"/"Zamboanga Sibugay" typed as a city.) Phase B added a `<datalist>` that *suggests* PH
+cities but a native datalist never *restricts* - free text still submits, and `normalizeCity` passes
+unknown text through unchanged. This makes the field strict.
+
+### Decisions
+
+- **Completeness first, or strict validation blocks real users.** Phase B's list was ~150 (mostly
+  cities). Filipinos live in *municipalities* too - the live data already has Jolo, Titay, Santo
+  Tomas, Dipolog. Validating against a 150-city list would REJECT legitimate residents, which is worse
+  than "Za". So step one is a COMPLETE, authoritative list of all ~149 cities AND ~1,490 municipalities
+  (PSGC), pulled from a public dataset for accuracy - not hand-typed from memory. Every value currently
+  in the live data that is a real place must be present.
+- **Strict membership, server-authoritative.** `onboardingSchema.city` becomes: required, and
+  `isValidPhCity(normalizeCity(input))` must be true, else a clear error. This gates BOTH registration
+  (`completeOnboarding`) and profile edit (`updateProfile`) - no client can save an invalid city.
+- **UX: a real picker, not free text.** A `CityCombobox` (type-to-filter, pick from the list, only a
+  listed place can be chosen) replaces the plain input on the onboarding + edit form. Familiar
+  "start typing your city" behaviour, big tap targets, keyboard + screen-reader accessible, filters to
+  the top matches so it stays fast over ~1,600 entries. A guest of any age types "zamb" and taps
+  "Zamboanga City"; typing "Za" and stopping shows "Choose your city from the list" and blocks submit.
+- **Existing messy values are left as-is** (a handful of provinces / "Za" / concatenations): strict
+  validation applies going forward and re-validates on the user's next edit, so they self-correct
+  without us re-guessing anyone's intent. No forced data rewrite this time (the Phase B one already
+  canonicalised the bulk).
+
+### International expansion / geolocation - the honest answer (DEFERRED to its own phase)
+
+Possible, but not a "now" change, and not something to bolt on blind:
+- **Other countries** need a **Country** field first (default Philippines), and a data source per
+  country. A hand-list does not scale to the world; the right tool is a **Places API** (Google Places
+  / Mapbox) behind our own combobox, or a large open dataset (GeoNames) if we want to stay
+  self-hosted and free. Either is a schema change (`profiles.country`, and city stored with country
+  context) plus a migration and a backfill of existing rows to `Philippines`.
+- **Geolocation** (auto-detecting the user's location) is doable via the browser Geolocation API or IP
+  lookup, but it is **sensitive personal data under RA 10173** - it needs consent, a Privacy Policy
+  clause, and a fallback for refusal. It should never be required.
+- **Recommendation:** ship strict PH validation now (this section); when international is wanted, do it
+  as a phase: add Country, swap the PH list for a Places-API-backed combobox scoped by country, keep
+  the same "must select a real place" rule, and treat geolocation as an optional convenience with
+  consent, not the source of truth.
+
+### Execution
+
+- **Data + validation (subagent, web-fetched for accuracy):** replace `PH_CITIES` in
+  `@vouchplay/config` with the complete cities+municipalities list; add `isValidPhCity`; keep
+  `normalizeCity` idempotent and mapping the live values onto list members; make `onboardingSchema`
+  enforce membership + required; unit tests incl. "Za" rejected, every live value accepted.
+- **UX (main):** `CityCombobox` client component; wire it into `onboarding-form.tsx` (covers onboarding
+  + edit). Server stays the backstop.
+- Gates, deploy both domains. No migration (config + validation + component only). If any real place is
+  found missing later it is a one-line config add.
+
 ## 1. Prompt Contract
 
 ### In scope

@@ -9,8 +9,32 @@ const base = {
   selfRatedSkill: 2,
 };
 
-describe('onboardingSchema - city normalization (master_plan §2AG Phase B)', () => {
-  it('normalizes a messy live spelling to its canonical form', () => {
+const INVALID_CITY_MESSAGE = 'Please choose your city from the list.';
+
+/** Pulls the `city` field error message out of a failed safeParse result. */
+function cityError(city: unknown): string | undefined {
+  const result = onboardingSchema.safeParse({ ...base, city });
+  if (result.success) return undefined;
+  return result.error.issues.find((i) => i.path[0] === 'city')?.message;
+}
+
+describe('onboardingSchema - strict city validation (master_plan §2AI)', () => {
+  it('accepts a canonical city and passes it through unchanged', () => {
+    const parsed = onboardingSchema.parse({ ...base, city: 'Zamboanga City' });
+    expect(parsed.city).toBe('Zamboanga City');
+  });
+
+  it('accepts and normalizes a bare municipality name', () => {
+    const parsed = onboardingSchema.parse({ ...base, city: 'jolo' });
+    expect(parsed.city).toBe('Jolo');
+  });
+
+  it('accepts a city case-insensitively and normalizes it', () => {
+    const parsed = onboardingSchema.parse({ ...base, city: 'DAVAO CITY' });
+    expect(parsed.city).toBe('Davao City');
+  });
+
+  it('normalizes a messy live spelling before validating', () => {
     const parsed = onboardingSchema.parse({ ...base, city: 'Zamboanga city' });
     expect(parsed.city).toBe('Zamboanga City');
   });
@@ -20,17 +44,29 @@ describe('onboardingSchema - city normalization (master_plan §2AG Phase B)', ()
     expect(parsed.city).toBe('Isabela City');
   });
 
-  it('keeps an unrecognised place, cleaned and Title-Cased, rather than rejecting it', () => {
-    const parsed = onboardingSchema.parse({ ...base, city: 'some far barangay' });
-    expect(parsed.city).toBe('Some Far Barangay');
+  it('rejects garbage ("Za") with the exact non-technical message', () => {
+    expect(cityError('Za')).toBe(INVALID_CITY_MESSAGE);
   });
 
-  it('still rejects a blank city', () => {
+  it('rejects a bare province ("Bulacan") with the exact message', () => {
+    expect(cityError('Bulacan')).toBe(INVALID_CITY_MESSAGE);
+  });
+
+  it('rejects an unrecognised place rather than silently accepting it', () => {
+    expect(cityError('some far barangay')).toBe(INVALID_CITY_MESSAGE);
+  });
+
+  it('rejects a blank city (required field)', () => {
     const result = onboardingSchema.safeParse({ ...base, city: '   ' });
     expect(result.success).toBe(false);
   });
 
-  it('still rejects a city over 80 characters', () => {
+  it('rejects a missing city', () => {
+    const result = onboardingSchema.safeParse({ ...base });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a city over 80 characters', () => {
     const result = onboardingSchema.safeParse({ ...base, city: 'a'.repeat(81) });
     expect(result.success).toBe(false);
   });

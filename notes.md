@@ -2798,3 +2798,20 @@ guest players preview=most_vouched tweak. Gates + one deploy.
 - LEADERBOARDS GUEST GATE (bug fix, §2AH): /leaderboards now redirects anon to /signup?next; Home
   "All rankings" button hidden for guests. Guests no longer bypass the top-3 preview + wall.
 Gates + one deploy.
+
+## 2026-09-11 - City = required, validated PH place (§2AI, handover v1.63)
+Problem: free-text city allowed "Za"; must be required + validated vs real PH cities.
+- packages/config ph-cities.ts: PH_CITIES regenerated from PSGC (jgngo/psgc-data muncity.json) ->
+  1423 deduped Title-Cased cities+municipalities; added isValidPhCity (normalize+Set); normalizeCity
+  now ordered-candidate resolver (San Fernando vs San Fernando City both round-trip), idempotent.
+  Bulacan(province) stays invalid -> real town remapped to "Bulakan". All live-data places validate.
+- packages/validation profile.ts: city required + .refine(isValidPhCity) msg "Please choose your city
+  from the list." -> gates completeOnboarding AND updateProfile.
+- apps/web components/ui/city-combobox.tsx (new): accessible type-to-filter picker (role=combobox,
+  listbox/option, arrow/enter/escape, min-h-11, setCustomValidity blocks invalid submit, MapPin+Check
+  affordances, top-30 filtered). Wired into onboarding-form (onboarding + edit); removed the old
+  free-text datalist.
+Existing messy values (provinces "Zamboanga Sibugay"/"Bulacan", "Za", "Titay Zamboanga Sibugay") stay
+until the user's next edit, then must re-pick (strict). No migration. Config 53 tests / validation 11.
+INTERNATIONAL/GEOLOCATION: deferred (§2AI) - needs Country field + Places API/GeoNames + schema
+migration + RA10173 consent for geolocation. Answered Jasper.

@@ -1,9 +1,10 @@
 'use client';
 
 import { useActionState } from 'react';
-import { SKILL_BANDS, PH_CITIES } from '@vouchplay/config';
+import { SKILL_BANDS } from '@vouchplay/config';
 import { completeOnboarding, updateProfile, type ProfileFormState } from '@/lib/actions/profile';
 import { Field, Input, Select, FormError } from '@/components/ui/field';
+import { CityCombobox } from '@/components/ui/city-combobox';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: ProfileFormState = {};
@@ -62,21 +63,9 @@ export function OnboardingForm({
           </Select>
         </Field>
         <Field label="City" htmlFor="city" required>
-          <Input
-            id="city"
-            name="city"
-            list="ph-cities"
-            autoComplete="off"
-            defaultValue={initial.city ?? ''}
-            required
-          />
-          {/* Native <datalist> autocomplete (§2AG Phase B): zero-JS, works on every phone; the input
-              still accepts free text for a place not on the list. */}
-          <datalist id="ph-cities">
-            {PH_CITIES.map((city) => (
-              <option key={city} value={city} />
-            ))}
-          </datalist>
+          {/* Strict, validated Philippine city/municipality picker (master_plan §2AI) - replaces the
+              old free-text datalist so "Za" and other non-places can no longer be submitted. */}
+          <CityCombobox id="city" name="city" defaultValue={initial.city ?? ''} required />
         </Field>
       </div>
 

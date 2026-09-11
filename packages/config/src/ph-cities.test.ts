@@ -1,5 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { PH_CITIES, normalizeCity } from './ph-cities';
+import { PH_CITIES, isValidPhCity, normalizeCity } from './ph-cities';
+
+/**
+ * Every real city/municipality currently present in the live directory data. Strict validation must
+ * never reject one of these (that would block a legitimate resident at signup). Forms match the
+ * canonical `PH_CITIES` display spelling (cities keep their "<Name> City" form).
+ */
+const LIVE_DATA_PLACES = [
+  'Zamboanga City',
+  'Isabela City',
+  'Lamitan City',
+  'Dumaguete City',
+  'Jolo',
+  'Santo Tomas',
+  'Valenzuela City',
+  'Cotabato City',
+  'Dipolog City',
+  'Toledo City',
+  'Titay',
+] as const;
 
 describe('PH_CITIES', () => {
   it('is deduplicated and alphabetically sorted', () => {
@@ -8,166 +27,133 @@ describe('PH_CITIES', () => {
     expect(new Set(PH_CITIES).size).toBe(PH_CITIES.length);
   });
 
-  it('is a reasonable, genuine PH-place list (100-200 entries)', () => {
-    expect(PH_CITIES.length).toBeGreaterThanOrEqual(100);
-    expect(PH_CITIES.length).toBeLessThanOrEqual(200);
+  it('covers the complete PH cities+municipalities set (~1,600 places, deduped to ~1,400 names)', () => {
+    // The PSGC lists ~1,630 cities+municipalities, but many municipalities share a name across
+    // provinces (dozens of "Santa Cruz", "San Isidro", etc.), so a genuine flat, de-duplicated name
+    // list is smaller (currently 1423). A resident of any same-named place still validates. The range
+    // is generous so a later one-line addition of a newly-created place does not break this test.
+    expect(PH_CITIES.length).toBeGreaterThanOrEqual(1400);
+    expect(PH_CITIES.length).toBeLessThanOrEqual(1600);
   });
 
   it('includes every place present in the live directory data', () => {
-    for (const place of [
-      'Zamboanga City',
-      'Isabela City',
-      'Lamitan City',
-      'Dumaguete City',
-      'Cotabato City',
-      'Santo Tomas',
-      'Toledo',
-    ]) {
+    for (const place of LIVE_DATA_PLACES) {
       expect(PH_CITIES).toContain(place);
+    }
+  });
+
+  it('does not include provinces or garbage as if they were cities', () => {
+    for (const notACity of [
+      'Za',
+      'Bulacan',
+      'Zamboanga Sibugay',
+      'Zamboanga del Sur',
+      'Cotabato',
+    ]) {
+      expect(PH_CITIES).not.toContain(notACity);
     }
   });
 });
 
-describe('normalizeCity - Zamboanga City group (322 players, 8 spellings)', () => {
+describe('normalizeCity - maps live-data spellings onto canonical list members', () => {
   it.each([
-    'Zamboanga',
-    'Zamboanga City',
-    'Zamboanga city',
-    'zamboanga city',
-    'ZAMBOANGA CITY',
-    'City of Zamboanga',
-    'City Of Zamboanga',
-    'Zamboaga city', // typo: missing "n"
-    'Zamboanga i', // truncated typo
-  ])('%s -> Zamboanga City', (input) => {
-    expect(normalizeCity(input)).toBe('Zamboanga City');
-  });
-});
-
-describe('normalizeCity - Isabela City group (12 players)', () => {
-  it.each([
-    'Isabela City',
-    'Isabela city',
-    'City Of Isabela',
-    'City of Isabela',
-    'Isabella city', // typo: extra "l"
-    'Isabela city basilan',
-    'Isabela basilan',
-  ])('%s -> Isabela City', (input) => {
-    expect(normalizeCity(input)).toBe('Isabela City');
-  });
-});
-
-describe('normalizeCity - Lamitan City group (6 players)', () => {
-  it.each(['Lamitan City', 'Lamitan city', 'lamitan city', 'City of Lamitan', 'Lamitan'])(
-    '%s -> Lamitan City',
-    (input) => {
-      expect(normalizeCity(input)).toBe('Lamitan City');
-    },
-  );
-});
-
-describe('normalizeCity - Dumaguete City group (5 players)', () => {
-  it.each(['Dumaguete City', 'Dumaguete city', 'Dumaguete', 'City of Dumaguete'])(
-    '%s -> Dumaguete City',
-    (input) => {
-      expect(normalizeCity(input)).toBe('Dumaguete City');
-    },
-  );
-});
-
-describe('normalizeCity - remaining live typos/variants', () => {
-  it('Sto.tomas -> Santo Tomas', () => {
-    expect(normalizeCity('Sto.tomas')).toBe('Santo Tomas');
-  });
-  it('Sto tomas -> Santo Tomas', () => {
-    expect(normalizeCity('Sto tomas')).toBe('Santo Tomas');
-  });
-  it('Santo tomas -> Santo Tomas', () => {
-    expect(normalizeCity('Santo tomas')).toBe('Santo Tomas');
-  });
-  it('Toledo City -> Toledo', () => {
-    expect(normalizeCity('Toledo City')).toBe('Toledo');
-  });
-  it('Toledo -> Toledo', () => {
-    expect(normalizeCity('Toledo')).toBe('Toledo');
-  });
-  it('COTABATO -> Cotabato City', () => {
-    expect(normalizeCity('COTABATO')).toBe('Cotabato City');
-  });
-  it('Zamboanga i -> Zamboanga City', () => {
-    expect(normalizeCity('Zamboanga i')).toBe('Zamboanga City');
-  });
-});
-
-describe('normalizeCity - alias map entries directly', () => {
-  it.each([
-    ['zamboaga', 'Zamboanga City'],
-    ['zamboanga i', 'Zamboanga City'],
-    ['isabella', 'Isabela City'],
-    ['isabela basilan', 'Isabela City'],
-    ['isabela city basilan', 'Isabela City'],
-    ['sto tomas', 'Santo Tomas'],
-    ['sto.tomas', 'Santo Tomas'],
-    ['cotabato', 'Cotabato City'],
-    ['toledo', 'Toledo'],
-  ])('alias "%s" -> %s', (input, expected) => {
+    ['Zamboanga', 'Zamboanga City'],
+    ['zamboanga city', 'Zamboanga City'],
+    ['ZAMBOANGA CITY', 'Zamboanga City'],
+    ['City of Zamboanga', 'Zamboanga City'],
+    ['Zamboaga city', 'Zamboanga City'], // typo: missing "n"
+    ['Zamboanga i', 'Zamboanga City'], // truncated typo
+    ['Dumaguete', 'Dumaguete City'],
+    ['Dipolog', 'Dipolog City'],
+    ['Toledo', 'Toledo City'],
+    ['Toledo City', 'Toledo City'],
+    ['valenzuela', 'Valenzuela City'],
+    ['Isabella city', 'Isabela City'], // typo: extra "l"
+    ['Isabela city basilan', 'Isabela City'],
+    ['Isabela basilan', 'Isabela City'],
+    ['City of Lamitan', 'Lamitan City'],
+    ['santo tomas', 'Santo Tomas'],
+    ['Sto tomas', 'Santo Tomas'],
+    ['Sto.tomas', 'Santo Tomas'],
+    ['jolo', 'Jolo'],
+    ['COTABATO', 'Cotabato City'],
+  ])('normalizeCity(%o) === %o', (input, expected) => {
     expect(normalizeCity(input)).toBe(expected);
   });
 });
 
-describe('normalizeCity - unknown places survive, never blanked', () => {
-  it('passes through an unrecognised place, cleaned and Title-Cased', () => {
-    expect(normalizeCity('some weird BARANGAY')).toBe('Some Weird Barangay');
-  });
-
-  it('does not special-case the "Phase 13 City" test rows (left to the data script)', () => {
-    expect(normalizeCity('Phase 13 City')).toBe('Phase 13');
-  });
-
-  it('never returns an empty string for non-empty input', () => {
-    expect(normalizeCity('xyzzy')).not.toBe('');
-  });
-
+describe('normalizeCity - purity and idempotence', () => {
   it('returns "" only for null/undefined/blank input', () => {
     expect(normalizeCity(null)).toBe('');
     expect(normalizeCity(undefined)).toBe('');
     expect(normalizeCity('   ')).toBe('');
   });
 
-  it('collapses internal whitespace', () => {
-    expect(normalizeCity('  General   Santos  ')).toBe('General Santos');
+  it('never blanks a non-empty input - unknown places survive, cleaned and Title-Cased', () => {
+    expect(normalizeCity('some weird BARANGAY')).toBe('Some Weird Barangay');
+    expect(normalizeCity('xyzzy')).not.toBe('');
+    // Collapses internal whitespace, then resolves onto the canonical city entry.
+    expect(normalizeCity('  General   Santos  ')).toBe('General Santos City');
+    expect(normalizeCity('lapu-lapu')).toBe('Lapu-Lapu City');
   });
 
-  it('title-cases a hyphenated proper noun', () => {
-    expect(normalizeCity('lapu-lapu')).toBe('Lapu-Lapu');
-  });
-});
-
-describe('normalizeCity - idempotence', () => {
-  it.each([
-    'Zamboanga',
-    'Zamboanga City',
-    'City of Zamboanga',
-    'Zamboaga city',
-    'Isabella city',
-    'Isabela city basilan',
-    'Sto.tomas',
-    'Toledo City',
-    'COTABATO',
-    'Phase 13 City',
-    'some weird BARANGAY',
-    'lapu-lapu',
-    '  General   Santos  ',
-  ])('normalizeCity(normalizeCity(%s)) === normalizeCity(%s)', (input) => {
-    const once = normalizeCity(input);
-    expect(normalizeCity(once)).toBe(once);
+  it('is idempotent for a spread of messy inputs', () => {
+    for (const input of [
+      'Zamboanga',
+      'City of Zamboanga',
+      'Zamboaga city',
+      'Isabella city',
+      'Toledo',
+      'valenzuela',
+      'Sto.tomas',
+      'some weird BARANGAY',
+      'xyzzy',
+      'lapu-lapu',
+    ]) {
+      const once = normalizeCity(input);
+      expect(normalizeCity(once)).toBe(once);
+    }
   });
 
-  it('is idempotent for every canonical PH_CITIES entry', () => {
+  it('is idempotent (round-trips to itself) for every canonical PH_CITIES entry', () => {
     for (const city of PH_CITIES) {
       expect(normalizeCity(city)).toBe(city);
       expect(normalizeCity(normalizeCity(city))).toBe(city);
+    }
+  });
+});
+
+describe('isValidPhCity', () => {
+  it('is true for every place in the live directory data', () => {
+    for (const place of LIVE_DATA_PLACES) {
+      expect(isValidPhCity(place)).toBe(true);
+    }
+  });
+
+  it('is true for messy-but-real spellings (case / suffix / typo tolerant)', () => {
+    for (const input of [
+      'DAVAO CITY',
+      'jolo',
+      'Zamboanga',
+      'City of Zamboanga',
+      'Isabella city',
+      'valenzuela',
+      'santo tomas',
+      'Titay',
+    ]) {
+      expect(isValidPhCity(input)).toBe(true);
+    }
+  });
+
+  it('is true for every canonical PH_CITIES entry', () => {
+    for (const city of PH_CITIES) {
+      expect(isValidPhCity(city)).toBe(true);
+    }
+  });
+
+  it('is false for garbage, provinces, and empty input', () => {
+    for (const bad of ['Za', '', '   ', 'Bulacan', 'Xyzzy', 'Zamboanga Sibugay', null, undefined]) {
+      expect(isValidPhCity(bad)).toBe(false);
     }
   });
 });
