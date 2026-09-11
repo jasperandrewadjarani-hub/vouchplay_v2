@@ -28,8 +28,11 @@ export async function Header() {
 
   return (
     <header className="vp-topbar border-border bg-surface/80 vp-hero sticky top-0 z-50 border-b backdrop-blur-lg">
-      {/* Developed-by line (top middle), links to the JT Consulting & Analytics page (§5.2.1). */}
-      <div className="flex justify-center px-4 pt-1.5">
+      {/* Top strip: the developed-by credit centred, and the live "players online" chip pinned to the
+          right - ABOVE the profile icon in the row below (master_plan §2S revised). It used to float
+          under the header (`top-full`) where it overlapped page content like the "Verify ID" prompt;
+          living in this strip keeps it clear of everything below the header. */}
+      <div className="relative flex min-h-7 items-center justify-center px-4 pt-1.5">
         <a
           href={BRAND.jtFacebookUrl}
           target="_blank"
@@ -38,6 +41,11 @@ export async function Header() {
         >
           Developed by {BRAND.developer.replace(' Inc.', '')}
         </a>
+        {showCounter && (
+          <div className="absolute top-1/2 right-4 -translate-y-1/2">
+            <OnlineCounter />
+          </div>
+        )}
       </div>
       <div className="relative mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4">
         <Link href="/" className="flex items-center gap-2" aria-label="VouchPlay home">
@@ -88,15 +96,6 @@ export async function Header() {
             </ButtonLink>
           )}
         </div>
-
-        {/* Live presence: a hovering chip just below the bell/profile, glued under the sticky header
-            (master_plan §2S). Absolute to this max-width row so it aligns under those icons on wide
-            screens rather than the far viewport corner. */}
-        {showCounter && (
-          <div className="absolute top-full right-4 z-50 mt-2">
-            <OnlineCounter />
-          </div>
-        )}
       </div>
       <div className="vp-gradient h-0.5 w-full opacity-80" aria-hidden />
     </header>

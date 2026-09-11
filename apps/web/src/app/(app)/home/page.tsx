@@ -82,9 +82,13 @@ export default async function HomePage() {
                   Who is leading right now
                 </h2>
               </div>
-              <ButtonLink href="/leaderboards" variant="secondary">
-                All rankings
-              </ButtonLink>
+              {/* Members-only: the full leaderboards are gated (master_plan §2AH), so a guest never
+                  gets an "All rankings" escape hatch past the top-3 preview + signup prompt. */}
+              {user && (
+                <ButtonLink href="/leaderboards" variant="secondary">
+                  All rankings
+                </ButtonLink>
+              )}
             </div>
             <div className="vp-glow relative overflow-hidden rounded-2xl">
               <div className="vp-gradient absolute inset-x-0 top-0 z-10 h-1" aria-hidden />

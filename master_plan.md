@@ -3201,7 +3201,7 @@ favour of a gated-preview funnel - a deliberate product decision (see the trade-
 | **Clubs list** `/clubs` | Nothing (no club data fetched) | A full `SignupWall`: "Sign up to discover clubs" |
 | **Club detail** `/clubs/[slug]` | Nothing | Redirect to `/signup?next=/clubs/{slug}` |
 | **Home** `/home` | Community Champions top 3 + Clubs top 3 only, then a signup prompt (players board, momentum, product cards hidden for guests) | Entry links prompt signup |
-| **Leaderboards** `/leaderboards` | The boards | Same entry-link gating as Home (same panel) |
+| **Leaderboards** `/leaderboards` | Members-only - a guest is redirected to signup (the Home "All rankings" button is hidden for guests) | Full boards gated |
 
 ### Mechanism (few, central changes)
 

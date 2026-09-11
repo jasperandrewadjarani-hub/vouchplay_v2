@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { CalendarClock } from 'lucide-react';
 import type { LeaderboardCategory } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
@@ -22,6 +23,10 @@ type SP = Record<string, string | string[] | undefined>;
 const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
 export default async function LeaderboardsPage({ searchParams }: { searchParams: Promise<SP> }) {
+  // Signup wall (master_plan §2AH): the full leaderboards are members-only. A guest sees the Home
+  // top-3 preview and is prompted to join; a direct hit here (or the old "All rankings" link) redirects
+  // to signup and resumes on the boards afterward. Home hides the "All rankings" button for guests too.
+  if (!(await getOptionalUser())) redirect('/signup?next=%2Fleaderboards');
   const sp = await searchParams;
   const categoryRaw = one(sp.category);
   // Contributors is the default board: it is the only one with real earned separation today, so

@@ -2789,3 +2789,12 @@ home/page.tsx: anon Home now = hero -> Community Champions top 3 -> Top clubs to
 Players board, momentum, RankingsExplanation, and feature cards hidden for guests. Community + clubs
 fetched at limit 3 for guests (players read skipped). Signed-in Home fully unchanged. Bundled with the
 guest players preview=most_vouched tweak. Gates + one deploy.
+
+## 2026-09-11 - UI fixes: online chip placement, edit-profile ID link, leaderboards guest gate
+- header.tsx: moved OnlineCounter from the floating `absolute top-full` (overlapped page content /
+  "Verify ID" prompt) INTO the top strip, right-aligned above the profile icon (§2S revised).
+- me/edit/page.tsx: added a prominent status-aware IdentityCard (approved/pending/CTA) linking
+  /me/settings/identity - ID upload was previously only findable from Me->Settings.
+- LEADERBOARDS GUEST GATE (bug fix, §2AH): /leaderboards now redirects anon to /signup?next; Home
+  "All rankings" button hidden for guests. Guests no longer bypass the top-3 preview + wall.
+Gates + one deploy.
