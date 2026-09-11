@@ -10,6 +10,7 @@ import { assertStaffActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { prepareIdentityDocument } from '@/lib/identity/prepare-identity-document';
+import { IDENTITY_DOCUMENT_TYPES, type IdentityDocumentType } from '@/lib/identity/document-types';
 
 /**
  * Identity verification pipeline (master_plan §2AG Phase C, handover §13.3). Staff-approved ONLY -
@@ -35,13 +36,9 @@ export interface IdentityActionState {
   message?: string;
 }
 
-export const IDENTITY_DOCUMENT_TYPES = [
-  'national_id',
-  'passport',
-  'drivers_license',
-  'other',
-] as const;
-export type IdentityDocumentType = (typeof IDENTITY_DOCUMENT_TYPES)[number];
+// The document-type list + type live in a PLAIN module, not here: a `'use server'` file may only
+// export async functions, so exporting a const from it made it `undefined` on the client and crashed
+// the upload form. Imported here for the server-side validation below; the client imports it directly.
 
 /** Statuses that block a new submission: already pending review, under review, or approved. */
 const BLOCKING_STATUSES: IdentityVerificationStatus[] = ['pending', 'reviewing', 'approved'];

@@ -2,11 +2,8 @@
 
 import { useActionState } from 'react';
 import { SubmitButton } from '@/components/ui/button';
-import {
-  submitIdentityVerification,
-  IDENTITY_DOCUMENT_TYPES,
-  type IdentityActionState,
-} from '@/lib/actions/identity';
+import { submitIdentityVerification, type IdentityActionState } from '@/lib/actions/identity';
+import { IDENTITY_DOCUMENT_TYPES } from '@/lib/identity/document-types';
 
 const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   national_id: 'National ID',
