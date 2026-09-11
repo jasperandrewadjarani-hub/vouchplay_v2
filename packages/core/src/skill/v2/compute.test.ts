@@ -34,6 +34,7 @@ const fresh = (id: string, clubIds: string[]): V2Voucher => ({
   standingRaw: 0,
   accountAgeDays: 1,
   clubIds,
+  outgoingCount: 5,
 });
 
 const anchor = (id: string, clubIds: string[] = []): V2Voucher => ({
@@ -42,6 +43,7 @@ const anchor = (id: string, clubIds: string[] = []): V2Voucher => ({
   standingRaw: 0,
   accountAgeDays: 365,
   clubIds,
+  outgoingCount: 5,
 });
 
 const vouch = (

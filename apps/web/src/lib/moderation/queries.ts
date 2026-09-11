@@ -2,6 +2,7 @@ import 'server-only';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertStaffActor } from '@/lib/moderation/staff';
 import { selectSkillProfiles, type SkillProfileRow } from '@/lib/vouches/active-skill';
+import { isHoldReason } from '@/lib/vouches/hold-reasons';
 import type {
   ReportRow,
   SkillReviewRow,
@@ -159,6 +160,7 @@ export async function listFraudFlags(includeResolved = false): Promise<FraudFlag
 
 const INTEGRITY_FLAG_TYPES = [
   'VELOCITY_BURST',
+  'SINGLE_PURPOSE_CLUSTER',
   'LOW_TRUST_SWARM',
   'RECIPROCAL_RING',
   'CLUB_BLOC',
@@ -184,7 +186,7 @@ export interface IntegrityQueueItem {
     /** V2's independent-equivalent evidence count - "Based on N independent players" (§2AF UX). */
     nEff: number | null;
   };
-  /** How many of this flag's held vouches are STILL invalidated under a velocity hold right now. */
+  /** How many of this flag's held vouches are STILL invalidated under a hold (§2AF/§2AJ) right now. */
   heldCount: number;
   evidence: Record<string, unknown>;
 }
@@ -267,9 +269,7 @@ export async function loadIntegrityQueue(): Promise<IntegrityQueueItem[]> {
       : [];
     const heldCount = heldIds.filter((id) => {
       const v = heldStatusById.get(id);
-      return (
-        v?.status === 'invalidated' && (v.invalidation_reason ?? '').startsWith('velocity_hold:')
-      );
+      return v?.status === 'invalidated' && isHoldReason(v.invalidation_reason);
     }).length;
 
     const skillRow = skillByPlayer.get(row.subject_id);

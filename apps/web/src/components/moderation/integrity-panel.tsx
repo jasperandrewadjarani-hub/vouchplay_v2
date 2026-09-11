@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { skillByOrdinal, FRAUD_FLAG_STATUS_LABELS, type FraudFlagStatus } from '@vouchplay/config';
 import type { IntegrityQueueItem } from '@/lib/moderation/queries';
 import { reinstateHeldVouches, keepHold, reviewFraudFlag } from '@/lib/actions/moderation';
+import { isHoldFlagType } from '@/lib/vouches/hold-reasons';
 import { QueueCard, MiniLink } from './queue-card';
 
 /**
@@ -16,6 +17,7 @@ import { QueueCard, MiniLink } from './queue-card';
 
 const FLAG_TITLES: Record<string, string> = {
   VELOCITY_BURST: 'Sudden burst of vouches',
+  SINGLE_PURPOSE_CLUSTER: 'Vouches from accounts that exist only to vouch this player',
   LOW_TRUST_SWARM: 'Many vouches from brand-new accounts',
   RECIPROCAL_RING: 'Mutual vouching group',
   CLUB_BLOC: 'One club is driving this rating',
@@ -55,7 +57,8 @@ function IntegrityActions({ item }: { item: IntegrityQueueItem }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pending, start] = useTransition();
 
-  const canReleaseHold = item.flagType === 'VELOCITY_BURST' && item.heldCount > 0;
+  // Both hold-producing flags (velocity §2AF, single-purpose cluster §2AJ) share the release path.
+  const canReleaseHold = isHoldFlagType(item.flagType) && item.heldCount > 0;
   const disabled = pending || !note.trim();
 
   function run(action: () => ReturnType<typeof reviewFraudFlag>) {

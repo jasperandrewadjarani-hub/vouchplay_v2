@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.63
+# VouchPlay Master Product & Code Execution Handover v1.64
 
-_(File retains its `…v1.1.md` name; content is v1.63 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.64 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -1294,6 +1294,14 @@ The system uses a rolling 24-hour window, not a calendar-day reset.
 
 Updating an existing vouch counts as one vouch action.
 
+**Newcomer caps (v1.64, master_plan §2AJ).** `0` on any cap means unlimited (the launch setting for
+players and coaches). A voucher who is NOT anchored (no confirmed/paid registration, approved ID, or
+coach role) and has received-vouch standing (§10.11 `standing`, mutual pairs excluded) below
+`vouch_newcomer_graduate_standing` (default `1.0`) is a *newcomer* and is capped at
+`vouch_newcomer_per_24h` (default `5`) vouches and `vouch_newcomer_requests_per_24h` (default `5`)
+requests, whenever those are stricter than the global caps. Account age is deliberately not a factor.
+The cap is enforced server-side on fresh facts; the vouch form shows a newcomer the rule in one line.
+
 ## 10.4 Default Vouch Update Cooldown
 
 Admin-configurable default:
@@ -1495,11 +1503,13 @@ All actions require reason and audit log.
 §11.2's risk flags were specified but never automated. They now run at every vouch write for the
 target (pure detectors in `@vouchplay/core`, persistence in the app) and write `fraud_flags` rows
 (`subject_type='user'`, deduplicated per subject+type while open/reviewing). Every threshold is an
-Admin setting (`skill_v2_*`). Flags never alter public scores (§11.2) with ONE deliberate exception:
+Admin setting (`skill_v2_*`). Flags never alter public scores (§11.2) with TWO deliberate exceptions
+(the two holds - automatic, reversible quarantines, never bans):
 
 | `flag_type` | Trigger (defaults) | Effect |
 |---|---|---|
-| `VELOCITY_BURST` | ≥ 8 vouches on a player within 6h, ≥ 60% from low-trust vouchers (trust < 0.5) | **Hold**: those low-trust vouches are set `status='invalidated'` with `invalidation_reason='velocity_hold:<flag_id>'` and a revision, excluded from CSL until a moderator reinstates them (`change_type='reinstated'`). The only automatic action; reversible; kill switch `vouch_velocity_guard_enabled`. |
+| `VELOCITY_BURST` | ≥ 8 vouches on a player within 6h, ≥ 60% from low-trust vouchers (trust < 0.5) | **Hold**: those low-trust vouches are set `status='invalidated'` with `invalidation_reason='velocity_hold:<flag_id>'` and a revision, excluded from CSL until a moderator reinstates them (`change_type='reinstated'`). Reversible; kill switch `vouch_velocity_guard_enabled`. |
+| `SINGLE_PURPOSE_CLUSTER` (v1.64, §2AJ) | ≥ 4 of a player's vouches, and ≥ 50% of them, come from vouchers that are unanchored, have zero standing and have given ≤ 2 vouches in total (`skill_v2_cluster_min` / `_share` / `_max_outgoing`) | **Hold** of those vouches (`invalidation_reason='cluster_hold:<flag_id>'`), same reinstate path. Not age-based - the sock-puppet *shape*. Kill switch `vouch_cluster_guard_enabled`. |
 | `LOW_TRUST_SWARM` | ≥ 6 vouches from unanchored accounts with no standing | flag only |
 | `RECIPROCAL_RING` | ≥ 4 vouches and ≥ 50% reciprocal | flag only |
 | `CLUB_BLOC` | one club supplies ≥ 60% of ≥ 4 vouches and that bloc's median sits ≥ 2 bands from the self-rating in one direction | flag only |
@@ -2463,7 +2473,8 @@ Organizer configures:
 - currency,
 - payment instructions,
 - accepted payment labels/methods,
-- payment deadline.
+- payment deadline,
+- (v1.64) the email address that receives a notification for every uploaded receipt (§24.4.1).
 
 ## 24.2 Payment Fields
 
@@ -2502,6 +2513,24 @@ Organizer can:
 - mark refunded.
 
 All payment changes are auditable.
+
+## 24.4.1 Payment receipt notification email (v1.64, master_plan §2AK)
+
+Per tournament, `tournaments.payment_notification_email` (blank = off; organizer form → Payment → "Send
+receipt notifications to"). When a team uploads a payment receipt (`submitPayment`), one email is sent,
+best-effort and never blocking the submission, from the pilot transport (`vouchplay@gmail.com`, §42
+deviation) to that address:
+
+- Subject: `Registration payment notification - {Tournament} - {NickA/NickB} - {Category}`
+- Body: submitted by (registrant email), team (both nicknames "A/B"), category (division), each
+  player's full name + email, amount submitted, mode of payment, payer name (if given), payment
+  reference / transaction number, **View receipt** (7-day signed link to the private proof - the only
+  way a private object can be opened from an email; expires) and **Open in Manage** (login-gated).
+- One registration = one division, so a pair entered in two categories produces two emails.
+- Every attempt is audited (`payment.notification_sent` / `_failed` / `_test`, entity = registration);
+  the receipt URL is never logged. "Send a test email" on Manage lets the organizer confirm delivery.
+- Inert until `SMTP_USER` / `SMTP_PASS` exist in the server env (the form says so in one line).
+  Deferred: daily digest mode, outbox/retry worker (§34A.13), dedicated provider before real volume.
 
 ## 24.5 Future Gateway
 
@@ -6203,9 +6232,33 @@ Maintain a changelog at the bottom.
 
 # Changelog
 
+## v1.64 (2026-09-11)
+
+_Newcomer vouching controls (master_plan §2AJ) and the payment-receipt notification email (§2AK).
+Migrations `0037` (settings seeds) and `0038` (`tournaments.payment_notification_email`)._
+
+- **Newcomer caps (§10.3).** The person GIVING a vouch is a *newcomer* while they have no anchor (no
+  confirmed/paid registration, no approved ID, no coach role) AND no standing (§2AF.1 received-vouch
+  standing below `vouch_newcomer_graduate_standing`, default 1.0; mutual pairs never count). Newcomers
+  get `vouch_newcomer_per_24h` (5) and `vouch_newcomer_requests_per_24h` (5) when stricter than the
+  global caps; established players are unchanged (global caps stay at the launch setting 0 = unlimited).
+  Deliberately NOT age-based - live data (all accounts < 7 days old, median 7 minutes from onboarding to
+  first vouch) shows age separates nobody. The vouch form shows a newcomer one plain line up front.
+- **`SINGLE_PURPOSE_CLUSTER` hold (§11.4).** A second automatic, reversible hold: when ≥ 4 vouches on a
+  player, and ≥ 50% of their vouches, come from unanchored, zero-standing accounts that have given ≤ 2
+  vouches in total (accounts that exist only to vouch this player), those vouches are held
+  (`invalidation_reason='cluster_hold:<flag_id>'`) and a high-severity flag opens. Kill switch
+  `vouch_cluster_guard_enabled`. Shadow-run on production: 0 of 377 players trip. Reinstate / keep-hold
+  and the profile "being reviewed" note now cover both hold kinds.
+- **Payment receipt notification email (§24.4.1).** New organizer setting `payment_notification_email`
+  (tournament form → Payment). Every uploaded receipt sends one email (`vouchplay@gmail.com` via the
+  pilot SMTP transport) with the registrant's email, team "NickA/NickB", category, each player's full
+  name + email, amount, mode of payment, reference, a 7-day receipt link and a Manage link; "Send a test
+  email" on Manage; every send audited. Inert until `SMTP_USER`/`SMTP_PASS` are set in Vercel.
+
 ## v1.63 (2026-09-11)
 
-_City is now a required, validated Philippine place (master_plan �2AI). No migration; config + validation + a new picker component. International/geolocation deferred (see �2AI)._
+_City is now a required, validated Philippine place (master_plan §2AI). No migration; config + validation + a new picker component. International/geolocation deferred (see §2AI)._
 
 - **Strict city validation.** Registration and profile edit now REQUIRE a real Philippine city or
   municipality: `onboardingSchema` rejects free text like "Za" (`isValidPhCity` over the complete

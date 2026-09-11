@@ -8,6 +8,8 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { getVouchSettings } from '@/lib/settings';
 import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { runVelocityGuard } from '@/lib/vouches/velocity-guard';
+import { getVoucherTier } from '@/lib/vouches/newcomer';
+import { effectiveVouchLimit } from '@/lib/vouches/limits';
 import { recomputePlayerContribution } from '@/lib/contribution/recompute';
 import { checkActorCanVouch } from '@/lib/moderation/enforcement';
 import { notify } from '@/lib/notifications/create';
@@ -127,11 +129,22 @@ export async function submitVouch(
 
     // Rolling 24h limit (§10.3): count vouch actions (revisions) in the window. A limit of 0 (or
     // less) means unlimited - the default (JT 2026-09-07); the one-active-vouch-per-pair rule below
-    // still prevents duplicate vouches for the same player.
-    const limit = isCoach ? settings.limits.coachPer24h : settings.limits.playerPer24h;
+    // still prevents duplicate vouches for the same player. A NEWCOMER (no anchor, no standing yet -
+    // master_plan §2AJ) gets the stricter newcomer cap when one is set; established players are
+    // untouched. Not age-based: on a week-old platform, age separates nobody.
+    const globalLimit = isCoach ? settings.limits.coachPer24h : settings.limits.playerPer24h;
+    const voucherTier = await getVoucherTier(user.id);
+    const isNewcomer = voucherTier.tier === 'newcomer';
+    const limit = effectiveVouchLimit(
+      globalLimit,
+      isNewcomer ? voucherTier.newcomerCaps.per24h : 0,
+    );
     if (limit > 0 && (actionsRes.count ?? 0) >= limit) {
       return {
-        error: `You've reached your vouch limit for now (${limit} per 24 hours). Try again later.`,
+        error:
+          isNewcomer && limit !== globalLimit
+            ? `New accounts can vouch for up to ${limit} players every 24 hours. The limit lifts once other players vouch for you, or you register for a tournament or verify your ID.`
+            : `You've reached your vouch limit for now (${limit} per 24 hours). Try again later.`,
       };
     }
 
@@ -329,10 +342,21 @@ export async function requestVouch(
     ]);
     if ((blockRes.data ?? []).length > 0) return { error: 'That request is unavailable.' };
     if (dupRes.data) return { error: 'You already have a pending request to this player.' };
+    // Same newcomer rule as `submitVouch` (§2AJ): a fresh account with no anchor and no standing gets
+    // the stricter request cap, so a throwaway account cannot mass-message the directory either.
     const settings = await getVouchSettings();
-    if ((rateRes.count ?? 0) >= settings.limits.requestsPer24h) {
+    const voucherTier = await getVoucherTier(user.id);
+    const isNewcomer = voucherTier.tier === 'newcomer';
+    const requestLimit = effectiveVouchLimit(
+      settings.limits.requestsPer24h,
+      isNewcomer ? voucherTier.newcomerCaps.requestsPer24h : 0,
+    );
+    if (requestLimit > 0 && (rateRes.count ?? 0) >= requestLimit) {
       return {
-        error: `You've reached your request limit (${settings.limits.requestsPer24h} per 24 hours).`,
+        error:
+          isNewcomer && requestLimit !== settings.limits.requestsPer24h
+            ? `New accounts can send up to ${requestLimit} vouch requests every 24 hours. The limit lifts once other players vouch for you, or you register for a tournament or verify your ID.`
+            : `You've reached your request limit (${requestLimit} per 24 hours).`,
       };
     }
     const { error } = await svc.from('vouch_requests').insert({

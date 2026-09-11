@@ -3298,6 +3298,150 @@ Possible, but not a "now" change, and not something to bolt on blind:
 - Gates, deploy both domains. No migration (config + validation + component only). If any real place is
   found missing later it is a one-line config add.
 
+## 2AJ. Newcomer vouching controls - new accounts spamming vouches (2026-09-11)
+
+Jasper: "with the current system, how do we control the activity of NEWLY created accounts spamming
+vouches? do we have a mechanism for this? if none, we need to create one in addition to our V2 STS
+system that has yet to be deployed."
+
+### What exists today (audited, live)
+
+- **No voucher-side control at all.** The only checks on the person GIVING a vouch are account status
+  (banned/suspended/restricted) and the rolling 24h cap - and the cap is currently `0` = unlimited for
+  both players and coaches (set 2026-09-07 for launch; requests are at 100). A one-minute-old account can
+  vouch without limit, at full STS_V1 weight.
+- **One target-side guard:** the velocity hold (§2AF) - ≥ 8 vouches on ONE player within 6h with ≥ 60%
+  from low-trust vouchers. A patient group spreading 3 vouches per 6h window never trips it.
+- **STS_V2 (dormant for public numbers)** already discounts an unanchored, zero-standing voucher to
+  0.125-0.25x weight, but V2 is not the live algorithm yet (Jasper's flip).
+
+### What the live data says (2026-09-11, read-only)
+
+- The platform is **6 days old**: all 398 onboarded accounts are "< 7 days"; 392 are under 3 days.
+- **100% of the 4,187 active vouches were given by accounts under 7 days old.** Median time from
+  onboarding to first vouch is **7 minutes**; 144 of 260 vouchers vouched within 10 minutes of joining.
+  That is the honest launch pattern (people join *to* vouch their friends) - not a spam signal.
+- 99 accounts are anchored (paid/confirmed registration, ID approved, coach); only 23 have zero
+  non-reciprocal standing; 245 have a photo. The graph is dense and honest.
+- Shadow run of the new "single-purpose cluster" detector (below) over 377 targets and 8 threshold
+  combinations: **0 targets trip, 0 vouches would be held.** No rigging of that shape exists yet, and the
+  detector can go live in HOLD mode with zero impact on any current player.
+
+### Decisions
+
+1. **Age is not a signal here - anchors and standing are.** Any "new account" hold keyed on account age
+   or "vouched too soon after joining" would freeze the entire community today (everyone is new, and
+   honest people vouch within minutes). This matches §2AF's principle ("anchors, not age"). So a
+   **newcomer** is defined as: NOT anchored AND received-vouch standing below a threshold - i.e. nobody
+   established has vouched for them yet and they have not put real-money / identity / role skin in the
+   game. Being vouched-for is the currency of the platform; that is what graduates you.
+   - `standing` = the §2AF.1 number (received vouches from OTHER accounts, anchored giver 1.0,
+     unanchored 0.5, mutual pairs excluded - so puppets cannot graduate each other by vouching back).
+   - Graduation threshold `vouch_newcomer_graduate_standing` (default 1.0 = one anchored giver or two
+     unanchored non-mutual givers). Anchored accounts are never newcomers.
+2. **Layer 1 - newcomer caps (activity control, voucher-side, hard).** While a newcomer:
+   `vouch_newcomer_per_24h` (default 5 - the original §10.3 player number) and
+   `vouch_newcomer_requests_per_24h` (default 5). The newcomer cap applies when it is stricter than the
+   global cap (global stays at Jasper's 0/unlimited for established players). Plain-language error on
+   hit; a single muted line on the vouch form tells a newcomer the rule up front (no clutter, one line,
+   only shown to newcomers).
+3. **Layer 2 - `SINGLE_PURPOSE_CLUSTER` detector + hold (target-side, the sock-puppet shape).** For a
+   target T, a *single-purpose* voucher is: not anchored, zero standing (nobody but T has vouched them,
+   mutual pairs excluded), and has given at most `skill_v2_cluster_max_outgoing` (2) vouches in total -
+   an account that exists to vouch T. If ≥ `skill_v2_cluster_min` (4) of T's vouches are single-purpose
+   AND they are ≥ `skill_v2_cluster_share` (50%) of T's vouches → **hold those vouches** (the same
+   reversible quarantine as the velocity hold: `status='invalidated'`,
+   `invalidation_reason='cluster_hold:<flag_id>'`, revision row, excluded from CSL) and raise a
+   high-severity `fraud_flags` row. Why this shape: it is exactly what a puppet farm looks like and is
+   NOT what a popular real player looks like (their vouch base is mostly established people, so the
+   share test fails). It is not age-based, so it works on day 6 as well as day 600. Kill switch
+   `vouch_cluster_guard_enabled` (default on). The honest false-positive case ("I invited four friends
+   who only know me") is indistinguishable from the attack by construction - it had 0 occurrences in
+   4,189 live vouches, the hold is reversible from the Moderation "Vouch integrity" queue in one click,
+   and the friends un-stick themselves the moment anyone else vouches them or they register.
+4. **Staff tooling reuses the velocity-hold pipeline** (queue card, reinstate / keep hold, "some vouches
+   are being reviewed" note on the profile) - generalised from one hold prefix to two. Reason text stays
+   plain-language and never names a voucher.
+5. **Under STS_V1 the residual risk is a patient farm** whose puppets first earn standing (e.g. an
+   established account vouching each puppet) - the caps only bound rate, the cluster hold catches the
+   cheap shape, and V2's trust weighting is the structural fix. Flipping `skill_algorithm_active_version`
+   to `STS_V2` remains Jasper's call after the Hermosa window (§2AF).
+
+### Not doing (and why)
+
+- No minimum account age before vouching, no "too soon after signup" flag - see the data above.
+- No IP / device fingerprinting, no email-alias heuristics - §2AF's "no new PII" principle holds.
+- No automatic release of a cluster hold when the cluster later gains standing (would need re-evaluation
+  including held vouches on every write; flip-flop risk). Staff reinstate is one click; revisit if
+  holds ever pile up. Deferred.
+
+### Execution
+
+- **Core + config (subagent):** `V2Voucher.outgoingCount`; `AnomalyParams.cluster*`;
+  `detectSinglePurposeCluster` in `packages/core/src/skill/v2/anomalies.ts` with boundary tests;
+  settings keys + catalog entries (`vouch_limits`, `vouch_integrity` groups); `apps/web/src/lib/settings.ts`
+  readers; `v2-facts.ts` fills `outgoingCount` (already has the rows); migration `0037` seeds.
+- **Web wiring (main):** `lib/vouches/newcomer.ts` (tier: anchored / standing / caps); `submitVouch` +
+  `requestVouch` newcomer caps + messages; guard generalised to apply holds for both flag types; hold
+  prefix helper shared by `held.ts`, `reinstateHeldVouches`, integrity queue, panel; vouch form notice
+  (newcomer only) via the profile page.
+- Gates → Jasper applies `0037` → push → verify both domains.
+
+## 2AK. Payment receipt notification email to the bank handler (2026-09-11)
+
+Jasper: vouchplay@gmail.com should send a "Registration payment notification" to the person handling
+the tournament's bank account (for Hermosa: kathrina.malinao@gmail.com) every time a team uploads a
+payment receipt - as an organizer setting - with a fixed format: registering player's email, team name
+(both nicknames "A/B"), category, both players' full names + emails, mode of payment, payment
+reference, and a clickable link that shows the uploaded receipt.
+
+### Findings
+
+- The app has an email channel (`lib/notifications/email.ts`, nodemailer over Gmail SMTP - the pilot
+  deviation approved 2026-09-05) that is **inert until `SMTP_USER` + `SMTP_PASS` exist in the server
+  env.** They are not set locally; if they are not set in Vercel either, nothing sends. Prerequisite for
+  Jasper: Vercel → Settings → Environment Variables (Production): `SMTP_USER=vouchplay@gmail.com`,
+  `SMTP_PASS=<16-char Gmail App Password>` (needs 2-Step Verification on the Google account), redeploy.
+  Consumer Gmail ≈ 500 sends/day - fine for receipts.
+- Hook point: `submitPayment` (`lib/actions/payment.ts`) already records the payment, moves the
+  registration to `payment_submitted`, and notifies organizers in-app. One registration = one team in
+  one division, so one receipt = one category (a pair entered in two categories uploads twice → two
+  emails, each naming its category).
+- Receipts live in the PRIVATE `payment-proofs` bucket; the only way to "show the image from a link" is
+  a signed URL. The existing viewer link lasts 60s (in-app). For an email we mint a **7-day** signed
+  link (long enough to reconcile a bank statement; still expires) and also link the organizer's Manage
+  page (login-gated) as the durable fallback.
+
+### Decisions
+
+1. **Per-tournament setting** `tournaments.payment_notification_email` (nullable; blank = off), edited in
+   the organizer's tournament form under Payment: "Send receipt notifications to" + one-line help. Saved
+   defensively so the main tournament save never fails if the column is not yet migrated.
+2. **One email per uploaded receipt**, sent best-effort right after the payment is recorded (never
+   blocks or fails the player's submission; failure is swallowed and audited as not-sent). Subject:
+   `Registration payment notification - {Tournament} - {Team A/B} - {Category}`. Body (text + simple
+   HTML, phone-friendly): submitted by (email), team, category, Player 1 full name + email, Player 2 full
+   name + email, amount submitted, mode of payment, reference number, "View receipt" link (7 days),
+   "Open in Manage" link, and the note that the link expires. No PII beyond what the organizer already
+   sees in Manage; the recipient is the organizer's designated person.
+3. **"Send a test email" button** on the Manage page next to the setting, so the organizer can confirm
+   delivery to Kathrina before registrations depend on it. The form also shows one honest status line:
+   whether email delivery is configured on the server.
+4. **Audit:** every send (or skipped send) writes `audit_logs` (`payment.notification_sent` /
+   `payment.notification_failed`, entity = registration). No new table.
+5. **Deferred:** a digest mode ("all receipts once a day"), an outbox/retry worker (§34A.13), and a
+   dedicated provider (Resend/Postmark) before real volume - unchanged from the pilot deviation.
+
+### Execution
+
+- **Subagent:** migration `0038` (column); `tournamentSchema.paymentNotificationEmail` (optional,
+  valid email); create/update actions save it; form field + status line + test button;
+  `lib/notifications/email.ts` gains a raw `sendEmail(message)` used by both the existing critical
+  path and the new notifier; `lib/payments/notification.ts` builds + sends the email (pure builder unit
+  tested with the exact format above); `submitPayment` calls it after the organizer in-app notify.
+- **Main:** docs (this section, handover v1.64 §24), review, gates, deploy with §2AJ. Jasper applies
+  `0038` before the push and sets the SMTP env.
+
 ## 1. Prompt Contract
 
 ### In scope

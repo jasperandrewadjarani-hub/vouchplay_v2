@@ -22,6 +22,7 @@ const voucher = (overrides: Partial<V2Voucher>): V2Voucher => ({
   standingRaw: 0,
   accountAgeDays: 0,
   clubIds: [],
+  outgoingCount: 5,
   ...overrides,
 });
 

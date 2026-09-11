@@ -47,6 +47,7 @@ import { getContributionProgress } from '@/lib/leaderboards/queries';
 import { getVouchSettings } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
 import { countHeldVouchesForTarget } from '@/lib/vouches/held';
+import { getVoucherTierCached } from '@/lib/vouches/newcomer';
 
 interface Params {
   params: Promise<{ slug: string }>;
@@ -120,10 +121,16 @@ export default async function PlayerProfilePage({ params }: Params) {
       ? await hasViewerBlocked(viewer.viewerId as string, player.id)
       : false;
   // The viewer's own vouch state for this player (§2U): colours the button and drives the note below.
-  const vouchState =
+  // The viewer's newcomer tier (§2AJ, cached 60s) only decides whether the form shows its one-line cap
+  // note - the server action enforces the cap on fresh facts regardless.
+  const [vouchState, viewerTier] =
     authed && !player.isOwnProfile
-      ? await getViewerVouchState(player.id, viewer.viewerId as string)
-      : { hasVouched: false, canUpdateInMs: null };
+      ? await Promise.all([
+          getViewerVouchState(player.id, viewer.viewerId as string),
+          getVoucherTierCached(viewer.viewerId as string),
+        ])
+      : [{ hasVouched: false, canUpdateInMs: null }, null];
+  const newcomerLimit = viewerTier?.tier === 'newcomer' ? viewerTier.newcomerCaps.per24h : 0;
   const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
   const skill = player.communitySkill
     ? { band: player.communitySkill, source: 'community' as const }
@@ -184,6 +191,7 @@ export default async function PlayerProfilePage({ params }: Params) {
               authed={authed}
               isOwnProfile={player.isOwnProfile}
               viewerIsCoach={viewer.isCoach && vouchSettings.coachWeightEnabled}
+              newcomerLimit={newcomerLimit}
               hasVouched={vouchState.hasVouched}
               canUpdateInMs={vouchState.canUpdateInMs}
               mode="profile"

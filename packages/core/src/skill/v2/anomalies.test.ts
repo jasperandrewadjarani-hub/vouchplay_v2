@@ -11,6 +11,9 @@ const A: AnomalyParams = {
   ringReciprocalShare: 0.5,
   blocShare: 0.6,
   spikeBands: 2,
+  clusterMaxOutgoing: 2,
+  clusterMin: 4,
+  clusterShare: 0.5,
 };
 
 const NOW = '2026-09-11T12:00:00.000Z';
@@ -23,6 +26,9 @@ const voucher = (id: string, overrides: Partial<V2Voucher> = {}): V2Voucher => (
   standingRaw: 0,
   accountAgeDays: 30,
   clubIds: [],
+  // Default is well above clusterMaxOutgoing(2) so existing fixtures/tests never accidentally
+  // qualify as single-purpose unless a test opts in explicitly.
+  outgoingCount: 5,
   ...overrides,
 });
 
@@ -277,6 +283,163 @@ describe('SPIKE', () => {
   it('does not trigger the thin-evidence path once nEff clears 3', () => {
     const flags = detectAnomalies(baseInput({ cslV1: null, cslV2: 5, selfRating: 2, nEff: 3 }), A);
     expect(flags.find((f) => f.type === 'SPIKE')).toBeUndefined();
+  });
+});
+
+describe('SINGLE_PURPOSE_CLUSTER (§2AJ)', () => {
+  it('does not trigger just below clusterMin (3 single-purpose vouches, all vouches single-purpose)', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 3; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    expect(flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER')).toBeUndefined();
+  });
+
+  it('triggers at exactly clusterMin single-purpose vouches with defaults (all vouches single-purpose)', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    const cluster = flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER');
+    expect(cluster).toBeDefined();
+    expect(cluster?.severity).toBe('high');
+    expect(cluster?.holdVouchIds.sort()).toEqual(['v0', 'v1', 'v2', 'v3'].sort());
+  });
+
+  it('triggers when the single-purpose share is exactly the threshold (4 of 8 = 0.5)', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      vouches.push(vouch(`vsp${i}`, id));
+    }
+    for (let i = 0; i < 4; i++) {
+      const id = `est${i}`;
+      vouchers.set(id, voucher(id, { anchored: true, outgoingCount: 20 }));
+      vouches.push(vouch(`vest${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    const cluster = flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER');
+    expect(cluster).toBeDefined();
+    expect(cluster?.holdVouchIds.sort()).toEqual(['vsp0', 'vsp1', 'vsp2', 'vsp3'].sort());
+  });
+
+  it('does not trigger when the single-purpose share is just under the threshold (4 of 9)', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      vouches.push(vouch(`vsp${i}`, id));
+    }
+    for (let i = 0; i < 5; i++) {
+      const id = `est${i}`;
+      vouchers.set(id, voucher(id, { anchored: true, outgoingCount: 20 }));
+      vouches.push(vouch(`vest${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    expect(flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER')).toBeUndefined();
+  });
+
+  it('excludes anchored vouchers from the single-purpose count even with zero standing and low outgoing', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `a${i}`;
+      vouchers.set(id, voucher(id, { anchored: true, outgoingCount: 1 }));
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    expect(flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER')).toBeUndefined();
+  });
+
+  it('excludes vouchers with standing above zero from the single-purpose count', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `s${i}`;
+      vouchers.set(id, voucher(id, { standingRaw: 0.5, outgoingCount: 1 }));
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    expect(flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER')).toBeUndefined();
+  });
+
+  it('excludes vouchers whose outgoingCount exceeds clusterMaxOutgoing', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `o${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 3 })); // > clusterMaxOutgoing (2)
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    expect(flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER')).toBeUndefined();
+  });
+
+  it('holdVouchIds equals only the single-purpose vouch ids, not the established ones', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 5; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 2 }));
+      vouches.push(vouch(`vsp${i}`, id));
+    }
+    for (let i = 0; i < 2; i++) {
+      const id = `est${i}`;
+      vouchers.set(id, voucher(id, { anchored: true, outgoingCount: 20 }));
+      vouches.push(vouch(`vest${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    const cluster = flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER');
+    expect(cluster).toBeDefined();
+    expect(cluster?.holdVouchIds.sort()).toEqual(['vsp0', 'vsp1', 'vsp2', 'vsp3', 'vsp4'].sort());
+    expect(cluster?.holdVouchIds).not.toContain('vest0');
+    expect(cluster?.holdVouchIds).not.toContain('vest1');
+  });
+
+  it('reason text never names/identifies a voucher or vouch', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    for (let i = 0; i < 4; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      vouches.push(vouch(`vsp${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers }), A);
+    const cluster = flags.find((f) => f.type === 'SINGLE_PURPOSE_CLUSTER');
+    expect(cluster).toBeDefined();
+    for (const id of [...vouchers.keys(), ...vouches.map((v) => v.id)]) {
+      expect(cluster?.reason).not.toContain(id);
+    }
+  });
+
+  it('appears after VELOCITY_BURST in detectAnomalies output when both trigger', () => {
+    const vouchers = new Map<string, V2Voucher>();
+    const vouches: V2Vouch[] = [];
+    const trust = new Map<string, number>();
+    // 6 low-trust, single-purpose, in-window vouches: also a velocity burst candidate (>= burstMin
+    // requires 8, so pad with 2 more low-trust single-purpose in-window vouches).
+    for (let i = 0; i < 8; i++) {
+      const id = `sp${i}`;
+      vouchers.set(id, voucher(id, { outgoingCount: 1 }));
+      trust.set(id, 0.1);
+      vouches.push(vouch(`v${i}`, id));
+    }
+    const flags = detectAnomalies(baseInput({ vouches, vouchers, trust }), A);
+    const burstIndex = flags.findIndex((f) => f.type === 'VELOCITY_BURST');
+    const clusterIndex = flags.findIndex((f) => f.type === 'SINGLE_PURPOSE_CLUSTER');
+    expect(burstIndex).toBeGreaterThanOrEqual(0);
+    expect(clusterIndex).toBeGreaterThan(burstIndex);
   });
 });
 

@@ -15,6 +15,14 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   coach_vouch_weight_enabled: true,
   vouch_requests_per_24h: 10,
   vouch_update_cooldown_days: 1,
+  // Newcomer vouching controls (master_plan §2AJ). A newcomer (not anchored, received-vouch standing
+  // below vouch_newcomer_graduate_standing) is capped stricter than the global caps above, which stay
+  // unlimited by default. 5 is the original §10.3 player number.
+  vouch_newcomer_per_24h: 5,
+  vouch_newcomer_requests_per_24h: 5,
+  // Received-vouch standing at which a newcomer graduates (one anchored giver, or two unanchored
+  // non-mutual givers, at the §2AF.1 standing formula).
+  vouch_newcomer_graduate_standing: 1,
   // A comment can now be written without a rating attached (master_plan §2B), which is a new way to
   // write on a stranger's profile, so it gets its own rolling cap. 10/day is generous for a real
   // player and cheap to lower. 0 = unlimited; the one-active-comment-per-pair rule still applies.
@@ -228,6 +236,14 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   skill_v2_bloc_share: 0.6,
   // SPIKE flag: minimum skill-band distance (V1 vs V2, or CSL vs self-rating with low N_eff) to flag.
   skill_v2_spike_bands: 2,
+  // Kill switch for the automatic SINGLE_PURPOSE_CLUSTER hold (§2AJ). Default on.
+  vouch_cluster_guard_enabled: true,
+  // SINGLE_PURPOSE_CLUSTER: max active vouches given by a voucher for it to count as single-purpose.
+  skill_v2_cluster_max_outgoing: 2,
+  // SINGLE_PURPOSE_CLUSTER: minimum single-purpose vouches on a target before the cluster is considered.
+  skill_v2_cluster_min: 4,
+  // SINGLE_PURPOSE_CLUSTER: minimum share of a target's vouches that must be single-purpose to hold.
+  skill_v2_cluster_share: 0.5,
 } as const;
 
 export type SystemSettingsKey = keyof typeof DEFAULT_SYSTEM_SETTINGS;

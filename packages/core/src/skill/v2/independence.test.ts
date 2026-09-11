@@ -20,6 +20,7 @@ const voucher = (id: string, clubIds: string[]): V2Voucher => ({
   standingRaw: 0,
   accountAgeDays: 30,
   clubIds,
+  outgoingCount: 5,
 });
 
 const vouch = (id: string, voucherId: string, overrides: Partial<V2Vouch> = {}): V2Vouch => ({

@@ -5,6 +5,7 @@ import { requireUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { createTournament } from '@/lib/actions/tournament';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
+import { emailChannelEnabled } from '@/lib/notifications/email';
 
 export const metadata: Metadata = { title: 'Create a tournament' };
 
@@ -35,7 +36,12 @@ export default async function NewTournamentPage() {
         </p>
       </div>
       <div className="border-border bg-surface rounded-2xl border p-5">
-        <TournamentForm action={createTournament} submitLabel="Create tournament" minimal />
+        <TournamentForm
+          action={createTournament}
+          submitLabel="Create tournament"
+          minimal
+          emailDeliveryReady={emailChannelEnabled()}
+        />
       </div>
     </section>
   );

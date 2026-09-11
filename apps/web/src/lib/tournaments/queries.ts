@@ -65,6 +65,28 @@ export async function getTournamentRules(tournamentId: string): Promise<Tourname
   }
 }
 
+/**
+ * Organizer-only payment receipt notification address (migration 0038; §2AK). Read defensively,
+ * the same pattern as `getTournamentRules` above: before 0038 is applied the column does not exist,
+ * and this degrades to null rather than failing the whole tournament detail read.
+ */
+async function getPaymentNotificationEmail(tournamentId: string): Promise<string | null> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('payment_notification_email')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (
+      (data as { payment_notification_email: string | null } | null)?.payment_notification_email ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function getDemandSummary(tournamentId: string): Promise<TournamentDemandDTO> {
   const fallback: TournamentDemandDTO = { total: 0, divisions: {}, avatars: [] };
   try {
@@ -597,6 +619,10 @@ export async function getTournamentBySlug(
     const isCo = orgRows.some((o) => o.user_id === viewer.viewerId);
     const canManage = isOwner || isCo || viewer.isStaff;
 
+    // Organizer-only: never expose the notification setting to a viewer who cannot manage this
+    // tournament (§2AK).
+    const paymentNotificationEmail = canManage ? await getPaymentNotificationEmail(row.id) : null;
+
     // Organizer-only: never mint or expose a signed QR URL to a viewer who cannot manage this
     // tournament (handover - payment QR is private, visible only in authenticated/authorized steps).
     let paymentQrUrl: string | null = null;
@@ -660,6 +686,7 @@ export async function getTournamentBySlug(
       isOwner,
       canManage,
       paymentQrUrl,
+      paymentNotificationEmail,
       clubLockAt: row.club_lock_at ?? null,
       enforceSkillFloor: rules.enforceSkillFloor,
       requireSkillVerified: rules.requireSkillVerified,

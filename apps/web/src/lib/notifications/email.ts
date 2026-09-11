@@ -4,11 +4,12 @@ import { createServiceClient } from '@/lib/supabase/service';
 
 /**
  * Email channel for critical notifications (handover §27.5) - READY BUT INERT. It sends only when the
- * app SMTP transport is configured (SMTP_USER + SMTP_PASS in the server env) AND the recipient has
- * opted into email. With no SMTP env (the current state) this is a no-op, so in-app notifications work
- * and the deploy has no external side effects. When Jasper adds the app-level Gmail App Password, email
- * for critical events switches on with no code change. Failure is always swallowed - a notification's
- * email must never break the action that created it.
+ * app SMTP transport is configured (SMTP_USER + SMTP_PASS in the server env). `sendCriticalEmail`
+ * additionally requires the recipient to have opted into email. With no SMTP env (the current state)
+ * this is a no-op, so in-app notifications work and the deploy has no external side effects. When
+ * Jasper adds the app-level Gmail App Password, email for critical events switches on with no code
+ * change. Failure is always swallowed - a notification's email must never break the action that
+ * created it.
  *
  * NOTE: this is a synchronous best-effort send for low-volume CRITICAL events only. A true async
  * outbox worker (handover §34A.13) is a later hardening; email volume here is intentionally tiny.
@@ -28,6 +29,38 @@ function smtpConfig(): { user: string; pass: string; host: string; port: number 
 /** True when the email channel could send (used to show accurate copy in the preferences UI). */
 export function emailChannelEnabled(): boolean {
   return smtpConfig() !== null;
+}
+
+/**
+ * Raw send: any `to`, no opt-in check (§2AK - shared by `sendCriticalEmail` below AND
+ * organizer-configured notifications like payment receipts, which are not a player
+ * notification-preference email). Returns false when SMTP is not configured or the send throws;
+ * NEVER throws into the caller.
+ */
+export async function sendEmail(message: EmailMessage): Promise<boolean> {
+  const cfg = smtpConfig();
+  if (!cfg) return false; // inert until SMTP is configured
+
+  try {
+    // Dynamic import so nodemailer is only loaded when the channel is actually enabled.
+    const nodemailer = (await import('nodemailer')).default;
+    const transport = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.port === 465,
+      auth: { user: cfg.user, pass: cfg.pass },
+    });
+    await transport.sendMail({
+      from: cfg.user,
+      to: message.to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    });
+    return true;
+  } catch {
+    return false; // best-effort: never throw into the caller's action
+  }
 }
 
 export async function sendCriticalEmail(args: {
@@ -60,28 +93,13 @@ export async function sendCriticalEmail(args: {
       text: args.text,
       idempotencyKey: args.idempotencyKey,
     };
-
-    // Dynamic import so nodemailer is only loaded when the channel is actually enabled.
-    const nodemailer = (await import('nodemailer')).default;
-    const transport = nodemailer.createTransport({
-      host: cfg.host,
-      port: cfg.port,
-      secure: cfg.port === 465,
-      auth: { user: cfg.user, pass: cfg.pass },
-    });
-    await transport.sendMail({
-      from: cfg.user,
-      to: message.to,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    });
+    await sendEmail(message);
   } catch {
     // best-effort: never throw into the caller's action
   }
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

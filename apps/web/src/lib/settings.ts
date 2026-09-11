@@ -206,7 +206,31 @@ export async function getAnomalyParams(): Promise<AnomalyParams> {
     ringReciprocalShare: num(m, 'skill_v2_ring_reciprocal_share'),
     blocShare: num(m, 'skill_v2_bloc_share'),
     spikeBands: num(m, 'skill_v2_spike_bands'),
+    clusterMaxOutgoing: num(m, 'skill_v2_cluster_max_outgoing'),
+    clusterMin: num(m, 'skill_v2_cluster_min'),
+    clusterShare: num(m, 'skill_v2_cluster_share'),
   };
+}
+
+export interface NewcomerVouchSettings {
+  per24h: number;
+  requestsPer24h: number;
+  graduateStanding: number;
+}
+
+/** Newcomer vouching caps + graduation threshold (master_plan §2AJ). */
+export async function getNewcomerVouchSettings(): Promise<NewcomerVouchSettings> {
+  const m = await loadSettings();
+  return {
+    per24h: num(m, 'vouch_newcomer_per_24h'),
+    requestsPer24h: num(m, 'vouch_newcomer_requests_per_24h'),
+    graduateStanding: num(m, 'vouch_newcomer_graduate_standing'),
+  };
+}
+
+/** Kill switch for the single-purpose cluster hold (§2AJ). Default on. */
+export async function isClusterGuardEnabled(): Promise<boolean> {
+  return loadSettingFlag('vouch_cluster_guard_enabled', true);
 }
 
 /**

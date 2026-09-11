@@ -1,9 +1,10 @@
 /**
- * Anomaly detection (master_plan §2AF, "Anomaly detection and the one live guard"). Five pure checks
- * over one target's active vouches, run on every vouch write. Only VELOCITY_BURST ever produces
- * `holdVouchIds` - the one automatic, reversible action (a quarantine, not a ban) because it is the
- * only way to stop an attack in progress before a moderator can look. Every other flag is
- * informational: it surfaces a pattern to a human, it never itself changes anyone's score.
+ * Anomaly detection (master_plan §2AF, "Anomaly detection and the one live guard"; §2AJ adds
+ * SINGLE_PURPOSE_CLUSTER). Six pure checks over one target's active vouches, run on every vouch write.
+ * Only VELOCITY_BURST and SINGLE_PURPOSE_CLUSTER ever produce `holdVouchIds` - the two automatic,
+ * reversible actions (a quarantine, not a ban) because they are the only ways to stop an attack in
+ * progress before a moderator can look. Every other flag is informational: it surfaces a pattern to a
+ * human, it never itself changes anyone's score.
  *
  * `reason` is written for a non-technical moderator and NEVER names or identifies a voucher; voucher
  * identity only ever appears in `evidence.vouchIds` / `holdVouchIds` (staff-only under existing RLS).
@@ -83,6 +84,50 @@ function detectLowTrustSwarm(input: DetectAnomaliesInput, a: AnomalyParams): Ano
     reason: `${swarm.length} vouches came from brand-new accounts with no track record yet.`,
     evidence: { count: swarm.length, vouchIds: swarm.map((vouch) => vouch.id) },
     holdVouchIds: [],
+  };
+}
+
+/**
+ * SINGLE_PURPOSE_CLUSTER (master_plan §2AJ): a puppet-farm shape, not an age or velocity one. A
+ * single-purpose voucher is not anchored, has zero received standing (nobody but this target has
+ * vouched them, reciprocal pairs already excluded upstream in `standingRaw`), and has given at most
+ * `a.clusterMaxOutgoing` vouches in total - an account that exists only to vouch this one target. If
+ * enough of the target's vouches are single-purpose, and they make up enough of the total, the
+ * single-purpose vouches are held for review.
+ */
+function detectSinglePurposeCluster(
+  input: DetectAnomaliesInput,
+  a: AnomalyParams,
+): AnomalyFlag | null {
+  const total = input.vouches.length;
+  if (total === 0) return null;
+
+  const singlePurpose = input.vouches.filter((vouch) => {
+    const voucher = input.vouchers.get(vouch.voucherId);
+    return (
+      voucher !== undefined &&
+      !voucher.anchored &&
+      voucher.standingRaw === 0 &&
+      voucher.outgoingCount <= a.clusterMaxOutgoing
+    );
+  });
+  if (singlePurpose.length < a.clusterMin) return null;
+
+  const share = singlePurpose.length / total;
+  if (share < a.clusterShare) return null;
+
+  return {
+    type: 'SINGLE_PURPOSE_CLUSTER',
+    severity: 'high',
+    reason: `${singlePurpose.length} of ${total} vouches came from accounts that exist only to vouch for this player - no one else has vouched for them and they have vouched almost no one else.`,
+    evidence: {
+      count: total,
+      singlePurposeCount: singlePurpose.length,
+      singlePurposeShare: share,
+      maxOutgoing: a.clusterMaxOutgoing,
+      vouchIds: singlePurpose.map((vouch) => vouch.id),
+    },
+    holdVouchIds: singlePurpose.map((vouch) => vouch.id),
   };
 }
 
@@ -196,6 +241,8 @@ export function detectAnomalies(input: DetectAnomaliesInput, a: AnomalyParams): 
   const flags: AnomalyFlag[] = [];
   const velocityBurst = detectVelocityBurst(input, a);
   if (velocityBurst) flags.push(velocityBurst);
+  const singlePurposeCluster = detectSinglePurposeCluster(input, a);
+  if (singlePurposeCluster) flags.push(singlePurposeCluster);
   const lowTrustSwarm = detectLowTrustSwarm(input, a);
   if (lowTrustSwarm) flags.push(lowTrustSwarm);
   const reciprocalRing = detectReciprocalRing(input, a);

@@ -2815,3 +2815,28 @@ Existing messy values (provinces "Zamboanga Sibugay"/"Bulacan", "Za", "Titay Zam
 until the user's next edit, then must re-pick (strict). No migration. Config 53 tests / validation 11.
 INTERNATIONAL/GEOLOCATION: deferred (§2AI) - needs Country field + Places API/GeoNames + schema
 migration + RA10173 consent for geolocation. Answered Jasper.
+
+## 2026-09-11 - Newcomer vouching controls (§2AJ, handover v1.64)
+Jasper: how do we control NEW accounts spamming vouches? Audit: NO voucher-side control existed (24h
+caps are 0 = unlimited since 09-07; only the target-side velocity hold). Live data: platform 6 days
+old, 100% of 4,187 vouches from <7d accounts, median 7 min onboarding->first vouch => age-based
+controls would freeze everyone. Design = anchors + standing, not age:
+- Newcomer = not anchored (paid/confirmed reg, ID approved, coach) AND §2AF.1 standing <
+  vouch_newcomer_graduate_standing (1.0; mutual pairs never count). Caps vouch_newcomer_per_24h (5)
+  and vouch_newcomer_requests_per_24h (5) when stricter than global. lib/vouches/newcomer.ts
+  (getVoucherTier, cached variant for the profile page); vouch form shows newcomers one line.
+- SINGLE_PURPOSE_CLUSTER detector (core anomalies.ts): >=4 and >=50% of a target's vouches from
+  unanchored, zero-standing vouchers with <=2 vouches given => HOLD (cluster_hold:<flag>), high flag,
+  kill switch vouch_cluster_guard_enabled. Shadow on prod: 0/377 targets trip. Guard generalised to
+  two hold kinds (hold-reasons.ts shared by held.ts, reinstate, integrity queue, panel).
+- Migration 0037 seeds 7 settings (defaults fall back if not applied). Residual risk under V1: a
+  patient farm that first earns standing; V2 flip remains the structural fix (Jasper's call).
+Deferred: auto-release of a cluster hold when standing later appears (staff reinstate = 1 click).
+
+## 2026-09-11 - Payment receipt notification email (§2AK, handover v1.64)
+Organizer setting tournaments.payment_notification_email (migration 0038; blank = off). Each uploaded
+receipt (submitPayment) emails: registrant email, team "NickA/NickB", category, players' full names +
+emails, amount, mode, reference, 7-day signed receipt link, Manage link. "Send a test email" on Manage.
+Audited (payment.notification_sent/_failed/_test). PREREQ: SMTP_USER=vouchplay@gmail.com + SMTP_PASS
+(Gmail App Password, 2FA) in Vercel env - channel is inert without them. Hermosa recipient:
+kathrina.malinao@gmail.com (organizer enters it in the form; not hardcoded).

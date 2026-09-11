@@ -21,11 +21,15 @@ export function VouchForm({
   targetId,
   targetName,
   viewerIsCoach,
+  newcomerLimit = 0,
   onClose,
 }: {
   targetId: string;
   targetName: string;
   viewerIsCoach: boolean;
+  /** > 0 when the viewer is a newcomer (master_plan §2AJ) and a newcomer cap is in force: shows the
+   *  one-line rule up front so the cap is never a surprise. 0 = nothing shown. */
+  newcomerLimit?: number;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -55,6 +59,12 @@ export function VouchForm({
             <p className="text-foreground-muted text-sm">
               Rate the skill you&apos;ve actually seen.
             </p>
+            {newcomerLimit > 0 && (
+              <p className="text-foreground-muted mt-1 text-xs">
+                New here? You can vouch for up to {newcomerLimit} players a day until other players
+                vouch for you, or you register for a tournament or verify your ID.
+              </p>
+            )}
           </div>
           <button
             type="button"

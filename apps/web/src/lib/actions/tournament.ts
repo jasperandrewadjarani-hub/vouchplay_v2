@@ -153,6 +153,7 @@ export async function createTournament(
     termsText: formData.get('termsText') ?? '',
     paymentInstructions: formData.get('paymentInstructions') ?? '',
     paymentMethods: formData.get('paymentMethods') ?? '',
+    paymentNotificationEmail: formData.get('paymentNotificationEmail') ?? '',
   });
   if (!parsed.success)
     return { error: parsed.error.issues[0]?.message ?? 'Please check the form.' };
@@ -207,6 +208,16 @@ export async function createTournament(
     }
     const t = created as { id: string; slug: string };
     newSlug = t.slug;
+
+    // Column arrives with migration 0038; the main save must never fail because of it (§2AK).
+    try {
+      await svc
+        .from('tournaments')
+        .update({ payment_notification_email: v.paymentNotificationEmail || null })
+        .eq('id', t.id);
+    } catch {
+      // Column not present yet (migration 0038 pending). The rest of the save already succeeded.
+    }
 
     const [configuredCapacity, configuredFee] = await Promise.all([
       loadSettingNumber(
@@ -266,6 +277,7 @@ export async function updateTournament(
     termsText: formData.get('termsText') ?? '',
     paymentInstructions: formData.get('paymentInstructions') ?? '',
     paymentMethods: formData.get('paymentMethods') ?? '',
+    paymentNotificationEmail: formData.get('paymentNotificationEmail') ?? '',
     clubLockAt: formData.get('clubLockAt') ?? '',
   });
   if (!parsed.success)
@@ -344,6 +356,18 @@ export async function updateTournament(
     }
     if (uploadedPaymentQrPath && previousPaymentQrPath !== uploadedPaymentQrPath)
       await deletePaymentQr(previousPaymentQrPath);
+
+    // Payment receipt notification email (migration 0038; §2AK). Saved defensively, separate from
+    // the main patch, so an update deploy before the migration lands still saves the rest of the
+    // form - the main tournament save must never fail because this column is missing.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ payment_notification_email: v.paymentNotificationEmail || null })
+        .eq('id', tournamentId);
+    } catch {
+      // Column not present yet (migration 0038 pending). The rest of the save already succeeded.
+    }
 
     // Organizer global rules (migration 0022). Persisted best-effort so a pre-migration deploy still
     // saves the rest of the form; once 0022 is applied these toggles take effect.

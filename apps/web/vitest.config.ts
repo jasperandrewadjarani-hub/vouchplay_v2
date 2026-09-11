@@ -9,6 +9,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // `server-only` resolves its throwing build by default; Next sets the `react-server` package
+      // export condition so it resolves to a no-op there, but Vitest's plain-Node resolver does not
+      // set that condition. Alias straight to the package's own no-op build (`empty.js`, the same
+      // file the `react-server` condition points at) so a colocated test can import a module that is
+      // correctly tagged `import 'server-only'` (e.g. `payments/notification.ts`, §2AK) without every
+      // such module needing a client-safe re-export just to be testable.
+      'server-only': fileURLToPath(
+        new URL('../../node_modules/server-only/empty.js', import.meta.url),
+      ),
     },
   },
   test: {

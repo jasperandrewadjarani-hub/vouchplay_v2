@@ -25,6 +25,11 @@ export interface V2Voucher {
   accountAgeDays: number;
   /** Active club memberships, used for bloc-decay grouping (§2AF.2). Empty array = no club. */
   clubIds: string[];
+  /**
+   * Active vouches this voucher has GIVEN (to anyone). A single-purpose account exists to vouch one
+   * target and has almost none (§2AJ).
+   */
+  outgoingCount: number;
 }
 
 /** One active vouch on a target, as evidence for the aggregation (§2AF.3-4). */
@@ -86,10 +91,21 @@ export interface AnomalyParams {
   blocShare: number;
   /** Band distance that counts as a "spike" for both CLUB_BLOC and SPIKE. */
   spikeBands: number;
+  /** SINGLE_PURPOSE_CLUSTER (§2AJ): max active vouches given by a voucher for it to count as single-purpose. */
+  clusterMaxOutgoing: number;
+  /** SINGLE_PURPOSE_CLUSTER (§2AJ): minimum single-purpose vouches on a target before the cluster is considered. */
+  clusterMin: number;
+  /** SINGLE_PURPOSE_CLUSTER (§2AJ): minimum share of a target's vouches that must be single-purpose to trigger a hold. */
+  clusterShare: number;
 }
 
 export type AnomalyFlagType =
-  'VELOCITY_BURST' | 'LOW_TRUST_SWARM' | 'RECIPROCAL_RING' | 'CLUB_BLOC' | 'SPIKE';
+  | 'VELOCITY_BURST'
+  | 'LOW_TRUST_SWARM'
+  | 'RECIPROCAL_RING'
+  | 'CLUB_BLOC'
+  | 'SPIKE'
+  | 'SINGLE_PURPOSE_CLUSTER';
 
 export type AnomalySeverity = 'high' | 'medium' | 'low';
 
@@ -105,6 +121,6 @@ export interface AnomalyFlag {
   reason: string;
   /** Counts, shares, window bounds, and vouch ids only - staff-only data, never prose. */
   evidence: Record<string, unknown>;
-  /** Only VELOCITY_BURST ever populates this - the specific low-trust vouches to quarantine. */
+  /** Only VELOCITY_BURST and SINGLE_PURPOSE_CLUSTER ever populate this - the specific vouches to quarantine. */
   holdVouchIds: string[];
 }

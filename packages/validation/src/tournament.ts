@@ -9,6 +9,16 @@ import { z } from 'zod';
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(''));
 const optionalDate = z.string().trim().optional().or(z.literal(''));
 
+// Blank -> undefined (notifications off); a non-blank value must be a real address (§2AK).
+const optionalEmail = z.preprocess(
+  (v) => (typeof v === 'string' ? v.trim() || undefined : v),
+  z
+    .string()
+    .max(254, 'Enter a valid email address.')
+    .email('Enter a valid email address.')
+    .optional(),
+);
+
 export const tournamentCreateSchema = z.object({
   name: z.string().trim().min(2, 'Tournament name is too short').max(120, 'Name is too long'),
   city: optionalText(120),
@@ -23,6 +33,9 @@ export const tournamentCreateSchema = z.object({
   termsText: optionalText(8000),
   paymentInstructions: optionalText(2000),
   paymentMethods: optionalText(300),
+  // Organizer-designated address that receives one email per uploaded payment receipt (§2AK).
+  // Blank turns it off; the column arrives with migration 0038 and is saved defensively.
+  paymentNotificationEmail: optionalEmail,
   // Single tournament-wide club representation lock (handover Phase 13.5). Optional date/time; no
   // per-division exception. Empty clears the lock.
   clubLockAt: optionalDate,

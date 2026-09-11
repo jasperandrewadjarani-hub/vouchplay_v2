@@ -14,6 +14,13 @@ import { notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentOrganizerIds } from '@/lib/notifications/recipients';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 import { preparePaymentProof } from '@/lib/payments/proof-file';
+import { emailChannelEnabled, sendEmail } from '@/lib/notifications/email';
+import {
+  notifyPaymentReceiptUploaded,
+  buildPaymentNotificationEmail,
+  type PaymentNotificationInput,
+} from '@/lib/payments/notification';
+import { publicEnv } from '@/lib/env';
 
 export interface PaymentActionState {
   ok?: boolean;
@@ -186,6 +193,9 @@ export async function submitPayment(
       entityType: 'tournament',
       entityId: tournamentId,
     });
+    // Best-effort receipt notification to the organizer's designated bank handler (§2AK). Never
+    // throws and never blocks/fails the player's submission.
+    await notifyPaymentReceiptUploaded(registrationId, user.id);
     await revalTournament(tournamentId);
   } catch {
     return { error: 'Payment submission is temporarily unavailable.' };
@@ -404,4 +414,75 @@ export async function markRefunded(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Marked refunded.' };
+}
+
+// ---------------------------------------------------------------------------
+// "Send a test email" for the payment receipt notification setting (§2AK)
+// ---------------------------------------------------------------------------
+export async function sendPaymentNotificationTest(
+  tournamentId: string,
+): Promise<{ ok?: boolean; error?: string; message?: string }> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { error: 'You do not have permission to review payments.' };
+  }
+  if (!emailChannelEnabled()) {
+    return { error: 'Email delivery is not configured on this server yet.' };
+  }
+  try {
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from('tournaments')
+      .select('name, slug, payment_notification_email')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    const t = data as {
+      name: string;
+      slug: string | null;
+      payment_notification_email: string | null;
+    } | null;
+    if (!t) return { error: 'Tournament not found.' };
+    const to = t.payment_notification_email;
+    if (!to) return { error: 'Save an email address first.' };
+
+    const sample: PaymentNotificationInput = {
+      tournamentName: t.name,
+      tournamentSlug: t.slug,
+      divisionName: "Men's Doubles - Beginner (sample)",
+      submittedByEmail: 'player1@example.com',
+      teamName: 'Jasper/Tane',
+      players: [
+        { fullName: 'Sample Player One', email: 'player1@example.com' },
+        { fullName: 'Sample Player Two', email: 'player2@example.com' },
+      ],
+      amountSubmitted: 1000,
+      currency: 'PHP',
+      method: 'GCash',
+      payerName: 'Sample Player One',
+      transactionReference: 'TEST-000000',
+      receiptUrl: null,
+      receiptExpiresDays: 7,
+      manageUrl: `${publicEnv.siteUrl}/tournaments/${t.slug ?? ''}/manage`,
+    };
+    const { subject, text, html } = buildPaymentNotificationEmail(sample);
+    const ok = await sendEmail({
+      to,
+      subject: `[TEST] ${subject}`,
+      text,
+      html,
+      idempotencyKey: `payment-notify-test:${tournamentId}:${Date.now()}`,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.notification_test',
+      entityType: 'tournament',
+      entityId: tournamentId,
+      after: { to, subject: `[TEST] ${subject}` },
+    });
+    if (!ok) return { error: 'Could not send the test email. Please try again.' };
+    return { ok: true, message: `Test email sent to ${to}.` };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
 }

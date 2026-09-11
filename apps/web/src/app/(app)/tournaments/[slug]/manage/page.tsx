@@ -13,6 +13,8 @@ import { isClosed } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
+import { PaymentNotificationTestButton } from '@/components/tournaments/payment-notification-test-button';
+import { emailChannelEnabled } from '@/lib/notifications/email';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
 import { DivisionBuilder } from '@/components/tournaments/division-builder';
 import { AnnouncementForm } from '@/components/tournaments/announcement-form';
@@ -170,6 +172,8 @@ export default async function ManageTournamentPage({ params }: Params) {
           action={updateTournament.bind(null, t.id, slug)}
           submitLabel="Save details"
           refreshOnSuccess
+          emailDeliveryReady={emailChannelEnabled()}
+          testButton={<PaymentNotificationTestButton tournamentId={t.id} />}
           initial={{
             name: t.name,
             city: t.city ?? '',
@@ -186,6 +190,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             termsText: t.termsText ?? '',
             paymentInstructions: t.paymentInstructions ?? '',
             paymentMethods: t.paymentMethods ?? '',
+            paymentNotificationEmail: t.paymentNotificationEmail ?? '',
             coverUrl: t.coverUrl ?? '',
             paymentQrUrl: t.paymentQrUrl ?? '',
             clubLockAt: toLocalInput(t.clubLockAt),

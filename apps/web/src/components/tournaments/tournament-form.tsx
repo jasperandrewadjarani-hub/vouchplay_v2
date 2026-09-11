@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { TournamentActionState } from '@/lib/actions/tournament';
@@ -24,6 +25,8 @@ export interface TournamentFormInitial {
   termsText?: string;
   paymentInstructions?: string;
   paymentMethods?: string;
+  /** Organizer-designated address that receives a copy of every uploaded receipt (§2AK). */
+  paymentNotificationEmail?: string;
   coverUrl?: string;
   /** Short-lived signed URL for the currently saved payment QR, if any (organizer-only read). */
   paymentQrUrl?: string;
@@ -45,6 +48,8 @@ export function TournamentForm({
   submitLabel,
   refreshOnSuccess = false,
   minimal = false,
+  emailDeliveryReady = false,
+  testButton,
 }: {
   action: (state: TournamentActionState, formData: FormData) => Promise<TournamentActionState>;
   initial?: TournamentFormInitial;
@@ -52,6 +57,10 @@ export function TournamentForm({
   refreshOnSuccess?: boolean;
   /** Minimal mode (create): just the essentials; the rest is edited later on Manage. */
   minimal?: boolean;
+  /** Whether the server's email channel is configured (§2AK) - shown next to the notification field. */
+  emailDeliveryReady?: boolean;
+  /** Organizer-only "send a test email" control, rendered under the notification field's hint. */
+  testButton?: ReactNode;
 }) {
   const router = useRouter();
   const [state, formAction] = useActionState(action, empty);
@@ -327,6 +336,29 @@ export function TournamentForm({
               defaultValue={initial.paymentMethods ?? ''}
             />
           </Field>
+          <div className="space-y-1.5">
+            <Field
+              label="Send receipt notifications to"
+              htmlFor="paymentNotificationEmail"
+              hint="Every uploaded payment receipt is emailed here - the person who checks the bank account. Leave blank to turn off."
+            >
+              <Input
+                type="email"
+                id="paymentNotificationEmail"
+                name="paymentNotificationEmail"
+                autoComplete="email"
+                placeholder="e.g. treasurer@club.ph"
+                maxLength={254}
+                defaultValue={initial.paymentNotificationEmail ?? ''}
+              />
+            </Field>
+            {emailDeliveryReady === false && (
+              <p className="text-foreground-muted text-xs">
+                Email delivery is not switched on for this server yet - ask VouchPlay support.
+              </p>
+            )}
+            {testButton}
+          </div>
           <Field
             label="Payment QR"
             htmlFor="paymentQr"

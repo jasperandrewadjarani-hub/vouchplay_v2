@@ -16,6 +16,7 @@ import { notify } from '@/lib/notifications/create';
 import { PLAYERS_LIST_TAG, playerTag, commentsTag } from '@/lib/players/queries';
 import { CLUBS_LIST_TAG, clubTag } from '@/lib/clubs/queries';
 import { listActiveVouchesForModeration, type ModerationVouch } from '@/lib/moderation/queries';
+import { isHoldFlagType, isHoldReason } from '@/lib/vouches/hold-reasons';
 import type { SafetyActionState } from './report';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -349,17 +350,19 @@ export async function invalidateVouch(vouchId: string, reason: string): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Vouch integrity (§2AF) - the velocity guard's hold is reversible; these two actions are the
-// moderator's only response to a VELOCITY_BURST flag. Neither ever touches the anonymous voucher's
-// identity - only vouch ids, exactly like the rest of this file's invalidate/moderation actions.
+// Vouch integrity (§2AF, §2AJ) - a guard's hold is reversible; these two actions are the moderator's
+// only response to a hold-producing flag (VELOCITY_BURST, SINGLE_PURPOSE_CLUSTER). Neither ever
+// touches the anonymous voucher's identity - only vouch ids, exactly like the rest of this file's
+// invalidate/moderation actions.
 // ---------------------------------------------------------------------------
 
 /**
- * Reinstate the vouches a velocity hold quarantined (§2AF "Reinstate held vouches (clear)"). Only
- * touches vouches that are STILL `status='invalidated'` with a `velocity_hold:` reason (a moderator
- * may have separately, individually invalidated one for cause via `invalidateVouch` in the meantime -
- * that is left alone), and skips any pair that already has a different active vouch (the voucher
- * re-vouched after the hold), since reinstating would collide with the one-active-vouch-per-pair index.
+ * Reinstate the vouches a hold quarantined (§2AF "Reinstate held vouches (clear)", §2AJ). Only touches
+ * vouches that are STILL `status='invalidated'` with a hold reason (`velocity_hold:` / `cluster_hold:`;
+ * a moderator may have separately, individually invalidated one for cause via `invalidateVouch` in the
+ * meantime - that is left alone), and skips any pair that already has a different active vouch (the
+ * voucher re-vouched after the hold), since reinstating would collide with the one-active-vouch-per-pair
+ * index.
  */
 export async function reinstateHeldVouches(
   flagId: string,
@@ -384,8 +387,8 @@ export async function reinstateHeldVouches(
       status: string;
       evidence: Record<string, unknown> | null;
     };
-    if (flag.flag_type !== 'VELOCITY_BURST') {
-      return { error: 'Only a velocity-hold flag can reinstate vouches.' };
+    if (!isHoldFlagType(flag.flag_type)) {
+      return { error: 'Only a hold flag can reinstate vouches.' };
     }
     if (!['open', 'reviewing'].includes(flag.status)) {
       return { error: 'This flag has already been closed.' };
@@ -416,8 +419,7 @@ export async function reinstateHeldVouches(
       }[];
       // Still held by this mechanism (not separately invalidated for cause since the hold).
       const eligible = candidates.filter(
-        (v) =>
-          v.status === 'invalidated' && (v.invalidation_reason ?? '').startsWith('velocity_hold:'),
+        (v) => v.status === 'invalidated' && isHoldReason(v.invalidation_reason),
       );
 
       const voucherIds = eligible.map((v) => v.voucher_id);
@@ -479,7 +481,7 @@ export async function reinstateHeldVouches(
   return { ok: true, message: 'Held vouches reinstated and the skill profile recomputed.' };
 }
 
-/** Keep a velocity hold in place - the flagged vouches stay invalidated; only the flag is closed. */
+/** Keep a hold in place - the flagged vouches stay invalidated; only the flag is closed. */
 export async function keepHold(flagId: string, note: string): Promise<SafetyActionState> {
   const actor = await assertStaffActor();
   if (!actor) return NO_STAFF;

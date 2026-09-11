@@ -124,6 +124,10 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   /** Organizer-only: short-lived signed URL for the saved payment QR, or null if none saved. Never
    * populated for a viewer without canManage (handover §Payment QR - private, never public). */
   paymentQrUrl: string | null;
+  /** Organizer-only: the payment-receipt notification address (migration 0038, §2AK), or null when
+   * unset or the viewer cannot manage this tournament. Read defensively - see
+   * `getPaymentNotificationEmail` in queries.ts - so a pre-migration deploy degrades to null. */
+  paymentNotificationEmail: string | null;
   /** Single tournament-wide club representation lock, or null when unset (handover Phase 13.5). */
   clubLockAt: string | null;
   /** Organizer global rules (migration 0022). Floor defaults on for new tournaments; others off. */

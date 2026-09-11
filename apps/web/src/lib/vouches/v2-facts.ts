@@ -33,6 +33,28 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** §2AF.1 "a confirmed/paid registration" - the statuses that count as a real-money commitment. */
 const ANCHOR_REGISTRATION_STATUSES = ['confirmed', 'payment_submitted', 'payment_pending'];
 
+/**
+ * §2AF.1 standing for one user from raw received/given edges (anchored giver 1.0, unanchored 0.5,
+ * mutual pairs excluded). Pure and exported so `gatherV2Facts` and `lib/vouches/newcomer.ts` (§2AJ
+ * newcomer-graduation check) compute standing with byte-identical logic from the same edge lists.
+ */
+export function standingFromEdges(
+  userId: string,
+  received: { voucher_id: string; target_id: string }[],
+  givenPairs: Set<string>,
+  anchoredGivers: Set<string>,
+): number {
+  let standing = 0;
+  for (const r of received) {
+    if (r.target_id !== userId) continue;
+    const giver = r.voucher_id;
+    const isReciprocalPair = givenPairs.has(`${userId}:${giver}`); // user also actively vouches this giver back
+    if (isReciprocalPair) continue; // §2AF.1: "mutual vouches cannot manufacture standing"
+    standing += anchoredGivers.has(giver) ? 1.0 : 0.5;
+  }
+  return standing;
+}
+
 function accountAgeDays(
   onboardedAt: string | null,
   createdAt: string | null,
@@ -49,13 +71,14 @@ function accountAgeDays(
  * anchored(u) (§2AF.1): a confirmed/paid tournament registration (via `team_members` -> `registrations`,
  * a two-hop fact and so two of the queries below), OR an approved identity verification, OR an active
  * coach role. One helper so both the target's own voucher set (U) and, for standing, THEIR givers'
- * givers (G) share byte-identical anchor logic.
+ * givers (G) share byte-identical anchor logic. Exported: shared with `lib/vouches/newcomer.ts`, which
+ * needs the same anchor check for the newcomer tier (§2AJ).
  *
  * Runs 4 bounded queries (registration anchoring needs `team_members` then `registrations`, since
  * PostgREST cannot embed those two tables directly - neither has a foreign key to the other, both only
  * reference `teams`; identity + coach are one query each, run in parallel with the registration lookup).
  */
-async function anchoredSet(svc: Svc, ids: string[]): Promise<Set<string>> {
+export async function anchoredSet(svc: Svc, ids: string[]): Promise<Set<string>> {
   const anchored = new Set<string>();
   if (ids.length === 0) return anchored;
 
@@ -208,25 +231,21 @@ export async function gatherV2Facts(targetId: string): Promise<V2Facts> {
       .limit(BOUND),
   ]);
   const received = (receivedRows ?? []) as { voucher_id: string; target_id: string }[];
-  const givenPairs = new Set(
-    ((givenRows ?? []) as { voucher_id: string; target_id: string }[]).map(
-      (r) => `${r.voucher_id}:${r.target_id}`,
-    ),
-  );
+  const given = (givenRows ?? []) as { voucher_id: string; target_id: string }[];
+  const givenPairs = new Set(given.map((r) => `${r.voucher_id}:${r.target_id}`));
+
+  // §2AJ: outgoingCount(u) - active vouches u has GIVEN (to anyone), from the same `given` rows used
+  // for reciprocity above. Feeds the SINGLE_PURPOSE_CLUSTER detector's "exists only to vouch one
+  // target" test.
+  const outgoingCountByUser = new Map<string, number>();
+  for (const r of given) {
+    outgoingCountByUser.set(r.voucher_id, (outgoingCountByUser.get(r.voucher_id) ?? 0) + 1);
+  }
 
   // G: the distinct givers behind U's standing, so THEIR anchored status (not U's) decides the 1.0 /
   // 0.5 each contributes (§2AF.1 "counting an anchored giver as 1.0 and an unanchored giver as 0.5").
   const G = Array.from(new Set(received.map((r) => r.voucher_id)));
   const anchoredG = await anchoredSet(svc, G);
-
-  const standingRaw = new Map<string, number>();
-  for (const r of received) {
-    const giver = r.voucher_id;
-    const u = r.target_id;
-    const isReciprocalPair = givenPairs.has(`${u}:${giver}`); // u also actively vouches this giver back
-    if (isReciprocalPair) continue; // §2AF.1: "mutual vouches cannot manufacture standing"
-    standingRaw.set(u, (standingRaw.get(u) ?? 0) + (anchoredG.has(giver) ? 1.0 : 0.5));
-  }
 
   const vouchers = new Map<string, V2Voucher>();
   for (const u of U) {
@@ -234,9 +253,10 @@ export async function gatherV2Facts(targetId: string): Promise<V2Facts> {
     vouchers.set(u, {
       id: u,
       anchored: anchoredU.has(u),
-      standingRaw: standingRaw.get(u) ?? 0,
+      standingRaw: standingFromEdges(u, received, givenPairs, anchoredG),
       accountAgeDays: accountAgeDays(prof?.onboarded_at ?? null, prof?.created_at ?? null, nowMs),
       clubIds: clubsByUser.get(u) ?? [],
+      outgoingCount: outgoingCountByUser.get(u) ?? 0,
     });
   }
 
