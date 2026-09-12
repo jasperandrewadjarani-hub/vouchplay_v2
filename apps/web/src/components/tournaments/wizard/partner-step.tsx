@@ -72,13 +72,9 @@ export function PartnerStep({
 
         <div className="border-warning/40 bg-warning/10 flex gap-2.5 rounded-xl border p-3">
           <AlertTriangle className="text-warning mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <div className="text-foreground space-y-1.5 text-sm">
-            <p className="font-semibold">{chosen.name} has not confirmed yet.</p>
-            <p>
-              Only do this if you have already agreed to play together. You are about to pay for
-              both of you.
-            </p>
-          </div>
+          <p className="text-foreground text-sm">
+            Only continue if you&rsquo;ve already agreed to play together.
+          </p>
         </div>
 
         <label className="border-border flex min-h-11 cursor-pointer items-start gap-2.5 rounded-xl border p-3 text-sm">

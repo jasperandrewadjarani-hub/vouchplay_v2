@@ -2960,3 +2960,23 @@ CLAUDE.md forbid (circularity). Flagged for his explicit override.
 Deferred: bare-slot / unpaid-partner reminders (cron), organizer waive top-up, remind-partner button,
 max_divisions_per_player enforcement, hide community chip from owner, voucher list on a distribution
 row click.
+
+## 2026-09-13 - Wizard v2, invitee bug, seat-model hardening, 3-state status, unpaid banner, players tab, co-organizer, organizer list (§2AP, handover v1.69)
+Jasper's second batch after §2AO. Diagnoses: (1) "You are not on this team" = getViewerRegistrationState
+filters the viewer's OWN unconfirmed member row out, so an invitee who has not accepted sees the
+inviter as a "confirmed partner" plus Leave/Change controls; Leave -> request_partner_release's
+confirmed-member guard -> not_team_member. Fix = unconfirmed-self teams are invitations, not entries
+(removed from the two maps; invitation card carries Accept/Decline); seat payment needs an accepted
+seat; stale-page refusals refresh; refused RPCs audited (rpc.refused). (2) Co-organizer: the manager
+posts free text as the slug -> "No player found with that handle"; fix = selection-only picker.
+Names were never public; 0043 tightens tournament_organizers RLS (anon could read active rows).
+(3) Age was not in the door check (ELIG advisory only) -> evaluateDivisionFit + player_fits_division
+v4 (0043) refuse age caps and unknown birthday on age-limited divisions.
+Design: classifyDivision (core) -> recommended (tap auto-advances) / other_up / other_down / full
+(one-line tick) / ineligible (collapsed, greyed, (!) reveals reason, never selectable) + hide toggle;
+"Pay for my slot"; help text cut. Status card = Confirmed / Payment for verification / Slot not
+secured on rows + cards; notes[] inside My registrations. Unpaid-slot amber strip first in the app
+shell chain. Partner invitations card separated from divisions. Players tab: "Search VouchPlay",
+40 px controls, single view toggle. Organizer list: collapsed capacity summary, default Has receipt,
+row money tags (Team paid / 1 of 2 slots paid / Slot paid · no partner yet), prose cut.
+Deferred: persist hide toggle; remind partner; assign partner; reminders cron; public Organizers line.

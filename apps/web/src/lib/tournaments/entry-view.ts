@@ -125,6 +125,50 @@ export function statusChip(entry: OrganizerRegistration): StatusChip {
   return { label: 'Awaiting payment', tone: 'waiting' };
 }
 
+export interface MoneyTag {
+  label: string;
+  /** Semantic tone. Never the only signal: the label always carries the meaning too (§34A). */
+  tone: 'done' | 'waiting' | 'action' | 'closed';
+}
+
+/**
+ * One money-only tag per entry, straight off `paymentSummary` (master_plan §2AP I). This is
+ * deliberately narrower than `statusChip`: it never mentions cancellation requests or eligibility, so
+ * a row can show BOTH tags side by side without repeating itself.
+ *
+ * §2AP C4: a CONFIRMED entry can still be only partially paid (an accepted partner release detaches a
+ * seat without downgrading the entry, per §2AM). That is exactly the case an organizer must not miss,
+ * so it surfaces as an action - amber, not a routine wait - even though every other chip on the row
+ * already reads "done".
+ */
+export function moneyTag(entry: OrganizerRegistration): MoneyTag {
+  const summary = entry.paymentSummary;
+
+  if (summary.teamReceipt === 'verified') return { label: 'Team paid', tone: 'done' };
+  if (summary.state === 'refunded') return { label: 'Refunded', tone: 'closed' };
+  if (summary.topupDue > 0) return { label: 'Top-up needed', tone: 'action' };
+  if (summary.state === 'declined') return { label: 'Declined', tone: 'action' };
+
+  if (summary.state === 'paid') {
+    // Fully paid seat-by-seat rather than by one team receipt (already handled above) - still named
+    // by the count, which is the more informative reading once there is more than one seat.
+    return { label: `${summary.paidSeats} of ${summary.totalSeats} slots paid`, tone: 'done' };
+  }
+
+  if (summary.state === 'partial') {
+    const openSeat = summary.seats.some((s) => s.playerId === null) || hasOpenSeat(entry);
+    if (openSeat) return { label: 'Slot paid · no partner yet', tone: 'waiting' };
+    const label = `${summary.paidSeats} of ${summary.totalSeats} slots paid`;
+    return { label, tone: entry.status === 'confirmed' ? 'action' : 'waiting' };
+  }
+
+  if (summary.submittedSeats > 0 || summary.state === 'submitted') {
+    return { label: 'Under review', tone: 'waiting' };
+  }
+
+  return { label: 'No receipt', tone: 'waiting' };
+}
+
 /** Money as one short string, or null when the division is free. */
 export function amountLabel(entry: OrganizerRegistration): string | null {
   if (entry.amountDue == null || entry.amountDue <= 0) return null;
@@ -194,11 +238,14 @@ export interface EntryFilters {
   search: string;
 }
 
+/** §2AP I: the organizer's default view is receipts - entries with nothing to check are noise until
+ *  asked for, so "Has receipt" is the one filter that starts applied (shown as a removable chip, so
+ *  "show me everything" is one tap away). */
 export const DEFAULT_FILTERS: EntryFilters = {
   divisions: [],
   statuses: [],
   eligibility: [],
-  payment: [],
+  payment: ['has_proof'],
   partner: [],
   includeClosed: false,
   search: '',

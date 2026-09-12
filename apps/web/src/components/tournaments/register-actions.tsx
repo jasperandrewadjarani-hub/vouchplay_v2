@@ -27,12 +27,19 @@ export function RegisterActions({
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function run(fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>) {
+  function run(
+    fn: () => Promise<{ ok?: boolean; error?: string; message?: string; refresh?: boolean }>,
+  ) {
     setMsg(null);
     start(async () => {
       const res = await fn();
       setMsg(res.error ?? res.message ?? null);
-      if (res.ok) router.refresh();
+      if (res.ok) {
+        router.refresh();
+      } else if (res.refresh || res.error?.startsWith('This team has changed')) {
+        // §2AP C3: a stale page self-heals instead of stranding the player on a dead control.
+        router.refresh();
+      }
     });
   }
 

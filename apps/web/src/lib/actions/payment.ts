@@ -9,7 +9,7 @@ import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { loadSettingNumber, isSlotReservationsEnabled } from '@/lib/settings';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { checkActorCanInteract } from '@/lib/moderation/enforcement';
-import { writeAudit } from '@/lib/moderation/audit';
+import { writeAudit, logRpcRefusal } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import { getTournamentMini, getTournamentOrganizerIds } from '@/lib/notifications/recipients';
@@ -30,6 +30,32 @@ export interface PaymentActionState {
   ok?: boolean;
   error?: string;
   message?: string;
+  /** Set alongside a stale-team error (master_plan §2AP C3): the team changed since the page was
+   *  opened, so the component should `router.refresh()` rather than strand the player on a page that
+   *  can no longer act. */
+  refresh?: boolean;
+}
+
+/** master_plan §2AP C3: the same stale-team sentence used everywhere this refusal can surface. */
+const STALE_TEAM_MESSAGE = 'This team has changed since you opened the page. Refreshing…';
+
+/**
+ * A direct `team_members` lookup came back empty (master_plan §2AP C3/C8) - logs the refusal
+ * (best-effort, never throws) and returns the shared stale-team copy with `refresh: true`.
+ */
+async function staleTeamError(
+  actorId: string,
+  fn: string,
+  registrationId: string,
+): Promise<PaymentActionState> {
+  await logRpcRefusal({
+    actorId,
+    fn,
+    code: 'not_team_member',
+    entityType: 'registration',
+    entityId: registrationId,
+  });
+  return { error: STALE_TEAM_MESSAGE, refresh: true };
 }
 
 function paymentProofError(
@@ -99,7 +125,7 @@ export async function submitPayment(
       .eq('team_id', r.team_id)
       .eq('player_id', user.id)
       .maybeSingle();
-    if (!member) return { error: 'You are not on this team.' };
+    if (!member) return await staleTeamError(user.id, 'submitPayment', registrationId);
     if (!['payment_pending', 'payment_submitted'].includes(r.status)) {
       return { error: 'This registration is not awaiting payment.' };
     }
@@ -285,11 +311,23 @@ export async function submitSeatPayment(
     if (!r) return { error: 'Registration not found.' };
     const { data: member } = await svc
       .from('team_members')
-      .select('id')
+      .select('id, confirmed_at')
       .eq('team_id', r.team_id)
       .eq('player_id', user.id)
       .maybeSingle();
-    if (!member) return { error: 'You are not on this team.' };
+    if (!member) return await staleTeamError(user.id, 'submitSeatPayment', registrationId);
+    // master_plan §2AP C2/Finding 2a: an unconfirmed invitee could pay their own seat before
+    // accepting - membership alone is not enough, the invitation must be answered first.
+    if (!(member as { confirmed_at: string | null }).confirmed_at) {
+      await logRpcRefusal({
+        actorId: user.id,
+        fn: 'submitSeatPayment',
+        code: 'membership_unconfirmed',
+        entityType: 'registration',
+        entityId: registrationId,
+      });
+      return { error: 'Accept the invitation first - then you can pay for your slot.' };
+    }
     if (!['payment_pending', 'payment_submitted', 'waitlisted'].includes(r.status)) {
       return { error: 'This registration is not awaiting payment.' };
     }

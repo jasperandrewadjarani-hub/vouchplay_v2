@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { describeDivisionFit, evaluateDivisionFit } from './division-fit';
-import type { DivisionFitInput } from './division-fit';
+import {
+  ageAtDate,
+  classifyDivision,
+  describeDivisionFit,
+  evaluateDivisionFit,
+} from './division-fit';
+import type { DivisionFitInput, DivisionFitResult } from './division-fit';
 
 function input(over: Partial<DivisionFitInput> = {}): DivisionFitInput {
   return {
@@ -24,13 +29,14 @@ describe('evaluateDivisionFit - sex classification', () => {
     expect(evaluateDivisionFit(input({ playerSex: 'female' }))).toEqual({
       fits: false,
       reason: 'sex',
+      playingUp: false,
       playingDown: false,
     });
   });
 
   it("keeps a man out of a women's division", () => {
     const r = evaluateDivisionFit(input({ sexClassification: 'women' }));
-    expect(r).toEqual({ fits: false, reason: 'sex', playingDown: false });
+    expect(r).toEqual({ fits: false, reason: 'sex', playingUp: false, playingDown: false });
   });
 
   it('lets anyone into a mixed division when no partner is being checked against', () => {
@@ -45,7 +51,7 @@ describe('evaluateDivisionFit - sex classification', () => {
     const r = evaluateDivisionFit(
       input({ sexClassification: 'mixed', playerSex: 'male', partnerSex: 'male' }),
     );
-    expect(r).toEqual({ fits: false, reason: 'mixed_pair', playingDown: false });
+    expect(r).toEqual({ fits: false, reason: 'mixed_pair', playingUp: false, playingDown: false });
   });
 
   it('lets an opposite-sex mixed pair through', () => {
@@ -60,7 +66,12 @@ describe('evaluateDivisionFit - sex classification', () => {
     const r = evaluateDivisionFit(
       input({ sexClassification: 'mixed', playerSex: null, partnerSex: 'male' }),
     );
-    expect(r).toEqual({ fits: false, reason: 'sex_unknown', playingDown: false });
+    expect(r).toEqual({
+      fits: false,
+      reason: 'sex_unknown',
+      playingUp: false,
+      playingDown: false,
+    });
   });
 
   it('singles ignores partnerSex - there is no partner to pair against', () => {
@@ -96,10 +107,11 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
   it('LETS A PLAYER ENTER A HARDER DIVISION - the rule people actually wanted', () => {
     // Low Intermediate (3) entering a High Intermediate (4) division. Choosing a harder game is
     // not something to refuse, and blocking it was the bug this suite exists to prevent returning.
+    // Also, by definition, this player's skill is below the division's minimum: playingUp is true.
     const r = evaluateDivisionFit(
       input({ effectiveSkill: 3, divisionMinimumSkill: 4, divisionMaximumSkill: 4 }),
     );
-    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+    expect(r).toEqual({ fits: true, reason: null, playingUp: true, playingDown: false });
   });
 
   it('lets a player enter a division far above their level', () => {
@@ -118,6 +130,7 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
     expect(evaluateDivisionFit(input({ effectiveSkill: 4 }))).toEqual({
       fits: false,
       reason: 'skill_too_high',
+      playingUp: false,
       playingDown: false,
     });
   });
@@ -159,70 +172,185 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
   });
 });
 
-describe('evaluateDivisionFit - play down one level (§2AO decision C)', () => {
-  it('lets a player exactly one level above the max in when the toggle is on, flagged playingDown', () => {
-    // division max is 2 (from input()'s default), so 3 is exactly one level above.
-    const r = evaluateDivisionFit(input({ effectiveSkill: 3, allowPlayDownOneLevel: true }));
-    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
-  });
-
-  it('does not let a player one level above in when the toggle is off', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: 3, allowPlayDownOneLevel: false }));
-    expect(r).toEqual({ fits: false, reason: 'skill_too_high', playingDown: false });
-  });
-
-  it('refuses a player two levels above even with the toggle on', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: 4, allowPlayDownOneLevel: true }));
-    expect(r).toEqual({ fits: false, reason: 'skill_too_high', playingDown: false });
-  });
-
-  it('the toggle never widens further than one level - three levels above still refused', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: 5, allowPlayDownOneLevel: true }));
-    expect(r.fits).toBe(false);
-  });
-
-  it('a player AT the max is not "playing down" even with the toggle on', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: 2, allowPlayDownOneLevel: true }));
-    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
-  });
-
-  it('the toggle does nothing when the skill floor is not enforced (already unrestricted)', () => {
+describe('evaluateDivisionFit - playingUp (§2AP A/B)', () => {
+  it('flags playingUp true when the player is below a banded division minimum', () => {
     const r = evaluateDivisionFit(
-      input({ effectiveSkill: 3, allowPlayDownOneLevel: true, enforceSkillFloor: false }),
+      input({ effectiveSkill: 1, divisionMinimumSkill: 3, divisionMaximumSkill: 3 }),
     );
-    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
+    expect(r.fits).toBe(true);
+    expect(r.playingUp).toBe(true);
   });
 
-  it('with the floor OFF, a player above the max still fits but is flagged playingDown', () => {
-    // Same scenario the master plan calls out: skill never blocks with the floor off, but the UI
-    // still needs to know to show the assessment warning.
-    const r = evaluateDivisionFit(input({ effectiveSkill: 4, enforceSkillFloor: false }));
-    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
-  });
-
-  it('with the floor OFF, a player at or below the max is not flagged playingDown', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: 2, enforceSkillFloor: false }));
-    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
-  });
-
-  it('an unknown skill is never flagged playingDown, toggle or not', () => {
-    const r = evaluateDivisionFit(input({ effectiveSkill: null, allowPlayDownOneLevel: true }));
-    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
-  });
-
-  it('open policy is never flagged playingDown regardless of skill', () => {
+  it('never flags playingUp on an open-skill division, however low the skill', () => {
     const r = evaluateDivisionFit(
-      input({ skillPolicy: 'open', effectiveSkill: 9, allowPlayDownOneLevel: true }),
+      input({
+        skillPolicy: 'open',
+        effectiveSkill: 0,
+        divisionMinimumSkill: 5,
+        divisionMaximumSkill: 5,
+      }),
     );
-    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+    expect(r.playingUp).toBe(false);
   });
 
-  it('sex still takes precedence over the play-down flag', () => {
+  it('never flags playingUp for a player with no known skill', () => {
     const r = evaluateDivisionFit(
-      input({ playerSex: 'female', effectiveSkill: 3, allowPlayDownOneLevel: true }),
+      input({ effectiveSkill: null, divisionMinimumSkill: 5, divisionMaximumSkill: 5 }),
+    );
+    expect(r.playingUp).toBe(false);
+  });
+
+  it('does not flag playingUp when there is no minimum to be below', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 0, divisionMinimumSkill: null }));
+    expect(r.playingUp).toBe(false);
+  });
+});
+
+describe('evaluateDivisionFit - age at the door (§2AP B)', () => {
+  it('fits when the player is inside the division age range', () => {
+    const r = evaluateDivisionFit(
+      input({ ageAtStart: 46, divisionMinimumAge: 45, divisionMaximumAge: null }),
+    );
+    expect(r.fits).toBe(true);
+  });
+
+  it('refuses a player below the division minimum age', () => {
+    const r = evaluateDivisionFit(
+      input({ ageAtStart: 44, divisionMinimumAge: 45, divisionMaximumAge: null }),
+    );
+    expect(r).toEqual({ fits: false, reason: 'age', playingUp: false, playingDown: false });
+  });
+
+  it('refuses a player above the division maximum age', () => {
+    const r = evaluateDivisionFit(
+      input({ ageAtStart: 20, divisionMinimumAge: null, divisionMaximumAge: 17 }),
+    );
+    expect(r).toEqual({ fits: false, reason: 'age', playingUp: false, playingDown: false });
+  });
+
+  it('refuses an unknown birthday on an age-limited division with age_unknown', () => {
+    const r = evaluateDivisionFit(
+      input({ ageAtStart: null, divisionMinimumAge: 45, divisionMaximumAge: null }),
+    );
+    expect(r).toEqual({
+      fits: false,
+      reason: 'age_unknown',
+      playingUp: false,
+      playingDown: false,
+    });
+  });
+
+  it('an unknown birthday fits fine on a division with no age limit', () => {
+    const r = evaluateDivisionFit(input({ ageAtStart: null }));
+    expect(r.fits).toBe(true);
+  });
+
+  it('age is only checked when the division actually has a range', () => {
+    // divisionMinimumAge/divisionMaximumAge both absent: legacy callers (and unlimited divisions)
+    // are completely untouched by the age rule, unknown birthday included.
+    const r = evaluateDivisionFit(input({ ageAtStart: undefined }));
+    expect(r.fits).toBe(true);
+  });
+
+  it('age is checked after sex - a sex failure still wins the headline', () => {
+    const r = evaluateDivisionFit(
+      input({
+        playerSex: 'female',
+        ageAtStart: 10,
+        divisionMinimumAge: 45,
+      }),
     );
     expect(r.reason).toBe('sex');
-    expect(r.playingDown).toBe(false);
+  });
+
+  it('age is checked before skill - an age failure wins over a skill failure', () => {
+    const r = evaluateDivisionFit(
+      input({
+        effectiveSkill: 5, // above the division's max of 2 - would fail skill_too_high
+        ageAtStart: 10,
+        divisionMinimumAge: 45,
+      }),
+    );
+    expect(r.reason).toBe('age');
+  });
+});
+
+describe('ageAtDate (§2AP B)', () => {
+  it('computes whole years old as of the given date', () => {
+    expect(ageAtDate('2000-01-01', '2026-01-01')).toBe(26);
+  });
+
+  it('counts the birthday itself as the new age', () => {
+    expect(ageAtDate('2000-06-15', '2026-06-15')).toBe(26);
+  });
+
+  it('has not turned the new age the day before the birthday', () => {
+    expect(ageAtDate('2000-06-16', '2026-06-15')).toBe(25);
+  });
+
+  it('returns null for an unparsable date of birth', () => {
+    expect(ageAtDate('not-a-date', '2026-01-01')).toBeNull();
+  });
+
+  it('returns null for an unparsable "at" date', () => {
+    expect(ageAtDate('2000-01-01', 'not-a-date')).toBeNull();
+  });
+
+  it('returns null when either date is missing', () => {
+    expect(ageAtDate(null, '2026-01-01')).toBeNull();
+    expect(ageAtDate('2000-01-01', null)).toBeNull();
+    expect(ageAtDate(undefined, undefined)).toBeNull();
+  });
+});
+
+describe('classifyDivision - precedence (§2AP A)', () => {
+  const fits: DivisionFitResult = {
+    fits: true,
+    reason: null,
+    playingUp: false,
+    playingDown: false,
+  };
+  const doesNotFit: DivisionFitResult = {
+    fits: false,
+    reason: 'skill_too_high',
+    playingUp: false,
+    playingDown: false,
+  };
+
+  it('registered wins over everything, even an otherwise-ineligible fit', () => {
+    expect(classifyDivision({ fit: doesNotFit, registered: true, full: true }).kind).toBe(
+      'registered',
+    );
+  });
+
+  it('ineligible wins over other_down/other_up/full when not registered', () => {
+    expect(classifyDivision({ fit: doesNotFit, registered: false, full: true }).kind).toBe(
+      'ineligible',
+    );
+  });
+
+  it('other_down wins over other_up and full', () => {
+    const playingDown: DivisionFitResult = { ...fits, playingUp: true, playingDown: true };
+    expect(classifyDivision({ fit: playingDown, registered: false, full: true }).kind).toBe(
+      'other_down',
+    );
+  });
+
+  it('other_up wins over full', () => {
+    const playingUp: DivisionFitResult = { ...fits, playingUp: true };
+    expect(classifyDivision({ fit: playingUp, registered: false, full: true }).kind).toBe(
+      'other_up',
+    );
+  });
+
+  it('full wins over recommended', () => {
+    expect(classifyDivision({ fit: fits, registered: false, full: true }).kind).toBe('full');
+  });
+
+  it('recommended is the default when nothing else applies', () => {
+    expect(classifyDivision({ fit: fits, registered: false, full: false }).kind).toBe(
+      'recommended',
+    );
   });
 });
 
@@ -301,5 +429,46 @@ describe('describeDivisionFit', () => {
         expect(msg).not.toContain(word);
       }
     }
+  });
+
+  describe('age copy (§2AP B)', () => {
+    it('age_unknown for the reader points at their own profile', () => {
+      const msg = describeDivisionFit('age_unknown', { ...base, subject: 'you' });
+      expect(msg.toLowerCase()).toContain('birthday');
+      expect(msg.toLowerCase()).toContain('profile');
+      expect(msg).toContain(base.divisionName);
+    });
+
+    it('age_unknown for a partner names them and asks them to add it', () => {
+      const msg = describeDivisionFit('age_unknown', {
+        ...base,
+        subject: 'partner',
+        partnerName: 'Maria',
+      });
+      expect(msg.startsWith('Maria')).toBe(true);
+      expect(msg.toLowerCase()).toContain('birthday');
+    });
+
+    it('age_unknown for a nameless partner falls back to a neutral noun', () => {
+      const msg = describeDivisionFit('age_unknown', { ...base, subject: 'partner' });
+      expect(msg.startsWith('That player')).toBe(true);
+    });
+
+    it('age for the reader names the age group, not a birthday fix', () => {
+      const msg = describeDivisionFit('age', { ...base, subject: 'you' });
+      expect(msg.toLowerCase()).toContain('age group');
+      expect(msg.toLowerCase()).not.toContain('birthday');
+    });
+
+    it('age for a partner names them and suggests a division without an age limit', () => {
+      const msg = describeDivisionFit('age', {
+        ...base,
+        subject: 'partner',
+        partnerName: 'Maria',
+      });
+      expect(msg.startsWith('Maria')).toBe(true);
+      expect(msg.toLowerCase()).toContain('age group');
+      expect(msg.toLowerCase()).toContain('without an age limit');
+    });
   });
 });

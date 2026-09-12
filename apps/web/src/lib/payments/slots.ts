@@ -10,6 +10,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/service';
 import { isSlotReservationsEnabled, loadSettingNumber } from '@/lib/settings';
 import { tournamentTag } from '@/lib/tournaments/queries';
+import { notify } from '@/lib/notifications/create';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 
 /**
@@ -303,9 +304,53 @@ export async function attachBareSlot(
 }
 
 /**
+ * Best-effort `slot_released` notification for every player whose LIVE slot was just detached
+ * (master_plan §2AP C5/Finding 2e): "a leaving player's slot detaches silently - they are not told it
+ * is theirs to reuse." Grouped by tournament so a multi-row detach sends at most one notification per
+ * player per tournament. Never throws - a notification failure must not surface as a detach failure.
+ */
+async function notifySlotsReleased(
+  rows: { player_id: string; tournament_id: string }[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  try {
+    const svc = createServiceClient();
+    const byTournament = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const set = byTournament.get(r.tournament_id) ?? new Set<string>();
+      set.add(r.player_id);
+      byTournament.set(r.tournament_id, set);
+    }
+    for (const [tournamentId, playerIds] of byTournament) {
+      const { data } = await svc
+        .from('tournaments')
+        .select('name, slug')
+        .eq('id', tournamentId)
+        .maybeSingle();
+      const t = data as { name: string; slug: string | null } | null;
+      const link = t?.slug ? `/tournaments/${t.slug}?register=1` : '/tournaments';
+      for (const playerId of playerIds) {
+        await notify({
+          recipientId: playerId,
+          type: 'slot_released',
+          params: { tournamentName: t?.name ?? 'a tournament' },
+          link,
+          entityType: 'tournament',
+          entityId: tournamentId,
+        });
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+
+/**
  * Detach every LIVE attached slot on a registration (all members, or one when `playerId` is given) -
  * "the money travels with the person" (master_plan §2AO A4): a partner leaving, a registration closed,
- * a member swapped out. Returns the number of rows detached. Never throws.
+ * a member swapped out. Every player actually detached is notified `slot_released` (master_plan §2AP
+ * C5) - the one shared place every detach site in `registration.ts` funnels through. Returns the
+ * number of rows detached. Never throws.
  */
 export async function detachSlots(registrationId: string, playerId?: string): Promise<number> {
   try {
@@ -316,9 +361,11 @@ export async function detachSlots(registrationId: string, playerId?: string): Pr
       .eq('registration_id', registrationId)
       .in('status', LIVE_STATUSES);
     if (playerId) query = query.eq('player_id', playerId);
-    const { data, error } = await query.select('id');
+    const { data, error } = await query.select('id, player_id, tournament_id');
     if (error) throw error;
-    return (data ?? []).length;
+    const rows = (data ?? []) as { id: string; player_id: string; tournament_id: string }[];
+    await notifySlotsReleased(rows);
+    return rows.length;
   } catch {
     return 0;
   }

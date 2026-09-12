@@ -1,6 +1,6 @@
 import 'server-only';
 import { SKILL_BANDS } from '@vouchplay/config';
-import { describeDivisionFit, evaluateDivisionFit } from '@vouchplay/core';
+import { ageAtDate, describeDivisionFit, evaluateDivisionFit } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getActiveSkillVersion } from '@/lib/settings';
 import {
@@ -90,10 +90,19 @@ export async function checkDivisionFit(
   const div = divRow as DivisionRuleRow | null;
   if (!div) return 'That division is no longer available.';
 
+  // §2AP B: age at the door. Read the tournament's start once - the door is the same for every
+  // candidate, so one read here is shared by all of them below.
+  const { data: tournRow } = await svc
+    .from('tournaments')
+    .select('start_at')
+    .eq('id', div.tournament_id)
+    .maybeSingle();
+  const tournamentStartAt = (tournRow as { start_at: string | null } | null)?.start_at ?? null;
+
   const ids = Array.from(new Set(candidates.map((c) => c.playerId)));
   const skillVersion = await getActiveSkillVersion();
   const [{ data: profileRows, error: profileError }, { rows: skillRows }] = await Promise.all([
-    svc.from('profiles').select('id, sex, self_rated_skill').in('id', ids),
+    svc.from('profiles').select('id, sex, self_rated_skill, date_of_birth').in('id', ids),
     // Effective skill honours the public skill-algorithm switch (§2AF rollout step 2) - falls open to
     // V1 columns when migration 0034 is not applied yet.
     selectSkillProfiles<SkillProfileRow & { player_id: string }>(
@@ -107,7 +116,12 @@ export async function checkDivisionFit(
 
   const profiles = new Map(
     (
-      (profileRows ?? []) as { id: string; sex: string | null; self_rated_skill: number | null }[]
+      (profileRows ?? []) as {
+        id: string;
+        sex: string | null;
+        self_rated_skill: number | null;
+        date_of_birth: string | null;
+      }[]
     ).map((p) => [p.id, p]),
   );
   const community = new Map(
@@ -137,6 +151,9 @@ export async function checkDivisionFit(
       allowPlayDownOneLevel,
       partnerSex: c.partnerSex,
       format: div.format,
+      ageAtStart: ageAtDate(p.date_of_birth, tournamentStartAt),
+      divisionMinimumAge: div.minimum_age,
+      divisionMaximumAge: div.maximum_age,
     });
     if (!verdict.fits && verdict.reason) {
       return describeDivisionFit(verdict.reason, {

@@ -103,7 +103,7 @@ export function PaymentModalBody({
         )}
         {mode === 'seat' && (
           <p className="text-foreground-muted mt-0.5 text-xs">
-            Your seat{earlyBird ? ' (early bird price)' : ''}
+            Your slot{earlyBird ? ' (early bird price)' : ''}
           </p>
         )}
         {mode === 'reservation' && (

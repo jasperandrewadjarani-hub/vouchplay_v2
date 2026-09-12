@@ -90,9 +90,11 @@ async function PlayersResults({
               : `${total} player${total === 1 ? '' : 's'}`
             : `A few of our ${total.toLocaleString()}+ players`}
         </p>
-        {/* Sort and view controls are signed-in features - a guest sees a fixed compact preview. */}
+        {/* Sort and view controls are signed-in features - a guest sees a fixed compact preview.
+            Single non-wrapping line (master_plan §2AN decision G) - even a 390px phone has room for
+            the compact sort select plus the 40px view-toggle button side by side. */}
         {authed && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center justify-between gap-2">
             <SortSelect sort={filters.sort ?? 'new_unvouched'} staff={viewer.isStaff} />
             <PlayerViewToggle compact={compact} />
           </div>

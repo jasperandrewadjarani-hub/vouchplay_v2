@@ -7,21 +7,18 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
-  Receipt,
   Search,
   SlidersHorizontal,
   TriangleAlert,
   X,
 } from 'lucide-react';
 import { skillByOrdinal, OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
-import { formatDate } from '@/lib/format-date';
 import {
   ELIGIBILITY_RESULT_LABELS,
   ELIGIBILITY_RESULT_DESCRIPTIONS,
   HARD_RULE_LABELS,
   REASON_LABELS,
   FLAG_LABELS,
-  type EntryPaymentSummary,
   type SeatSummary,
   type SeatState,
 } from '@vouchplay/core';
@@ -50,6 +47,7 @@ import {
   filterEntries,
   hasOpenSeat,
   hasUnconfirmedPartner,
+  moneyTag,
   sortEntries,
   STATUS_LABELS,
   statusChip,
@@ -164,8 +162,10 @@ function ChipGroup<T extends string>({
 }
 
 /**
- * Division capacity strip: one glance at "where do we stand on slots" per division. Tapping a row
- * toggles that division into the filter, the same as tapping a Division chip.
+ * Division capacity strip: one glance at "where do we stand on slots" per division. Collapsed by
+ * default behind a one-line summary (master_plan §2AP Decision I) - the per-division rows are detail
+ * an organizer opens for, not something that should push the list down the page on every visit.
+ * Tapping a row toggles that division into the filter, the same as tapping a Division chip.
  */
 function CapacityStrip({
   divisions,
@@ -177,44 +177,60 @@ function CapacityStrip({
   onToggle: (id: string) => void;
 }) {
   if (divisions.length === 0) return null;
+  const totalRegistered = divisions.reduce((sum, d) => sum + d.registered, 0);
+  const totalCapacity = divisions.reduce((sum, d) => sum + d.capacity, 0);
+  const totalPaid = divisions.reduce((sum, d) => sum + d.paid, 0);
   return (
-    <ul className="border-border divide-border divide-y overflow-hidden rounded-2xl border">
-      {divisions.map((d) => {
-        const pct = d.capacity > 0 ? Math.min(100, (d.registered / d.capacity) * 100) : 0;
-        const warn = d.capacity > 0 && d.registered / d.capacity >= 0.9;
-        const active = activeIds.includes(d.id);
-        return (
-          <li key={d.id}>
-            <button
-              type="button"
-              aria-pressed={active}
-              onClick={() => onToggle(d.id)}
-              className={`hover:bg-surface-muted flex min-h-11 w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors ${
-                active ? 'bg-primary/5' : ''
-              }`}
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-foreground truncate text-sm font-medium">{d.name}</span>
-                <span className="text-foreground shrink-0 text-sm font-bold tabular-nums">
-                  {d.registered} / {d.capacity}
+    <details className="group border-border overflow-hidden rounded-2xl border">
+      <summary className="hover:bg-surface-muted flex min-h-11 w-full cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-sm [&::-webkit-details-marker]:hidden">
+        <span className="text-foreground font-medium">
+          Divisions ({divisions.length}) · {totalRegistered}/{totalCapacity} entered · {totalPaid}{' '}
+          fully paid
+        </span>
+        <ChevronDown
+          size={16}
+          aria-hidden
+          className="text-foreground-muted shrink-0 transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <ul className="border-border divide-border divide-y border-t">
+        {divisions.map((d) => {
+          const pct = d.capacity > 0 ? Math.min(100, (d.registered / d.capacity) * 100) : 0;
+          const warn = d.capacity > 0 && d.registered / d.capacity >= 0.9;
+          const active = activeIds.includes(d.id);
+          return (
+            <li key={d.id}>
+              <button
+                type="button"
+                aria-pressed={active}
+                onClick={() => onToggle(d.id)}
+                className={`hover:bg-surface-muted flex min-h-11 w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors ${
+                  active ? 'bg-primary/5' : ''
+                }`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-foreground truncate text-sm font-medium">{d.name}</span>
+                  <span className="text-foreground shrink-0 text-sm font-bold tabular-nums">
+                    {d.registered} / {d.capacity}
+                  </span>
                 </span>
-              </span>
-              <span className="text-foreground-muted flex items-center justify-between gap-2 text-[11px]">
-                <span>
-                  {d.registered} registered · {d.paid} paid · {d.pending} pending
+                <span className="text-foreground-muted flex items-center justify-between gap-2 text-[11px]">
+                  <span>
+                    {d.registered} registered · {d.paid} paid · {d.pending} pending
+                  </span>
                 </span>
-              </span>
-              <span className="bg-surface-muted h-1.5 w-full overflow-hidden rounded-full">
-                <span
-                  className={`block h-full rounded-full ${warn ? 'bg-warning' : 'bg-primary'}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+                <span className="bg-surface-muted h-1.5 w-full overflow-hidden rounded-full">
+                  <span
+                    className={`block h-full rounded-full ${warn ? 'bg-warning' : 'bg-primary'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
   );
 }
 
@@ -260,6 +276,17 @@ export function OrganizerRegistrations({
   const visible = sortEntries(filterEntries(registrations, filters), sort);
   const selected = registrations.find((r) => r.id === openId) ?? null;
   const chips = describeEntryChips(filters, divisions);
+  // True only while the default "Has receipt" filter is the sole thing narrowing the list, so the
+  // count line can say what it's showing instead of the generic "shown" (master_plan §2AP Decision I).
+  const isDefaultReceiptFilterOnly =
+    filters.payment.length === 1 &&
+    filters.payment[0] === 'has_proof' &&
+    filters.divisions.length === 0 &&
+    filters.statuses.length === 0 &&
+    filters.eligibility.length === 0 &&
+    filters.partner.length === 0 &&
+    !filters.includeClosed &&
+    filters.search.trim() === '';
   const activeGroupCount =
     Number(filters.divisions.length > 0) +
     Number(filters.statuses.length > 0) +
@@ -435,7 +462,9 @@ export function OrganizerRegistrations({
         </div>
       )}
 
-      <p className="text-foreground-muted text-xs">{visible.length} shown</p>
+      <p className="text-foreground-muted text-xs">
+        {visible.length} {isDefaultReceiptFilterOnly ? 'with receipts' : 'shown'}
+      </p>
 
       {visible.length === 0 ? (
         <p className="text-foreground-muted text-sm">Nothing here. Try a different filter.</p>
@@ -468,21 +497,6 @@ const TONE_STYLES: Record<StatusChip['tone'], string> = {
   closed: 'border-border text-foreground-muted opacity-70',
 };
 
-// Order reasons by how much they should drive an organizer's decision: a hard rule or a skill-cap
-// breach first, "still building / not many vouches" confidence notes last.
-const REASON_PRIORITY = [
-  'SKILL_ABOVE_DIVISION_MAX',
-  // Play-one-level-down (master_plan §2AO C, ELIG_V1.1): a REVIEW result, not a hard mismatch, but
-  // still an "assess before confirming" ask - ranked right after an outright skill-cap breach.
-  'PLAYING_DOWN_ONE_LEVEL',
-  'STS_BELOW_REQUIRED',
-  'SKILL_VERIFIED_REQUIRED_MISSING',
-  'AGE_UNKNOWN',
-  'UNRATED',
-  'INSUFFICIENT_EVIDENCE',
-  'LOW_CONFIDENCE',
-];
-
 /**
  * Fallback labels for reason codes not yet in the shared `@vouchplay/core` map (master_plan §2AO
  * Decision C: `PLAYING_DOWN_ONE_LEVEL` ships from the core/eligibility lane built in parallel with
@@ -499,47 +513,15 @@ function reasonLabel(code: string): string {
 }
 
 /**
- * Plain-language reasons a registration is flagged, for the LIST row (§2AD) - so an organizer sees
- * WHO and WHY without opening the sheet. Reads the stored eligibility snapshot and maps each flagged
- * player's most salient code to its human label, grouping players who share a reason. Returns e.g.
- * ["Berl, Mayong - Community skill is above the division maximum", "Joy - Not many vouches yet"].
- */
-function eligibilityReasonLines(entry: OrganizerRegistration): string[] {
-  const snap = (entry.eligibilitySnapshot ?? {}) as Snapshot;
-  const nameById = new Map(entry.members.map((m) => [m.id, m.name]));
-  const byReason = new Map<string, string[]>();
-  const add = (label: string, name: string) => {
-    const names = byReason.get(label) ?? [];
-    if (!names.includes(name)) names.push(name);
-    byReason.set(label, names);
-  };
-  for (const p of snap.players ?? []) {
-    if ((p.result ?? 'ELIGIBLE') === 'ELIGIBLE') continue;
-    const name = nameById.get(p.playerId) ?? 'A player';
-    const hard = (p.hardRuleCodes ?? [])[0];
-    const hardLabel = hard ? HARD_RULE_LABELS[hard as keyof typeof HARD_RULE_LABELS] : undefined;
-    if (hardLabel) {
-      add(hardLabel, name);
-      continue;
-    }
-    const code =
-      REASON_PRIORITY.find((c) => (p.reasonCodes ?? []).includes(c)) ?? (p.reasonCodes ?? [])[0];
-    const label = code ? reasonLabel(code) : undefined;
-    if (label) add(label, name);
-  }
-  return [...byReason.entries()].map(([label, names]) => `${names.join(', ')} — ${label}`);
-}
-
-/**
  * One entry, scannable in a glance: who, which division, what it needs, how much. The whole row is
  * the control - a small "Manage" link beside a tall row is a smaller target than the row itself.
  */
 function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () => void }) {
   const chip = statusChip(entry);
+  const money = moneyTag(entry);
   const amount = amountLabel(entry);
   const openSeat = hasOpenSeat(entry);
   const unconfirmed = !openSeat && hasUnconfirmedPartner(entry);
-  const reasonLines = entry.eligibilityStatus !== 'eligible' ? eligibilityReasonLines(entry) : [];
   return (
     <li>
       <button
@@ -561,6 +543,11 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
             >
               {chip.label}
             </span>
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${TONE_STYLES[money.tone]}`}
+            >
+              {money.label}
+            </span>
             {openSeat && (
               <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
                 <Clock size={10} aria-hidden />
@@ -579,24 +566,7 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
                 {statusToLabel(entry.eligibilityStatus)}
               </span>
             )}
-            {entry.hasProof && (
-              <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
-                <Receipt size={10} aria-hidden />
-                Receipt
-              </span>
-            )}
           </span>
-          {/* The specific reason(s) the entry is flagged, right in the list so the organizer sees
-              who and why before opening the sheet (§2AD). */}
-          {reasonLines.length > 0 && (
-            <span className="text-foreground-muted mt-1 block text-[11px] leading-snug">
-              {reasonLines.map((line, i) => (
-                <span key={i} className="block truncate">
-                  {line}
-                </span>
-              ))}
-            </span>
-          )}
         </span>
         <ChevronRight size={16} className="text-foreground-muted shrink-0" aria-hidden />
       </button>
@@ -737,8 +707,8 @@ function RegRow({
         nameById={nameById}
       />
 
-      {/* Cancellation request (§1Y, §2L) - the reason was fetched but never shown, so the organizer
-          could see "Cancellation asked" without knowing why. Now the player's own words are here. */}
+      {/* Cancellation request (§1Y, §2L, §2AP I) - the player's own reason, cut to one line: what
+          they said, then what to do about it. */}
       {reg.cancellationRequest && (
         <div className="border-warning/40 bg-warning/10 mt-2 rounded-lg border p-2.5">
           <p className="text-warning flex items-center gap-1.5 text-xs font-semibold">
@@ -746,11 +716,7 @@ function RegRow({
             Cancellation requested
           </p>
           <p className="text-foreground mt-1 text-sm whitespace-pre-wrap">
-            &ldquo;{reg.cancellationRequest.reason}&rdquo;
-          </p>
-          <p className="text-foreground-muted mt-1 text-xs">
-            Asked {formatDate(reg.cancellationRequest.requestedAt)}. To cancel this entry, use
-            Reject above; anything about the payment is settled with the player directly.
+            &ldquo;{reg.cancellationRequest.reason}&rdquo; Reject above to cancel.
           </p>
         </div>
       )}
@@ -807,14 +773,6 @@ const SEAT_STATE_TONE: Record<SeatState, string> = {
   unpaid: 'text-foreground-muted',
   empty: 'text-foreground-muted',
 };
-
-/** The one-line summary at the top of the Payments block (master_plan §2AO A6). */
-function paymentSummaryLine(summary: EntryPaymentSummary): string {
-  if (summary.fullyPaid) return 'Fully paid';
-  if (summary.state === 'submitted') return 'Under review';
-  if (summary.paidSeats > 0) return `Paid ${summary.paidSeats} of ${summary.totalSeats} seats`;
-  return 'No receipt yet';
-}
 
 /**
  * The team-scope receipt row - unchanged controls from before this batch (View proof / Verify /
@@ -926,6 +884,7 @@ function SeatRow({
   slot,
   nameById,
   currency,
+  extra,
   tournamentId,
   pending,
   start,
@@ -936,6 +895,9 @@ function SeatRow({
   slot: OrganizerRegistration['slots'][number] | undefined;
   nameById: Map<string, string>;
   currency: string | null;
+  /** True when this seat's own receipt is redundant - the team receipt already covers every slot
+   *  (master_plan §2AP Decision C6, "overpayment"). */
+  extra: boolean;
   tournamentId: string;
   pending: boolean;
   start: StartTransition;
@@ -950,9 +912,16 @@ function SeatRow({
     <li className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-foreground text-xs font-medium">{name}</span>
-        <span className={`text-xs font-semibold ${SEAT_STATE_TONE[seat.state]}`}>
-          {SEAT_STATE_LABELS[seat.state]}
-          {seat.state === 'topup' && ` (${currency ?? 'PHP'} ${topupAmount.toLocaleString()})`}
+        <span className="flex items-center gap-1.5">
+          {extra && (
+            <span className="border-warning/40 bg-warning/10 text-warning inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold">
+              Extra
+            </span>
+          )}
+          <span className={`text-xs font-semibold ${SEAT_STATE_TONE[seat.state]}`}>
+            {SEAT_STATE_LABELS[seat.state]}
+            {seat.state === 'topup' && ` (${currency ?? 'PHP'} ${topupAmount.toLocaleString()})`}
+          </span>
         </span>
       </div>
       {slot && (
@@ -1042,12 +1011,17 @@ function PaymentsBlock({
   const summary = reg.paymentSummary;
   if (!summary) return null;
   const slotByPlayer = new Map((reg.slots ?? []).map((s) => [s.playerId, s]));
+  // Overpayment (master_plan §2AP Decision C6): the team receipt already covers every slot, but a
+  // seat also carries its own receipt - visible to the organizer instead of silently absorbed.
+  const hasOverpayment =
+    (summary.teamReceipt === 'verified' || summary.teamReceipt === 'submitted') &&
+    (reg.slots ?? []).length > 0;
 
   return (
     <div className="border-border mt-2 space-y-2.5 rounded-lg border border-dashed p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-foreground text-xs font-semibold">Payments</span>
-        <span className="text-foreground-muted text-xs">{paymentSummaryLine(summary)}</span>
+        <span className="text-foreground-muted text-xs">{moneyTag(reg).label}</span>
       </div>
 
       {reg.paymentId && (
@@ -1061,21 +1035,31 @@ function PaymentsBlock({
         />
       )}
 
+      {hasOverpayment && (
+        <p className="text-warning text-xs">
+          Extra receipt on file - the team receipt already covers every slot. Refund or keep.
+        </p>
+      )}
+
       <ul className="divide-border divide-y">
-        {summary.seats.map((seat, i) => (
-          <SeatRow
-            key={seat.playerId ?? `open-seat-${i}`}
-            seat={seat}
-            slot={seat.playerId ? slotByPlayer.get(seat.playerId) : undefined}
-            nameById={nameById}
-            currency={reg.currency}
-            tournamentId={tournamentId}
-            pending={pending}
-            start={start}
-            run={run}
-            setMsg={setMsg}
-          />
-        ))}
+        {summary.seats.map((seat, i) => {
+          const slot = seat.playerId ? slotByPlayer.get(seat.playerId) : undefined;
+          return (
+            <SeatRow
+              key={seat.playerId ?? `open-seat-${i}`}
+              seat={seat}
+              slot={slot}
+              nameById={nameById}
+              currency={reg.currency}
+              extra={hasOverpayment && !!slot}
+              tournamentId={tournamentId}
+              pending={pending}
+              start={start}
+              run={run}
+              setMsg={setMsg}
+            />
+          );
+        })}
       </ul>
     </div>
   );

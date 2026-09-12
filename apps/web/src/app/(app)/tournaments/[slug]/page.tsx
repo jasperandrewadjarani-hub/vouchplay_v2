@@ -12,6 +12,7 @@ import { TournamentDemandSummary } from '@/components/tournaments/demand-summary
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { MyRegistrations } from '@/components/tournaments/my-registrations';
+import { PartnerInvitationsCard } from '@/components/tournaments/partner-invitations-card';
 import { DivisionBrowser } from '@/components/tournaments/division-browser';
 import type { WizardTournament } from '@/components/tournaments/registration-wizard';
 import { ClubRepSelector } from '@/components/tournaments/club-rep-selector';
@@ -202,6 +203,12 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           lookingForPartner={regState.viewerLookingForPartner}
           openForSponsorship={regState.viewerOpenForSponsorship}
         />
+      )}
+
+      {/* Partner invitations: split out above My registrations so a decision the OTHER team made
+          never reads as one of the viewer's own entries (master_plan §2AP D). */}
+      {authed && regState && regState.invitations.length > 0 && (
+        <PartnerInvitationsCard invitations={regState.invitations} />
       )}
 
       {/* My registrations: collapsed manager of the player's own active entries, after details. */}

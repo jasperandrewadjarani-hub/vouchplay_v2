@@ -26,7 +26,7 @@ export function InvitationActions({
   // Confirm in place rather than relying on a refresh: an action with no feedback reads as an
   // action that failed, and the only way to learn Cancel had worked was to reload (§1N, §1Y).
   function run(
-    fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>,
+    fn: () => Promise<{ ok?: boolean; error?: string; message?: string; refresh?: boolean }>,
     successText: string,
   ) {
     setMsg(null);
@@ -36,6 +36,11 @@ export function InvitationActions({
       setMsg(res.error ?? null);
       if (res.ok) {
         setDone(res.message ?? successText);
+        router.refresh();
+      } else if (res.refresh || res.error?.startsWith('This team has changed')) {
+        // §2AP C3: the team changed under the viewer (partner accepted/left/declined elsewhere) -
+        // a stale page can no longer strand them on a control that can only fail. Show the message
+        // and self-heal immediately rather than leaving them to press something dead again.
         router.refresh();
       }
     });
@@ -110,11 +115,11 @@ export function InvitationActions({
         <button
           type="button"
           disabled={pending || Boolean(done)}
-          onClick={() => run(() => cancelInvitation(invitationId), 'Invitation cancelled.')}
+          onClick={() => run(() => cancelInvitation(invitationId), 'Invitation withdrawn.')}
           className={`${btn} border-border text-foreground inline-flex min-h-[44px] items-center gap-1.5 border disabled:opacity-60`}
         >
           {pending && <Loader2 size={13} className="animate-spin" aria-hidden />}
-          {pending ? 'Cancelling…' : done ? 'Cancelled' : 'Cancel'}
+          {pending ? 'Withdrawing…' : done ? 'Withdrawn' : 'Withdraw'}
         </button>
       )}
       {msg && <span className="text-danger text-xs">{msg}</span>}

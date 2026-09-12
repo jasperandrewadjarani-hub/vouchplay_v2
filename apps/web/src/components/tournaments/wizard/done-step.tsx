@@ -54,7 +54,7 @@ export function DoneStep({
   const bullets: string[] = [];
   if (outcome.paidNow) bullets.push('The organizer will verify your payment.');
   if (outcome.partnerNamed) bullets.push('Your partner needs to confirm the team.');
-  if (outcome.payFor === 'seat') bullets.push('Your partner needs to pay their seat.');
+  if (outcome.payFor === 'seat') bullets.push('Your partner needs to pay their slot.');
   if (outcome.isReservation) {
     bullets.push(
       outcome.registrationCloseAt

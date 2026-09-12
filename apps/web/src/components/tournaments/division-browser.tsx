@@ -9,12 +9,12 @@ import { SKILL_BANDS } from '@vouchplay/config';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { RegisterActions } from './register-actions';
-import { InvitationActions } from './invitation-actions';
 import { PartnerChangeActions } from './partner-change-actions';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
 import { RegistrationWizard, type WizardTournament } from './registration-wizard';
 
-/** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). */
+/** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). "Invited"
+ *  is its own neutral tone - an invitation is not yet a state the viewer's own slot has (§2AP C1/E). */
 const TONE_CHIP: Record<SlotTone, string> = {
   action: 'text-warning',
   waiting: 'text-foreground-muted',
@@ -81,7 +81,7 @@ export function DivisionBrowser({
     tournament;
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
   const registeredIds = new Set(state ? Object.keys(state.registrationsByDivision) : []);
-  const invitations = state?.invitations ?? [];
+  const invitedIds = new Set(state?.invitedDivisionIds ?? []);
   const effectiveSkill = state
     ? effectivePlayerSkill(
         state.viewerSkill.communitySkillLevel,
@@ -177,41 +177,6 @@ export function DivisionBrowser({
         </div>
       )}
 
-      {invitations.length > 0 && (
-        <div className="border-border border-t px-4 py-3">
-          <h3 className="text-foreground mb-2 text-sm font-semibold">Partner invitations</h3>
-          <ul className="space-y-2">
-            {invitations.map((i) => (
-              <li
-                key={i.id}
-                className={`border-border bg-surface-muted gap-2 rounded-xl border p-2.5 ${
-                  i.prepaid && i.direction === 'incoming'
-                    ? 'flex flex-col items-start'
-                    : 'flex items-center justify-between'
-                }`}
-              >
-                <span className="text-foreground text-sm">
-                  {i.direction === 'incoming' ? 'From ' : 'To '}
-                  {i.otherSlug ? (
-                    <Link href={`/players/${i.otherSlug}`} className="text-primary font-medium">
-                      {i.otherName}
-                    </Link>
-                  ) : (
-                    <span className="font-medium">{i.otherName}</span>
-                  )}
-                </span>
-                <InvitationActions
-                  invitationId={i.id}
-                  direction={i.direction}
-                  prepaid={i.prepaid}
-                  partnerName={i.otherName}
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {visible.length === 0 ? (
         <p className="text-foreground-muted border-border border-t p-4 text-sm">
           No divisions published yet.
@@ -227,6 +192,10 @@ export function DivisionBrowser({
             const capacity = Math.max(0, d.capacityTeams);
             const isFull = capacity > 0 && d.registeredTeams >= capacity;
             const registered = registeredIds.has(d.id);
+            // An incoming pending invitation is not yet a state the viewer's own slot has - it is
+            // excluded from `registrationsByDivision` entirely (master_plan §2AP C1), so it gets its
+            // own neutral chip and no Enter button rather than reading as either an entry or a gap.
+            const invited = invitedIds.has(d.id);
             const team = state?.teamsByDivision[d.id];
             // The honest state of the viewer's own entry, if they have one. "Registered" (green) is
             // gone: an entry is only secured once confirmed, and until then this says what is
@@ -249,10 +218,14 @@ export function DivisionBrowser({
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-4">
                     <span className="text-foreground text-sm font-semibold">{d.name}</span>
                     <span className="text-foreground-muted flex items-center gap-2 text-xs">
-                      {status && (
-                        <span className={`${TONE_CHIP[status.tone]} font-medium`}>
-                          {status.shortLabel}
-                        </span>
+                      {invited ? (
+                        <span className="text-foreground-muted font-medium">Invited</span>
+                      ) : (
+                        status && (
+                          <span className={`${TONE_CHIP[status.tone]} font-medium`}>
+                            {status.headlineLabel}
+                          </span>
+                        )
                       )}
                       <ChevronDown size={16} aria-hidden />
                     </span>
@@ -291,6 +264,19 @@ export function DivisionBrowser({
                           <span>{status.assurance} Manage it in My registrations above.</span>
                         </p>
                       )
+                    ) : invited ? (
+                      <p className="text-foreground-muted flex items-start gap-1.5 text-xs font-medium">
+                        <AlertCircle size={14} className="mt-0.5 shrink-0" aria-hidden />
+                        <span>
+                          You&rsquo;ve been invited to this division.{' '}
+                          <Link
+                            href="#partner-invitations"
+                            className="text-primary underline underline-offset-2"
+                          >
+                            See your invitation
+                          </Link>
+                        </span>
+                      </p>
                     ) : fitMessage ? (
                       /* One clear sentence and no control. Offering a button that the server will
                          refuse teaches people the app is broken (§2D). */

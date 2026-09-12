@@ -47,6 +47,12 @@ const formatVouches = (v: number) => (v >= VOUCHES_MAX ? `${VOUCHES_MAX}+` : Str
 const controlClass =
   'w-full min-h-[44px] rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-foreground-muted focus-visible:outline-2 focus-visible:outline-offset-2';
 
+/** The search row's own controls (input/Filters/Search) drop to a 40px tap target
+ *  (master_plan §2AN decision G) - the sheet's own selects/toggles below keep the 44px
+ *  `controlClass`/`min-h-[44px]` floor untouched. */
+const compactControlClass =
+  'w-full min-h-10 rounded-xl border border-border bg-background px-3.5 py-2 text-sm text-foreground placeholder:text-foreground-muted focus-visible:outline-2 focus-visible:outline-offset-2';
+
 const sectionLabel = 'text-foreground block text-sm font-semibold';
 
 /** A tappable pill used for skill bands, the sex segments and the boolean toggles. `compact` is the
@@ -219,8 +225,8 @@ export function SearchFilters({
             name="q"
             value={q}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search by name, nickname or city"
-            className={`${controlClass} pl-9`}
+            placeholder="Search VouchPlay"
+            className={`${compactControlClass} pl-9`}
             aria-label="Search players"
           />
         </div>
@@ -228,7 +234,7 @@ export function SearchFilters({
           type="button"
           onClick={() => setShowFilters((v) => !v)}
           aria-expanded={showFilters}
-          className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-2.5 text-sm font-medium"
+          className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium"
         >
           <SlidersHorizontal size={16} aria-hidden />
           {/* Closed-by-default sheet still needs to say what's applied (master_plan §2AN decision 2):
@@ -249,7 +255,7 @@ export function SearchFilters({
         <button
           type="submit"
           disabled={pending}
-          className="bg-primary inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-70"
+          className="bg-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-70"
         >
           {pending && <Loader2 size={14} className="animate-spin" aria-hidden />}
           Search

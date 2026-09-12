@@ -11,8 +11,8 @@ import { quoteFor } from './shared';
 import type { WizardPayFor, WizardTournament } from './types';
 
 /**
- * Step 3: choose what to pay for (master_plan §2AO A5/B). Two shapes:
- *  - a division was chosen -> "Pay for my seat" / "Pay for the whole team" (doubles only);
+ * Step 3: choose what to pay for (master_plan §2AO A5/B, §2AP A). Two shapes:
+ *  - a division was chosen -> "Pay for my slot" / "Pay for the whole team" (doubles only);
  *  - "I'll choose a division later" was chosen -> a single "Reserve my slot" card.
  * Free divisions never reach this step (the caller skips straight to creating the entry and Done).
  */
@@ -79,14 +79,14 @@ export function PayStep({
               onClick={() => onChoose('seat')}
               className="border-border bg-surface hover:border-primary/50 min-h-11 w-full rounded-xl border p-4 text-left disabled:opacity-60"
             >
-              <p className="text-foreground text-sm font-semibold">Pay for my seat</p>
+              <p className="text-foreground text-sm font-semibold">Pay for my slot</p>
               <p className="text-foreground mt-1 text-lg font-bold">
                 {formatFee(division.currency, quote.perPlayer)}
               </p>
               {quote.earlyBirdApplied && earlyBirdNote(quote.earlyBirdEndsAt)}
               {isDoubles && (
                 <p className="text-foreground-muted mt-1 text-xs">
-                  Your partner pays their own seat.
+                  Your partner pays their own slot.
                 </p>
               )}
             </button>

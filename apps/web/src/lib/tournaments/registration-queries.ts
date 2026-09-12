@@ -78,6 +78,12 @@ export interface ViewerTeam {
   teamId: string;
   status: string;
   members: Mini[];
+  /** The viewer's OWN membership on this team - confirmed (accepted) or not (§2AP C1). A team where
+   *  this is false is an INVITATION from the viewer's point of view, not an entry: it is excluded
+   *  from `teamsByDivision` / `registrationsByDivision` entirely (see `getViewerRegistrationState`),
+   *  so this field is always true for a team actually present in those maps. Kept on the type per the
+   *  master_plan §2AP contract. */
+  myMembershipConfirmed: boolean;
   /** A named partner who has not answered yet, or null. */
   pendingPartner: Mini | null;
   /** The id of that pending (`sent`) invitation, for a Withdraw-invite control. Null when there is
@@ -112,6 +118,11 @@ export interface ViewerRegistration {
 export interface ViewerInvitation {
   id: string;
   divisionId: string;
+  /** The division's display name, so the invitation card never has to make a second round trip to
+   *  show which division this is for (master_plan §2AP C1). */
+  divisionName: string;
+  /** The team this invitation belongs to, or null defensively. */
+  teamId: string | null;
   direction: 'incoming' | 'outgoing';
   otherName: string;
   otherSlug: string | null;
@@ -139,12 +150,18 @@ export interface ViewerRegistrationSkillProfile {
   selfRatedSkillLevel: number | null;
   /** Needed to apply the division sex rule in the browser, the same way the server does (§2D). */
   sex: string | null;
+  /** Needed to apply the age-at-the-door rule in the browser the same way the server does
+   *  (master_plan §2AP B). Null when the player has not added a birthday. */
+  dateOfBirth: string | null;
 }
 
 export interface ViewerRegistrationState {
   teamsByDivision: Record<string, ViewerTeam>;
   registrationsByDivision: Record<string, ViewerRegistration>;
   invitations: ViewerInvitation[];
+  /** Divisions where the viewer has an INCOMING pending invitation, so the division browser can chip
+   *  them "Invited" (master_plan §2AP C1). Derived from `invitations` - not a separate read. */
+  invitedDivisionIds: string[];
   clubReps: ClubRep[];
   eligibleClubs: EligibleClub[];
   viewerSkill: ViewerRegistrationSkillProfile;
@@ -182,6 +199,9 @@ export interface ViewerRegistrationState {
    *  reservation costs right now. Null when no open division charges a fee, or `slotsEnabled` is
    *  false. */
   slotPrice: SlotPriceQuote | null;
+  /** `tournaments.start_at`, read once - the door for the age-at-the-door check (master_plan §2AP B).
+   *  Null when the tournament has no scheduled start yet. */
+  tournamentStartAt: string | null;
 }
 
 export async function getViewerRegistrationState(
@@ -196,7 +216,7 @@ export async function getViewerRegistrationState(
     svc
       .from('profiles')
       .select(
-        'slug, self_rated_skill, sex, looking_for_partner, open_for_sponsorship, onboarded_at',
+        'slug, self_rated_skill, sex, looking_for_partner, open_for_sponsorship, onboarded_at, date_of_birth',
       )
       .eq('id', userId)
       .maybeSingle(),
@@ -213,6 +233,7 @@ export async function getViewerRegistrationState(
     looking_for_partner: boolean | null;
     open_for_sponsorship: boolean | null;
     onboarded_at: string | null;
+    date_of_birth: string | null;
   } | null;
   const skill = viewerSkillRow as {
     community_skill_level: number | null;
@@ -229,6 +250,7 @@ export async function getViewerRegistrationState(
     skillVerified: skill?.skill_verified ?? false,
     selfRatedSkillLevel: viewerProfile?.self_rated_skill ?? null,
     sex: viewerProfile?.sex ?? null,
+    dateOfBirth: viewerProfile?.date_of_birth ?? null,
   };
 
   // Teams I'm on in this tournament.
@@ -242,6 +264,11 @@ export async function getViewerRegistrationState(
   const registrationsByDivision: Record<string, ViewerRegistration> = {};
   /** Teams whose every registration is closed. They are history, and nothing may act on them. */
   const retiredTeamIds = new Set<string>();
+  /** Teams where the viewer's OWN membership is unconfirmed - an invitation, not an entry, from the
+   *  viewer's point of view (master_plan §2AP C1). Excluded from both `teamsByDivision` and
+   *  `registrationsByDivision` - the registration belongs to the inviter, not to an invitee who has
+   *  not accepted yet. */
+  const invitationOnlyTeamIds = new Set<string>();
 
   if (myTeamIds.length > 0) {
     const { data: teams } = await svc
@@ -356,6 +383,19 @@ export async function getViewerRegistrationState(
     for (const t of teamRows) {
       if (retiredTeamIds.has(t.id)) continue;
       const teamMembers = members.filter((m) => m.team_id === t.id);
+      // §2AP C1 (the invitee bug): the viewer's OWN membership row on this team. When it exists and
+      // is unconfirmed, this team is an INVITATION from the viewer's point of view, not an entry - the
+      // old `pending`/`confirmedOther` lookups both explicitly exclude the viewer's own row
+      // (`m.player_id !== userId`), so an unconfirmed invitee read the INVITER as a "confirmed
+      // partner" and got Change/Leave controls for a team they had not accepted onto. Excluding the
+      // team entirely (below) is the real fix - the invitation itself still surfaces via
+      // `state.invitations`, independent of this loop.
+      const mine = teamMembers.find((m) => m.player_id === userId);
+      const myMembershipConfirmed = mine ? Boolean(mine.confirmed_at) : true;
+      if (!myMembershipConfirmed) {
+        invitationOnlyTeamIds.add(t.id);
+        continue;
+      }
       const pending = teamMembers.find((m) => !m.confirmed_at && m.player_id !== userId);
       const confirmedOther = teamMembers.find((m) => m.confirmed_at && m.player_id !== userId);
       // General truth: this team is short a player, for whatever reason (never named, declined,
@@ -366,6 +406,7 @@ export async function getViewerRegistrationState(
       teamsByDivision[t.division_id] = {
         teamId: t.id,
         status: t.status,
+        myMembershipConfirmed,
         pendingPartner: pending ? (profiles.get(pending.player_id) ?? null) : null,
         pendingInvitationId: pendingInvitationByTeam.get(t.id) ?? null,
         seatVacantAfterDecline: hasOpenSeat,
@@ -390,8 +431,12 @@ export async function getViewerRegistrationState(
     }
 
     // The open registrations, filtered from the set already fetched above rather than queried
-    // again - two round trips could disagree with each other about the same rows.
-    const regList = allRegList.filter((r) => !CLOSED_REG.has(r.status));
+    // again - two round trips could disagree with each other about the same rows. A registration
+    // whose team is invitation-only for this viewer (§2AP C1) belongs to the inviter, not to the
+    // viewer - it is excluded here exactly as its team is excluded from `teamsByDivision`.
+    const regList = allRegList.filter(
+      (r) => !CLOSED_REG.has(r.status) && !invitationOnlyTeamIds.has(r.team_id),
+    );
     // Payments for those registrations.
     const paymentByReg = new Map<
       string,
@@ -581,6 +626,23 @@ export async function getViewerRegistrationState(
   }
   const otherIds = inv.map((i) => (i.inviter_id === userId ? i.invitee_id : i.inviter_id));
   const otherProfiles = await resolve(otherIds);
+
+  // §2AP C1: each invitation carries its own division name, so the "Partner invitations" card never
+  // has to make a second round trip to say what it is for. Bounded to the divisions actually named
+  // on a live invitation for this viewer.
+  const invDivisionIds = Array.from(new Set(inv.map((i) => i.division_id)));
+  const invDivisionNames = new Map<string, string>();
+  if (invDivisionIds.length > 0) {
+    const { data: invDivRows } = await svc
+      .from('divisions')
+      .select(
+        'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+      )
+      .in('id', invDivisionIds);
+    type InvDivRow = { id: string } & Parameters<typeof divisionName>[0];
+    for (const d of (invDivRows ?? []) as InvDivRow[]) invDivisionNames.set(d.id, divisionName(d));
+  }
+
   const invitations: ViewerInvitation[] = inv.map((i) => {
     const incoming = i.invitee_id === userId;
     const otherId = incoming ? i.inviter_id : i.invitee_id;
@@ -588,6 +650,8 @@ export async function getViewerRegistrationState(
     return {
       id: i.id,
       divisionId: i.division_id,
+      divisionName: invDivisionNames.get(i.division_id) ?? 'Division',
+      teamId: i.team_id,
       direction: incoming ? 'incoming' : 'outgoing',
       otherName: p?.name ?? 'player',
       otherSlug: p?.slug ?? null,
@@ -595,6 +659,12 @@ export async function getViewerRegistrationState(
       prepaid: Boolean(i.team_id && prepaidTeams.has(i.team_id)),
     };
   });
+  // §2AP C1: divisions with an INCOMING pending invitation, so the division browser can chip them
+  // "Invited" (an invitee's own membership is excluded from `teamsByDivision` above, so without this
+  // the browser would otherwise show no trace of the invitation at all).
+  const invitedDivisionIds = Array.from(
+    new Set(invitations.filter((i) => i.direction === 'incoming').map((i) => i.divisionId)),
+  );
 
   // Club representations + eligible clubs.
   const { data: repRows } = await svc
@@ -653,6 +723,7 @@ export async function getViewerRegistrationState(
     teamsByDivision,
     registrationsByDivision,
     invitations,
+    invitedDivisionIds,
     clubReps,
     eligibleClubs,
     viewerSkill,
@@ -667,6 +738,7 @@ export async function getViewerRegistrationState(
     bareSlot,
     slotPrice,
     partnerChangesOpen,
+    tournamentStartAt: tournStatus?.start_at ?? null,
   };
 }
 

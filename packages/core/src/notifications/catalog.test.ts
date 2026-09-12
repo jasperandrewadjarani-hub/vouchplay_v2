@@ -112,3 +112,31 @@ describe('tournament slot notifications (§2AO A)', () => {
     expect(MUTABLE_CATEGORIES).toContain('payments');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2AP C4/C5 - seat-model hardening: a released seat notifies both sides.
+// ---------------------------------------------------------------------------
+describe('seat release notifications (§2AP C)', () => {
+  it('partner_left_pay_pending is critical, partners-category, and names who left and who owes', () => {
+    const def = notificationDef('partner_left_pay_pending')!;
+    expect(def.category).toBe('partners');
+    expect(def.critical).toBe(true);
+    expect(def.title({ actorName: 'Maria', tournamentName: 'Hermosa Open' })).toBe(
+      'Maria left your team for Hermosa Open - the new partner will need to pay their slot',
+    );
+  });
+
+  it('partner_left_pay_pending is not mutable (partners has other critical types too, but this one cannot be muted)', () => {
+    expect(notificationDef('partner_left_pay_pending')!.critical).toBe(true);
+  });
+
+  it('slot_released is non-critical, payments-category, and tells the player their slot is free again', () => {
+    const def = notificationDef('slot_released')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(false);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Your slot for Hermosa Open is free to use again',
+    );
+    expect(def.body({})).toBe('Choose a division any time before registration closes.');
+  });
+});

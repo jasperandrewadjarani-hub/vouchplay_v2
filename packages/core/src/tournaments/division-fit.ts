@@ -28,7 +28,24 @@
  * path so the UI can still surface the same warning even though nothing is blocked.
  */
 
-export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_too_high' | 'mixed_pair';
+export type DivisionFitReason =
+  'sex' | 'sex_unknown' | 'skill_too_high' | 'mixed_pair' | 'age' | 'age_unknown';
+
+/**
+ * Whole years old on a given date (UTC), or null when either date is missing or unparsable.
+ * Mirrors the eligibility engine's helper so the door and the engine never disagree about a birthday
+ * (master_plan §2AP B). Exported so the viewer state and the wizard use the same arithmetic.
+ */
+export function ageAtDate(dobIso: string | null | undefined, atIso: string | null | undefined) {
+  if (!dobIso || !atIso) return null;
+  const born = new Date(dobIso);
+  const at = new Date(atIso);
+  if (Number.isNaN(born.getTime()) || Number.isNaN(at.getTime())) return null;
+  let age = at.getUTCFullYear() - born.getUTCFullYear();
+  const m = at.getUTCMonth() - born.getUTCMonth();
+  if (m < 0 || (m === 0 && at.getUTCDate() < born.getUTCDate())) age--;
+  return age >= 0 && age < 130 ? age : null;
+}
 
 export interface DivisionFitInput {
   /** 'male' | 'female' | anything else | null when the player has not said. */
@@ -58,12 +75,26 @@ export interface DivisionFitInput {
    * `enforceSkillFloor` - it widens the floor by exactly one level, it never replaces it.
    */
   allowPlayDownOneLevel?: boolean;
+  /**
+   * §2AP B: age at the DOOR. The player's age at the tournament start (see `ageAtDate`), or null
+   * when their birthday is unknown; the division's optional age range. Both `undefined` = the caller
+   * is not checking age at all (legacy callers keep their exact behaviour).
+   */
+  ageAtStart?: number | null;
+  divisionMinimumAge?: number | null;
+  divisionMaximumAge?: number | null;
 }
 
 export interface DivisionFitResult {
   fits: boolean;
   /** Null when it fits. Only the FIRST failing rule is reported - see `evaluateDivisionFit`. */
   reason: DivisionFitReason | null;
+  /**
+   * True when the player's effective skill is BELOW the division's minimum on a banded division -
+   * entering a harder bracket (always allowed; the wizard asks for a one-line acknowledgement,
+   * §2AP A). False when skill is unknown, the division is open, or there is no minimum.
+   */
+  playingUp: boolean;
   /**
    * True when this player is above the division's maximum skill and is entering anyway - either
    * because the organizer's play-down-one-level toggle let exactly one level through (`fits: true`),
@@ -84,26 +115,45 @@ export interface DivisionFitResult {
 export function evaluateDivisionFit(input: DivisionFitInput): DivisionFitResult {
   const sex = input.sexClassification;
   const singleSex = sex === 'men' || sex === 'women';
+  const refuse = (reason: DivisionFitReason): DivisionFitResult => ({
+    fits: false,
+    reason,
+    playingUp: false,
+    playingDown: false,
+  });
   // Told apart on purpose. "This division is for women" is a dead end for someone who simply never
   // filled the field in; "add your gender to your profile" is a door. Roughly a third of accounts
   // have no gender recorded, so this is the common case, not the edge one.
-  if (singleSex && !input.playerSex)
-    return { fits: false, reason: 'sex_unknown', playingDown: false };
-  if (sex === 'men' && input.playerSex !== 'male')
-    return { fits: false, reason: 'sex', playingDown: false };
-  if (sex === 'women' && input.playerSex !== 'female')
-    return { fits: false, reason: 'sex', playingDown: false };
+  if (singleSex && !input.playerSex) return refuse('sex_unknown');
+  if (sex === 'men' && input.playerSex !== 'male') return refuse('sex');
+  if (sex === 'women' && input.playerSex !== 'female') return refuse('sex');
 
   // §2AM decision 1: mixed doubles is one male + one female, not "anyone". `partnerSex` is only
   // present when this check is FOR a specific other seat (the picker, an invite, an acceptance) -
   // singles has no partner, and a bare per-player fit check (partnerSex undefined) still accepts
   // anyone, because composition is a property of the PAIR, not of either player alone.
   if (sex === 'mixed' && input.partnerSex !== undefined && input.format !== 'singles') {
-    if (!input.playerSex) return { fits: false, reason: 'sex_unknown', playingDown: false };
-    if (input.partnerSex && input.playerSex === input.partnerSex) {
-      return { fits: false, reason: 'mixed_pair', playingDown: false };
-    }
+    if (!input.playerSex) return refuse('sex_unknown');
+    if (input.partnerSex && input.playerSex === input.partnerSex) return refuse('mixed_pair');
   }
+
+  // §2AP B: age at the door. Only when the caller supplied the division's range (legacy callers
+  // that do not pass age keep their exact behaviour). An unknown birthday on an age-limited
+  // division is a door, not a wall: the message says what to add.
+  const ageLimited = input.divisionMinimumAge != null || input.divisionMaximumAge != null;
+  if (ageLimited) {
+    if (input.ageAtStart == null) return refuse('age_unknown');
+    if (input.divisionMinimumAge != null && input.ageAtStart < input.divisionMinimumAge)
+      return refuse('age');
+    if (input.divisionMaximumAge != null && input.ageAtStart > input.divisionMaximumAge)
+      return refuse('age');
+  }
+
+  const playingUp =
+    input.skillPolicy !== 'open' &&
+    input.effectiveSkill != null &&
+    input.divisionMinimumSkill != null &&
+    input.effectiveSkill < input.divisionMinimumSkill;
 
   const aboveMax =
     input.skillPolicy !== 'open' &&
@@ -123,19 +173,54 @@ export function evaluateDivisionFit(input: DivisionFitInput): DivisionFitResult 
       input.allowPlayDownOneLevel &&
       input.effectiveSkill === (input.divisionMaximumSkill as number) + 1
     ) {
-      return { fits: true, reason: null, playingDown: true };
+      return { fits: true, reason: null, playingUp: false, playingDown: true };
     }
-    return { fits: false, reason: 'skill_too_high', playingDown: false };
+    return refuse('skill_too_high');
   }
 
   // The floor is OFF: skill never blocks entry, but a player above the division's own maximum is
   // still worth flagging - `playingDown` lets the wizard show the same "subject to assessment"
   // warning even though nothing here refuses them (§2AO decision C).
   if (!input.enforceSkillFloor && aboveMax) {
-    return { fits: true, reason: null, playingDown: true };
+    return { fits: true, reason: null, playingUp: false, playingDown: true };
   }
 
-  return { fits: true, reason: null, playingDown: false };
+  return { fits: true, reason: null, playingUp, playingDown: false };
+}
+
+// ---------------------------------------------------------------------------
+// §2AP A: how a division should be PRESENTED to this player in the wizard - one pure verdict that the
+// wizard's grouped list and the division browser's row both read, so they can never disagree.
+// ---------------------------------------------------------------------------
+
+export type DivisionKind =
+  'recommended' | 'other_up' | 'other_down' | 'full' | 'registered' | 'ineligible';
+
+export interface DivisionClassification {
+  kind: DivisionKind;
+  fit: DivisionFitResult;
+}
+
+/**
+ * Recommended = fits, and the player's skill is inside the band (or the division is open-skill).
+ * Other = fits but above the band (`other_up`, a harder bracket) or one level below it (`other_down`,
+ * organizer-allowed), or full (waitlist). Registered and ineligible are terminal. Order of
+ * precedence: registered > ineligible > other_down > other_up > full > recommended - a full division
+ * the player would be playing down in still needs the play-down acknowledgement, so it stays
+ * `other_down` and the wizard adds the waitlist line to that panel.
+ */
+export function classifyDivision(input: {
+  fit: DivisionFitResult;
+  registered: boolean;
+  full: boolean;
+}): DivisionClassification {
+  const { fit } = input;
+  if (input.registered) return { kind: 'registered', fit };
+  if (!fit.fits) return { kind: 'ineligible', fit };
+  if (fit.playingDown) return { kind: 'other_down', fit };
+  if (fit.playingUp) return { kind: 'other_up', fit };
+  if (input.full) return { kind: 'full', fit };
+  return { kind: 'recommended', fit };
 }
 
 export interface FitMessageContext {
@@ -183,6 +268,19 @@ export function describeDivisionFit(reason: DivisionFitReason, ctx: FitMessageCo
   // either player individually, so it would be wrong to single one of them out as "the problem".
   if (reason === 'mixed_pair') {
     return 'Mixed doubles needs one male and one female player.';
+  }
+
+  // §2AP B: age at the door. Unknown is a door ("add your birthday"); outside the range is a wall
+  // with the range named, so the player can find the bracket that is theirs.
+  if (reason === 'age_unknown') {
+    return ctx.subject === 'you'
+      ? `${ctx.divisionName} has an age limit, and your profile has no birthday yet. Add your birthday to your profile and this will open up.`
+      : `${who} has no birthday on their profile, so they cannot be entered in ${ctx.divisionName}. Ask them to add it, or choose a division without an age limit.`;
+  }
+  if (reason === 'age') {
+    return ctx.subject === 'you'
+      ? `${ctx.divisionName} is for a different age group. Look for a division that matches your age.`
+      : `${who} is outside the age group for ${ctx.divisionName}. Pick a partner who fits, or choose a division without an age limit.`;
   }
 
   const band = ctx.bandLabel ?? 'this level';

@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { X } from 'lucide-react';
 import {
   addCoOrganizer,
   removeCoOrganizer,
@@ -11,10 +12,21 @@ import {
   type OrganizerSearchResult,
 } from '@/lib/actions/tournament';
 import type { OrganizerDTO } from '@/lib/tournaments/dto';
+import { PlayerAvatar } from '@/components/players/player-avatar';
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: TournamentActionState = {};
+
+/** First letters of up to the first two words, for the avatar fallback disc. */
+function initialsFromName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  return parts
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join('');
+}
 const PERMS: { key: string; label: string }[] = [
   { key: 'edit', label: 'Edit tournament' },
   { key: 'manage_divisions', label: 'Manage divisions' },
@@ -42,11 +54,15 @@ export function CoOrganizerManager({
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<OrganizerSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  // Selection-only (master_plan §2AP Decision H): the slug is never typed, only chosen from a
+  // search result, so a name that resembles someone else's handle can no longer be posted as if it
+  // were an exact match.
+  const [chosen, setChosen] = useState<OrganizerSearchResult | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (query.trim().length < 2) {
+    if (chosen || query.trim().length < 2) {
       setMatches([]);
       setSearching(false);
       return;
@@ -59,10 +75,14 @@ export function CoOrganizerManager({
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [query]);
+  }, [query, chosen]);
 
   useEffect(() => {
-    if (state.ok) router.refresh();
+    if (state.ok) {
+      router.refresh();
+      setChosen(null);
+      setQuery('');
+    }
   }, [state.ok, router]);
 
   const coOrganizers = organizers.filter((o) => !o.isOwner);
@@ -118,42 +138,70 @@ export function CoOrganizerManager({
         <p className="text-foreground text-sm font-semibold">Add a co-organizer</p>
         <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
         <FormError>{state.error}</FormError>
+        <input type="hidden" name="targetSlug" value={chosen?.slug ?? ''} />
         <Field
           label="Find an organizer"
-          htmlFor="targetSlug"
-          hint="Search an approved Organizer account."
-          required
+          htmlFor="organizer-search"
+          hint="Only players with an approved Organizer role appear here."
         >
-          <Input
-            id="targetSlug"
-            name="targetSlug"
-            required
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              if (event.target.value.trim().length < 2) setMatches([]);
-            }}
-            placeholder="Search by name"
-            autoComplete="off"
-          />
+          {chosen ? (
+            <span className="border-border bg-surface-muted inline-flex min-h-11 items-center gap-2 rounded-full border py-1 pr-2 pl-1">
+              <PlayerAvatar
+                url={chosen.avatarUrl ?? null}
+                initials={initialsFromName(chosen.name)}
+                name={chosen.name}
+                size="sm"
+              />
+              <span className="text-foreground text-sm font-medium">
+                {chosen.name} · @{chosen.slug}
+              </span>
+              <button
+                type="button"
+                onClick={() => setChosen(null)}
+                aria-label="Clear selected organizer"
+                className="text-foreground-muted hover:text-foreground ml-1 inline-flex min-h-8 min-w-8 items-center justify-center rounded-full"
+              >
+                <X size={14} aria-hidden />
+              </button>
+            </span>
+          ) : (
+            <Input
+              id="organizer-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                // Never submit the form from the search box - Enter only exists here to keep typing.
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+              placeholder="Search by name"
+              autoComplete="off"
+            />
+          )}
         </Field>
-        {searching && <p className="text-foreground-muted text-xs">Searching...</p>}
-        {matches.length > 0 && (
+        {!chosen && searching && <p className="text-foreground-muted text-xs">Searching...</p>}
+        {!chosen && matches.length > 0 && (
           <ul className="border-border divide-border -mt-2 divide-y rounded-lg border">
             {matches.map((match) => (
               <li key={match.slug}>
                 <button
                   type="button"
                   onClick={() => {
-                    setQuery(match.slug);
+                    setChosen(match);
                     setMatches([]);
                   }}
-                  className="hover:bg-surface-muted flex w-full items-center justify-between gap-2 p-2 text-left"
+                  className="hover:bg-surface-muted flex w-full items-center gap-2 p-2 text-left"
                 >
-                  <span className="text-foreground text-sm">{match.name}</span>
-                  <span className="text-foreground-muted text-xs">
-                    @{match.slug}
-                    {match.city ? ` · ${match.city}` : ''}
+                  <PlayerAvatar
+                    url={match.avatarUrl ?? null}
+                    initials={initialsFromName(match.name)}
+                    name={match.name}
+                    size="sm"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="text-foreground block truncate text-sm">{match.name}</span>
+                    <span className="text-foreground-muted block truncate text-xs">
+                      @{match.slug}
+                    </span>
                   </span>
                 </button>
               </li>
@@ -171,7 +219,9 @@ export function CoOrganizerManager({
             </label>
           ))}
         </fieldset>
-        <SubmitButton pendingLabel="Adding…">Add co-organizer</SubmitButton>
+        <SubmitButton pendingLabel="Adding…" disabled={!chosen}>
+          Add co-organizer
+        </SubmitButton>
       </form>
     </div>
   );

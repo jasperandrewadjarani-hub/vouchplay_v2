@@ -13,6 +13,7 @@ import {
   hasOpenSeat,
   hasUnconfirmedPartner,
   isClosed,
+  moneyTag,
   queuesFor,
   sortEntries,
   statusChip,
@@ -257,6 +258,183 @@ describe('the chip says what to do, not what the column holds', () => {
   });
 });
 
+describe('moneyTag - a money-only tag straight off paymentSummary (§2AP I)', () => {
+  it('shows "Team paid" when the team receipt is verified', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'paid',
+            fullyPaid: true,
+            anyReceipt: true,
+            paidSeats: 2,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [],
+            teamReceipt: 'verified',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: 'Team paid', tone: 'done' });
+  });
+
+  it('shows "X of Y slots paid" when every seat is paid individually (no team receipt)', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'paid',
+            fullyPaid: true,
+            anyReceipt: true,
+            paidSeats: 2,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [],
+            teamReceipt: 'none',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: '2 of 2 slots paid', tone: 'done' });
+  });
+
+  it('shows "X of Y slots paid" for a partial team with every seat filled', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'partial',
+            fullyPaid: false,
+            anyReceipt: true,
+            paidSeats: 1,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [
+              { playerId: 'p1', state: 'paid', amountDue: 500, amountSubmitted: 500 },
+              { playerId: 'p2', state: 'unpaid', amountDue: 500, amountSubmitted: 0 },
+            ],
+            teamReceipt: 'none',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: '1 of 2 slots paid', tone: 'waiting' });
+  });
+
+  it('shows "Slot paid - no partner yet" when the partial team has an empty seat', () => {
+    expect(
+      moneyTag(
+        entry({
+          members: [{ id: 'p1', name: 'Maria Cruz', slug: 'maria', avatarUrl: null }],
+          paymentSummary: {
+            state: 'partial',
+            fullyPaid: false,
+            anyReceipt: true,
+            paidSeats: 1,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [
+              { playerId: 'p1', state: 'paid', amountDue: 500, amountSubmitted: 500 },
+              { playerId: null, state: 'empty', amountDue: 0, amountSubmitted: 0 },
+            ],
+            teamReceipt: 'none',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: 'Slot paid · no partner yet', tone: 'waiting' });
+  });
+
+  it('surfaces a CONFIRMED entry with a partial summary as an action (§2AP C4), not a routine wait', () => {
+    expect(
+      moneyTag(
+        entry({
+          status: 'confirmed',
+          paymentSummary: {
+            state: 'partial',
+            fullyPaid: false,
+            anyReceipt: true,
+            paidSeats: 1,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [
+              { playerId: 'p1', state: 'paid', amountDue: 500, amountSubmitted: 500 },
+              { playerId: 'p2', state: 'unpaid', amountDue: 500, amountSubmitted: 0 },
+            ],
+            teamReceipt: 'none',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: '1 of 2 slots paid', tone: 'action' });
+  });
+
+  it('shows "Under review" when a seat is submitted and none is paid', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'submitted',
+            fullyPaid: false,
+            anyReceipt: true,
+            paidSeats: 0,
+            submittedSeats: 1,
+            totalSeats: 2,
+            seats: [],
+            teamReceipt: 'none',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: 'Under review', tone: 'waiting' });
+  });
+
+  it('shows "Top-up needed" whenever topupDue is outstanding, ahead of the partial label', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'partial',
+            fullyPaid: false,
+            anyReceipt: true,
+            paidSeats: 1,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [],
+            teamReceipt: 'none',
+            topupDue: 500,
+          },
+        }),
+      ),
+    ).toEqual({ label: 'Top-up needed', tone: 'action' });
+  });
+
+  it('shows "Declined" for a declined summary', () => {
+    expect(
+      moneyTag(
+        entry({
+          paymentSummary: {
+            state: 'declined',
+            fullyPaid: false,
+            anyReceipt: false,
+            paidSeats: 0,
+            submittedSeats: 0,
+            totalSeats: 2,
+            seats: [],
+            teamReceipt: 'rejected',
+            topupDue: 0,
+          },
+        }),
+      ),
+    ).toEqual({ label: 'Declined', tone: 'action' });
+  });
+
+  it('shows "No receipt" when nothing has happened yet', () => {
+    expect(moneyTag(entry())).toEqual({ label: 'No receipt', tone: 'waiting' });
+  });
+});
+
 describe('scanning', () => {
   it('labels a team by the people in it', () => {
     expect(teamLabel(entry())).toBe('Maria Cruz & Ana Reyes');
@@ -341,19 +519,25 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     entry({ id: 'e', divisionId: 'd3', divisionName: 'Mixed Doubles', status: 'rejected' }),
   ];
 
-  it('DEFAULT_FILTERS applies no constraint (every group empty = "Any") except hiding closed', () => {
-    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a', 'c', 'd']);
+  it('DEFAULT_FILTERS shows only entries with a receipt, closed still hidden (§2AP I)', () => {
+    // §2AP I: the organizer's default view is receipts, so DEFAULT_FILTERS is no longer "no
+    // constraint" - only 'd' has a receipt (hasProof: true) among the open, non-closed rows.
+    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['d']);
   });
 
   it('the legacy "show closed" switch shows ONLY closed when no Status is picked (§2O, unchanged)', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, includeClosed: true }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], includeClosed: true }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['b', 'e']);
   });
 
   it('an explicit Status pick shows a closed status even with "show closed" off', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, statuses: ['withdrawn'] }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], statuses: ['withdrawn'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['b']);
   });
 
@@ -361,6 +545,7 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     expect(
       filterEntries(rows, {
         ...DEFAULT_FILTERS,
+        payment: [],
         statuses: ['confirmed'],
         includeClosed: true,
       }).map((r) => r.id),
@@ -371,6 +556,7 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     expect(
       filterEntries(rows, {
         ...DEFAULT_FILTERS,
+        payment: [],
         statuses: ['withdrawn', 'rejected'],
       }).map((r) => r.id),
     ).toEqual(['b', 'e']);
@@ -378,13 +564,17 @@ describe('combinable filters - AND across groups, OR within a group', () => {
 
   it('Division is OR within the group', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, divisions: ['d2', 'd3'] }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], divisions: ['d2', 'd3'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['c', 'd']); // 'e' is closed and hidden by the default closed-gate
   });
 
   it('Eligibility filters to the picked kinds', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, eligibility: ['review'] }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], eligibility: ['review'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['d']);
   });
 
@@ -443,10 +633,14 @@ describe('combinable filters - AND across groups, OR within a group', () => {
 
   it('Partner filters to confirmed/unconfirmed', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, partner: ['unconfirmed'] }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], partner: ['unconfirmed'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['d']);
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, partner: ['confirmed'] }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], partner: ['confirmed'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['a', 'c']);
   });
 
@@ -461,7 +655,9 @@ describe('combinable filters - AND across groups, OR within a group', () => {
       }),
     ];
     expect(
-      filterEntries(withOpenSeat, { ...DEFAULT_FILTERS, partner: ['none'] }).map((r) => r.id),
+      filterEntries(withOpenSeat, { ...DEFAULT_FILTERS, payment: [], partner: ['none'] }).map(
+        (r) => r.id,
+      ),
     ).toEqual(['f']);
   });
 
@@ -477,23 +673,52 @@ describe('combinable filters - AND across groups, OR within a group', () => {
 
   it('search still ANDs with the other groups', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, divisions: ['d2'], search: 'lyn' }).map(
-        (r) => r.id,
-      ),
+      filterEntries(rows, {
+        ...DEFAULT_FILTERS,
+        payment: [],
+        divisions: ['d2'],
+        search: 'lyn',
+      }).map((r) => r.id),
     ).toEqual(['c']);
     // 'd' also has the default "Maria Cruz & Ana Reyes" members, so the un-scoped search matches both.
-    expect(filterEntries(rows, { ...DEFAULT_FILTERS, search: 'MARIA' }).map((r) => r.id)).toEqual([
-      'a',
-      'd',
-    ]);
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], search: 'MARIA' }).map((r) => r.id),
+    ).toEqual(['a', 'd']);
   });
 
   it('every group empty means every group applies no constraint, one at a time', () => {
-    const base: EntryFilters = { ...DEFAULT_FILTERS };
+    // A fully-open base, independent of DEFAULT_FILTERS' own receipts-only starting point (§2AP I) -
+    // this test is about the general "empty group = Any" property, not about what ships as default.
+    const base: EntryFilters = { ...DEFAULT_FILTERS, payment: [] };
     expect(filterEntries(rows, { ...base, divisions: [] })).toEqual(filterEntries(rows, base));
     expect(filterEntries(rows, { ...base, eligibility: [] })).toEqual(filterEntries(rows, base));
     expect(filterEntries(rows, { ...base, payment: [] })).toEqual(filterEntries(rows, base));
     expect(filterEntries(rows, { ...base, partner: [] })).toEqual(filterEntries(rows, base));
+  });
+
+  it('§2AP I: payment "partial" also matches a CONFIRMED entry whose summary is only partial', () => {
+    // §2AP C4: an accepted partner release can detach a seat without downgrading a confirmed entry -
+    // the organizer's "partial" filter must still surface it, not just the pre-confirmation ones.
+    const confirmedPartial = entry({
+      id: 'i',
+      status: 'confirmed',
+      paymentSummary: {
+        state: 'partial',
+        fullyPaid: false,
+        anyReceipt: true,
+        paidSeats: 1,
+        submittedSeats: 0,
+        totalSeats: 2,
+        seats: [],
+        teamReceipt: 'none',
+        topupDue: 0,
+      },
+    });
+    expect(
+      filterEntries([confirmedPartial], { ...DEFAULT_FILTERS, payment: ['partial'] }).map(
+        (r) => r.id,
+      ),
+    ).toEqual(['i']);
   });
 });
 
@@ -503,8 +728,13 @@ describe('chip description + clearing', () => {
     { id: 'd2', name: "Women's Doubles" },
   ];
 
-  it('describes every active filter as a removable chip, and none when defaults', () => {
-    expect(describeEntryChips(DEFAULT_FILTERS, divisions)).toEqual([]);
+  it('describes every active filter as a removable chip, including the §2AP I default receipts chip', () => {
+    // DEFAULT_FILTERS now starts with payment: ['has_proof'] (§2AP I) - it is shown as a removable
+    // chip, not silently applied, so "show me everything" is one tap.
+    expect(describeEntryChips(DEFAULT_FILTERS, divisions)).toEqual([
+      { group: 'payment', value: 'has_proof', label: 'Has receipt' },
+    ]);
+    expect(describeEntryChips({ ...DEFAULT_FILTERS, payment: [] }, divisions)).toEqual([]);
     const filters: EntryFilters = {
       divisions: ['d1'],
       statuses: ['confirmed'],

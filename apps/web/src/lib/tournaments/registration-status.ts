@@ -1,22 +1,28 @@
 /**
  * The one honest description of a registration's real state, from the applicant's point of view
- * (master_plan §2G).
+ * (master_plan §2G, amended to a three-state headline by §2AP E).
  *
  * A single pure function so three surfaces cannot describe the same entry three different ways: the
  * chip in the division browser, the notice on the My-registrations card, and the badge on the
  * tournament card. It is the same discipline §1Z applied to the organizer's queues.
  *
- * THE RULE: only a `confirmed` registration is SECURED. Every other active state -
- * payment_pending, payment_submitted, under_review, waitlisted - is PROVISIONAL, and the applicant's
- * own view of it must say so plainly and say what is still outstanding. The pay-first flow (§1U)
- * depends on that urgency: telling someone they are "Registered" before they have paid removes the
- * very reason to pay.
+ * THE RULE (§2AP E): the applicant sees exactly one of three headlines everywhere a chip appears -
+ * **Confirmed** (done, green), **Payment for verification** (waiting - a receipt covering the
+ * viewer's own slot, or the whole team, is in), or **Slot not secured** (action, amber - nothing
+ * covering the viewer's slot yet, a decline, a top-up, the waitlist, or a free entry still awaiting
+ * the organizer). Every other truth - no partner yet, partner not confirmed, top-up needed, the
+ * waitlist, a declined receipt, an organizer confirmation still pending on a free entry - moves to
+ * `notes[]`, rendered only inside the My-registrations card, under the headline. `shortLabel` is kept
+ * as a plain alias of `headlineLabel` so a caller that has not been touched for §2AP still renders a
+ * single, sensible chip.
  */
 
 import { formatMonthDay } from '@/lib/format-date';
 import type { EntryPaymentSummary, SeatState } from '@vouchplay/core';
 
 export type SlotTone = 'action' | 'waiting' | 'done';
+
+export type RegistrationHeadline = 'confirmed' | 'verifying' | 'unsecured';
 
 export interface RegistrationFacts {
   /** registrations.status */
@@ -51,8 +57,18 @@ export interface RegistrationStatusView {
   tone: SlotTone;
   /** True only for a confirmed entry. Drives every "you're in" vs "not secured" decision. */
   secured: boolean;
-  /** The single most important state word, for a compact chip. */
+  /** Kept as a plain alias of `headlineLabel` (§2AP E) so an untouched caller still renders one
+   *  sensible chip. Do not read this for anything more specific than the headline itself. */
   shortLabel: string;
+  /** The one headline word shown EVERYWHERE a chip appears - division rows, tournament cards, the
+   *  My-registrations card (master_plan §2AP E). */
+  headline: RegistrationHeadline;
+  /** 'Confirmed' | 'Payment for verification' | 'Slot not secured'. */
+  headlineLabel: string;
+  /** Every secondary truth the headline does not carry, short, applicant-facing, in priority order.
+   *  Rendered only inside the My-registrations card, under the headline. Empty when there is nothing
+   *  more to say. */
+  notes: string[];
   /** The heading of the notice on the applicant's own card. */
   title: string;
   /** What is still outstanding, in plain language, in the order the applicant should act. Empty
@@ -66,40 +82,130 @@ export interface RegistrationStatusView {
 
 const NOT_SECURED = 'Your slot is not secured yet';
 
+const HEADLINE_LABEL: Record<RegistrationHeadline, string> = {
+  confirmed: 'Confirmed',
+  verifying: 'Payment for verification',
+  unsecured: 'Slot not secured',
+};
+
+const HEADLINE_TONE: Record<RegistrationHeadline, SlotTone> = {
+  confirmed: 'done',
+  verifying: 'waiting',
+  unsecured: 'action',
+};
+
 /**
- * Describe a registration honestly. Order matters: the most action-forcing truth wins the headline,
- * but every outstanding step is still listed so nothing is hidden.
+ * The ONE decision behind the headline (§2AP E), computed once up front from the raw facts so every
+ * branch below just describes the same verdict in different words - it can never disagree with itself.
+ *
+ * Confirmed and waitlisted are terminal. Otherwise: a receipt is "in" when it covers the viewer's own
+ * slot (`mySeat` submitted or paid) or the whole team (a legacy `paymentStatus`/`regStatus` still
+ * mid-review, or a seat-aware `teamReceipt` submitted/verified) - and a receipt covering the viewer's
+ * own slot only counts while that slot is not itself declined or short a top-up.
+ */
+function computeHeadline(facts: RegistrationFacts): RegistrationHeadline {
+  if (facts.regStatus === 'confirmed') return 'confirmed';
+  if (facts.regStatus === 'waitlisted') return 'unsecured';
+
+  const mySeat = facts.mySeat ?? null;
+  if (mySeat === 'declined' || mySeat === 'topup') return 'unsecured';
+
+  const ownSlotCovered = mySeat === 'submitted' || mySeat === 'paid';
+  const teamCovered =
+    facts.paymentStatus === 'submitted' ||
+    facts.paymentStatus === 'pending' ||
+    facts.regStatus === 'payment_submitted' ||
+    facts.regStatus === 'under_review' ||
+    facts.paymentSummary?.teamReceipt === 'submitted' ||
+    facts.paymentSummary?.teamReceipt === 'verified';
+
+  return ownSlotCovered || teamCovered ? 'verifying' : 'unsecured';
+}
+
+function finish(
+  headline: RegistrationHeadline,
+  notes: string[],
+  rest: { title: string; steps: string[]; assurance: string; needsPayment: boolean },
+): RegistrationStatusView {
+  const headlineLabel = HEADLINE_LABEL[headline];
+  return {
+    tone: HEADLINE_TONE[headline],
+    secured: headline === 'confirmed',
+    shortLabel: headlineLabel,
+    headline,
+    headlineLabel,
+    notes,
+    ...rest,
+  };
+}
+
+/** The shared "no partner" note/step reasoning - identical wording logic on both the fee-only and
+ *  seat-aware paths, so a doubles entry never describes an empty seat two different ways. */
+function partnerNote(
+  seatOpen: boolean,
+  partnerUnconfirmed: boolean,
+  partnerLockAt: string | null | undefined,
+  partnerLockPassed: boolean | undefined,
+): string | null {
+  if (seatOpen) {
+    if (partnerLockPassed) {
+      return 'The partner lock-in has passed - contact the organizer about your partner';
+    }
+    if (partnerLockAt) {
+      return `No partner yet - choose one before ${formatMonthDay(partnerLockAt)}`;
+    }
+    return 'Name a partner to fill the empty seat';
+  }
+  if (partnerUnconfirmed) return 'Partner has not confirmed yet';
+  return null;
+}
+
+/**
+ * Describe a registration honestly. Order matters: the headline is decided once (`computeHeadline`),
+ * then each path below fills in the applicant-facing detail - `title`/`steps`/`assurance` for the
+ * primary action, `notes` for everything secondary.
  */
 export function describeRegistrationStatus(facts: RegistrationFacts): RegistrationStatusView {
-  const { regStatus, paymentStatus, fee } = facts;
+  const headline = computeHeadline(facts);
   const partnerUnconfirmed = Boolean(facts.partnerUnconfirmed);
-  // General truth: the team is short a player, for any reason (§2AM decision 2/3). `seatVacantAfterDecline`
-  // is kept as the fallback so a caller that has not been updated yet still gets the old behaviour.
   const seatOpen = Boolean(facts.seatOpen ?? facts.seatVacantAfterDecline);
-  const feeOwed = fee > 0;
+  const feeOwed = facts.fee > 0;
 
-  // Confirmed is the ONLY secured state.
-  if (regStatus === 'confirmed') {
-    return {
-      tone: 'done',
-      secured: true,
-      shortLabel: 'Confirmed',
+  if (headline === 'confirmed') {
+    // §2AP C4: a confirmed entry that becomes partial (an accepted release detaches the seat) keeps
+    // its status - but the remaining player needs to know the new partner will owe money.
+    const notes: string[] = [];
+    if (seatOpen) {
+      notes.push('Slot open - the new partner will need to pay their slot');
+    } else if (facts.paymentSummary?.state === 'partial') {
+      const partnerName = facts.partnerName?.trim() || 'Your partner';
+      notes.push(`${partnerName} still needs to pay their slot`);
+    }
+    return finish('confirmed', notes, {
       title: "You're in",
       steps: [],
       assurance: 'Your slot is confirmed.',
       needsPayment: false,
-    };
+    });
   }
 
-  // Seat-aware path (master_plan §2AO A2/A7): once a caller supplies the seat summary, the payment
-  // step speaks about THIS player's seat ("pay for your seat") rather than the whole team's fee, and
-  // a partial team is its own honest state instead of reading as either paid or unpaid.
   if (facts.paymentSummary) {
-    return describeSeatAwareStatus(facts, facts.paymentSummary);
+    return describeSeatAwareStatus(facts, facts.paymentSummary, headline, {
+      partnerUnconfirmed,
+      seatOpen,
+    });
   }
 
-  // Everything below is provisional. Collect the outstanding steps first, then choose the headline.
-  const steps: string[] = [];
+  return describeLegacyStatus(facts, headline, { partnerUnconfirmed, seatOpen, feeOwed });
+}
+
+function describeLegacyStatus(
+  facts: RegistrationFacts,
+  headline: RegistrationHeadline,
+  ctx: { partnerUnconfirmed: boolean; seatOpen: boolean; feeOwed: boolean },
+): RegistrationStatusView {
+  const { regStatus, paymentStatus } = facts;
+  const { partnerUnconfirmed, seatOpen, feeOwed } = ctx;
 
   const paymentRejected = paymentStatus === 'rejected';
   const paymentUnderReview =
@@ -108,6 +214,7 @@ export function describeRegistrationStatus(facts: RegistrationFacts): Registrati
     paymentStatus === 'pending';
   const paymentNotStarted = regStatus === 'payment_pending' && !paymentUnderReview;
 
+  const steps: string[] = [];
   if (feeOwed) {
     if (paymentRejected) {
       steps.push('Your last receipt was declined. Upload a new payment receipt.');
@@ -132,101 +239,81 @@ export function describeRegistrationStatus(facts: RegistrationFacts): Registrati
     steps.push('Your partner still needs to confirm the team.');
   }
 
+  const pn = partnerNote(
+    seatOpen,
+    partnerUnconfirmed,
+    facts.partnerLockAt,
+    facts.partnerLockPassed,
+  );
+
   // Waitlist is its own honest state - the entry is not taking a slot at all, and no amount of
   // paying changes that until a slot opens.
   if (regStatus === 'waitlisted') {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'Waitlisted',
+    return finish(headline, ['On the waitlist - no slot held yet', ...(pn ? [pn] : [])], {
       title: "You're on the waitlist",
       steps: steps.length > 0 ? steps : ['You will be notified if a slot opens up.'],
       assurance: 'This division is full, so you are on the waitlist, not holding a slot.',
       needsPayment: false,
-    };
+    });
   }
 
   // The applicant can act now when money is owed (not started, or declined).
   const needsPayment = feeOwed && (paymentNotStarted || paymentRejected);
 
   if (paymentRejected) {
-    return {
-      tone: 'action',
-      secured: false,
-      shortLabel: 'Payment declined',
+    return finish(headline, [...(pn ? [pn] : []), 'Last receipt declined - send a new one'], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + '.',
       needsPayment: true,
-    };
+    });
   }
 
   if (needsPayment) {
-    return {
-      tone: 'action',
-      secured: false,
-      shortLabel: 'Payment pending',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' - pay to secure it.',
       needsPayment: true,
-    };
+    });
   }
 
   // Payment is in and being reviewed, and/or the partner has not confirmed. The applicant has done
   // their part; the slot is still not secured until the organizer confirms.
   if (paymentUnderReview && feeOwed) {
-    return {
-      tone: 'waiting',
-      secured: false,
-      // Payment still wins the headline over "Under review" when neither partner fact applies; an
-      // open seat is the more actionable of the two partner states, so it takes priority (§2AM).
-      shortLabel: seatOpen
-        ? 'No partner yet'
-        : partnerUnconfirmed
-          ? 'Partner not confirmed'
-          : 'Under review',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until the organizer confirms it.',
       needsPayment: false,
-    };
+    });
   }
 
   if (seatOpen) {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'No partner yet',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until you choose a partner.',
       needsPayment: false,
-    };
+    });
   }
 
   if (partnerUnconfirmed) {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'Partner not confirmed',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until your partner confirms.',
       needsPayment: false,
-    };
+    });
   }
 
   // Free division, no fee, awaiting the organizer's confirmation.
-  return {
-    tone: 'waiting',
-    secured: false,
-    shortLabel: 'Awaiting confirmation',
+  return finish(headline, ["Awaiting the organizer's confirmation"], {
     title: NOT_SECURED,
     steps: steps.length > 0 ? steps : ['The organizer will confirm your entry.'],
     assurance: NOT_SECURED + ' until the organizer confirms it.',
     needsPayment: false,
-  };
+  });
 }
 
 /** The plain-language step for the viewer's OWN seat, or null when it needs nothing. */
@@ -251,19 +338,16 @@ function mySeatStep(seat: SeatState): string | null {
  * The seat-aware twin of the fee-only logic above (master_plan §2AO A2/A7, F). Called only when the
  * caller supplies `paymentSummary` - a legacy caller (organizer surfaces not yet touched by §2AO, or
  * a pre-migration deploy) gets exactly the fee-only behaviour above, unchanged.
- *
- * THE RULE is identical to the fee-only path: `confirmed` is the only secured state (already handled
- * by the caller before this runs), and every other active state names what is still outstanding - now
- * per SEAT rather than per team, because a doubles entry can be half paid.
  */
 function describeSeatAwareStatus(
   facts: RegistrationFacts,
   summary: EntryPaymentSummary,
+  headline: RegistrationHeadline,
+  ctx: { partnerUnconfirmed: boolean; seatOpen: boolean },
 ): RegistrationStatusView {
   const mySeat = facts.mySeat ?? null;
   const partnerName = facts.partnerName?.trim() || 'Your partner';
-  const partnerUnconfirmed = Boolean(facts.partnerUnconfirmed);
-  const seatOpen = Boolean(facts.seatOpen ?? facts.seatVacantAfterDecline);
+  const { partnerUnconfirmed, seatOpen } = ctx;
 
   const steps: string[] = [];
   const mine = mySeat ? mySeatStep(mySeat) : null;
@@ -290,107 +374,92 @@ function describeSeatAwareStatus(
     steps.push('Your partner still needs to confirm the team.');
   }
 
+  const pn = partnerNote(
+    seatOpen,
+    partnerUnconfirmed,
+    facts.partnerLockAt,
+    facts.partnerLockPassed,
+  );
+  const partnerPayNote = partnerNeedsToPay ? [`${partnerName} still needs to pay their slot`] : [];
+
   if (facts.regStatus === 'waitlisted') {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'Waitlisted',
-      title: "You're on the waitlist",
-      steps: steps.length > 0 ? steps : ['You will be notified if a slot opens up.'],
-      assurance: 'This division is full, so you are on the waitlist, not holding a slot.',
-      needsPayment: false,
-    };
+    return finish(
+      headline,
+      ['On the waitlist - no slot held yet', ...(pn ? [pn] : []), ...partnerPayNote],
+      {
+        title: "You're on the waitlist",
+        steps: steps.length > 0 ? steps : ['You will be notified if a slot opens up.'],
+        assurance: 'This division is full, so you are on the waitlist, not holding a slot.',
+        needsPayment: false,
+      },
+    );
   }
 
   // The viewer themselves can act now: their own seat needs money.
   const needsPayment = mySeat === 'unpaid' || mySeat === 'declined' || mySeat === 'topup';
 
   if (mySeat === 'declined') {
-    return {
-      tone: 'action',
-      secured: false,
-      shortLabel: 'Payment declined',
+    return finish(headline, [...(pn ? [pn] : []), 'Last receipt declined - send a new one'], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + '.',
       needsPayment: true,
-    };
+    });
   }
 
   if (mySeat === 'unpaid' || mySeat === 'topup') {
-    return {
-      tone: 'action',
-      secured: false,
-      shortLabel: 'Payment pending',
+    const topupNote = mySeat === 'topup' ? ['Top-up needed for your slot'] : [];
+    return finish(headline, [...(pn ? [pn] : []), ...topupNote], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' - pay to secure it.',
       needsPayment: true,
-    };
+    });
   }
 
   // My seat is settled (paid or submitted, or there is no seat of mine to speak of - a free
   // division would never reach here since summarizeEntryPayment marks it fully paid). The team as a
   // whole may still be short.
   if (summary.state === 'partial') {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'Partially paid',
+    return finish(headline, [...(pn ? [pn] : []), ...partnerPayNote], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until everyone has paid.',
       needsPayment,
-    };
+    });
   }
 
   if (mySeat === 'submitted' || summary.state === 'submitted') {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: seatOpen
-        ? 'No partner yet'
-        : partnerUnconfirmed
-          ? 'Partner not confirmed'
-          : 'Under review',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until the organizer confirms it.',
       needsPayment,
-    };
+    });
   }
 
   if (seatOpen) {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'No partner yet',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until you choose a partner.',
       needsPayment,
-    };
+    });
   }
 
   if (partnerUnconfirmed) {
-    return {
-      tone: 'waiting',
-      secured: false,
-      shortLabel: 'Partner not confirmed',
+    return finish(headline, pn ? [pn] : [], {
       title: NOT_SECURED,
       steps,
       assurance: NOT_SECURED + ' until your partner confirms.',
       needsPayment,
-    };
+    });
   }
 
-  return {
-    tone: 'waiting',
-    secured: false,
-    shortLabel: 'Awaiting confirmation',
+  return finish(headline, ["Awaiting the organizer's confirmation"], {
     title: NOT_SECURED,
     steps: steps.length > 0 ? steps : ['The organizer will confirm your entry.'],
     assurance: NOT_SECURED + ' until the organizer confirms it.',
     needsPayment,
-  };
+  });
 }

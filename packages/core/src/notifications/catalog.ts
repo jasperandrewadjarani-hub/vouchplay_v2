@@ -158,6 +158,15 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} withdrew their partner invite`,
     (p) => `You are no longer named on their entry for ${tour(p)}.`,
   ),
+  // §2AP C4: a confirmed entry that becomes partial (an accepted release detaches the seat) is not
+  // downgraded (§2AM) - but the remaining player is now the one holding a paid entry with an empty
+  // seat, and the next partner they name arrives owing money. Critical for the same reason as
+  // partner_named_paid: it is money-adjacent and blocks nothing but should not be missed.
+  partner_left_pay_pending: t(
+    'partners',
+    true,
+    (p) => `${who(p)} left your team for ${tour(p)} - the new partner will need to pay their slot`,
+  ),
 
   // --- Registrations (§27.1 / §27.3) ---
   // Critical: a player has asked to undo a payment that reached the organizer directly, so it must
@@ -249,6 +258,14 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     true,
     (p) => `Your slot receipt for ${tour(p)} was declined`,
     (p) => p.reason,
+  ),
+  // §2AP C5: the leaving player's own seat detaches silently otherwise - this is what tells them it
+  // is theirs to reuse. Non-critical: nothing is blocked and nothing needs urgent action.
+  slot_released: t(
+    'payments',
+    false,
+    (p) => `Your slot for ${tour(p)} is free to use again`,
+    () => 'Choose a division any time before registration closes.',
   ),
 
   // --- Eligibility (§27.1 / §27.3) ---

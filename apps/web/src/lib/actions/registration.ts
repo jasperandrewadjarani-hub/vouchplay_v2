@@ -3,7 +3,13 @@
 import { revalidateTag } from 'next/cache';
 import { partnerInviteSchema } from '@vouchplay/validation';
 import { SKILL_BANDS } from '@vouchplay/config';
-import { evaluateDivisionFit, describeDivisionFit, quoteFee, formatFee } from '@vouchplay/core';
+import {
+  ageAtDate,
+  evaluateDivisionFit,
+  describeDivisionFit,
+  quoteFee,
+  formatFee,
+} from '@vouchplay/core';
 import { divisionName } from '@/lib/tournaments/dto';
 import { formatDate } from '@/lib/format-date';
 import { getOptionalUser } from '@/lib/auth';
@@ -14,6 +20,7 @@ import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { TOURNAMENTS_LIST_TAG, tournamentTag, getTournamentRules } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 import { checkDivisionFit } from '@/lib/tournaments/division-fit-check';
+import { logRpcRefusal } from '@/lib/moderation/audit';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import {
   getActorMini,
@@ -34,6 +41,10 @@ export interface RegistrationActionState {
   ok?: boolean;
   error?: string;
   message?: string;
+  /** Set alongside a stale-team error (master_plan §2AP C3): the team changed since the page was
+   *  opened (a decline, a cancel, a race), so the component should `router.refresh()` rather than
+   *  strand the player on a page that can no longer act. */
+  refresh?: boolean;
 }
 
 /** The shared shape every entry-creating helper below returns, before its exported wrapper adapts it
@@ -41,6 +52,7 @@ export interface RegistrationActionState {
  *  original exported actions, so behaviour is identical for any old client still calling them). */
 interface EntryOutcome {
   error?: string;
+  refresh?: boolean;
   registrationId?: string;
   teamId?: string;
   status?: string;
@@ -49,10 +61,14 @@ interface EntryOutcome {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** master_plan §2AP C3: a stale page (a decline, a cancel, a race elsewhere) can no longer act on a
+ *  team it thinks it still has - this is the one sentence for that, everywhere it can surface. */
+const STALE_TEAM_MESSAGE = 'This team has changed since you opened the page. Refreshing…';
+
 /** Map a raised RPC exception message to user-safe copy. */
 const RPC_ERRORS: Record<string, string> = {
   team_not_found: 'That team could not be found.',
-  not_team_member: 'You are not on this team.',
+  not_team_member: STALE_TEAM_MESSAGE,
   division_not_found: 'That division could not be found.',
   registration_closed: 'Registration is not open for this tournament.',
   division_closed: 'This division is not open for registration.',
@@ -68,7 +84,7 @@ const RPC_ERRORS: Record<string, string> = {
   player_cancellation_not_allowed: 'This registration can no longer be cancelled by a player.',
   player_division_change_not_allowed: 'Only an unpaid pending registration can change division.',
   payment_already_started:
-    'This entry already has payment activity. Contact the organizer for help.',
+    'Your partner has already paid their slot, so this entry can only be cancelled by the organizer. Use Request to cancel.',
   target_division_not_found: 'That division is unavailable.',
   target_division_closed: 'That division is not open.',
   target_division_team_mismatch: 'Your team does not fit that division.',
@@ -97,6 +113,48 @@ function friendly(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
   for (const [key, text] of Object.entries(RPC_ERRORS)) if (msg.includes(key)) return text;
   return 'That action failed. Please try again.';
+}
+
+/**
+ * One-line replacement for every `if (error) return { error: friendly(error.message) };` call site
+ * (master_plan §2AP C8/C3): logs the raw refusal code (best-effort, never throws) before mapping it
+ * to player-facing copy, and flags `refresh: true` when the refusal was a stale-team one, so the
+ * component can `router.refresh()` instead of stranding the player on a page that can no longer act.
+ */
+async function friendlyLogged(
+  actorId: string | null,
+  fn: string,
+  message: string | undefined,
+  entity?: { entityType?: string; entityId?: string | null },
+): Promise<{ error: string; refresh?: true }> {
+  await logRpcRefusal({
+    actorId,
+    fn,
+    code: message ?? 'unknown',
+    entityType: entity?.entityType,
+    entityId: entity?.entityId ?? null,
+  });
+  const text = friendly(message);
+  return message?.includes('not_team_member') ? { error: text, refresh: true } : { error: text };
+}
+
+/**
+ * The TS-side twin of the same stale-team refusal (master_plan §2AP C3): a direct `team_members`
+ * lookup, rather than an RPC, came back empty. Logged and worded identically to the RPC path above.
+ */
+async function staleTeamError(
+  actorId: string,
+  fn: string,
+  entityId?: string | null,
+): Promise<{ error: string; refresh: true }> {
+  await logRpcRefusal({
+    actorId,
+    fn,
+    code: 'not_team_member',
+    entityType: 'registration',
+    entityId: entityId ?? null,
+  });
+  return { error: STALE_TEAM_MESSAGE, refresh: true };
 }
 
 const ELIG_REVIEW = new Set(['review', 'skill_mismatch', 'ineligible_hard_rule']);
@@ -339,7 +397,9 @@ async function doEnterWithPendingPartner(
     p_message: v.message ? v.message.trim() : null,
     p_expires_at: null,
   });
-  if (teamError) return { error: friendly(teamError.message) };
+  if (teamError) {
+    return await friendlyLogged(userId, 'create_team_with_pending_partner', teamError.message);
+  }
   const teamId = (created as { team_id?: string } | null)?.team_id;
   if (!teamId) return { error: 'Could not start your entry. Please try again.' };
 
@@ -347,7 +407,7 @@ async function doEnterWithPendingPartner(
     p_team_id: teamId,
     p_actor: userId,
   });
-  if (regError) return { error: friendly(regError.message) };
+  if (regError) return await friendlyLogged(userId, 'register_team', regError.message);
   const regId = (reg as { registration_id?: string } | null)?.registration_id;
   const status = (reg as { status?: string } | null)?.status;
   if (regId) await computeRegistrationEligibility(regId);
@@ -477,7 +537,7 @@ export async function replacePendingPartner(
       p_message: v.message ? v.message.trim() : null,
       p_expires_at: null,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'replace_pending_partner', error.message);
 
     const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
     await notify({
@@ -573,7 +633,7 @@ export async function changePartner(
       p_message: v.message ? v.message.trim() : null,
       p_expires_at: null,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'change_partner', error.message);
 
     const removedPlayer = (data as { removed_player?: string } | null)?.removed_player;
     const registrationId = (data as { registration_id?: string } | null)?.registration_id;
@@ -664,7 +724,7 @@ export async function searchInvitablePlayers(
   const safe = term.replace(/[%,()]/g, ' ');
   const { data } = await svc
     .from('profiles')
-    .select('id, slug, first_name, last_name, nickname, city, sex, self_rated_skill')
+    .select('id, slug, first_name, last_name, nickname, city, sex, self_rated_skill, date_of_birth')
     .eq('account_status', 'active')
     .not('onboarded_at', 'is', null)
     .neq('id', user.id)
@@ -680,6 +740,7 @@ export async function searchInvitablePlayers(
       city: string | null;
       sex: string | null;
       self_rated_skill: number | null;
+      date_of_birth: string | null;
     }[]
   ).filter((p) => p.slug);
 
@@ -716,6 +777,13 @@ export async function searchInvitablePlayers(
     const actorSex = (actorRow as { sex: 'male' | 'female' | null } | null)?.sex ?? null;
     if (div) {
       const { enforceSkillFloor } = await getTournamentRules(div.tournament_id);
+      // §2AP B: age at the door, same rule as `checkDivisionFit` - one shared tournament start read.
+      const { data: tournRow } = await svc
+        .from('tournaments')
+        .select('start_at')
+        .eq('id', div.tournament_id)
+        .maybeSingle();
+      const tournamentStartAt = (tournRow as { start_at: string | null } | null)?.start_at ?? null;
       const community = new Map(
         ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
           (r) => [r.player_id, r.community_skill_level],
@@ -742,6 +810,9 @@ export async function searchInvitablePlayers(
           enforceSkillFloor,
           partnerSex: actorSex,
           format: div.format,
+          ageAtStart: ageAtDate(p.date_of_birth, tournamentStartAt),
+          divisionMinimumAge: div.minimum_age,
+          divisionMaximumAge: div.maximum_age,
         });
         if (!verdict.fits && verdict.reason) {
           reasons.set(
@@ -798,7 +869,7 @@ export async function respondInvitation(
         p_invitation_id: invitationId,
         p_actor: user.id,
       });
-      if (error) return { error: friendly(error.message) };
+      if (error) return await friendlyLogged(user.id, 'accept_partner_invitation', error.message);
       // The snapshot now covers both members - re-check fit + composition at acceptance, not only
       // at invite (a community skill level can move between the two, §2AM decision 3).
       let liveRegId: string | null = null;
@@ -915,7 +986,7 @@ export async function respondInvitation(
         p_invitation_id: invitationId,
         p_actor: user.id,
       });
-      if (error) return { error: friendly(error.message) };
+      if (error) return await friendlyLogged(user.id, 'decline_partner_invitation', error.message);
       const [me, tm] = await Promise.all([
         getActorMini(user.id),
         getTournamentMini(row.tournament_id),
@@ -971,7 +1042,7 @@ export async function cancelInvitation(invitationId: string): Promise<Registrati
       p_invitation_id: invitationId,
       p_actor: user.id,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'cancel_partner_invitation', error.message);
     const inviteeId = (data as { invitee_id?: string } | null)?.invitee_id;
 
     // §2AO A4: the withdrawn invitee's money travels with them (they were never a confirmed member,
@@ -1041,7 +1112,7 @@ export async function requestPartnerRelease(
       p_leaving_player: leavingPlayerId,
       p_message: message?.trim() || null,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'request_partner_release', error.message);
     const approverId = (data as { approver_id?: string } | null)?.approver_id;
     const leavingPlayer =
       (data as { leaving_player?: string } | null)?.leaving_player ?? leavingPlayerId;
@@ -1113,7 +1184,7 @@ export async function respondPartnerRelease(
       p_actor: user.id,
       p_accept: accept,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'respond_partner_release', error.message);
 
     const [me, tm] = await Promise.all([
       getActorMini(user.id),
@@ -1150,15 +1221,46 @@ export async function respondPartnerRelease(
       // demanding a second player who is no longer there.
       const { data: regRows } = await svc
         .from('registrations')
-        .select('id')
+        .select('id, status')
         .eq('team_id', row.team_id)
         .not('status', 'in', '(withdrawn,cancelled,rejected)');
-      for (const r of (regRows ?? []) as { id: string }[]) {
+      // §2AP C4: the team member left BEHIND, if this release drops the entry out of fully paid -
+      // resolved once, outside the loop (an accepted release removes at most one player).
+      let remainingConfirmed: string[] = [];
+      if (removedPlayer) {
+        const { data: memberRows } = await svc
+          .from('team_members')
+          .select('player_id, confirmed_at')
+          .eq('team_id', row.team_id);
+        remainingConfirmed = (
+          (memberRows ?? []) as { player_id: string; confirmed_at: string | null }[]
+        )
+          .filter((m) => m.confirmed_at && m.player_id !== removedPlayer)
+          .map((m) => m.player_id);
+      }
+      for (const r of (regRows ?? []) as { id: string; status: string }[]) {
+        const wasConfirmed = r.status === 'confirmed';
         await computeRegistrationEligibility(r.id);
         // §2AO A4: the leaving player's money travels with them.
         if (removedPlayer) {
           await detachSlots(r.id, removedPlayer);
-          await settleRegistration(r.id, user.id);
+          const summary = await settleRegistration(r.id, user.id);
+          // §2AP C4/Finding 2b: a CONFIRMED entry that drops out of fully paid through this release
+          // keeps its `confirmed` status (§2AM) but nothing else told the remaining player their
+          // partner's seat is now open money - this is that notice.
+          if (wasConfirmed && summary && !summary.fullyPaid && remainingConfirmed.length > 0) {
+            const leavingName = (await getActorMini(removedPlayer)).name;
+            await notifyMany(remainingConfirmed, {
+              type: 'partner_left_pay_pending',
+              actorId: user.id,
+              params: { actorName: leavingName, tournamentName: tm.name },
+              link: tm.slug
+                ? `/tournaments/${tm.slug}?entered=${r.id}#my-registrations`
+                : '/tournaments',
+              entityType: 'tournament',
+              entityId: row.tournament_id,
+            });
+          }
         }
       }
     } else {
@@ -1198,7 +1300,7 @@ export async function cancelPartnerRelease(requestId: string): Promise<Registrat
       p_request_id: requestId,
       p_actor: user.id,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'cancel_partner_release', error.message);
     if (tournamentId) await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -1249,7 +1351,7 @@ export async function registerTeam(
       if (fitError) return { error: fitError };
     }
     const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: user.id });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'register_team', error.message);
     const regId = (data as { registration_id?: string } | null)?.registration_id;
     const status = (data as { status?: string } | null)?.status;
     if (regId) await computeRegistrationEligibility(regId);
@@ -1319,7 +1421,7 @@ async function doRegisterSolo(
     });
   }
   const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: userId });
-  if (error) return { error: friendly(error.message) };
+  if (error) return await friendlyLogged(userId, 'register_team', error.message);
   const regId = (data as { registration_id?: string } | null)?.registration_id;
   const status = (data as { status?: string } | null)?.status;
   if (regId) await computeRegistrationEligibility(regId);
@@ -1388,7 +1490,7 @@ async function doEnterDoublesSolo(
     p_division_id: divisionId,
     p_actor: userId,
   });
-  if (teamError) return { error: friendly(teamError.message) };
+  if (teamError) return await friendlyLogged(userId, 'create_solo_doubles_team', teamError.message);
   const teamId = (created as { team_id?: string } | null)?.team_id;
   if (!teamId) return { error: 'Could not start your entry. Please try again.' };
 
@@ -1396,7 +1498,7 @@ async function doEnterDoublesSolo(
     p_team_id: teamId,
     p_actor: userId,
   });
-  if (regError) return { error: friendly(regError.message) };
+  if (regError) return await friendlyLogged(userId, 'register_team', regError.message);
   const regId = (reg as { registration_id?: string } | null)?.registration_id;
   const status = (reg as { status?: string } | null)?.status;
   if (regId) await computeRegistrationEligibility(regId);
@@ -1582,7 +1684,8 @@ export async function requestRegistrationCancellation(
       .eq('team_id', row.team_id)
       .eq('player_id', user.id)
       .maybeSingle();
-    if (!member) return { error: 'You are not on this team.' };
+    if (!member)
+      return await staleTeamError(user.id, 'requestRegistrationCancellation', registrationId);
 
     // One open request at a time, so a frustrated tap does not spam the organizer's timeline.
     const { data: existing } = await svc
@@ -1731,7 +1834,7 @@ export async function withdrawRegistration(
         .eq('team_id', teamId)
         .eq('player_id', user.id)
         .maybeSingle();
-      if (!member) return { error: 'You are not on this team.' };
+      if (!member) return await staleTeamError(user.id, 'withdrawRegistration', registrationId);
       const result = await svc.rpc('release_slot', {
         p_registration_id: registrationId,
         p_actor: user.id,
@@ -1740,7 +1843,7 @@ export async function withdrawRegistration(
       data = result.data;
       error = result.error;
     }
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'withdrawRegistration', error.message);
 
     // §2AO A4: a closed registration keeps no attached slot - the money travels back to the player as
     // a bare reservation, reusable through the wizard.
@@ -1824,7 +1927,7 @@ export async function leaveTeamAfterCancellation(
       p_team_id: teamId,
       p_actor: user.id,
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'leave_team_after_cancel', error.message);
     const remaining = (
       (data as { remaining_player_ids?: string[] } | null)?.remaining_player_ids ?? []
     ).filter((id): id is string => typeof id === 'string');
@@ -2077,7 +2180,7 @@ export async function rejectRegistration(
       p_actor: user.id,
       p_new_status: 'rejected',
     });
-    if (error) return { error: friendly(error.message) };
+    if (error) return await friendlyLogged(user.id, 'release_slot', error.message);
     // §2AO A4: a closed registration keeps no attached slot.
     await detachSlots(registrationId);
     if (reason.trim()) {

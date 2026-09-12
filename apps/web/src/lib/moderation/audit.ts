@@ -37,3 +37,29 @@ export async function writeAudit(entry: AuditEntry): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Log a refused RPC (or the TS-side equivalent of one, e.g. a stale-membership check) so a reported
+ * bug has a trail (master_plan §2AP C8/Finding 2f). Best-effort - a logging failure must never affect
+ * the caller's own refusal, so this never throws and its result is not checked by callers.
+ */
+export interface RpcRefusalInput {
+  actorId: string | null;
+  /** The RPC (or server action) that refused, e.g. 'respond_partner_release'. */
+  fn: string;
+  /** The raw refusal code (the RPC's raised message substring, or a short TS-side code). */
+  code: string;
+  entityType?: string;
+  entityId?: string | null;
+  meta?: Record<string, unknown>;
+}
+
+export async function logRpcRefusal(input: RpcRefusalInput): Promise<void> {
+  await writeAudit({
+    actorId: input.actorId,
+    action: 'rpc.refused',
+    entityType: input.entityType ?? 'rpc',
+    entityId: input.entityId ?? null,
+    after: { fn: input.fn, code: input.code, ...(input.meta ?? {}) },
+  });
+}

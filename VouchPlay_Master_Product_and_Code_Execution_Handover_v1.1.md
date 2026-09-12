@@ -2109,6 +2109,12 @@ a tick. ELIG_V1.1 records `PLAYING_DOWN_ONE_LEVEL` as REVIEW so the organizer as
 
 ## 18.5 Age Rules
 
+**v1.69 (master_plan §2AP B):** age is now checked at the DOOR as well as by the eligibility engine:
+`evaluateDivisionFit` / `player_fits_division` refuse a player outside a division's age range at the
+tournament start date, and refuse an unknown birthday on an age-limited division with "add your
+birthday to your profile". Existing entries are untouched; the check runs at entry and at partner
+acceptance.
+
 Age is an independent eligibility rule.
 
 Examples:
@@ -2370,6 +2376,12 @@ Block:
 - registration after lock/close unless organizer override.
 
 ## 21.5 Open seat, consented partner change, and the partner lock-in (v1.66, master_plan §2AM)
+
+**v1.69 (master_plan §2AP C):** a team on which the viewer's own seat is still UNCONFIRMED is an
+invitation, not one of the viewer's entries - it never shows Leave / Change / Pay controls, and a seat
+payment requires an accepted seat. Any stale-page refusal ("this team has changed") refreshes the page.
+A confirmed entry that loses a paid seat through an accepted release keeps its status but is shown
+as partially paid to both sides; the leaving player is told their slot is reusable.
 
 Doubles entries carry a **team-level partner state** alongside the registration status above:
 `open seat` (one confirmed member, nobody named), `partner pending` (named, not yet accepted),
@@ -6378,6 +6390,34 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.69 (2026-09-13)
+
+_Wizard v2, the invitee "not on this team" bug and seat-model hardening, the three-state status
+card, the unpaid-slot banner, players-tab control tweaks, the co-organizer picker fix, and the
+organizer registrations cleanup (master_plan §2AP). Migration `0043` (age at the door; organizer
+rows no longer publicly readable)._
+
+- **Division step (§19.2):** Recommended divisions first (tap = next step), then Other (higher /
+  one lower / full, each with a one-line "I understand" tick), then Ineligible collapsed and greyed
+  with a (!) that reveals the reason; a "Hide ineligible" toggle; ineligible is never selectable.
+  Age caps now refuse at the door (§18.5). "Pay for my slot" wording; help text cut.
+- **Invitations are not entries (§20, §21.5):** a player who has not accepted yet sees the
+  invitation card (Accept / Decline), never Leave / Change / Pay for that team - the cause of the
+  "You are not on this team" message. Seat payment requires an accepted seat. Stale pages self-heal.
+- **Status card (§2G):** three headlines only - Confirmed · Payment for verification · Slot not
+  secured - on rows and cards; every other notice (no division / partner yet, waitlist, partner
+  still to pay) lives inside My registrations.
+- **Unpaid-slot banner:** first in the app-shell nudge chain for any unsecured slot in an open
+  tournament.
+- **Seat-model loose ends:** confirmed entries that lose a paid seat surface as partially paid;
+  leaving players are told their slot is reusable; extra receipts are flagged; refused RPCs are
+  audited (`rpc.refused`).
+- **Organizer:** co-organizer picker is selection-only (the free-text handle was the failure);
+  co-organizer names were never public and the rows are now not publicly readable either;
+  registrations list: collapsed division breakdown, default filter Has receipt, slot / team paid
+  tags, less prose.
+- **Players tab:** "Search VouchPlay", 40 px controls, one view toggle.
 
 ## v1.68 (2026-09-12)
 

@@ -24,7 +24,7 @@ import {
 import { getOptionalUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { AVATARS_BUCKET, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
+import { AVATARS_BUCKET, PAYMENT_PROOFS_BUCKET, avatarUrl } from '@/lib/storage';
 import { authorizeOrganizer, hasOrganizerRole, type OrganizerPerm } from '@/lib/tournaments/authz';
 import {
   TOURNAMENTS_LIST_TAG,
@@ -1023,10 +1023,16 @@ export async function addCoOrganizer(
     const svc = createServiceClient();
     const { data: target } = await svc
       .from('profiles')
-      .select('id')
+      .select('id, first_name, last_name, nickname')
       .eq('slug', targetSlug)
       .maybeSingle();
-    const targetUserId = (target as { id: string } | null)?.id;
+    const targetProfile = target as {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      nickname: string | null;
+    } | null;
+    const targetUserId = targetProfile?.id;
     if (!targetUserId) return { error: 'No player found with that handle.' };
     if (targetUserId === user.id) return { error: 'You already own this tournament.' };
     const { data: eligibleRoles } = await svc
@@ -1036,8 +1042,17 @@ export async function addCoOrganizer(
       .eq('status', 'active')
       .in('role', ['organizer', 'admin', 'super_admin'])
       .limit(1);
-    if (!eligibleRoles || eligibleRoles.length === 0)
-      return { error: 'A co-organizer must have an approved Organizer role.' };
+    if (!eligibleRoles || eligibleRoles.length === 0) {
+      // master_plan §2AP H: name the person, not just the rule - the manager already found them by
+      // name, so a bare "must have an approved Organizer role" reads like a dead end.
+      const targetName =
+        [targetProfile.first_name, targetProfile.last_name].filter(Boolean).join(' ').trim() ||
+        targetProfile.nickname ||
+        'That player';
+      return {
+        error: `${targetName} needs an approved Organizer role first - they can apply from Me → Roles.`,
+      };
+    }
 
     const permissions: Record<string, boolean> = {};
     for (const key of PERM_KEYS) permissions[key] = bool(formData, `perm_${key}`);
@@ -1060,6 +1075,8 @@ export interface OrganizerSearchResult {
   slug: string;
   name: string;
   city: string | null;
+  /** So the picker can render a chip with a face, not just a name (master_plan §2AP H). */
+  avatarUrl: string | null;
 }
 
 /** Narrow account picker for owners; final add still verifies the active Organizer role server-side. */
@@ -1071,7 +1088,7 @@ export async function searchEligibleOrganizers(q: string): Promise<OrganizerSear
   const svc = createServiceClient();
   const { data: profiles } = await svc
     .from('profiles')
-    .select('id, slug, first_name, last_name, nickname, city')
+    .select('id, slug, first_name, last_name, nickname, city, avatar_path')
     .eq('account_status', 'active')
     .not('onboarded_at', 'is', null)
     .neq('id', actor.id)
@@ -1084,6 +1101,7 @@ export async function searchEligibleOrganizers(q: string): Promise<OrganizerSear
     last_name: string | null;
     nickname: string | null;
     city: string | null;
+    avatar_path: string | null;
   }>;
   if (rows.length === 0) return [];
   const { data: roles } = await svc
@@ -1108,6 +1126,7 @@ export async function searchEligibleOrganizers(q: string): Promise<OrganizerSear
         row.nickname ||
         'VouchPlay player',
       city: row.city,
+      avatarUrl: avatarUrl(row.avatar_path),
     }));
 }
 

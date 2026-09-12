@@ -192,13 +192,24 @@ export function MyRegistrations({
                   <span className="text-foreground text-sm font-semibold">{d.name}</span>
                   <span className="text-foreground-muted inline-flex items-center gap-1.5 text-xs">
                     <ToneIcon tone={s.tone} />
-                    {s.shortLabel}
+                    {s.headlineLabel}
                   </span>
                 </div>
                 {team && (
                   <p className="text-foreground-muted mt-1 text-xs">
                     Team: {team.members.map((m) => m.name).join(' & ')}
                   </p>
+                )}
+
+                {/* Everything the headline chip does not carry - no partner yet, top-up needed, the
+                    waitlist, a partner still to pay - as a compact list under the headline, rather than
+                    stacked into a second explanatory chip (master_plan §2AP E). */}
+                {s.notes.length > 0 && (
+                  <ul className="text-foreground-muted mt-1 space-y-0.5 text-xs">
+                    {s.notes.map((n, i) => (
+                      <li key={i}>{n}</li>
+                    ))}
+                  </ul>
                 )}
 
                 {/* One seat line per member, from the same summarizeEntryPayment the organizer and
@@ -214,10 +225,12 @@ export function MyRegistrations({
                   </ul>
                 )}
 
-                {/* The unmissable truth: a provisional entry is NOT secured, and here is exactly what
-                    is still outstanding. Amber when the applicant can act now (pay), muted when they
-                    are waiting on the organizer or a partner (§2G). */}
-                {!s.secured && (
+                {/* The old checklist only earns its place when it says something the notes above did
+                    not already say - once the status module returns notes, they are the outstanding
+                    truth, and repeating it in a second box is exactly the duplication §2AP E removes.
+                    Kept for the cases notes leave empty (e.g. "pay to secure it", where the Pay Now
+                    control below is the action itself). */}
+                {!s.secured && s.notes.length === 0 && s.steps.length > 0 && (
                   <div
                     role="note"
                     className={`mt-2 rounded-lg border p-2.5 text-xs ${
@@ -226,26 +239,16 @@ export function MyRegistrations({
                         : 'border-border bg-surface-muted'
                     }`}
                   >
-                    <p
-                      className={`flex items-center gap-1.5 font-semibold ${
-                        s.tone === 'action' ? 'text-warning' : 'text-foreground'
-                      }`}
-                    >
-                      <TriangleAlert size={13} aria-hidden />
-                      {s.title}
-                    </p>
-                    {s.steps.length > 0 && (
-                      <ul className="text-foreground-muted mt-1.5 space-y-1">
-                        {s.steps.map((step, i) => (
-                          <li key={i} className="flex items-start gap-1.5">
-                            <span aria-hidden className="mt-0.5">
-                              •
-                            </span>
-                            <span>{step}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                    <ul className="text-foreground-muted space-y-1">
+                      {s.steps.map((step, i) => (
+                        <li key={i} className="flex items-start gap-1.5">
+                          <span aria-hidden className="mt-0.5">
+                            •
+                          </span>
+                          <span>{step}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

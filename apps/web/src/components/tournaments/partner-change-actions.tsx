@@ -64,14 +64,21 @@ export function PartnerChangeActions({
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
 
-  function run(fn: () => Promise<{ ok?: boolean; error?: string; message?: string }>) {
+  function run(
+    fn: () => Promise<{ ok?: boolean; error?: string; message?: string; refresh?: boolean }>,
+  ) {
     setMsg(null);
     setIsError(false);
     start(async () => {
       const res = await fn();
       setMsg(res.error ?? res.message ?? null);
       setIsError(Boolean(res.error));
-      if (res.ok) router.refresh();
+      if (res.ok) {
+        router.refresh();
+      } else if (res.refresh || res.error?.startsWith('This team has changed')) {
+        // §2AP C3: the team changed under the viewer - self-heal instead of leaving a dead control.
+        router.refresh();
+      }
     });
   }
 
@@ -290,6 +297,8 @@ function ChoosePartner({
       } else {
         setMsg(res.error ?? 'Could not name that partner.');
         setIsError(true);
+        // §2AP C3: the team changed under the viewer - self-heal instead of leaving a dead control.
+        if (res.refresh || res.error?.startsWith('This team has changed')) router.refresh();
       }
     });
   }

@@ -52,6 +52,8 @@ export function PaidEntryActions({
       } else {
         setMsg(res.error ?? 'Could not send that request.');
         setIsError(true);
+        // §2AP C3: the team changed under the viewer - self-heal instead of leaving a dead control.
+        if (res.refresh || res.error?.startsWith('This team has changed')) router.refresh();
       }
     });
   }

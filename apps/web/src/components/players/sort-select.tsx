@@ -49,7 +49,10 @@ export function SortSelect({ sort, staff }: { sort: PlayerSort; staff: boolean }
 
   return (
     <div className="flex items-center gap-2">
-      <label htmlFor="player-sort" className="text-foreground-muted shrink-0 text-xs font-medium">
+      <label
+        htmlFor="player-sort"
+        className="text-foreground-muted shrink-0 text-[11px] font-medium"
+      >
         Sort by
       </label>
       <div className="relative">
@@ -58,7 +61,7 @@ export function SortSelect({ sort, staff }: { sort: PlayerSort; staff: boolean }
           value={sort}
           disabled={pending}
           onChange={(e) => onChange(e.target.value)}
-          className="border-border bg-surface text-foreground min-h-[44px] rounded-lg border py-1.5 pr-7 pl-2.5 text-sm disabled:opacity-60"
+          className="border-border bg-surface text-foreground min-h-10 rounded-lg border pr-6 pl-2 text-sm disabled:opacity-60"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>

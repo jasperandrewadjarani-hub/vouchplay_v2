@@ -9,6 +9,7 @@ import { WelcomeModal } from './welcome-modal';
 import { LegalConsentGate } from './legal/legal-consent-gate';
 import { SiteFooter } from './site-footer';
 import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
+import { UnpaidSlotStrip } from './tournaments/unpaid-slot-strip';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import {
@@ -19,6 +20,7 @@ import {
   getViewerIdentityNudge,
 } from '@/lib/auth';
 import { getVoucherPowerCached, type VoucherPower } from '@/lib/vouches/voucher-power';
+import { getViewerUnpaidSlots } from '@/lib/tournaments/unpaid';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -36,26 +38,45 @@ export async function AppShell({ children }: { children: ReactNode }) {
   const showBanner = bannerEnabled && bannerText.trim().length > 0;
   const staff = maintenance ? await viewerIsStaff() : false;
   const gated = maintenance && !staff;
-  // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
-  // have played with vouch for them (§2O). Skipped under maintenance gating.
-  const nudge = gated ? { unvouched: false, slug: null } : await getViewerReputationNudge();
-  // Minimal vouching power (master_plan §2AN decision 5, handover §10.5 v1.67): a signed-in, onboarded
-  // viewer with no photo, no approved ID and no vouch received yet. This is the top of the
-  // mutually-exclusive nudge chain - it explains WHY the generic "unvouched" nudge would otherwise show
-  // (and wins over it), rather than stacking a second strip that says the same thing two ways.
-  const minimalPower: VoucherPower | null = gated
+  // Unpaid-slot banner (master_plan §2AP F): the FIRST link of the mutually-exclusive nudge chain -
+  // an unsecured slot outranks every reputation strip, because a lapsed hold can cost the player their
+  // place outright. Skipped under maintenance gating and for a viewer who has not onboarded yet (they
+  // cannot hold a registration). The rest of the chain is skipped entirely once this shows, the same
+  // way the identity nudge already skips once minimal-power or unvouched shows below.
+  const unpaidSlots = gated
     ? null
     : await (async () => {
         const profile = await getMyProfile();
         if (!profile?.onboarded_at) return null;
-        const power = await getVoucherPowerCached(profile.id);
-        return power.minimal ? power : null;
+        const slots = await getViewerUnpaidSlots();
+        return slots.count > 0 ? slots : null;
       })();
+  const showUnpaid = Boolean(unpaidSlots);
+  // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
+  // have played with vouch for them (§2O). Skipped under maintenance gating or when the unpaid-slot
+  // banner already shows.
+  const nudge =
+    gated || showUnpaid ? { unvouched: false, slug: null } : await getViewerReputationNudge();
+  // Minimal vouching power (master_plan §2AN decision 5, handover §10.5 v1.67): a signed-in, onboarded
+  // viewer with no photo, no approved ID and no vouch received yet. This is the next link of the
+  // mutually-exclusive nudge chain - it explains WHY the generic "unvouched" nudge would otherwise show
+  // (and wins over it), rather than stacking a second strip that says the same thing two ways.
+  const minimalPower: VoucherPower | null =
+    gated || showUnpaid
+      ? null
+      : await (async () => {
+          const profile = await getMyProfile();
+          if (!profile?.onboarded_at) return null;
+          const power = await getVoucherPowerCached(profile.id);
+          return power.minimal ? power : null;
+        })();
   // Identity self-nudge (master_plan §2AG Phase C, D2): only one self-nudge strip is ever visible at
-  // a time, and the minimal/unvouched nudges win when either would otherwise show - so this is skipped
-  // entirely whenever one of those is already showing.
+  // a time, and the unpaid/minimal/unvouched nudges win when any would otherwise show - so this is
+  // skipped entirely whenever one of those is already showing.
   const identityNudge =
-    gated || nudge.unvouched || minimalPower ? { show: false } : await getViewerIdentityNudge();
+    gated || showUnpaid || nudge.unvouched || minimalPower
+      ? { show: false }
+      : await getViewerIdentityNudge();
   // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
   // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
   const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
@@ -117,9 +138,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
         </div>
       )}
       <Header />
-      {/* Mutually-exclusive self-nudge chain: minimal power wins over the generic unvouched nudge,
-          which wins over the identity self-nudge (§2AN decision 5, §2AG Phase C D2). */}
-      {minimalPower && !gated ? (
+      {/* Mutually-exclusive self-nudge chain: the unpaid-slot banner wins over minimal power, which
+          wins over the generic unvouched nudge, which wins over the identity self-nudge (master_plan
+          §2AP F, §2AN decision 5, §2AG Phase C D2). */}
+      {showUnpaid && unpaidSlots && !gated ? (
+        <UnpaidSlotStrip summary={unpaidSlots} />
+      ) : minimalPower && !gated ? (
         <MinimalPowerStrip multiplier={minimalPower.multiplier} />
       ) : (
         nudge.unvouched &&

@@ -4047,6 +4047,200 @@ detach hooks and the wizard's server round-trips → full gates → one commit �
 `scripts/apply-0042.sql` (safe before or after the push; before is preferred so the feature is live
 the moment the deploy lands), pushes → verification on both domains and a read of the new rows.
 
+## 2AP. Wizard v2 (grouped divisions, auto-advance, confirmations), the invitee "not on this team" bug, seat-model loose ends, 3-state status card, unpaid-slot banner, players-tab tweaks, co-organizer fix, organizer list cleanup (2026-09-13)
+
+Jasper's second batch after §2AO went live: (1) division step - recommended on top, other (one lower
+/ higher) next, ineligible collapsed and greyed at the bottom, a (!) that explains why instead of
+inline caveats, a hide-ineligible toggle, auto-advance when a recommended division is tapped, a
+final "I understand" prompt for the other divisions, ineligible never selectable, "Pay for Slot"
+wording, less help text; (2) BUG: accepting a partnership then leaving it says "You are not on this
+team", plus "a lot of loose ends" in sequence combinations; (3) the registration status card reduced
+to three states - Confirmed / Payment for verification / Slot not secured - with the other notices
+living in My registrations; (4) a yellow banner for anyone with an unpaid slot; (5) partner
+invitations separated from the divisions section; (6) Players tab: "Search VouchPlay", shorter
+Sort / Filters / Search controls, detailed-compact as one toggle; (7) organizer: cannot add a
+co-organizer, hide co-organizer names from the public; (8) organizer registrations: collapsible
+division breakdown, default filter = has receipt, slot-vs-team paid tags, less text.
+
+### Findings (audited; production read 2026-09-13 + one Explore pass)
+
+1. **The "not on this team" bug is real and reproducible from code.** `getViewerRegistrationState`
+   builds each team view with `pending = members.find(m => !m.confirmed_at && m.player_id !== userId)`
+   and `confirmedOther = members.find(m => m.confirmed_at && m.player_id !== userId)`. Since §1U every
+   invite creates BOTH member rows at once (inviter confirmed, invitee unconfirmed), so from the
+   INVITEE's own viewpoint their own unconfirmed row is filtered out, the inviter reads as a
+   "confirmed partner", and `PartnerChangeActions` renders **Change partner / Leave this team** to a
+   player who has not accepted yet - on the same page as the Accept / Decline prompt for the same
+   team. "Leave" calls `request_partner_release`, whose first check is that the ACTOR is a confirmed
+   member → `not_team_member` → "You are not on this team." Every genuine post-accept leave in
+   production succeeded (two accepted release requests on record); the failure is the pre-accept
+   view. Two more paths surface the same sentence on a stale page: after the other player cancels
+   (the team is disbanded and every member row deleted), any action on the still-open page hits the
+   same guard; `leaveTeamAfterCancellation` is dead code (never rendered).
+2. **Seat-model loose ends found by walking every sequence** (the live test trail on 2026-09-12 covered
+   solo + pay slot, play-down acknowledge, partner named after paying, request-to-cancel):
+   a. an unconfirmed invitee can pay their seat before accepting (`submitSeatPayment` only checks
+      `team_members` membership, not `confirmed_at`);
+   b. a CONFIRMED entry that loses a paid seat through an accepted release stays `confirmed` (never
+      downgraded, by §2AM) while its money state drops to partial - nothing tells the remaining
+      player or lands it in the organizer's payment queue;
+   c. a team receipt AND a seat receipt can coexist (partner pays their slot after the inviter paid
+      the whole team) - the summary correctly treats the team receipt as covering, but the extra
+      receipt is invisible as an overpayment;
+   d. a player whose partner has paid their slot cannot self-cancel (correct) but the message says
+      only "payment activity";
+   e. a leaving player's slot detaches silently - they are not told it is theirs to reuse;
+   f. RPC refusals are not logged anywhere, which is why the reported bug had no trail.
+3. **Age is not in the door check.** `evaluateDivisionFit` / `player_fits_division` test sex and skill
+   only; age caps (e.g. "45 and Up") are ELIG_V1 advisory only. A 30-year-old can enter a 45+
+   division and the organizer sees a hard-rule flag afterwards. Jasper's "in no way can they select
+   ineligible divisions (gender, skill cap, age cap)" needs age at the door.
+4. **Co-organizer.** `addCoOrganizer` requires the OWNER, a target found BY SLUG, and an active
+   organizer / admin role; the manager posts a free-text input as the slug, so typing a name and
+   pressing Enter yields "No player found with that handle" even when the person was listed.
+   Hermosa has zero co-organizer rows. Co-organizer names are NOT shown anywhere public (the page
+   says "Organized by {owner}" only), but the `tournament_organizers` read policy makes active rows
+   readable to anyone with the anon key - the "shown on the page" intent that policy comment
+   describes was never built.
+5. **Organizer list** is one long column: search, a per-division capacity strip (16 rows for
+   Hermosa), sort, filters, chips, then rows that each repeat eligibility reason sentences; the
+   detail sheet repeats explainers. Default filters are all "Any".
+6. **App shell** already runs a mutually-exclusive nudge chain (minimal-power > unvouched > identity),
+   each a per-request `cache()` read; the strips share one amber style.
+7. **Players tab** controls are all 44 px tall (search, Filters, Search, Sort select), the placeholder
+   reads "Search by name, nickname or city", and the view is a two-segment control (compact default).
+
+### Decisions
+
+**A. Division step v2 (§2AO B amended).** One pure classifier in core, `classifyDivision`, returns
+`recommended | other_up | other_down | full | registered | ineligible` plus the fit reason and
+whether the entry is playing up/down:
+- **Recommended** = fits and the player's effective skill is inside the band (or the division is
+  open-skill), age and sex permitting. Listed first, plain cards. **Tapping one auto-advances** to
+  the next step - no Continue.
+- **Other divisions** = fits but outside the band: higher (`other_up`) or one level lower
+  (`other_down`, only when the organizer allows it), and full divisions (waitlist). Tapping opens a
+  short confirm panel on the card, one sentence each, with a required tick, then Continue:
+  higher - "This division is above your community-vouched skill. I understand it may not match my
+  level."; one lower - the §2AO play-down sentence + "I understand"; full - "This division is full.
+  I understand I'm joining the waitlist, not taking a slot."
+- **Ineligible** (sex, age, skill cap) = never selectable; grouped at the bottom, **collapsed by
+  default** ("Not eligible (3)") and greyed; each name carries a (!) button that reveals the reason
+  on tap (no inline caveat text). A **"Hide ineligible"** toggle at the top of the step removes the
+  group entirely for that visit.
+- Copy: "Pay for my slot" / "Pay for the whole team" / "Reserve my slot"; every help line that
+  repeats its label is removed; the wizard says one sentence per decision.
+
+**B. Age at the door (§18.5 enforced, migration 0043).** `evaluateDivisionFit` gains `ageAtStart`
+and `divisionMinimumAge / divisionMaximumAge`; reasons `age` and `age_unknown` ("add your birthday to
+your profile"), mirrored in `player_fits_division` v4 using `profiles.date_of_birth` at
+`tournaments.start_at`. Unknown birthday on an age-limited division is refused at the door (the
+message is the fix), exactly as an unknown sex is today. Existing entries are untouched; the check
+runs at entry and at partner acceptance.
+
+**C. The invitee bug and the sequence loose ends (seat model hardening).**
+1. `getViewerRegistrationState` now knows the viewer's OWN membership: `myMembershipConfirmed`. A
+   team where the viewer is still unconfirmed is an INVITATION, not an entry: it is removed from
+   `registrationsByDivision` / `teamsByDivision`, so no Leave / Change / Pay control can render for
+   it; the division row shows "Invited" and the invitation card (D below) carries Accept / Decline.
+2. `submitSeatPayment` requires a CONFIRMED membership ("Accept the invitation first.").
+3. Any `not_team_member` (or the equivalent TS check) reaching the client now reads "This team has
+   changed since you opened the page." and the component refreshes the page - a stale view can no
+   longer strand a player.
+4. A confirmed entry that becomes partial (release accepted, seat detached) keeps its status (§2AM)
+   but: the remaining player is notified `partner_left_pay_pending` ("Your partner left - the new
+   partner will need to pay their slot"), the entry's chip reads "Confirmed · slot open" for the
+   player and "Confirmed · 1 of 2 slots paid" for the organizer, and it appears under the organizer's
+   "Partially paid" filter.
+5. The leaving player is told their slot is free to reuse (`slot_released`, links to the tournament).
+6. When a team receipt and seat receipts coexist, the organizer's payment block shows an amber
+   "Extra receipt - refund or keep" line on the seat row(s); the summary is unchanged.
+7. `payment_already_started` copy: "Your partner has already paid their slot, so this entry can only
+   be cancelled by the organizer. Use Request to cancel."
+8. Every refused RPC in registration / payment actions writes an append-only `audit_logs` row
+   `rpc.refused` (actor, function, code, entity) so the next report has a trail.
+
+**D. Partner invitations get their own card** on the tournament page, above My registrations:
+"Partner invitations (N)" with From / To, the division, prepaid note, Accept / Decline / Withdraw.
+Removed from inside the division list.
+
+**E. Three-state status card (§2G amended, v1.69).** `describeRegistrationStatus` returns a
+`headline`: **Confirmed** (done, green) · **Payment for verification** (waiting: a receipt covering
+the viewer's own slot or the team is in) · **Slot not secured** (action, amber: nothing covering the
+viewer's slot yet, or declined, or waitlisted, or a free entry awaiting the organizer). The headline
+is the ONLY chip on division rows and tournament cards. Everything else - no division yet, no
+partner yet, partner not confirmed, on the waitlist, partner still to pay, top-up needed - is a
+`notes[]` line rendered only inside the My registrations card, under the headline. `shortLabel`
+stays as an alias of the headline so nothing else breaks.
+
+**F. Unpaid-slot banner.** A new first link in the app-shell nudge chain, winning over the
+reputation strips: an amber strip "Your slot for {tournament} isn't secured yet - pay now" (or "You
+have {n} unsecured slots") linking to the entry, shown to a signed-in player with any registration
+in an open tournament whose OWN slot is unpaid (`payment_pending`, or a seat-model entry whose seat
+is unpaid / declined), or a declined bare slot. One bounded per-request read, `cache()`d like the
+others.
+
+**G. Players tab.** Placeholder "Search VouchPlay"; the search input, Filters, Search and Sort
+controls drop to 40 px (`min-h-10`, still a comfortable tap target); detailed/compact becomes ONE
+icon toggle button (compact default, `aria-pressed`, tooltip "Detailed view" / "Compact view").
+
+**H. Co-organizer.** The manager becomes selection-only: type to search, tap a result to choose
+(chip with name + handle), Add is enabled only with a chosen person; the slug is never typed. The
+server keeps its checks and adds the exact reason when the person lacks the organizer role ("{name}
+needs an approved Organizer role first - they can apply from Me → Roles."). **Names are already
+hidden from the public** (finding 4) so no toggle is needed; instead 0043 tightens the
+`tournament_organizers` read policy to the organizer themselves, the tournament's organizers and
+staff, so the rows are not publicly readable either. Recorded here so it is not re-asked.
+
+**I. Organizer registrations cleanup.** The capacity strip becomes a collapsed "Divisions (16) ·
+{registered}/{capacity} · {fully paid} paid" summary row that expands on tap; the default filter is
+Payment = **Has receipt** (shown as a removable chip, so "show me everything" is one tap); each row
+gains one money tag from the summary - **Team paid**, **1 of 2 slots paid**, **2 of 2 slots paid**,
+**Slot paid · no partner yet**, **Under review**, **No receipt** - that updates as the partner is
+named and pays; list rows lose the eligibility sentences (the warning chip stays; sentences live in
+the sheet); the sheet's explainers are cut to one line each.
+
+### Better suggestions folded in / deferred
+
+- Folded in: the classifier as one pure function shared by the wizard and the division browser;
+  age at the door; invitations excluded from "my entries" (the bug's true fix, not a patch on the
+  Leave button); the stale-page self-heal; RPC refusal logging; the overpayment line; the 40 px
+  control size instead of shrinking below the tap-target floor; selection-only co-organizer picker.
+- Deferred (phase 2): remember the hide-ineligible toggle across visits; a "Remind partner" button;
+  organizer "assign partner"; bare-slot / unpaid reminders (cron); a public "Organizers" line on the
+  tournament page with per-organizer opt-in (the RLS is now safe for it).
+
+### Contracts
+
+**Core:** `division-fit.ts` → `DivisionFitInput.ageAtStart?: number | null`, `divisionMinimumAge?`,
+`divisionMaximumAge?`; reasons `'age' | 'age_unknown'`; `DivisionFitResult.playingUp: boolean`;
+`classifyDivision(input): { kind: 'recommended'|'other_up'|'other_down'|'full'|'registered'|'ineligible'; fit: DivisionFitResult }`
+(+ `describeDivisionFit` copy for the two age reasons); `ageAtDate(dobIso, atIso)` exported.
+Notifications: `partner_left_pay_pending` (critical), `slot_released` (non-critical).
+**Web, status:** `RegistrationStatusView` gains `headline: 'confirmed'|'verifying'|'unsecured'`,
+`headlineLabel`, `notes: string[]`; `shortLabel === headlineLabel`.
+**Web, queries:** `ViewerRegistrationSkillProfile.dateOfBirth`; `ViewerTeam.myMembershipConfirmed`;
+unconfirmed-self teams excluded from the two maps; `ViewerInvitation.divisionName`;
+`getViewerUnpaidSlots()` in `lib/tournaments/unpaid.ts` → `{ count, first: { tournamentName, slug,
+registrationId | null } | null }`.
+**Web, actions:** `submitSeatPayment` confirmed-membership check; `logRpcRefusal()` in
+`lib/moderation/audit.ts` used by `friendly()` call sites; release/detach notifications;
+`addCoOrganizer` reason copy. **Migration 0043:** `player_fits_division` v4 (age) + the
+`tournament_organizers` read policy.
+**Web, UI:** `wizard/division-step.tsx` (groups, toggle, (!) reveal, auto-advance, confirm panels),
+`wizard/pay-step.tsx` copy, `partner-invitations-card.tsx` (new), `my-registrations.tsx` (headline +
+notes), `division-browser.tsx` (headline chip, invitations removed), `partner-change-actions.tsx` /
+`register-actions.tsx` / `paid-entry-actions.tsx` (stale-team refresh), `app-shell.tsx` +
+`unpaid-slot-strip.tsx`, players `search-filters.tsx` / `sort-select.tsx` / `player-view-toggle.tsx`,
+organizer `organizer-registrations.tsx` / `co-organizer-manager.tsx`.
+
+### Execution
+
+Docs → migration 0043 (main session) → five Sonnet lanes in parallel with file ownership (core +
+status; server; wizard + player UI; organizer UI; players tab) → review of the viewer-state fix, the
+classifier and the banner query → full gates → one commit → Jasper applies `scripts/apply-0043.sql`
+and pushes → verification on both domains.
+
 ## 1. Prompt Contract
 
 ### In scope
