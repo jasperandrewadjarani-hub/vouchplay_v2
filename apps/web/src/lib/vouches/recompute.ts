@@ -44,9 +44,11 @@ export async function recomputePlayerSkillProfile(
   const svc = createServiceClient();
   const settings = await getVouchSettings();
 
+  // `used_coach_weight` is selected alongside the V1 inputs (not a second query) so the
+  // `coach_vouch_count` maintenance below reuses these same rows (master_plan §2AO D2).
   const { data: vouches } = await svc
     .from('vouches')
-    .select('skill_level, effective_weight, voucher_id')
+    .select('skill_level, effective_weight, voucher_id, used_coach_weight')
     .eq('target_id', targetId)
     .eq('status', 'active');
 
@@ -93,6 +95,26 @@ export async function recomputePlayerSkillProfile(
     },
     { onConflict: 'player_id' },
   );
+
+  // --- coach_vouch_count (master_plan §2AO D2, migration 0042) -----------------------------------
+  // Maintained here as a SEPARATE, tolerant update rather than a field on the upsert above, so a
+  // database that has not yet run migration 0042 (column missing, Postgres 42703) can never fail the
+  // V1 skill write that already committed. Reuses the `vouches` rows already loaded above - no second
+  // query. Drives the "Coach-vouched" chip and cards without a per-card query.
+  try {
+    const coachVouchCount = (vouches ?? []).filter(
+      (r) => (r as { used_coach_weight?: boolean }).used_coach_weight === true,
+    ).length;
+    const { error: coachCountError } = await svc
+      .from('player_skill_profiles')
+      .update({ coach_vouch_count: coachVouchCount })
+      .eq('player_id', targetId);
+    if (coachCountError && coachCountError.code !== '42703') {
+      throw new Error(`coach_vouch_count_persist_failed: ${coachCountError.message}`);
+    }
+  } catch {
+    // Best-effort only - never break the V1 skill profile write above.
+  }
 
   // --- STS_V2 (master_plan §2AF) -----------------------------------------------------------------
   // Additive and side-by-side: computed and persisted here, but NEVER allowed to affect the V1 write

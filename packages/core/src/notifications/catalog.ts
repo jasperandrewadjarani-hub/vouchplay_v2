@@ -28,6 +28,15 @@ export interface NotificationParams {
   reason?: string;
   outcome?: string; // 'approved' | 'rejected' etc.
   extra?: string;
+  /**
+   * §2AO A - tournament slots. Preformatted (e.g. `formatFee('PHP', 1500)` -> "PHP 1,500"), NOT a
+   * bare number: this catalog is pure copy and has no business deciding currency formatting.
+   */
+  amount?: string;
+  /** Currency code (e.g. "PHP"), for a caller that wants to compose its own amount string. */
+  currency?: string;
+  /** Preformatted deadline (e.g. "Sep 20, 2026") - the early-bird cutoff, when one applies. */
+  deadline?: string;
 }
 
 export interface NotificationTypeDef {
@@ -209,6 +218,36 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     'payments',
     true,
     (p) => `Your payment needs another look for ${tour(p)}`,
+    (p) => p.reason,
+  ),
+
+  // --- Tournament slots (§2AO A) - the seat is its own unit of payment, separate from the team
+  // receipt above. Critical where money or a hold is on the line, same reasoning as partner_named_paid.
+  seat_payment_due: t(
+    'payments',
+    true,
+    (p) => `Your seat for ${tour(p)} needs payment`,
+    (p) => {
+      const amount = p.amount ?? 'the seat fee';
+      const deadline = p.deadline ? ` Pay by ${p.deadline} for the early-bird price.` : '';
+      return `Pay ${amount} to hold your seat.${deadline}`;
+    },
+  ),
+  seat_payment_verified: t(
+    'payments',
+    false,
+    (p) => `Your seat payment for ${tour(p)} was verified`,
+  ),
+  slot_reservation_verified: t(
+    'payments',
+    true,
+    (p) => `Your reserved slot for ${tour(p)} is verified - choose your division`,
+    () => 'Open the registration wizard to pick your division.',
+  ),
+  slot_reservation_rejected: t(
+    'payments',
+    true,
+    (p) => `Your slot receipt for ${tour(p)} was declined`,
     (p) => p.reason,
   ),
 

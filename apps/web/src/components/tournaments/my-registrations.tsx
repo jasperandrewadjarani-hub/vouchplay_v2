@@ -1,19 +1,33 @@
-import { CircleCheck, CircleDollarSign, Clock, ListChecks, TriangleAlert } from 'lucide-react';
-import { quoteFee } from '@vouchplay/core';
-import type { DivisionDTO } from '@/lib/tournaments/dto';
+'use client';
+
+import { useState } from 'react';
+import {
+  CircleCheck,
+  CircleDollarSign,
+  Clock,
+  ListChecks,
+  ShieldAlert,
+  TriangleAlert,
+} from 'lucide-react';
+import { formatFee } from '@vouchplay/core';
+import type { SeatState } from '@vouchplay/core';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
 import { RegisterActions } from './register-actions';
 import { PayNowCell } from './payment-modal';
 import { PaidEntryActions } from './paid-entry-actions';
 import { PartnerChangeActions } from './partner-change-actions';
+import { Button } from '@/components/ui/button';
+import { RegistrationWizard, type WizardTournament } from './registration-wizard';
+import type { WizardInitial } from './wizard/types';
 
 /**
  * Default-collapsed "My registrations (N)" manager shown immediately after the tournament details
- * (handover Phase 13.5). It is the single home for a player's own entries: one card per active entry
- * with division, team, status, payment, and the valid change actions. A player may hold entries in
- * several distinct divisions; each is independent. Status uses an icon plus text (never colour
- * alone) and the native details/summary keeps it keyboard and screen reader operable.
+ * (handover Phase 13.5; master_plan §2AO A7). It is the single home for a player's own entries: one
+ * card per active entry with division, team, status, per-seat payment, and the valid change actions.
+ * A player may hold entries in several distinct divisions; each is independent. A "Reserved slot"
+ * card sits above them for a bare (no-division-yet) slot reservation. Status uses an icon plus text
+ * (never colour alone) and the native details/summary keeps it keyboard and screen reader operable.
  */
 
 const ACTIVE = new Set([
@@ -30,45 +44,46 @@ function ToneIcon({ tone }: { tone: SlotTone }) {
   return <CircleCheck size={15} className="text-success" aria-hidden />;
 }
 
+/** "You: paid" / "Maria: not yet paid" / "Open seat" / "Maria: receipt sent" / "Top-up needed"
+ *  (master_plan §2AO A7). */
+function seatLineText(seatState: SeatState, who: string): string {
+  switch (seatState) {
+    case 'empty':
+      return 'Open seat';
+    case 'paid':
+      return `${who}: paid`;
+    case 'submitted':
+      return `${who}: receipt sent`;
+    case 'declined':
+      return `${who}: payment declined`;
+    case 'topup':
+      return `${who}: top-up needed`;
+    case 'unpaid':
+    default:
+      return `${who}: not yet paid`;
+  }
+}
+
 export function MyRegistrations({
-  tournamentId,
-  divisions,
+  tournament,
   state,
-  registrationOpen,
-  paymentInstructions,
-  paymentMethods,
-  earlyBird = { startsAt: null, endsAt: null },
-  slotHoldMinutes = 30,
   enteredRegistrationId = null,
 }: {
-  tournamentId: string;
-  divisions: DivisionDTO[];
+  tournament: WizardTournament;
   state: ViewerRegistrationState;
-  registrationOpen: boolean;
-  paymentInstructions: string | null;
-  paymentMethods: string | null;
-  /** Tournament-wide early-bird window (§1V). */
-  earlyBird?: { startsAt: string | null; endsAt: string | null };
-  /** How long an unpaid entry holds its slot, for the "pay later" warning (§2J). */
-  slotHoldMinutes?: number;
   /** A registration just created by this visit: open the panel straight onto it (§1Y). */
   enteredRegistrationId?: string | null;
 }) {
-  // One quote per division, so the price shown and the price charged come from the same function.
-  const quoteFor = (d: DivisionDTO) =>
-    quoteFee({
-      feeAmount: d.feeAmount,
-      earlyBirdFeeAmount: d.earlyBirdFeeAmount,
-      earlyBirdStartsAt: earlyBird.startsAt,
-      earlyBirdEndsAt: earlyBird.endsAt,
-      teamSize: d.teamSize,
-    });
+  const { divisions, registrationOpen } = tournament;
   const byId = new Map(divisions.map((d) => [d.id, d]));
+  const [wizardInitial, setWizardInitial] = useState<WizardInitial | null>(null);
+
   const entries = Object.entries(state.registrationsByDivision)
     .filter(([, reg]) => ACTIVE.has(reg.status))
     .map(([divisionId, reg]) => {
       const division = byId.get(divisionId);
       const team = state.teamsByDivision[divisionId];
+      const partnerName = team?.members.find((m) => m.id !== state.viewerId)?.name ?? null;
       const status = division
         ? describeRegistrationStatus({
             regStatus: reg.status,
@@ -78,179 +93,240 @@ export function MyRegistrations({
             seatOpen: Boolean(team?.seatOpen),
             partnerLockAt: state.partnerLockAt,
             partnerLockPassed: state.partnerLockPassed,
+            paymentSummary: reg.paymentSummary,
+            mySeat: reg.mySeat,
+            partnerName,
           })
         : null;
-      return { division, reg, divisionId, status };
+      return { division, reg, divisionId, status, team, partnerName };
     })
     .filter((e) => e.division && e.status);
-  if (entries.length === 0) return null;
+
+  const bareSlot = state.bareSlot ?? null;
+  if (entries.length === 0 && !bareSlot) return null;
 
   const actionable = entries.filter((e) => e.status!.needsPayment).length;
-
-  // "Enter and pay" promised two things and used to deliver one, dropping the player back on the
-  // division list to hunt for the payment form. The action now returns the new registration id, the
-  // caller puts it in the URL, and this panel opens on it. The anchor does the scrolling natively,
-  // so the continuous flow needs no client JavaScript at all (§1Y).
   const isNew = Boolean(
     enteredRegistrationId && entries.some((e) => e.reg.id === enteredRegistrationId),
   );
 
   return (
-    <details
-      open={isNew}
-      id="my-registrations"
-      className="border-primary/30 bg-primary/5 scroll-mt-24 rounded-2xl border"
-    >
-      <summary className="text-foreground flex cursor-pointer list-none items-center gap-2 p-4 text-base font-semibold">
-        <ListChecks size={18} className="text-primary" aria-hidden />
-        My registrations ({entries.length})
-        {actionable > 0 && (
-          <span className="text-warning ml-1 inline-flex items-center gap-1 text-xs font-medium">
-            <TriangleAlert size={13} aria-hidden />
-            {actionable} to pay
-          </span>
-        )}
-        <span className="text-foreground-muted ml-auto text-xs font-normal">Show</span>
-      </summary>
-      <ul className="space-y-3 px-4 pb-4">
-        {entries.map(({ division, reg, divisionId, status }) => {
-          const d = division!;
-          const team = state.teamsByDivision[divisionId];
-          const s = status!;
-          return (
-            <li key={divisionId} className="border-border bg-surface rounded-xl border p-3">
+    <>
+      <details
+        open={isNew || Boolean(bareSlot)}
+        id="my-registrations"
+        className="border-primary/30 bg-primary/5 scroll-mt-24 rounded-2xl border"
+      >
+        <summary className="text-foreground flex cursor-pointer list-none items-center gap-2 p-4 text-base font-semibold">
+          <ListChecks size={18} className="text-primary" aria-hidden />
+          My registrations ({entries.length})
+          {actionable > 0 && (
+            <span className="text-warning ml-1 inline-flex items-center gap-1 text-xs font-medium">
+              <TriangleAlert size={13} aria-hidden />
+              {actionable} to pay
+            </span>
+          )}
+          <span className="text-foreground-muted ml-auto text-xs font-normal">Show</span>
+        </summary>
+        <ul className="space-y-3 px-4 pb-4">
+          {bareSlot && (
+            <li className="border-primary/40 bg-surface rounded-xl border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-foreground text-sm font-semibold">{d.name}</span>
-                <span className="text-foreground-muted inline-flex items-center gap-1.5 text-xs">
-                  <ToneIcon tone={s.tone} />
-                  {s.shortLabel}
+                <span className="text-foreground flex items-center gap-1.5 text-sm font-semibold">
+                  <ShieldAlert size={15} className="text-primary" aria-hidden />
+                  Reserved slot
                 </span>
-              </div>
-              {team && (
-                <p className="text-foreground-muted mt-1 text-xs">
-                  Team: {team.members.map((m) => m.name).join(' & ')}
-                </p>
-              )}
-              {/* The unmissable truth: a provisional entry is NOT secured, and here is exactly what
-                  is still outstanding. Amber when the applicant can act now (pay), muted when they
-                  are waiting on the organizer or a partner (§2G). */}
-              {!s.secured && (
-                <div
-                  role="note"
-                  className={`mt-2 rounded-lg border p-2.5 text-xs ${
-                    s.tone === 'action'
-                      ? 'border-warning/40 bg-warning/10'
-                      : 'border-border bg-surface-muted'
+                <span
+                  className={`text-xs font-medium ${
+                    bareSlot.status === 'verified'
+                      ? 'text-success'
+                      : bareSlot.status === 'rejected'
+                        ? 'text-danger'
+                        : 'text-foreground-muted'
                   }`}
                 >
-                  <p
-                    className={`flex items-center gap-1.5 font-semibold ${
-                      s.tone === 'action' ? 'text-warning' : 'text-foreground'
+                  {bareSlot.status === 'verified'
+                    ? 'Verified'
+                    : bareSlot.status === 'rejected'
+                      ? `Declined${bareSlot.rejectionReason ? `: ${bareSlot.rejectionReason}` : ''}`
+                      : 'Receipt sent'}
+                </span>
+              </div>
+              <p className="text-foreground-muted mt-1 text-xs">
+                {formatFee(bareSlot.currency, bareSlot.amountDue)} - holds a place in the
+                tournament, not in a division.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button type="button" onClick={() => setWizardInitial({ step: 'division' })}>
+                  Choose your division
+                </Button>
+                {bareSlot.status === 'rejected' && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setWizardInitial({ step: 'receipt', payFor: 'reservation' })}
+                  >
+                    Send a new receipt
+                  </Button>
+                )}
+              </div>
+            </li>
+          )}
+          {entries.map(({ division, reg, divisionId, status, team, partnerName }) => {
+            const d = division!;
+            const s = status!;
+            const feeOwed = d.feeAmount > 0;
+            const legacyNeedsPayment = !reg.paymentSummary && reg.paymentStatus !== 'submitted';
+            const seatNeedsPayment = Boolean(
+              reg.mySeat && (['unpaid', 'declined', 'topup'] as SeatState[]).includes(reg.mySeat),
+            );
+            const showPayNow =
+              feeOwed &&
+              reg.status !== 'confirmed' &&
+              (reg.paymentSummary ? seatNeedsPayment : legacyNeedsPayment);
+            const hasReceiptInReview =
+              reg.paymentStatus === 'submitted' || Boolean(reg.paymentSummary?.anyReceipt);
+            return (
+              <li key={divisionId} className="border-border bg-surface rounded-xl border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-foreground text-sm font-semibold">{d.name}</span>
+                  <span className="text-foreground-muted inline-flex items-center gap-1.5 text-xs">
+                    <ToneIcon tone={s.tone} />
+                    {s.shortLabel}
+                  </span>
+                </div>
+                {team && (
+                  <p className="text-foreground-muted mt-1 text-xs">
+                    Team: {team.members.map((m) => m.name).join(' & ')}
+                  </p>
+                )}
+
+                {/* One seat line per member, from the same summarizeEntryPayment the organizer and
+                    the status chip read (master_plan §2AO A2/A7) - only once a caller supplies it. */}
+                {feeOwed && reg.paymentSummary && reg.paymentSummary.totalSeats > 1 && (
+                  <ul className="text-foreground-muted mt-1.5 space-y-0.5 text-xs">
+                    {reg.paymentSummary.seats.map((seat, i) => {
+                      const isMe = seat.playerId === state.viewerId;
+                      const memberName = team?.members.find((m) => m.id === seat.playerId)?.name;
+                      const who = isMe ? 'You' : (memberName ?? partnerName ?? 'Partner');
+                      return <li key={i}>{seatLineText(seat.state, who)}</li>;
+                    })}
+                  </ul>
+                )}
+
+                {/* The unmissable truth: a provisional entry is NOT secured, and here is exactly what
+                    is still outstanding. Amber when the applicant can act now (pay), muted when they
+                    are waiting on the organizer or a partner (§2G). */}
+                {!s.secured && (
+                  <div
+                    role="note"
+                    className={`mt-2 rounded-lg border p-2.5 text-xs ${
+                      s.tone === 'action'
+                        ? 'border-warning/40 bg-warning/10'
+                        : 'border-border bg-surface-muted'
                     }`}
                   >
-                    <TriangleAlert size={13} aria-hidden />
-                    {s.title}
-                  </p>
-                  {s.steps.length > 0 && (
-                    <ul className="text-foreground-muted mt-1.5 space-y-1">
-                      {s.steps.map((step, i) => (
-                        <li key={i} className="flex items-start gap-1.5">
-                          <span aria-hidden className="mt-0.5">
-                            •
-                          </span>
-                          <span>{step}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-              {/* Payment is the last step, so it lives in a focused modal, not poured into the list
-                  (§2K). A receipt already in review keeps its inline management (partner change,
-                  request to cancel); an entry still awaiting payment shows one clear "Pay now"
-                  control that opens the modal - which auto-opens for the entry just created, so
-                  "Enter and pay" flows straight into it. */}
-              {d.feeAmount > 0 && reg.paymentStatus === 'submitted' ? (
-                <div className="mt-2">
-                  <PaidEntryActions
-                    registrationId={reg.id}
-                    tournamentId={tournamentId}
-                    teamId={team?.teamId}
-                    divisionId={divisionId}
-                    partnerName={team?.members.find((m) => m.id !== state.viewerId)?.name ?? null}
-                    canChangePartner={d.teamSize > 1 && Boolean(team?.teamId && divisionId)}
-                  />
-                </div>
-              ) : (
-                d.feeAmount > 0 &&
-                reg.status === 'payment_pending' && (
+                    <p
+                      className={`flex items-center gap-1.5 font-semibold ${
+                        s.tone === 'action' ? 'text-warning' : 'text-foreground'
+                      }`}
+                    >
+                      <TriangleAlert size={13} aria-hidden />
+                      {s.title}
+                    </p>
+                    {s.steps.length > 0 && (
+                      <ul className="text-foreground-muted mt-1.5 space-y-1">
+                        {s.steps.map((step, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span aria-hidden className="mt-0.5">
+                              •
+                            </span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Payment is the last step, so it opens the wizard's Pay step rather than being
+                    poured into the list (§2K, §2AO B). A receipt already in review keeps its inline
+                    management (partner change, request to cancel); an entry whose own seat still
+                    needs money shows one clear "Pay now" control. */}
+                {showPayNow ? (
                   <PayNowCell
+                    tournament={tournament}
+                    state={state}
+                    registrationId={reg.id}
                     autoOpen={reg.id === enteredRegistrationId}
-                    details={{
-                      registrationId: reg.id,
-                      tournamentId,
-                      divisionName: d.name,
-                      amountDue: quoteFor(d).teamTotal,
-                      perPlayer: quoteFor(d).perPlayer,
-                      teamSize: d.teamSize,
-                      earlyBird: quoteFor(d).earlyBirdApplied,
-                      currency: d.currency,
-                      instructions: paymentInstructions,
-                      methods: paymentMethods,
-                      paymentStatus: reg.paymentStatus,
-                      rejectionReason: reg.paymentRejectionReason,
-                      paymentQrUrl: state.paymentQrUrl,
-                      slotHoldMinutes,
-                    }}
                   />
-                )
-              )}
-              {/* Once a receipt is in, PaidEntryActions above is the sole manager of the entry, so
-                  RegisterActions is not also rendered - it only repeated the status and a dead-end
-                  sentence there (§2L). It still owns cancel / change-division for unpaid entries. */}
-              {reg.paymentStatus !== 'submitted' && (
-                <div className="mt-2">
-                  <RegisterActions
-                    tournamentId={tournamentId}
+                ) : (
+                  feeOwed &&
+                  hasReceiptInReview && (
+                    <div className="mt-2">
+                      <PaidEntryActions
+                        registrationId={reg.id}
+                        tournamentId={tournament.id}
+                        teamId={team?.teamId}
+                        divisionId={divisionId}
+                        partnerName={partnerName}
+                        canChangePartner={d.teamSize > 1 && Boolean(team?.teamId && divisionId)}
+                      />
+                    </div>
+                  )
+                )}
+                {/* Once a receipt is in, PaidEntryActions above is the sole manager of the entry, so
+                    RegisterActions is not also rendered - it only repeated the status and a dead-end
+                    sentence there (§2L). It still owns cancel / change-division for unpaid entries. */}
+                {!hasReceiptInReview && (
+                  <div className="mt-2">
+                    <RegisterActions
+                      tournamentId={tournament.id}
+                      divisionId={divisionId}
+                      teamId={team?.teamId}
+                      format={d.format as 'singles' | 'doubles'}
+                      registrationOpen={registrationOpen}
+                      registration={{
+                        id: reg.id,
+                        status: reg.status,
+                        paymentStatus: reg.paymentStatus,
+                      }}
+                    />
+                  </div>
+                )}
+                {/* One compact Partner block per doubles entry (§2AM): open seat, pending invite,
+                    confirmed partner (change/leave), an outgoing or incoming release request, or the
+                    lock notice - exactly one at a time, and team is always set for a doubles division
+                    (a paid entry always has at least one confirmed member). */}
+                {d.format === 'doubles' && team && (
+                  <PartnerChangeActions
+                    teamId={team.teamId}
+                    tournamentId={tournament.id}
                     divisionId={divisionId}
-                    teamId={team?.teamId}
-                    format={d.format as 'singles' | 'doubles'}
-                    registrationOpen={registrationOpen}
-                    registration={{
-                      id: reg.id,
-                      status: reg.status,
-                      paymentStatus: reg.paymentStatus,
-                    }}
+                    viewerId={state.viewerId}
+                    pendingPartnerName={team.pendingPartner?.name ?? null}
+                    pendingInvitationId={team.pendingInvitationId}
+                    confirmedPartner={team.confirmedPartner}
+                    seatOpen={team.seatOpen}
+                    releaseRequest={team.releaseRequest}
+                    partnerLockAt={state.partnerLockAt}
+                    partnerChangesOpen={state.partnerChangesOpen}
                   />
-                </div>
-              )}
-              {/* The 'cancel, dissolve, re-invite' explanation that used to live here described a
-                  flow that no longer exists: under pay-first a team always carries a registration,
-                  so that path could never run (§1V). PartnerChangeActions and PaidEntryActions now
-                  each state the one thing that is true for the state the player is actually in. */}
-              {/* One compact Partner block per doubles entry (§2AM): open seat, pending invite,
-                  confirmed partner (change/leave), an outgoing or incoming release request, or the
-                  lock notice - exactly one at a time, and team is always set for a doubles division
-                  (a paid entry always has at least one confirmed member). */}
-              {d.format === 'doubles' && team && (
-                <PartnerChangeActions
-                  teamId={team.teamId}
-                  tournamentId={tournamentId}
-                  divisionId={divisionId}
-                  viewerId={state.viewerId}
-                  pendingPartnerName={team.pendingPartner?.name ?? null}
-                  pendingInvitationId={team.pendingInvitationId}
-                  confirmedPartner={team.confirmedPartner}
-                  seatOpen={team.seatOpen}
-                  releaseRequest={team.releaseRequest}
-                  partnerLockAt={state.partnerLockAt}
-                  partnerChangesOpen={state.partnerChangesOpen}
-                />
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </details>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </details>
+
+      {wizardInitial && (
+        <RegistrationWizard
+          tournament={tournament}
+          state={state}
+          initial={wizardInitial}
+          onClose={() => setWizardInitial(null)}
+        />
+      )}
+    </>
   );
 }

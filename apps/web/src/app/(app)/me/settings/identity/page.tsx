@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { IdentityVerificationStatus } from '@vouchplay/db';
-import { requireUser } from '@/lib/auth';
+import { requireUser, safeNext } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { loadSettingFlag } from '@/lib/settings';
 import { IdentityVerificationForm } from '@/components/identity/identity-verification-form';
 
 export const metadata: Metadata = { title: 'Verify your identity' };
+
+interface IdentityVerificationPageProps {
+  searchParams: Promise<{ next?: string | string[] }>;
+}
 
 /**
  * Me → Settings → "Verify my identity" (master_plan §2AG Phase C, handover §13.3). Staff-approved
@@ -14,8 +18,18 @@ export const metadata: Metadata = { title: 'Verify your identity' };
  * Reads are wrapped so a not-yet-applied migration 0036 degrades to "not available yet" rather than
  * a broken page (fail-open, same contract as the submit action).
  */
-export default async function IdentityVerificationPage() {
-  const user = await requireUser('/me/settings/identity');
+export default async function IdentityVerificationPage({
+  searchParams,
+}: IdentityVerificationPageProps) {
+  const sp = await searchParams;
+  // Same-origin-only redirect target (master_plan §2AO decision 9) - e.g. the Coach application gate
+  // sending the player here before returning to `/me/roles/coach`. Submission itself never sets
+  // `approved` (D1 above), so the form redirects there once the upload succeeds rather than waiting on
+  // a review outcome; absent/unsafe falls back to today's inline "Submitted" behaviour.
+  const next = safeNext(Array.isArray(sp.next) ? sp.next[0] : sp.next);
+  const user = await requireUser(
+    next ? `/me/settings/identity?next=${encodeURIComponent(next)}` : '/me/settings/identity',
+  );
   const enabled = await loadSettingFlag('identity_verification_enabled', true);
 
   let hasAvatar = false;
@@ -93,7 +107,11 @@ export default async function IdentityVerificationPage() {
             Add a profile photo first - identity verification needs both a photo and an ID.
           </p>
           <Link
-            href="/me/edit"
+            href={`/me/edit?next=${encodeURIComponent(
+              next
+                ? `/me/settings/identity?next=${encodeURIComponent(next)}`
+                : '/me/settings/identity',
+            )}`}
             className="text-primary inline-block font-semibold underline underline-offset-2"
           >
             Add a profile photo
@@ -101,7 +119,7 @@ export default async function IdentityVerificationPage() {
         </div>
       )}
 
-      {enabled && canSubmit && hasAvatar && <IdentityVerificationForm />}
+      {enabled && canSubmit && hasAvatar && <IdentityVerificationForm next={next} />}
     </div>
   );
 }

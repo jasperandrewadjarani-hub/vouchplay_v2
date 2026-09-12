@@ -7,6 +7,7 @@ import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
 import {
   getOrganizerRegistrations,
+  getOrganizerBareSlots,
   getClubOverrideParticipants,
 } from '@/lib/tournaments/registration-queries';
 import { isClosed, hasOpenSeat, hasUnconfirmedPartner } from '@/lib/tournaments/entry-view';
@@ -17,11 +18,13 @@ import { TournamentForm } from '@/components/tournaments/tournament-form';
 import { PaymentNotificationTestButton } from '@/components/tournaments/payment-notification-test-button';
 import { PaymentReceiptBackfillButton } from '@/components/tournaments/payment-receipt-backfill-button';
 import { emailChannelEnabled } from '@/lib/notifications/email';
+import { isSlotReservationsEnabled } from '@/lib/settings';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
 import { DivisionBuilder } from '@/components/tournaments/division-builder';
 import { AnnouncementForm } from '@/components/tournaments/announcement-form';
 import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manager';
 import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
+import { ReservedSlotsPanel } from '@/components/tournaments/reserved-slots-panel';
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
 import { isoToPhInput, isoToPhDateInput } from '@vouchplay/core';
@@ -90,13 +93,19 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t) notFound();
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
-  const [registrations, clubOverrideParticipants, pendingReceiptCount] = await Promise.all([
-    getOrganizerRegistrations(t.id),
-    getClubOverrideParticipants(t.id),
-    // §2AL: only meaningful once an organizer has saved a notification address - otherwise there is
-    // nothing to backfill into, so skip the read entirely.
-    t.paymentNotificationEmail ? getPendingReceiptNotificationCount(t.id) : Promise.resolve(0),
-  ]);
+  const [registrations, clubOverrideParticipants, pendingReceiptCount, bareSlots, slotsEnabled] =
+    await Promise.all([
+      getOrganizerRegistrations(t.id),
+      getClubOverrideParticipants(t.id),
+      // §2AL: only meaningful once an organizer has saved a notification address - otherwise there
+      // is nothing to backfill into, so skip the read entirely.
+      t.paymentNotificationEmail ? getPendingReceiptNotificationCount(t.id) : Promise.resolve(0),
+      // Reserved slots (master_plan §2AO A5/A6). Read defensively - `getOrganizerBareSlots` and its
+      // `tournament_slots` table arrive with migration 0042, so a pre-migration deploy degrades to
+      // "no reserved slots" instead of breaking Manage.
+      getOrganizerBareSlots(t.id).catch(() => []),
+      isSlotReservationsEnabled(),
+    ]);
   const overview = computeOverview(
     registrations.map((r) => ({
       divisionId: r.divisionId,
@@ -162,17 +171,20 @@ export default async function ManageTournamentPage({ params }: Params) {
       </ManageSection>
 
       <ManageSection title="Registrations">
-        <OrganizerRegistrations
-          tournamentId={t.id}
-          registrations={registrations}
-          eligibilityDivisions={t.divisions.map((d) => ({
-            id: d.id,
-            name: d.name,
-            format: d.format,
-            teamSize: d.teamSize,
-          }))}
-          divisions={divisionCapacity}
-        />
+        <div className="space-y-5">
+          <ReservedSlotsPanel tournamentId={t.id} slots={bareSlots} enabled={slotsEnabled} />
+          <OrganizerRegistrations
+            tournamentId={t.id}
+            registrations={registrations}
+            eligibilityDivisions={t.divisions.map((d) => ({
+              id: d.id,
+              name: d.name,
+              format: d.format,
+              teamSize: d.teamSize,
+            }))}
+            divisions={divisionCapacity}
+          />
+        </div>
       </ManageSection>
 
       {/* Payment notifications (§2AK/§2AL) as its own visible section - the receipt-email actions were
@@ -247,6 +259,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             enforceSkillFloor: t.enforceSkillFloor,
             requireSkillVerified: t.requireSkillVerified,
             requireOrganizerApproval: t.requireOrganizerApproval,
+            allowPlayDownOneLevel: t.allowPlayDownOneLevel,
           }}
         />
       </ManageSection>

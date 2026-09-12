@@ -751,6 +751,11 @@ All authorization must be enforced server-side and through database row-level se
 
 ## 4.4 Coach Application, Review & Badge Flow (implementation contract, 2026-09-07)
 
+**v1.68 gate (master_plan §2AO G):** the application form opens only for a player with an APPROVED
+identity verification and a profile photo. Otherwise Me → Roles → Become a Coach shows a two-step gate
+(1. Verify your ID, 2. Add a profile photo) whose buttons return to the application when done; the
+submit action enforces the same two facts server-side.
+
 Coach is an **approved global role**, never a self-declared profile label. Identity Verified, Skill
 Verified, and Coach are separate facts; none implies another.
 
@@ -1130,6 +1135,12 @@ without presenting an explicit popularity leaderboard.
 
 ## 9.1 Profile Header
 
+**v1.68 (master_plan §2AO D/E):** the Community Skill Level chip and the Self-Rated Skill chip are shown
+TOGETHER (community first) on the full profile; cards keep one chip. A player with at least one active
+coach-weighted vouch carries a "Coach-vouched" chip (medal). Admin `profile_show_community_skill = false`
+hides the community chip from other players (profile and cards; they see the self-rated chip instead);
+the owner and staff still see it.
+
 Show:
 - Avatar.
 - Name.
@@ -1163,6 +1174,11 @@ Contextual actions:
 - Block.
 
 ## 9.2 Skill Distribution
+
+**v1.68 (master_plan §2AO D3/E):** built for coach vouches: the avatars of coaches whose vouch is
+public (every coach vouch from v1.68 on) appear on the band row they vouched, each linking to the coach.
+Anonymous vouchers still show nothing. Admin `profile_show_vouch_meter = false` hides this whole section
+from everyone except staff, the profile owner included.
 
 Show vouch distribution by skill band.
 
@@ -1247,6 +1263,10 @@ Skill tags are not part of the Community Skill Level calculation in V1.
 This is a core domain module and must be implemented with dedicated unit tests.
 
 ## 10.1 Vouch Form
+
+**v1.68 (master_plan §2AO D1):** with "Vouch as a Coach" ON, the anonymous toggle is forced OFF and
+disabled ("Coach vouches are always shown with your name"); the server stores `visibility = 'public'`
+for every coach-weighted vouch. A coach vouching as a player keeps the ordinary anonymous default.
 
 Fields:
 - Skill Level `required`.
@@ -2078,6 +2098,15 @@ Mixed Doubles default rule in V1:
 Genderless:
 - no sex restriction.
 
+## 18.7 Play one level down (v1.68, master_plan §2AO C)
+
+Tournament setting `allow_play_down_one_level` (default off). When the skill floor is enforced and
+this is on, a player whose effective skill is exactly ONE level above a division's maximum may enter
+it. The wizard shows the division as "One level below your skill" with the sentence: *"You're entering
+one level below your community-vouched skill. Your division is subject to the organizers' final skills
+assessment, and you may be moved to a different division to keep play fair for everyone."* and requires
+a tick. ELIG_V1.1 records `PLAYING_DOWN_ONE_LEVEL` as REVIEW so the organizer assesses the entry.
+
 ## 18.5 Age Rules
 
 Age is an independent eligibility rule.
@@ -2315,6 +2344,10 @@ Team consists of one player.
 `PAYMENT_PENDING → PAYMENT_SUBMITTED → UNDER_REVIEW → CONFIRMED`
 
 ## 21.3 Multiple Entries
+
+**v1.68 note:** `max_divisions_per_player` is still not enforced in code (audited in master_plan §2AO,
+finding 5); the live rule is one active team per player per division. Enforcement is deferred until
+after the Hermosa window.
 
 Allowed by default.
 
@@ -2590,6 +2623,29 @@ emailed yet (`payments.notification_sent_at IS NULL`, migration `0039`) - confir
 concurrency-limited, audited; used once to backfill the receipts uploaded before the feature existed. `notification_sent_at` is stamped on each successful send and cleared on a fresh
 (re)submission, so no address is ever double-emailed.
 
+## 24.6 Tournament slots - the seat as the unit of payment (v1.68, master_plan §2AO A)
+
+A **tournament slot** (`tournament_slots`, §36.28A) is one player's paid seat in one tournament. It is
+created at receipt submission and is either BARE (no division chosen yet - priced at the lowest
+per-player quote among open divisions, early bird applied at submission; it holds no division capacity)
+or ATTACHED to a registration (that player's seat on the team). A team receipt (`payments`) still pays
+every seat at once.
+
+An entry's money state is decided by one shared function (`summarizeEntryPayment`): per seat
+`paid | submitted | topup | declined | unpaid | empty`; overall `paid | partial | submitted | unpaid |
+declined | refunded` with `paidSeats / totalSeats`. **A registration is CONFIRMED only when fully
+paid** (a verified team receipt, or a verified seat for every one of `team_size` seats). One paid seat
+holds the team's slot (`payment_submitted`), exactly like a §21.5 solo entry.
+
+Slots follow the player: a partner joining with a bare slot has it attached automatically; one without
+is notified `seat_payment_due`; a player leaving an entry, or an entry closed by the organizer or
+withdrawn, detaches their slot (it becomes bare again). A player whose own seat is the only money on a
+solo entry may cancel it themselves and re-enter another division with the same slot.
+
+Organizers review team receipts, seat receipts and bare reservations with the same verify / reject /
+refund actions; a "Reserved slots" panel lists bare slots; the receipt email (§24.4.1) and its backfill
+include slot receipts. Feature flag `tournament_slot_reservations_enabled` (seeded true by 0042).
+
 ## 24.5 Future Gateway
 
 Backend must implement a `PaymentProvider` interface so a payment gateway can be added without changing registration domain logic.
@@ -2635,6 +2691,10 @@ Inputs:
 - division Skill Verified requirement.
 
 ## 25.4 Default Rules
+
+**v1.68 (ELIG_V1.1):** when the tournament allows one level down (§18.7), a community skill exactly one
+level above the division maximum yields `REVIEW` with reason `PLAYING_DOWN_ONE_LEVEL` instead of
+`SKILL_MISMATCH`.
 
 If community skill is within band and evidence threshold is met:
 `ELIGIBLE`
@@ -4501,6 +4561,35 @@ updated_at
 
 ---
 
+## 36.28A `tournament_slots` (v1.68)
+
+```text
+id uuid
+tournament_id
+player_id
+registration_id nullable (on delete set null) - null = bare slot
+division_id nullable (informational: division chosen at purchase)
+status enum payment_status (submitted,verified,rejected,refunded)
+amount_due
+amount_submitted
+currency
+method
+payer_name
+transaction_reference
+proof_storage_path PRIVATE/controlled (payment-proofs bucket)
+early_bird_applied
+submitted_at
+verified_by
+verified_at
+rejection_reason
+notification_sent_at
+created_at
+updated_at
+-- partial unique: one live bare slot per (tournament_id, player_id); one live attached slot per (registration_id, player_id)
+```
+
+---
+
 ## 36.29 `waitlist_entries`
 
 ```text
@@ -6289,6 +6378,34 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.68 (2026-09-12)
+
+_Tournament slots (pay per seat, reserve before choosing a division), the step-by-step registration
+wizard, an organizer "one level below" allowance with organizer assessment, coach vouches surfaced on
+the profile, Admin profile-visibility toggles, and a coach-application gate (master_plan §2AO).
+Migration `0042` (additive; safe during the open window)._
+
+- **Tournament slots (§24.6, §36.28A):** a player can pay for their OWN seat - with a partner, with an
+  open seat, or with no division chosen yet (a bare slot at the lowest per-player price). A team entry
+  is CONFIRMED only when it is fully paid: a verified team receipt, or a verified seat for every seat.
+  Partially paid entries are shown as such to the player, the partner (who is told to settle) and the
+  organizer; slots detach and follow the player when they leave an entry or it is closed. Organizer
+  review covers team receipts, seat receipts and bare reservations with the same actions; the receipt
+  email and backfill include them.
+- **Registration wizard (§19.2, §21.1, §23.1):** one modal, one decision per screen - Division (with
+  "choose later") → Partner (with "choose later") → Pay (my seat / whole team / pay later, with the
+  honest hold warning) → Receipt → Done. Replaces the three inline entry forms; the division list keeps
+  one "Enter" per row. The "looking for partner" toggle is gone from the division dropdown.
+- **Play one level down (§18.7, §25.4):** `allow_play_down_one_level` per tournament; the fit gates
+  accept exactly one level below; ELIG_V1.1 records `PLAYING_DOWN_ONE_LEVEL` as REVIEW so the entry is
+  assessed by the organizer, and the player is told so in the same words before entering.
+- **Coach vouches (§9.1, §9.2, §10.1):** always attributed when the coach toggle is on; a
+  "Coach-vouched" chip on the profile and cards; coach avatars on the distribution row they vouched;
+  community and self-rated chips shown side by side on the full profile. Weights unchanged.
+- **Admin toggles (§36.39):** `profile_show_vouch_meter`, `profile_show_community_skill`,
+  `tournament_slot_reservations_enabled` (seeded true by 0042; code default false).
+- **Coach application gate (§4.4):** approved ID and a profile photo required, walked through in order.
 
 ## v1.67 (2026-09-12)
 

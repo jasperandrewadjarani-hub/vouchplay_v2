@@ -15,6 +15,18 @@ export interface OverviewRegInput {
   hasOpenSeat?: boolean;
   /** A named partner has not confirmed yet. */
   partnerUnconfirmed?: boolean;
+  /** `paymentSummary.fullyPaid` (master_plan §2AO A2/A6) - the shared team-receipt + attached-seats
+   *  verdict, not just this row's own team-scope `paymentStatus`. Drives `fullyPaidTeams`. */
+  fullyPaid?: boolean;
+}
+
+/** One attached-or-bare `tournament_slots` row, for the revenue tile (master_plan §2AO A6). Bare
+ *  reservations have no registration, so they cannot travel through `OverviewRegInput`. Mirrors the
+ *  existing team-payment convention below: a verified row's `amountDue` IS the revenue it collected. */
+export interface OverviewSlotInput {
+  status: string;
+  amountDue: number | null;
+  currency: string | null;
 }
 
 export interface OverviewDivisionInput {
@@ -35,11 +47,13 @@ export interface OrganizerOverview {
   paymentsToReview: number; // proof submitted, awaiting organizer verification
   waitlistCount: number;
   eligibilityReviewCount: number; // review + skill_mismatch + hard-rule
-  revenueCollected: number; // sum of verified payment amounts
+  revenueCollected: number; // sum of verified payment amounts + verified slot amounts (§2AO A6)
   currency: string | null;
   nearingCapacity: DivisionCapacity[]; // >= 80% of capacity
   /** Active (non-terminal) entries with an open seat OR an unconfirmed partner (master_plan §2AM). */
   incompleteTeams: number;
+  /** Active (non-terminal) entries whose `paymentSummary.fullyPaid` is true (master_plan §2AO A6). */
+  fullyPaidTeams: number;
 }
 
 const TERMINAL = new Set(['withdrawn', 'cancelled', 'rejected']);
@@ -48,9 +62,16 @@ const SLOT_HOLDING = new Set(['confirmed', 'payment_submitted', 'under_review', 
 const ELIGIBILITY_REVIEW = new Set(['review', 'skill_mismatch', 'ineligible_hard_rule']);
 const NEARING_THRESHOLD = 0.8;
 
+/**
+ * §2AO A6: `slots` is a separate, optional list rather than a field on `OverviewRegInput` because a
+ * BARE reservation (no division, no registration yet) still counts toward revenue but cannot travel
+ * through a per-registration input. Defaults to `[]` so a caller not yet passing slot data keeps
+ * getting exactly today's team-payment-only revenue figure.
+ */
 export function computeOverview(
   registrations: OverviewRegInput[],
   divisions: OverviewDivisionInput[],
+  slots: OverviewSlotInput[] = [],
 ): OrganizerOverview {
   let confirmedTeams = 0;
   let paymentsToReview = 0;
@@ -60,12 +81,14 @@ export function computeOverview(
   let totalRegistrations = 0;
   let currency: string | null = null;
   let incompleteTeams = 0;
+  let fullyPaidTeams = 0;
 
   const activeByDivision = new Map<string, number>();
 
   for (const r of registrations) {
     if (!TERMINAL.has(r.status)) totalRegistrations++;
     if (!TERMINAL.has(r.status) && (r.hasOpenSeat || r.partnerUnconfirmed)) incompleteTeams++;
+    if (!TERMINAL.has(r.status) && r.fullyPaid) fullyPaidTeams++;
     if (r.status === 'confirmed') confirmedTeams++;
     if (r.status === 'waitlisted') waitlistCount++;
     if (r.paymentStatus === 'submitted') paymentsToReview++;
@@ -78,6 +101,13 @@ export function computeOverview(
     }
     if (SLOT_HOLDING.has(r.status)) {
       activeByDivision.set(r.divisionId, (activeByDivision.get(r.divisionId) ?? 0) + 1);
+    }
+  }
+
+  for (const s of slots) {
+    if (s.status === 'verified' && s.amountDue != null) {
+      revenueCollected += s.amountDue;
+      if (!currency && s.currency) currency = s.currency;
     }
   }
 
@@ -100,5 +130,6 @@ export function computeOverview(
     currency,
     nearingCapacity,
     incompleteTeams,
+    fullyPaidTeams,
   };
 }

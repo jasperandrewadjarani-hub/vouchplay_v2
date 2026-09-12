@@ -24,12 +24,13 @@ describe('evaluateDivisionFit - sex classification', () => {
     expect(evaluateDivisionFit(input({ playerSex: 'female' }))).toEqual({
       fits: false,
       reason: 'sex',
+      playingDown: false,
     });
   });
 
   it("keeps a man out of a women's division", () => {
     const r = evaluateDivisionFit(input({ sexClassification: 'women' }));
-    expect(r).toEqual({ fits: false, reason: 'sex' });
+    expect(r).toEqual({ fits: false, reason: 'sex', playingDown: false });
   });
 
   it('lets anyone into a mixed division when no partner is being checked against', () => {
@@ -44,7 +45,7 @@ describe('evaluateDivisionFit - sex classification', () => {
     const r = evaluateDivisionFit(
       input({ sexClassification: 'mixed', playerSex: 'male', partnerSex: 'male' }),
     );
-    expect(r).toEqual({ fits: false, reason: 'mixed_pair' });
+    expect(r).toEqual({ fits: false, reason: 'mixed_pair', playingDown: false });
   });
 
   it('lets an opposite-sex mixed pair through', () => {
@@ -59,7 +60,7 @@ describe('evaluateDivisionFit - sex classification', () => {
     const r = evaluateDivisionFit(
       input({ sexClassification: 'mixed', playerSex: null, partnerSex: 'male' }),
     );
-    expect(r).toEqual({ fits: false, reason: 'sex_unknown' });
+    expect(r).toEqual({ fits: false, reason: 'sex_unknown', playingDown: false });
   });
 
   it('singles ignores partnerSex - there is no partner to pair against', () => {
@@ -98,7 +99,7 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
     const r = evaluateDivisionFit(
       input({ effectiveSkill: 3, divisionMinimumSkill: 4, divisionMaximumSkill: 4 }),
     );
-    expect(r).toEqual({ fits: true, reason: null });
+    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
   });
 
   it('lets a player enter a division far above their level', () => {
@@ -117,6 +118,7 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
     expect(evaluateDivisionFit(input({ effectiveSkill: 4 }))).toEqual({
       fits: false,
       reason: 'skill_too_high',
+      playingDown: false,
     });
   });
 
@@ -154,6 +156,73 @@ describe('evaluateDivisionFit - skill: up is allowed, down is not', () => {
     expect(evaluateDivisionFit(input({ playerSex: 'female', effectiveSkill: 5 })).reason).toBe(
       'sex',
     );
+  });
+});
+
+describe('evaluateDivisionFit - play down one level (§2AO decision C)', () => {
+  it('lets a player exactly one level above the max in when the toggle is on, flagged playingDown', () => {
+    // division max is 2 (from input()'s default), so 3 is exactly one level above.
+    const r = evaluateDivisionFit(input({ effectiveSkill: 3, allowPlayDownOneLevel: true }));
+    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
+  });
+
+  it('does not let a player one level above in when the toggle is off', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 3, allowPlayDownOneLevel: false }));
+    expect(r).toEqual({ fits: false, reason: 'skill_too_high', playingDown: false });
+  });
+
+  it('refuses a player two levels above even with the toggle on', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 4, allowPlayDownOneLevel: true }));
+    expect(r).toEqual({ fits: false, reason: 'skill_too_high', playingDown: false });
+  });
+
+  it('the toggle never widens further than one level - three levels above still refused', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 5, allowPlayDownOneLevel: true }));
+    expect(r.fits).toBe(false);
+  });
+
+  it('a player AT the max is not "playing down" even with the toggle on', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 2, allowPlayDownOneLevel: true }));
+    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+  });
+
+  it('the toggle does nothing when the skill floor is not enforced (already unrestricted)', () => {
+    const r = evaluateDivisionFit(
+      input({ effectiveSkill: 3, allowPlayDownOneLevel: true, enforceSkillFloor: false }),
+    );
+    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
+  });
+
+  it('with the floor OFF, a player above the max still fits but is flagged playingDown', () => {
+    // Same scenario the master plan calls out: skill never blocks with the floor off, but the UI
+    // still needs to know to show the assessment warning.
+    const r = evaluateDivisionFit(input({ effectiveSkill: 4, enforceSkillFloor: false }));
+    expect(r).toEqual({ fits: true, reason: null, playingDown: true });
+  });
+
+  it('with the floor OFF, a player at or below the max is not flagged playingDown', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: 2, enforceSkillFloor: false }));
+    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+  });
+
+  it('an unknown skill is never flagged playingDown, toggle or not', () => {
+    const r = evaluateDivisionFit(input({ effectiveSkill: null, allowPlayDownOneLevel: true }));
+    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+  });
+
+  it('open policy is never flagged playingDown regardless of skill', () => {
+    const r = evaluateDivisionFit(
+      input({ skillPolicy: 'open', effectiveSkill: 9, allowPlayDownOneLevel: true }),
+    );
+    expect(r).toEqual({ fits: true, reason: null, playingDown: false });
+  });
+
+  it('sex still takes precedence over the play-down flag', () => {
+    const r = evaluateDivisionFit(
+      input({ playerSex: 'female', effectiveSkill: 3, allowPlayDownOneLevel: true }),
+    );
+    expect(r.reason).toBe('sex');
+    expect(r.playingDown).toBe(false);
   });
 });
 

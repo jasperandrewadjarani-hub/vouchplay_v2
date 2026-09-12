@@ -49,6 +49,7 @@ export const HARD_RULE_LABELS: Record<HardRuleCode, string> = {
 
 export const REASON_LABELS: Record<EligibilityReasonCode, string> = {
   SKILL_ABOVE_DIVISION_MAX: 'Community skill is above the division maximum',
+  PLAYING_DOWN_ONE_LEVEL: 'Entered one level below their skill - assess before confirming',
   STS_BELOW_REQUIRED: 'Skill-Trust Score is below the division requirement',
   LOW_CONFIDENCE: 'Skill-Trust Score is still building (lower confidence)',
   INSUFFICIENT_EVIDENCE: 'Not many vouches yet',

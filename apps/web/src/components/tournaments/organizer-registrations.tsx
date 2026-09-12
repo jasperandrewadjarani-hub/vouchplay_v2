@@ -21,6 +21,9 @@ import {
   HARD_RULE_LABELS,
   REASON_LABELS,
   FLAG_LABELS,
+  type EntryPaymentSummary,
+  type SeatSummary,
+  type SeatState,
 } from '@vouchplay/core';
 import { confirmRegistration, rejectRegistration } from '@/lib/actions/registration';
 import {
@@ -400,6 +403,10 @@ export function OrganizerRegistrations({
             options={[
               { value: 'has_proof' as const, label: 'Has receipt' },
               { value: 'no_proof' as const, label: 'No receipt' },
+              // Seat-level payment states (master_plan §2AO A6) - on top of the older
+              // has-a-receipt/no-receipt pair, so an organizer can find "still owes a top-up" teams.
+              { value: 'partial' as const, label: 'Partially paid' },
+              { value: 'paid' as const, label: 'Fully paid' },
             ]}
             selected={filters.payment}
             onToggle={(p) => setFilters((f) => ({ ...f, payment: toggleIn(f.payment, p) }))}
@@ -465,6 +472,9 @@ const TONE_STYLES: Record<StatusChip['tone'], string> = {
 // breach first, "still building / not many vouches" confidence notes last.
 const REASON_PRIORITY = [
   'SKILL_ABOVE_DIVISION_MAX',
+  // Play-one-level-down (master_plan §2AO C, ELIG_V1.1): a REVIEW result, not a hard mismatch, but
+  // still an "assess before confirming" ask - ranked right after an outright skill-cap breach.
+  'PLAYING_DOWN_ONE_LEVEL',
   'STS_BELOW_REQUIRED',
   'SKILL_VERIFIED_REQUIRED_MISSING',
   'AGE_UNKNOWN',
@@ -472,6 +482,21 @@ const REASON_PRIORITY = [
   'INSUFFICIENT_EVIDENCE',
   'LOW_CONFIDENCE',
 ];
+
+/**
+ * Fallback labels for reason codes not yet in the shared `@vouchplay/core` map (master_plan §2AO
+ * Decision C: `PLAYING_DOWN_ONE_LEVEL` ships from the core/eligibility lane built in parallel with
+ * this one). Merged in ahead of `REASON_LABELS` so this screen reads correctly whether or not that
+ * lane has landed yet; once it does, the two copies should read the same and this entry becomes an
+ * inert duplicate rather than a missing label.
+ */
+const REASON_LABEL_FALLBACK: Record<string, string> = {
+  PLAYING_DOWN_ONE_LEVEL: 'Entered one level below their skill - assess before confirming',
+};
+
+function reasonLabel(code: string): string {
+  return REASON_LABELS[code as keyof typeof REASON_LABELS] ?? REASON_LABEL_FALLBACK[code] ?? code;
+}
 
 /**
  * Plain-language reasons a registration is flagged, for the LIST row (§2AD) - so an organizer sees
@@ -499,7 +524,7 @@ function eligibilityReasonLines(entry: OrganizerRegistration): string[] {
     }
     const code =
       REASON_PRIORITY.find((c) => (p.reasonCodes ?? []).includes(c)) ?? (p.reasonCodes ?? [])[0];
-    const label = code ? REASON_LABELS[code as keyof typeof REASON_LABELS] : undefined;
+    const label = code ? reasonLabel(code) : undefined;
     if (label) add(label, name);
   }
   return [...byReason.entries()].map(([label, names]) => `${names.join(', ')} — ${label}`);
@@ -699,80 +724,18 @@ function RegRow({
         </div>
       )}
 
-      {/* Payment review (§24.4) */}
-      {reg.paymentId && (
-        <div className="border-border mt-2 rounded-lg border border-dashed p-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-foreground-muted text-xs">
-              Payment:{' '}
-              <span className="text-foreground font-medium">
-                {reg.paymentStatus?.replace(/_/g, ' ')}
-              </span>
-              {reg.amountDue != null && reg.currency && (
-                <span>
-                  {' '}
-                  · {reg.currency} {reg.amountDue.toLocaleString()}
-                </span>
-              )}
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {reg.hasProof && (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    start(async () => {
-                      const res = await getProofSignedUrl(reg.paymentId as string);
-                      if (res.url) window.open(res.url, '_blank', 'noopener');
-                      else setMsg(res.error ?? 'Could not open proof.');
-                    })
-                  }
-                  className={`${btn} border-border text-foreground border`}
-                >
-                  View proof
-                </button>
-              )}
-              {reg.paymentStatus === 'submitted' && (
-                <>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => run(() => verifyPayment(reg.paymentId as string, tournamentId))}
-                    className={`${btn} vp-gradient text-white`}
-                  >
-                    Verify
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => {
-                      const why = prompt('Reason for rejecting this payment?');
-                      if (why && why.trim())
-                        run(() => rejectPayment(reg.paymentId as string, tournamentId, why.trim()));
-                    }}
-                    className={`${btn} text-danger border-border border`}
-                  >
-                    Reject payment
-                  </button>
-                </>
-              )}
-              {reg.paymentStatus === 'verified' && (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    if (confirm('Mark this payment refunded?'))
-                      run(() => markRefunded(reg.paymentId as string, tournamentId, ''));
-                  }}
-                  className={`${btn} border-border text-foreground border`}
-                >
-                  Mark refunded
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Payments (master_plan §2AO A6) - the team receipt, if any, plus one line per seat with its
+          own Verify / Reject / Refund. Replaces the single team-only payment block: money can now
+          arrive as one team receipt OR as any number of per-seat receipts (§2AO A2). */}
+      <PaymentsBlock
+        reg={reg}
+        tournamentId={tournamentId}
+        pending={pending}
+        start={start}
+        run={run}
+        setMsg={setMsg}
+        nameById={nameById}
+      />
 
       {/* Cancellation request (§1Y, §2L) - the reason was fetched but never shown, so the organizer
           could see "Cancellation asked" without knowing why. Now the player's own words are here. */}
@@ -819,6 +782,301 @@ function RegRow({
       )}
 
       {msg && <p className="text-foreground-muted mt-1 text-xs">{msg}</p>}
+    </div>
+  );
+}
+
+/** A running server-action call that does not itself resolve to an `ActionResult` (e.g. fetching a
+ *  signed proof URL) - `run`'s wrapper only fits actions that report ok/error/message. */
+type StartTransition = (fn: () => void) => void;
+
+const SEAT_STATE_LABELS: Record<SeatState, string> = {
+  paid: 'Paid',
+  submitted: 'Receipt sent',
+  topup: 'Top-up needed',
+  declined: 'Declined',
+  unpaid: 'Not paid',
+  empty: 'Empty',
+};
+
+const SEAT_STATE_TONE: Record<SeatState, string> = {
+  paid: 'text-success',
+  submitted: 'text-warning',
+  topup: 'text-warning',
+  declined: 'text-danger',
+  unpaid: 'text-foreground-muted',
+  empty: 'text-foreground-muted',
+};
+
+/** The one-line summary at the top of the Payments block (master_plan §2AO A6). */
+function paymentSummaryLine(summary: EntryPaymentSummary): string {
+  if (summary.fullyPaid) return 'Fully paid';
+  if (summary.state === 'submitted') return 'Under review';
+  if (summary.paidSeats > 0) return `Paid ${summary.paidSeats} of ${summary.totalSeats} seats`;
+  return 'No receipt yet';
+}
+
+/**
+ * The team-scope receipt row - unchanged controls from before this batch (View proof / Verify /
+ * Reject / Refund), now explicit about `kind: 'team'` so the shared action family can also review
+ * per-seat slot receipts (master_plan §2AO A6).
+ */
+function TeamReceiptRow({
+  reg,
+  tournamentId,
+  pending,
+  start,
+  run,
+  setMsg,
+}: {
+  reg: OrganizerRegistration;
+  tournamentId: string;
+  pending: boolean;
+  start: StartTransition;
+  run: (fn: () => Promise<ActionResult>) => void;
+  setMsg: (m: string | null) => void;
+}) {
+  const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  return (
+    <div className="border-border rounded-lg border p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-foreground-muted text-xs">
+          Team receipt:{' '}
+          <span className="text-foreground font-medium">
+            {reg.paymentStatus?.replace(/_/g, ' ')}
+          </span>
+          {reg.amountDue != null && reg.currency && (
+            <span>
+              {' '}
+              · {reg.currency} {reg.amountDue.toLocaleString()}
+            </span>
+          )}
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {reg.hasProof && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const res = await getProofSignedUrl(reg.paymentId as string, 'team');
+                  if (res.url) window.open(res.url, '_blank', 'noopener');
+                  else setMsg(res.error ?? 'Could not open proof.');
+                })
+              }
+              className={`${btn} border-border text-foreground border`}
+            >
+              View proof
+            </button>
+          )}
+          {reg.paymentStatus === 'submitted' && (
+            <>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(() => verifyPayment(reg.paymentId as string, tournamentId, 'team'))
+                }
+                className={`${btn} vp-gradient text-white`}
+              >
+                Verify
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  const why = prompt('Reason for rejecting this payment?');
+                  if (why && why.trim())
+                    run(() =>
+                      rejectPayment(reg.paymentId as string, tournamentId, why.trim(), 'team'),
+                    );
+                }}
+                className={`${btn} text-danger border-border border`}
+              >
+                Reject payment
+              </button>
+            </>
+          )}
+          {reg.paymentStatus === 'verified' && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                if (confirm('Mark this payment refunded?'))
+                  run(() => markRefunded(reg.paymentId as string, tournamentId, '', 'team'));
+              }}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Mark refunded
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One seat's line in the Payments block: who (or "Open seat"), its state word, and - only when a
+ * slot receipt actually exists for that player - its own View proof / Verify / Reject / Refund,
+ * `kind: 'slot'` (master_plan §2AO A6).
+ */
+function SeatRow({
+  seat,
+  slot,
+  nameById,
+  currency,
+  tournamentId,
+  pending,
+  start,
+  run,
+  setMsg,
+}: {
+  seat: SeatSummary;
+  slot: OrganizerRegistration['slots'][number] | undefined;
+  nameById: Map<string, string>;
+  currency: string | null;
+  tournamentId: string;
+  pending: boolean;
+  start: StartTransition;
+  run: (fn: () => Promise<ActionResult>) => void;
+  setMsg: (m: string | null) => void;
+}) {
+  const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  const name = seat.playerId ? (nameById.get(seat.playerId) ?? 'Player') : 'Open seat';
+  const topupAmount = Math.max(0, seat.amountDue - seat.amountSubmitted);
+
+  return (
+    <li className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-foreground text-xs font-medium">{name}</span>
+        <span className={`text-xs font-semibold ${SEAT_STATE_TONE[seat.state]}`}>
+          {SEAT_STATE_LABELS[seat.state]}
+          {seat.state === 'topup' && ` (${currency ?? 'PHP'} ${topupAmount.toLocaleString()})`}
+        </span>
+      </div>
+      {slot && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {slot.hasProof && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const res = await getProofSignedUrl(slot.id, 'slot');
+                  if (res.url) window.open(res.url, '_blank', 'noopener');
+                  else setMsg(res.error ?? 'Could not open proof.');
+                })
+              }
+              className={`${btn} border-border text-foreground border`}
+            >
+              View proof
+            </button>
+          )}
+          {slot.status === 'submitted' && (
+            <>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => verifyPayment(slot.id, tournamentId, 'slot'))}
+                className={`${btn} vp-gradient text-white`}
+              >
+                Verify
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  const why = prompt('Reason for rejecting this seat payment?');
+                  if (why && why.trim())
+                    run(() => rejectPayment(slot.id, tournamentId, why.trim(), 'slot'));
+                }}
+                className={`${btn} text-danger border-border border`}
+              >
+                Reject
+              </button>
+            </>
+          )}
+          {slot.status === 'verified' && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                if (confirm('Mark this seat payment refunded?'))
+                  run(() => markRefunded(slot.id, tournamentId, '', 'slot'));
+              }}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Mark refunded
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * The organizer's whole money picture for one entry (master_plan §2AO A2/A6): a one-line summary,
+ * the team receipt if one exists, then every seat with its own review controls. Reads
+ * `paymentSummary`/`slots` defensively - both are additive fields on `OrganizerRegistration` landing
+ * from a parallel lane, so this renders nothing rather than crashing until they arrive.
+ */
+function PaymentsBlock({
+  reg,
+  tournamentId,
+  pending,
+  start,
+  run,
+  setMsg,
+  nameById,
+}: {
+  reg: OrganizerRegistration;
+  tournamentId: string;
+  pending: boolean;
+  start: StartTransition;
+  run: (fn: () => Promise<ActionResult>) => void;
+  setMsg: (m: string | null) => void;
+  nameById: Map<string, string>;
+}) {
+  const summary = reg.paymentSummary;
+  if (!summary) return null;
+  const slotByPlayer = new Map((reg.slots ?? []).map((s) => [s.playerId, s]));
+
+  return (
+    <div className="border-border mt-2 space-y-2.5 rounded-lg border border-dashed p-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-foreground text-xs font-semibold">Payments</span>
+        <span className="text-foreground-muted text-xs">{paymentSummaryLine(summary)}</span>
+      </div>
+
+      {reg.paymentId && (
+        <TeamReceiptRow
+          reg={reg}
+          tournamentId={tournamentId}
+          pending={pending}
+          start={start}
+          run={run}
+          setMsg={setMsg}
+        />
+      )}
+
+      <ul className="divide-border divide-y">
+        {summary.seats.map((seat, i) => (
+          <SeatRow
+            key={seat.playerId ?? `open-seat-${i}`}
+            seat={seat}
+            slot={seat.playerId ? slotByPlayer.get(seat.playerId) : undefined}
+            nameById={nameById}
+            currency={reg.currency}
+            tournamentId={tournamentId}
+            pending={pending}
+            start={start}
+            run={run}
+            setMsg={setMsg}
+          />
+        ))}
+      </ul>
     </div>
   );
 }
@@ -916,7 +1174,7 @@ function EligibilityPanel({
                       ))}
                       {p.reasonCodes.map((c) => (
                         <span key={c} className="text-warning text-[11px]">
-                          • {REASON_LABELS[c as keyof typeof REASON_LABELS] ?? c}
+                          • {reasonLabel(c)}
                         </span>
                       ))}
                       {p.flags.map((c) => (

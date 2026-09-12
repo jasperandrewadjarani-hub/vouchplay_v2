@@ -41,6 +41,9 @@ export interface TournamentFormInitial {
   enforceSkillFloor?: boolean;
   requireSkillVerified?: boolean;
   requireOrganizerApproval?: boolean;
+  /** Play one level down (migration 0042, master_plan §2AO C). Only meaningful alongside
+   *  `enforceSkillFloor`; the checkbox is nested under it in the form. */
+  allowPlayDownOneLevel?: boolean;
 }
 
 const textarea =
@@ -230,6 +233,25 @@ export function TournamentForm({
               </span>
               <span className="text-foreground-muted block text-xs">
                 Players cannot join a division below their skill level. Recommended.
+              </span>
+            </span>
+          </label>
+          {/* Play one level down (master_plan §2AO C) - nested under the floor rule above, since it
+              only has an effect when that rule is on. */}
+          <label className="ml-6 flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="allowPlayDownOneLevel"
+              defaultChecked={initial.allowPlayDownOneLevel ?? false}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">
+                Allow players one level below their skill to enter
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                They see a warning that their division is subject to your final skills assessment,
+                and the entry lands in Needs review.
               </span>
             </span>
           </label>

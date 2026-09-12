@@ -257,7 +257,10 @@ export async function updateProfile(
 
   revalidateTag(PLAYERS_LIST_TAG);
   if (savedSlug) revalidateTag(playerTag(savedSlug));
-  redirect('/me?profile=updated');
+  // master_plan §2AO decision 9: a caller (e.g. the Coach application gate) can send the player here
+  // with `?next=` to resume somewhere specific after saving - same-origin only, default unchanged.
+  const next = safeNext(formData.get('next') as string | null);
+  redirect(next ?? '/me?profile=updated');
 }
 
 type AvailabilityResult = { ok?: boolean; error?: string; value?: boolean };

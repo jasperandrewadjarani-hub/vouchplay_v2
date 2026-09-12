@@ -2,18 +2,33 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Download, Clock, ShieldCheck } from 'lucide-react';
-import { submitPayment, type PaymentActionState } from '@/lib/actions/payment';
+import { Download, ShieldCheck } from 'lucide-react';
+import {
+  submitPayment,
+  submitSeatPayment,
+  submitSlotReservation,
+  type PaymentActionState,
+} from '@/lib/actions/payment';
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
-import { Modal } from '@/components/ui/modal';
+import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
+import { RegistrationWizard } from './registration-wizard';
+import type { WizardTournament } from './wizard/types';
 
 const empty: PaymentActionState = {};
 
+/** What is being paid for (master_plan §2AO A2/B) - the ONE thing that decides which server action a
+ *  receipt posts to. `team` pays every seat at once; `seat` pays only the payer's own seat; `reservation`
+ *  is a bare slot with no division chosen yet. */
+export type PaymentMode = 'team' | 'seat' | 'reservation';
+
 export interface PaymentDetails {
-  registrationId: string;
+  mode: PaymentMode;
+  /** Null only for `reservation` - a bare slot has no registration yet. */
+  registrationId: string | null;
   tournamentId: string;
-  divisionName: string;
+  /** Null for `reservation` - there is no division yet. */
+  divisionName: string | null;
   amountDue: number;
   perPlayer?: number | null;
   teamSize?: number;
@@ -24,19 +39,24 @@ export interface PaymentDetails {
   paymentStatus: string | null;
   rejectionReason: string | null;
   paymentQrUrl: string | null;
-  slotHoldMinutes?: number;
 }
 
 /**
- * Payment as a centered modal (master_plan §2K).
- *
- * Payment is the LAST step of registering, so it gets its own focused surface instead of being poured
- * inline into the My-registrations list. The modal portals to document.body (shared Modal, §1X), so
- * it floats center-screen over whatever opened it - the division browser after "Enter and pay", or a
- * "Pay now" button in My registrations - and the page behind it never looks like it failed or reset.
+ * The receipt form itself (master_plan §2AO B, Receipt step) - amount headline, QR + save, payment
+ * instructions/methods, and the method/payer/reference/proof form. Generalised with `mode` so the
+ * same body posts a team payment, a seat payment, or a bare-slot reservation: the wizard's Receipt
+ * step is the only caller now, and it decides which of the three this is.
  */
-function PaymentModalBody({ details, onClose }: { details: PaymentDetails; onClose: () => void }) {
+export function PaymentModalBody({
+  details,
+  onSuccess,
+}: {
+  details: PaymentDetails;
+  /** Fired once the receipt is recorded (after `router.refresh()`); the wizard moves to Done. */
+  onSuccess: () => void;
+}) {
   const {
+    mode,
     registrationId,
     tournamentId,
     amountDue,
@@ -49,21 +69,25 @@ function PaymentModalBody({ details, onClose }: { details: PaymentDetails; onClo
     paymentStatus,
     rejectionReason,
     paymentQrUrl,
-    slotHoldMinutes = 30,
   } = details;
   const router = useRouter();
-  const [payingLater, setPayingLater] = useState(false);
-  const action = submitPayment.bind(null, registrationId, tournamentId);
+  const action =
+    mode === 'team'
+      ? submitPayment.bind(null, registrationId as string, tournamentId)
+      : mode === 'seat'
+        ? submitSeatPayment.bind(null, registrationId as string, tournamentId)
+        : submitSlotReservation.bind(null, tournamentId);
   const [state, formAction] = useActionState(action, empty);
 
-  // On a successful receipt submission the entry flips to "under review": close and refresh so the
-  // list shows the new state instead of the payment form.
+  // On a successful receipt submission, refresh so the rest of the page reflects the new state, then
+  // let the wizard move on to Done.
   useEffect(() => {
     if (state.ok) {
       router.refresh();
-      onClose();
+      onSuccess();
     }
-  }, [state.ok, router, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.ok, router]);
 
   return (
     <div className="space-y-3">
@@ -71,10 +95,20 @@ function PaymentModalBody({ details, onClose }: { details: PaymentDetails; onClo
         <p className="text-foreground text-xl font-bold">
           Send {currency} {amountDue.toLocaleString()}
         </p>
-        {perPlayer != null && teamSize > 1 && (
+        {mode === 'team' && perPlayer != null && teamSize > 1 && (
           <p className="text-foreground-muted mt-0.5 text-xs">
             {currency} {perPlayer.toLocaleString()} per player x {teamSize} players
             {earlyBird ? ' (early bird price)' : ''}
+          </p>
+        )}
+        {mode === 'seat' && (
+          <p className="text-foreground-muted mt-0.5 text-xs">
+            Your seat{earlyBird ? ' (early bird price)' : ''}
+          </p>
+        )}
+        {mode === 'reservation' && (
+          <p className="text-foreground-muted mt-0.5 text-xs">
+            Reserves your place in the tournament{earlyBird ? ' (early bird price)' : ''}
           </p>
         )}
       </div>
@@ -151,63 +185,26 @@ function PaymentModalBody({ details, onClose }: { details: PaymentDetails; onClo
         </Field>
         <SubmitButton pendingLabel="Submitting…">Submit payment proof</SubmitButton>
       </form>
-
-      {/* Leaving without paying is allowed, but it is a real decision with a consequence, so it is a
-          deliberate two-step rather than a silent close (§2J). */}
-      <div className="border-border border-t pt-3">
-        {payingLater ? (
-          <div className="border-warning/40 bg-warning/10 rounded-lg border p-2.5">
-            <p className="text-foreground flex items-start gap-1.5 text-sm font-semibold">
-              <Clock size={14} className="text-warning mt-0.5 shrink-0" aria-hidden />
-              Your slot is not confirmed until you pay
-            </p>
-            <p className="text-foreground-muted mt-1 text-xs leading-relaxed">
-              This entry holds your place for about {slotHoldMinutes} minutes. After that the slot
-              can go to someone else, and it is only locked in once you pay and the organizer
-              verifies it. You can come back and pay any time from My registrations.
-            </p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setPayingLater(false)}
-                className="vp-gradient inline-flex min-h-[44px] items-center rounded-xl px-4 text-sm font-semibold text-white"
-              >
-                Keep paying
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="border-border text-foreground-muted hover:text-foreground inline-flex min-h-[44px] items-center rounded-xl border px-4 text-sm font-medium"
-              >
-                Yes, I&rsquo;ll pay later
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setPayingLater(true)}
-            className="border-border text-foreground-muted hover:text-foreground hover:bg-surface-muted inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border text-sm font-medium transition-colors"
-          >
-            I&rsquo;ll pay later
-          </button>
-        )}
-      </div>
     </div>
   );
 }
 
 /**
- * "Pay now to secure your slot" - the single control a pending entry shows in My registrations, and
- * the thing "Enter and pay" flows into. It owns the modal's open state so the list stays a list.
+ * "Pay now to secure your slot" - the single control an unpaid entry shows in My registrations. It
+ * opens the registration wizard at the Pay step for this registration (master_plan §2AO B) instead of
+ * its own modal, so seat-vs-team and the receipt form live in the one place every entry point shares.
  * `autoOpen` is set for the entry the player just created, so payment appears the instant the page
- * settles after "Proceeding to payment…" - no vanished form, no five-second gap (§2K).
+ * settles - no vanished form, no five-second gap (§2K).
  */
 export function PayNowCell({
-  details,
+  tournament,
+  state,
+  registrationId,
   autoOpen = false,
 }: {
-  details: PaymentDetails;
+  tournament: WizardTournament;
+  state: ViewerRegistrationState;
+  registrationId: string;
   autoOpen?: boolean;
 }) {
   const [open, setOpen] = useState(autoOpen);
@@ -222,14 +219,12 @@ export function PayNowCell({
         Pay now to secure your slot
       </button>
       {open && (
-        <Modal
-          title="Pay to secure your slot"
-          subtitle={details.divisionName}
-          align="center"
+        <RegistrationWizard
+          tournament={tournament}
+          state={state}
+          initial={{ step: 'pay', registrationId }}
           onClose={() => setOpen(false)}
-        >
-          <PaymentModalBody details={details} onClose={() => setOpen(false)} />
-        </Modal>
+        />
       )}
     </div>
   );

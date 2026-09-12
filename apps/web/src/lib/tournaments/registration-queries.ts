@@ -1,7 +1,22 @@
 import 'server-only';
-import { partnerLockEffectiveAt, isPartnerLockPassed } from '@vouchplay/core';
+import {
+  partnerLockEffectiveAt,
+  isPartnerLockPassed,
+  quoteSlotPrice,
+  summarizeEntryPayment,
+  type SlotPriceQuote,
+  type EntryPaymentSummary,
+  type SeatState,
+} from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
+import { isSlotReservationsEnabled } from '@/lib/settings';
+import {
+  summarizeRegistration,
+  getSlotsByRegistration,
+  getLatestBareSlot,
+  getOrganizerSlots,
+} from '@/lib/payments/slots';
 import { divisionName } from './dto';
 import { getPartnerLockAt } from './queries';
 
@@ -88,6 +103,11 @@ export interface ViewerRegistration {
   paymentId: string | null;
   paymentStatus: string | null;
   paymentRejectionReason: string | null;
+  /** The shared money-state verdict for this entry (master_plan §2AO A2). Null only when the
+   *  registration itself could not be read back (should not happen for a row already in hand). */
+  paymentSummary: EntryPaymentSummary | null;
+  /** This viewer's own seat state within `paymentSummary`, or null when they hold no seat in it. */
+  mySeat: SeatState | null;
 }
 export interface ViewerInvitation {
   id: string;
@@ -144,6 +164,24 @@ export interface ViewerRegistrationState {
   /** Tournament status in (registration_open, registration_closed) AND now < the effective lock.
    *  Registration close does NOT gate partner actions - only this flag does. */
   partnerChangesOpen: boolean;
+  /** `tournament_slot_reservations_enabled` (master_plan §2AO A1). */
+  slotsEnabled: boolean;
+  /** The viewer's own bare (no-division-yet) reservation: live first, else the newest rejected one -
+   *  so a declined reservation can still say "Declined - pay again". Null when they have none, or
+   *  when `slotsEnabled` is false. */
+  bareSlot: {
+    id: string;
+    status: string;
+    amountDue: number;
+    amountSubmitted: number | null;
+    currency: string;
+    rejectionReason: string | null;
+    submittedAt: string | null;
+  } | null;
+  /** The cheapest per-player quote among the tournament's open, fee-charging divisions - what a bare
+   *  reservation costs right now. Null when no open division charges a fee, or `slotsEnabled` is
+   *  false. */
+  slotPrice: SlotPriceQuote | null;
 }
 
 export async function getViewerRegistrationState(
@@ -389,19 +427,53 @@ export async function getViewerRegistrationState(
         paymentId: pay?.id ?? null,
         paymentStatus: pay?.status ?? null,
         paymentRejectionReason: pay?.rejection_reason ?? null,
+        paymentSummary: null,
+        mySeat: null,
       };
     }
+
+    // §2AO A2: one shared money-state verdict per registration, and this viewer's own seat within it.
+    // Bounded by the number of divisions this viewer has entered - never a tournament-wide scan.
+    await Promise.all(
+      Object.values(registrationsByDivision).map(async (r) => {
+        const summary = await summarizeRegistration(r.id);
+        r.paymentSummary = summary;
+        r.mySeat = summary?.seats.find((s) => s.playerId === userId)?.state ?? null;
+      }),
+    );
   }
+
+  // §2AO A1/A5: read once, reused by the QR-eligibility check below and the bare-slot/price fields
+  // returned at the end of this function.
+  const slotsEnabled = await isSlotReservationsEnabled();
+  const { data: tournStatusRow } = await svc
+    .from('tournaments')
+    .select('status, start_at, early_bird_starts_at, early_bird_ends_at')
+    .eq('id', tournamentId)
+    .maybeSingle();
+  const tournStatus = tournStatusRow as {
+    status: string;
+    start_at: string | null;
+    early_bird_starts_at: string | null;
+    early_bird_ends_at: string | null;
+  } | null;
 
   // A player is at the pay step whenever a registration is awaiting payment or resubmission, even
   // before any payment row exists. Basing this on the registration status (not a payment row) is what
-  // makes the organizer QR visible during a fresh payment_pending entry.
-  const paymentEligible = Object.values(registrationsByDivision).some(
-    (registration) =>
-      registration.status === 'payment_pending' ||
-      registration.status === 'payment_submitted' ||
-      registration.paymentStatus === 'rejected',
-  );
+  // makes the organizer QR visible during a fresh payment_pending entry. §2AO A1: a viewer with no
+  // registration yet but who could start a bare reservation is ALSO at a pay step - simplest rule:
+  // whenever slots are enabled and the tournament is open, resolve the QR for any signed-in onboarded
+  // viewer (a 5-minute signed URL is an acceptable cost for that simplicity).
+  const paymentEligible =
+    Object.values(registrationsByDivision).some(
+      (registration) =>
+        registration.status === 'payment_pending' ||
+        registration.status === 'payment_submitted' ||
+        registration.paymentStatus === 'rejected',
+    ) ||
+    (slotsEnabled &&
+      tournStatus?.status === 'registration_open' &&
+      Boolean(viewerProfile?.onboarded_at));
   let paymentQrUrl: string | null = null;
   if (paymentEligible) {
     // This optional column is read only when a player is at the private payment step. If migration
@@ -418,6 +490,46 @@ export async function getViewerRegistrationState(
         (await svc.storage.from(PAYMENT_PROOFS_BUCKET).createSignedUrl(paymentQrPath, 300)).data
           ?.signedUrl ?? null;
     }
+  }
+
+  // §2AO A5/A7: the viewer's own bare reservation and the tournament's current slot price. Both read
+  // only when the feature is live, and defensively (a missing table degrades to null/no-slot).
+  let bareSlot: ViewerRegistrationState['bareSlot'] = null;
+  let slotPrice: SlotPriceQuote | null = null;
+  if (slotsEnabled) {
+    const [slotRow, divRes] = await Promise.all([
+      getLatestBareSlot(tournamentId, userId),
+      svc
+        .from('divisions')
+        .select('status, fee_amount, early_bird_fee_amount')
+        .eq('tournament_id', tournamentId),
+    ]);
+    if (slotRow) {
+      bareSlot = {
+        id: slotRow.id,
+        status: slotRow.status,
+        amountDue: Number(slotRow.amount_due),
+        amountSubmitted: slotRow.amount_submitted != null ? Number(slotRow.amount_submitted) : null,
+        currency: slotRow.currency,
+        rejectionReason: slotRow.rejection_reason,
+        submittedAt: slotRow.submitted_at,
+      };
+    }
+    const divisionsForQuote = (
+      (divRes.data ?? []) as {
+        status: string;
+        fee_amount: number;
+        early_bird_fee_amount: number | null;
+      }[]
+    ).map((d) => ({
+      status: d.status,
+      feeAmount: Number(d.fee_amount),
+      earlyBirdFeeAmount: d.early_bird_fee_amount != null ? Number(d.early_bird_fee_amount) : null,
+    }));
+    slotPrice = quoteSlotPrice(divisionsForQuote, {
+      startsAt: tournStatus?.early_bird_starts_at ?? null,
+      endsAt: tournStatus?.early_bird_ends_at ?? null,
+    });
   }
 
   // Pending invitations for this tournament (incoming + outgoing).
@@ -521,14 +633,9 @@ export async function getViewerRegistrationState(
   }));
 
   // Partner lock-in + the derived "changes open" gate (master_plan §2AM decision 5). `status` and
-  // `start_at` always exist; the lock column is read defensively via `getPartnerLockAt` so the app
-  // degrades to "partner changes open" until migration 0040 and its helpers land.
-  const { data: tournStatusRow } = await svc
-    .from('tournaments')
-    .select('status, start_at')
-    .eq('id', tournamentId)
-    .maybeSingle();
-  const tournStatus = tournStatusRow as { status: string; start_at: string | null } | null;
+  // `start_at` (read once, above, alongside the slot-price fields) always exist; the lock column is
+  // read defensively via `getPartnerLockAt` so the app degrades to "partner changes open" until
+  // migration 0040 and its helpers land.
   const rawPartnerLockAt = await getPartnerLockAt(tournamentId);
   const partnerLockAt = partnerLockEffectiveAt(tournStatus?.start_at ?? null, rawPartnerLockAt);
   const partnerLockPassed = isPartnerLockPassed(
@@ -556,6 +663,9 @@ export async function getViewerRegistrationState(
     viewerOnboarded: Boolean(viewerProfile?.onboarded_at),
     partnerLockAt,
     partnerLockPassed,
+    slotsEnabled,
+    bareSlot,
+    slotPrice,
     partnerChangesOpen,
   };
 }
@@ -586,6 +696,22 @@ export interface OrganizerRegistration {
   amountDue: number | null;
   currency: string | null;
   hasProof: boolean;
+  /** The shared money-state verdict for this entry (master_plan §2AO A2/A6) - team receipt combined
+   *  with every attached seat. */
+  paymentSummary: EntryPaymentSummary;
+  /** Every attached slot row (any status) on this entry, one per seat receipt ever submitted -
+   *  each with its own Verify/Reject/Refund in the detail sheet. */
+  slots: {
+    id: string;
+    playerId: string;
+    playerName: string;
+    status: string;
+    amountDue: number;
+    amountSubmitted: number | null;
+    hasProof: boolean;
+    rejectionReason: string | null;
+    submittedAt: string | null;
+  }[];
 }
 
 export async function getOrganizerRegistrations(
@@ -615,12 +741,14 @@ export async function getOrganizerRegistrations(
   const { data: divs } = await svc
     .from('divisions')
     .select(
-      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age, team_size',
+      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age, team_size, fee_amount',
     )
     .eq('tournament_id', tournamentId);
   const divName = new Map<string, string>();
   const divTeamSize = new Map<string, number>();
-  type DivNameRow = { id: string; team_size: number } & Parameters<typeof divisionName>[0];
+  type DivNameRow = { id: string; team_size: number; fee_amount: number } & Parameters<
+    typeof divisionName
+  >[0];
   for (const d of (divs ?? []) as DivNameRow[]) {
     divName.set(d.id, divisionName(d));
     divTeamSize.set(d.id, d.team_size);
@@ -691,8 +819,37 @@ export async function getOrganizerRegistrations(
     payByReg.set(p.registration_id, p);
   }
 
+  // §2AO A2/A6: one shared money-state verdict + attached-slot list per registration, from a single
+  // bounded `tournament_slots` read (defensive - degrades to "no slots" before migration 0042).
+  const slotsByReg = await getSlotsByRegistration(regRows.map((r) => r.id));
+  const membersByTeam = new Map<string, string[]>();
+  for (const m of members) {
+    const list = membersByTeam.get(m.team_id) ?? [];
+    list.push(m.player_id);
+    membersByTeam.set(m.team_id, list);
+  }
+  const divisionFeeById = new Map<string, number>();
+  for (const d of (divs ?? []) as DivNameRow[]) {
+    if (d.fee_amount != null) divisionFeeById.set(d.id, Number(d.fee_amount));
+  }
+
   return regRows.map((r) => {
     const pay = payByReg.get(r.id);
+    const teamSize = divTeamSize.get(r.division_id) ?? 2;
+    const slots = slotsByReg.get(r.id) ?? [];
+    const paymentSummary = summarizeEntryPayment({
+      teamSize,
+      memberIds: membersByTeam.get(r.team_id) ?? [],
+      teamPayment: pay ? { status: pay.status } : null,
+      slots: slots.map((s) => ({
+        playerId: s.player_id,
+        status: s.status,
+        amountDue: Number(s.amount_due),
+        amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
+        createdAt: s.created_at,
+      })),
+      feeOwed: (divisionFeeById.get(r.division_id) ?? 0) > 0,
+    });
     return {
       id: r.id,
       teamId: r.team_id,
@@ -711,15 +868,86 @@ export async function getOrganizerRegistrations(
       unconfirmedMemberIds: members
         .filter((m) => m.team_id === r.team_id && !m.confirmed_at)
         .map((m) => m.player_id),
-      teamSize: divTeamSize.get(r.division_id) ?? 2,
+      teamSize,
       cancellationRequest: cancelByReg.get(r.id) ?? null,
       paymentId: pay?.id ?? null,
       paymentStatus: pay?.status ?? null,
       amountDue: pay ? Number(pay.amount_due) : null,
       currency: pay?.currency ?? null,
       hasProof: !!pay?.proof_storage_path,
+      paymentSummary,
+      slots: slots.map((s) => ({
+        id: s.id,
+        playerId: s.player_id,
+        playerName: profiles.get(s.player_id)?.name ?? 'VouchPlay player',
+        status: s.status,
+        amountDue: Number(s.amount_due),
+        amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
+        hasProof: !!s.proof_storage_path,
+        rejectionReason: s.rejection_reason,
+        submittedAt: s.submitted_at,
+      })),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Reserved (bare) slots panel (master_plan §2AO A6) - every bare tournament_slots row, any status.
+// ---------------------------------------------------------------------------
+export interface OrganizerBareSlot {
+  id: string;
+  playerId: string;
+  playerName: string;
+  playerSlug: string | null;
+  status: string;
+  amountDue: number;
+  amountSubmitted: number | null;
+  currency: string;
+  hasProof: boolean;
+  submittedAt: string | null;
+  rejectionReason: string | null;
+  /** The division chosen at purchase (informational only - a bare slot holds no division capacity),
+   *  or null when none was recorded. */
+  divisionName: string | null;
+}
+
+export async function getOrganizerBareSlots(tournamentId: string): Promise<OrganizerBareSlot[]> {
+  const all = await getOrganizerSlots(tournamentId);
+  const bare = all.filter((s) => !s.registration_id);
+  if (bare.length === 0) return [];
+
+  const [profiles, divisionIdsSet] = [
+    await resolve(bare.map((s) => s.player_id)),
+    new Set(bare.map((s) => s.division_id).filter((id): id is string => !!id)),
+  ];
+  const divisionIds = Array.from(divisionIdsSet);
+  const divNameById = new Map<string, string>();
+  if (divisionIds.length > 0) {
+    const svc = createServiceClient();
+    const { data: divs } = await svc
+      .from('divisions')
+      .select(
+        'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+      )
+      .in('id', divisionIds);
+    type DivNameRow = { id: string } & Parameters<typeof divisionName>[0];
+    for (const d of (divs ?? []) as DivNameRow[]) divNameById.set(d.id, divisionName(d));
+  }
+
+  return bare.map((s) => ({
+    id: s.id,
+    playerId: s.player_id,
+    playerName: profiles.get(s.player_id)?.name ?? 'VouchPlay player',
+    playerSlug: profiles.get(s.player_id)?.slug ?? null,
+    status: s.status,
+    amountDue: Number(s.amount_due),
+    amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
+    currency: s.currency,
+    hasProof: !!s.proof_storage_path,
+    submittedAt: s.submitted_at,
+    rejectionReason: s.rejection_reason,
+    divisionName: s.division_id ? (divNameById.get(s.division_id) ?? 'Division') : null,
+  }));
 }
 
 // ---------------------------------------------------------------------------

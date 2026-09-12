@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Check, X } from 'lucide-react';
@@ -40,6 +40,11 @@ export function VouchForm({
 }) {
   const router = useRouter();
   const [state, action] = useActionState(submitVouch, empty);
+  // §2AO D1: coach vouches are always attributed. "Vouch as a Coach" forces the anonymous checkbox
+  // off and disabled; unchecking it restores whatever anonymous choice the voucher had before -
+  // `anonymousChoice` keeps that choice alive underneath the forced-off display state.
+  const [asCoach, setAsCoach] = useState(false);
+  const [anonymousChoice, setAnonymousChoice] = useState(true);
 
   // Refresh the profile behind the dialog, but do not auto-close: the confirmation is where the
   // next useful action lives (§1S).
@@ -179,7 +184,13 @@ export function VouchForm({
 
             {viewerIsCoach && (
               <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-                <input type="checkbox" name="asCoach" className="mt-0.5" />
+                <input
+                  type="checkbox"
+                  name="asCoach"
+                  checked={asCoach}
+                  onChange={(e) => setAsCoach(e.target.checked)}
+                  className="mt-0.5"
+                />
                 <span>
                   <span className="text-foreground font-medium">Vouch as a Coach</span>
                   <span className="text-foreground-muted block text-xs">
@@ -190,13 +201,26 @@ export function VouchForm({
             )}
 
             <label className="border-border flex items-start gap-2 rounded-xl border p-3 text-sm">
-              <input type="checkbox" name="anonymous" defaultChecked className="mt-0.5" />
+              <input
+                type="checkbox"
+                name="anonymous"
+                checked={asCoach ? false : anonymousChoice}
+                disabled={asCoach}
+                onChange={(e) => setAnonymousChoice(e.target.checked)}
+                className="mt-0.5"
+              />
               <span>
                 <span className="text-foreground font-medium">Keep my rating anonymous</span>
-                <span className="text-foreground-muted block text-xs">
-                  Hides your identity on the public rating. VouchPlay admins may still inspect it
-                  for safety. Any comment you add is never anonymous.
-                </span>
+                {asCoach ? (
+                  <span className="text-foreground-muted block text-xs">
+                    Coach vouches are always shown with your name.
+                  </span>
+                ) : (
+                  <span className="text-foreground-muted block text-xs">
+                    Hides your identity on the public rating. VouchPlay admins may still inspect it
+                    for safety. Any comment you add is never anonymous.
+                  </span>
+                )}
               </span>
             </label>
 

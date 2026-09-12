@@ -2,18 +2,17 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ChevronDown, Coins, ShieldCheck, Users } from 'lucide-react';
+import { AlertCircle, ChevronDown, ClipboardCheck, Coins, ShieldCheck, Users } from 'lucide-react';
 import { describeDivisionFit, effectivePlayerSkill, evaluateDivisionFit } from '@vouchplay/core';
+import { quoteFee, formatFee } from '@vouchplay/core';
 import { SKILL_BANDS } from '@vouchplay/config';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { RegisterActions } from './register-actions';
-import { PartnerInviteForm } from './partner-invite-form';
-import { quoteFee, formatFee } from '@vouchplay/core';
 import { InvitationActions } from './invitation-actions';
 import { PartnerChangeActions } from './partner-change-actions';
-import { EnterDoublesSoloAction } from './enter-doubles-solo-action';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
+import { RegistrationWizard, type WizardTournament } from './registration-wizard';
 
 /** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). */
 const TONE_CHIP: Record<SlotTone, string> = {
@@ -22,21 +21,17 @@ const TONE_CHIP: Record<SlotTone, string> = {
   done: 'text-success',
 };
 
-export interface EarlyBirdWindow {
-  startsAt: string | null;
-  endsAt: string | null;
-}
-
 /**
- * Collapsed-by-default division browser (handover Phase 13.5, §1D). Public facts for every division;
- * for a signed-in player during open registration each division also offers the right register
- * action, so a player with one entry can still enter other divisions without hunting. Divisions the
- * player already holds link back to My registrations instead of repeating the action.
+ * Collapsed-by-default division browser (handover Phase 13.5, §1D; master_plan §2AO B). Public facts
+ * for every division; for a signed-in player during open registration each joinable division offers
+ * ONE "Enter" button that opens the registration wizard pre-selected on that division - the old
+ * inline partner-search / "enter solo" / "register" forms are gone, replaced by the wizard. Divisions
+ * the player already holds link back to My registrations instead of repeating the action.
  */
 
 // fee_amount IS the per-player price since migration 0026 - it is no longer divided by team size
 // (§1V). Dividing again would quietly halve every quoted price.
-function moneyPerPlayer(d: DivisionDTO, earlyBird: EarlyBirdWindow): string {
+function moneyPerPlayer(d: DivisionDTO, earlyBird: WizardTournament['earlyBird']): string {
   const quote = quoteFee({
     feeAmount: d.feeAmount,
     earlyBirdFeeAmount: d.earlyBirdFeeAmount,
@@ -72,28 +67,18 @@ function skillLabelFor(ordinal: number | null) {
 }
 
 export function DivisionBrowser({
-  tournamentId,
-  divisions,
+  tournament,
   state,
-  registrationOpen,
   authed,
   signInHref,
-  requireSkillVerified,
-  enforceSkillFloor,
-  earlyBird = { startsAt: null, endsAt: null },
 }: {
-  tournamentId: string;
-  divisions: DivisionDTO[];
+  tournament: WizardTournament;
   state: ViewerRegistrationState | null;
-  registrationOpen: boolean;
   authed: boolean;
   signInHref: string;
-  /** Tournament-wide early-bird window; every division shares it (§1V). */
-  earlyBird?: EarlyBirdWindow;
-  requireSkillVerified: boolean;
-  /** Organizer setting: players may not enter a division below their own level (§2F). */
-  enforceSkillFloor: boolean;
 }) {
+  const { divisions, earlyBird, requireSkillVerified, enforceSkillFloor, registrationOpen } =
+    tournament;
   const visible = divisions.filter((d) => d.status !== 'draft' && d.status !== 'cancelled');
   const registeredIds = new Set(state ? Object.keys(state.registrationsByDivision) : []);
   const invitations = state?.invitations ?? [];
@@ -104,9 +89,12 @@ export function DivisionBrowser({
       )
     : null;
   const [onlyJoinable, setOnlyJoinable] = useState(false);
+  const [enterDivisionId, setEnterDivisionId] = useState<string | null>(null);
 
   // Fit is computed once for every division, up front, because it is needed twice: to render the
-  // reason on a row, and to count and filter the ones this player can actually enter (§2F).
+  // reason on a row, and to count and filter the ones this player can actually enter (§2F). Play-down
+  // is honoured here too (matching the wizard) so a division a player may enter one level down still
+  // offers an Enter button rather than reading as a dead end.
   const rows = visible.map((d) => {
     const fit = state
       ? evaluateDivisionFit({
@@ -117,6 +105,7 @@ export function DivisionBrowser({
           divisionMinimumSkill: d.minimumSkill,
           divisionMaximumSkill: d.maximumSkill,
           enforceSkillFloor,
+          allowPlayDownOneLevel: tournament.allowPlayDownOneLevel,
         })
       : { fits: true, reason: null };
     return {
@@ -321,44 +310,38 @@ export function DivisionBrowser({
                       </Link>
                     ) : !registrationOpen ? (
                       <p className="text-foreground-muted text-xs">Registration is closed.</p>
-                    ) : d.format === 'doubles' && !team ? (
-                      <div>
-                        <p className="text-foreground-muted mb-1 text-xs">
-                          Invite a partner to form your team:
-                        </p>
-                        <PartnerInviteForm
-                          tournamentId={tournamentId}
-                          divisionId={d.id}
-                          viewerLookingForPartner={state?.viewerLookingForPartner ?? false}
-                        />
-                        {/* §2AM decision 2: pay for the slot now, name a partner any time before
-                            the lock-in. Hidden once partner changes are closed - there would be
-                            nothing to choose later. */}
-                        {state?.partnerChangesOpen && (
-                          <EnterDoublesSoloAction
-                            tournamentId={tournamentId}
-                            divisionId={d.id}
-                            partnerLockAt={state.partnerLockAt}
-                          />
-                        )}
-                      </div>
                     ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEnterDivisionId(d.id)}
+                        className="vp-gradient inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white"
+                      >
+                        <ClipboardCheck size={15} aria-hidden />
+                        Enter
+                      </button>
+                    )}
+
+                    {/* Once entered, RegisterActions still owns cancel (unpaid entries only), and
+                        PartnerChangeActions still owns the partner block - unchanged from before the
+                        wizard (§2AM). */}
+                    {registered && reg && (
                       <div className="space-y-2">
                         <RegisterActions
-                          tournamentId={tournamentId}
+                          tournamentId={tournament.id}
                           divisionId={d.id}
                           teamId={team?.teamId}
                           format={d.format as 'singles' | 'doubles'}
                           registrationOpen={registrationOpen}
-                          registration={null}
+                          registration={{
+                            id: reg.id,
+                            status: reg.status,
+                            paymentStatus: reg.paymentStatus,
+                          }}
                         />
-                        {/* Shown only when there is something to do about the partner: a vacant
-                            seat to fill, or a wait to explain. No disclosure to open and no
-                            control that cannot succeed (§1U). */}
                         {d.format === 'doubles' && team && state && (
                           <PartnerChangeActions
                             teamId={team.teamId}
-                            tournamentId={tournamentId}
+                            tournamentId={tournament.id}
                             divisionId={d.id}
                             viewerId={state.viewerId}
                             pendingPartnerName={team.pendingPartner?.name ?? null}
@@ -378,6 +361,15 @@ export function DivisionBrowser({
             );
           })}
         </ul>
+      )}
+
+      {enterDivisionId && state && (
+        <RegistrationWizard
+          tournament={tournament}
+          state={state}
+          initial={{ step: 'division', divisionId: enterDivisionId }}
+          onClose={() => setEnterDivisionId(null)}
+        />
       )}
     </details>
   );

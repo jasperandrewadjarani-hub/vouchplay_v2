@@ -232,6 +232,18 @@ export async function createTournament(
       // Column not present yet (migration 0040 pending). The rest of the save already succeeded.
     }
 
+    // Play one level down (migration 0042; master_plan §2AO C). Its own defensive update, separate
+    // from every other column group, so a pre-0042 deploy still creates the tournament even if 0022
+    // or 0040 are already applied and this one is not.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ allow_play_down_one_level: bool(formData, 'allowPlayDownOneLevel') })
+        .eq('id', t.id);
+    } catch {
+      // Column not present yet (migration 0042 pending). The rest of the save already succeeded.
+    }
+
     const [configuredCapacity, configuredFee] = await Promise.all([
       loadSettingNumber(
         'default_division_capacity_teams',
@@ -407,6 +419,18 @@ export async function updateTournament(
         .eq('id', tournamentId);
     } catch {
       // Column not present yet (migration 0040 pending). The rest of the save already succeeded.
+    }
+
+    // Play one level down (migration 0042; master_plan §2AO C). Its own defensive update, separate
+    // from every other column group (including the 0022 rules group above), so an update deploy
+    // before 0042 lands still saves the rest of the form even when 0022/0040 are already applied.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ allow_play_down_one_level: bool(formData, 'allowPlayDownOneLevel') })
+        .eq('id', tournamentId);
+    } catch {
+      // Column not present yet (migration 0042 pending). The rest of the save already succeeded.
     }
     invalidate(slug, tournamentId);
   } catch {

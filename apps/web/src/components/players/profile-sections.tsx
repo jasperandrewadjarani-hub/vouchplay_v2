@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { formatShortMonthYear } from '@/lib/format-date';
 import { SectionCard } from './section-card';
+import { PlayerAvatar } from './player-avatar';
+import type { PlayerProfileDTO } from '@/lib/players/dto';
 
 export { SectionCard };
 
@@ -10,16 +12,22 @@ function EmptyNote({ children }: { children: ReactNode }) {
   return <p className="text-foreground-muted text-sm">{children}</p>;
 }
 
+const MAX_BAND_AVATARS = 5;
+
 /**
  * Skill distribution by band (handover §9.2). Shows vouch counts per band from the computed
- * snapshot; anonymous vs public voucher identities are handled elsewhere (icons are a later add).
+ * snapshot. When `coachVouchers` is supplied (master_plan §2AO D3, profile-only), each band that a
+ * coach publicly vouched at also shows their clickable, overlapping avatars - anonymous coach
+ * vouches never reach this component (excluded at the query level, see `players/queries.ts`).
  */
 export function SkillDistribution({
   distribution,
   total,
+  coachVouchers,
 }: {
   distribution: Record<string, number>;
   total: number;
+  coachVouchers?: PlayerProfileDTO['coachVouchers'];
 }) {
   const max = Math.max(1, ...SKILL_BANDS.map((b) => distribution[String(b.ordinal)] ?? 0));
   return (
@@ -33,16 +41,62 @@ export function SkillDistribution({
         <ul className="space-y-1.5">
           {[...SKILL_BANDS].reverse().map((band) => {
             const count = distribution[String(band.ordinal)] ?? 0;
+            const coaches = (coachVouchers ?? []).filter((c) => c.level === band.ordinal);
+            const shown = coaches.slice(0, MAX_BAND_AVATARS);
+            const extra = coaches.length - shown.length;
             return (
-              <li key={band.key} className="flex items-center gap-3">
+              <li key={band.key} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="text-foreground-muted w-32 shrink-0 text-xs">{band.label}</span>
-                <span className="bg-surface-muted h-2 flex-1 overflow-hidden rounded-full">
+                <span className="bg-surface-muted h-2 min-w-24 flex-1 overflow-hidden rounded-full">
                   <span
                     className="block h-full rounded-full"
                     style={{ width: `${(count / max) * 100}%`, backgroundColor: band.color }}
                   />
                 </span>
                 <span className="text-foreground-muted w-6 text-right text-xs">{count}</span>
+                {shown.length > 0 && (
+                  <span className="flex items-center -space-x-2">
+                    {shown.map((coach, i) =>
+                      coach.slug ? (
+                        <Link
+                          key={`${coach.slug}-${i}`}
+                          href={`/players/${coach.slug}`}
+                          title={`Coach ${coach.name} vouched ${band.label}`}
+                          aria-label={`Coach ${coach.name} vouched ${band.label}`}
+                          className="ring-surface hover:ring-primary rounded-full ring-2 transition-shadow hover:z-10"
+                        >
+                          <PlayerAvatar
+                            url={coach.avatarUrl}
+                            initials={coach.name.slice(0, 1).toUpperCase()}
+                            name={coach.name}
+                            size="sm"
+                            verified={coach.verified}
+                          />
+                        </Link>
+                      ) : (
+                        <span
+                          key={`${coach.name}-${i}`}
+                          title={`Coach ${coach.name} vouched ${band.label}`}
+                          aria-label={`Coach ${coach.name} vouched ${band.label}`}
+                          className="ring-surface rounded-full ring-2"
+                        >
+                          <PlayerAvatar
+                            url={coach.avatarUrl}
+                            initials={coach.name.slice(0, 1).toUpperCase()}
+                            name={coach.name}
+                            size="sm"
+                            verified={coach.verified}
+                          />
+                        </span>
+                      ),
+                    )}
+                    {extra > 0 && (
+                      <span className="bg-surface-muted text-foreground-muted ring-surface flex h-10 w-10 items-center justify-center rounded-full text-xs font-semibold ring-2">
+                        +{extra}
+                      </span>
+                    )}
+                  </span>
+                )}
               </li>
             );
           })}

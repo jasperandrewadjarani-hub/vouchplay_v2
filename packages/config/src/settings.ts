@@ -80,6 +80,13 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // only the pre-decision backstop (document_delete_after = submitted_at + N days) for the case
   // staff never decide.
   identity_verification_enabled: true,
+  // §2AO E: hide the per-level vouch meter (Skill distribution) from everyone but staff when false.
+  profile_show_vouch_meter: true,
+  // §2AO E: hide the community-vouched skill chip from OTHER players (profile + cards) when false.
+  profile_show_community_skill: true,
+  // §2AO A: tournament slots (pay per seat / reserve before choosing a division). Code default is
+  // OFF on purpose: migration 0042 seeds it to true, so the feature is inert until the table exists.
+  tournament_slot_reservations_enabled: false,
   identity_doc_retention_days: 7,
 
   // Safety & moderation abuse limits (handover §14, §11.3, §30.7). Rolling 24h windows.

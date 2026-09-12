@@ -6,6 +6,7 @@ import {
   GraduationCap,
   Trophy,
   Clock,
+  Medal,
 } from 'lucide-react';
 import type { SkillBand } from '@vouchplay/config';
 
@@ -81,6 +82,24 @@ export function CoachBadge() {
     <span className={`${chip} bg-accent-cyan/15 text-accent-cyan`} title="Approved Coach">
       <GraduationCap size={12} aria-hidden />
       Coach
+    </span>
+  );
+}
+
+/**
+ * "Coach-vouched" chip (master_plan §2AO D2): a coach has vouched for this player's skill. Deliberately
+ * NOT called "Coach verified" - Identity-Verified and Skill-Verified are already two LOCKED, separate
+ * concepts, and a coach's vouch verifies neither. Shown when `player_skill_profiles.coach_vouch_count
+ * > 0` (the caller derives this from the DTO, never from a per-card query).
+ */
+export function CoachVouchedBadge() {
+  return (
+    <span
+      className={`${chip} bg-accent-cyan/15 text-accent-cyan`}
+      title="A coach has vouched for this player's skill"
+    >
+      <Medal size={12} aria-hidden />
+      Coach-vouched
     </span>
   );
 }

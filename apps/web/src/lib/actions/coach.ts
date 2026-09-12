@@ -10,6 +10,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { ROLE_EVIDENCE_BUCKET } from '@/lib/storage';
 import { loadSettingFlag, loadSettingNumber } from '@/lib/settings';
 import { prepareCoachEvidence, type PreparedCoachEvidence } from '@/lib/coach/evidence';
+import { getCoachGateState } from '@/lib/coach/queries';
 import { notify } from '@/lib/notifications/create';
 import { emitAnalyticsEvent } from '@/lib/analytics';
 import { PLAYERS_LIST_TAG } from '@/lib/players/queries';
@@ -105,6 +106,13 @@ export async function submitCoachApplication(
   if (!user) return { error: 'Please sign in.' };
   if (!(await loadSettingFlag('coach_applications_enabled', true))) {
     return { error: 'Coach applications are temporarily closed.' };
+  }
+  // §2AO G, defense in depth: the SQL RPC is unchanged, so this is the server-side backstop for the
+  // same two facts `/me/roles/coach` gates the form on - a request that reaches this action by
+  // bypassing the client (or racing a stale page) is refused exactly the same way.
+  const gate = await getCoachGateState(user.id);
+  if (!gate.hasPhoto || gate.identityStatus !== 'approved') {
+    return { error: 'Verify your ID and add a profile photo before applying.' };
   }
   const parsed = parseApplication(formData);
   if (!parsed.success)

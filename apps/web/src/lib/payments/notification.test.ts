@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildPaymentNotificationEmail, type PaymentNotificationInput } from './notification';
 
 const fullFixture: PaymentNotificationInput = {
+  kind: 'team',
   tournamentName: 'Hermosa Open',
   tournamentSlug: 'hermosa-open-ab12cd',
   divisionName: "Men's Doubles - Beginner",
@@ -95,9 +96,10 @@ describe('buildPaymentNotificationEmail (master_plan §2AK)', () => {
   });
 });
 
-describe('buildPaymentNotificationEmail summary block (master_plan §2AL)', () => {
+describe('buildPaymentNotificationEmail summary block (master_plan §2AL/§2AO A6)', () => {
   const summary = {
     total: 28,
+    fullyPaidTeams: 15,
     perDivision: [
       { division: "Men's Doubles", count: 12 },
       { division: 'Mixed Doubles', count: 5 },
@@ -109,7 +111,7 @@ describe('buildPaymentNotificationEmail summary block (master_plan §2AL)', () =
     ],
   };
 
-  it('appends the total and one indented line per division, below the payment details, in text', () => {
+  it('appends the total, one indented line per division, and the fully-paid count, below the payment details, in text', () => {
     const { text } = buildPaymentNotificationEmail({ ...fullFixture, summary });
     expect(text).toBe(
       [
@@ -134,8 +136,32 @@ describe('buildPaymentNotificationEmail summary block (master_plan §2AL)', () =
         "  Women's Doubles High Intermediate: 2",
         '  45 and Up Men: 1',
         '  Mixed Doubles Advanced: 1',
+        'Fully paid teams: 15',
       ].join('\n'),
     );
+  });
+
+  it('also renders "Seat receipts pending" in text when seatReceipts is present', () => {
+    const { text } = buildPaymentNotificationEmail({
+      ...fullFixture,
+      summary: { ...summary, seatReceipts: 4 },
+    });
+    expect(text.split('\n').at(-1)).toBe('Seat receipts pending: 4');
+  });
+
+  it('omits "Seat receipts pending" in text when seatReceipts is absent', () => {
+    const { text } = buildPaymentNotificationEmail({ ...fullFixture, summary });
+    expect(text).not.toContain('Seat receipts pending');
+  });
+
+  it('renders the fully-paid count and (when present) seat receipts pending in html', () => {
+    const { html } = buildPaymentNotificationEmail({
+      ...fullFixture,
+      summary: { ...summary, seatReceipts: 4 },
+    });
+    expect(html).toContain('Fully paid teams');
+    expect(html).toContain('15');
+    expect(html).toContain('Seat receipts pending: 4');
   });
 
   it('renders a heading with the total and every division in html, ordered count desc then name asc', () => {
@@ -155,6 +181,7 @@ describe('buildPaymentNotificationEmail summary block (master_plan §2AL)', () =
   it('escapes a malicious division name in the summary html', () => {
     const malicious = {
       total: 1,
+      fullyPaidTeams: 0,
       perDivision: [{ division: '<script>alert(1)</script>', count: 1 }],
     };
     const { html } = buildPaymentNotificationEmail({ ...fullFixture, summary: malicious });
@@ -166,5 +193,43 @@ describe('buildPaymentNotificationEmail summary block (master_plan §2AL)', () =
     const { text, html } = buildPaymentNotificationEmail(fullFixture);
     expect(text).not.toContain('Paid teams so far');
     expect(html).not.toContain('Paid teams so far');
+  });
+});
+
+describe('buildPaymentNotificationEmail by kind (master_plan §2AO A6)', () => {
+  it('keeps the team subject exactly as before', () => {
+    const { subject } = buildPaymentNotificationEmail({ ...fullFixture, kind: 'team' });
+    expect(subject).toBe(
+      "Registration payment notification - Hermosa Open - Jasper/Tane - Men's Doubles - Beginner",
+    );
+  });
+
+  it('formats the seat subject as "Seat payment - {player} ({team label}, {division})"', () => {
+    const { subject } = buildPaymentNotificationEmail({ ...fullFixture, kind: 'seat' });
+    expect(subject).toBe("Seat payment - Jasper Adjarani (Jasper/Tane, Men's Doubles - Beginner)");
+  });
+
+  it('formats the reservation subject as "Slot reservation - {player} (no division yet)"', () => {
+    const { subject } = buildPaymentNotificationEmail({
+      ...fullFixture,
+      kind: 'reservation',
+      players: [{ fullName: 'Solo Player', email: 'solo@example.com' }],
+    });
+    expect(subject).toBe('Slot reservation - Solo Player (no division yet)');
+  });
+
+  it('renders an optional seatLabel line in both text and html', () => {
+    const { text, html } = buildPaymentNotificationEmail({
+      ...fullFixture,
+      kind: 'seat',
+      seatLabel: 'Seat 1 of 2 - Jasper Adjarani',
+    });
+    expect(text).toContain('Seat: Seat 1 of 2 - Jasper Adjarani');
+    expect(html).toContain('Seat 1 of 2 - Jasper Adjarani');
+  });
+
+  it('omits the Seat line when seatLabel is not given', () => {
+    const { text } = buildPaymentNotificationEmail(fullFixture);
+    expect(text).not.toContain('Seat:');
   });
 });

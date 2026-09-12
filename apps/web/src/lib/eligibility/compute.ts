@@ -2,6 +2,7 @@ import 'server-only';
 import { revalidateTag } from 'next/cache';
 import {
   evaluateTeamEligibility,
+  PLAY_DOWN_WARNING,
   type PlayerEligibilityInput,
   type DivisionEligibilityRules,
   type EligibilityResult,
@@ -203,6 +204,9 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     // Skill Verified is now a single tournament-wide rule (migration 0022), not per division.
     skillVerifiedRequired: rules.requireSkillVerified || div.skill_verified_required,
     minimumSts: div.minimum_sts != null ? Number(div.minimum_sts) : null,
+    // §2AO decision C / ELIG_V1.1: the organizer's "Allow one level below" toggle (migration 0042,
+    // read defensively by getTournamentRules - false before it is applied).
+    allowPlayDownOneLevel: rules.allowPlayDownOneLevel,
   };
 
   // §50 historical-mismatch evidence: organizer-confirmed play in a clearly-higher division.
@@ -250,6 +254,12 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
   const storedResult =
     requiresApproval && outcome.result === 'ELIGIBLE' ? 'REVIEW' : outcome.result;
 
+  // §2AO decision C: when any member landed on PLAYING_DOWN_ONE_LEVEL, the organizer and the player
+  // must read the SAME sentence - so the wizard's play-down copy is stored verbatim as the
+  // snapshot's top-level note, once, rather than duplicated per-player. This never alters the
+  // version-locked per-player codes above; it is a human-readable echo of one of them.
+  const note = outcome.reasonCodes.includes('PLAYING_DOWN_ONE_LEVEL') ? PLAY_DOWN_WARNING : null;
+
   const snapshot = {
     algorithmVersion: outcome.algorithmVersion,
     evaluatedAt: new Date().toISOString(),
@@ -258,6 +268,7 @@ async function computeForReg(svc: Svc, reg: RegRow): Promise<void> {
     hardRuleCodes: outcome.hardRuleCodes,
     reasonCodes: outcome.reasonCodes,
     flags: outcome.flags,
+    note,
     thresholds: settings.thresholds,
     players: outcome.players.map((p) => ({
       playerId: p.playerId,

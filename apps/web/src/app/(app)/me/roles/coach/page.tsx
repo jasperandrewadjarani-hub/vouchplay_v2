@@ -2,21 +2,29 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireUser } from '@/lib/auth';
 import { loadSettingFlag, loadSettingNumber } from '@/lib/settings';
-import { getMyCoachState } from '@/lib/coach/queries';
+import { getMyCoachState, getCoachGateState } from '@/lib/coach/queries';
 import { CoachApplication } from '@/components/roles/coach-application';
+import { CoachGate } from '@/components/roles/coach-gate';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 
 export const metadata: Metadata = { title: 'Become a Coach' };
 
 export default async function CoachRolePage() {
   const user = await requireUser('/me/roles/coach');
-  const [state, enabled, slaDays, maxFiles, maxBytes] = await Promise.all([
+  const [state, enabled, slaDays, maxFiles, maxBytes, gate] = await Promise.all([
     getMyCoachState(user.id),
     loadSettingFlag('coach_applications_enabled', true),
     loadSettingNumber('coach_application_review_sla_days', 7),
     loadSettingNumber('coach_evidence_max_files', 5),
     loadSettingNumber('coach_evidence_max_bytes', 5 * 1024 * 1024),
+    getCoachGateState(user.id),
   ]);
+  // §2AO G: an already-active coach (or a live application) walks straight into `CoachApplication`,
+  // which handles those states itself - the gate only stands between a fresh applicant and the form.
+  const gated =
+    !state.activeCoach &&
+    !state.application &&
+    (!gate.hasPhoto || gate.identityStatus !== 'approved');
 
   return (
     <section className="mx-auto max-w-2xl space-y-4">
@@ -41,6 +49,8 @@ export default async function CoachRolePage() {
         >
           The Coach application database update is not live yet. Your profile is unchanged.
         </div>
+      ) : gated ? (
+        <CoachGate hasPhoto={gate.hasPhoto} identityStatus={gate.identityStatus} />
       ) : (
         <CoachApplication
           activeCoach={state.activeCoach}

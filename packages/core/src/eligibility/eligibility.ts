@@ -11,9 +11,17 @@
  * All thresholds are injected from Admin settings (never hardcoded, handover coding standard). The
  * algorithm is version-locked: any change to its semantics is a NEW version - bump
  * ELIGIBILITY_ALGORITHM_VERSION and never mutate historical snapshot meaning.
+ *
+ * ELIG_V1.1 (master_plan §2AO decision C): an organizer can allow entry exactly one skill level
+ * below a player's community-vouched skill (`DivisionEligibilityRules.allowPlayDownOneLevel`). When
+ * that flag is set and a player's CSL is EXACTLY one above the division max, the result is REVIEW
+ * with reason `PLAYING_DOWN_ONE_LEVEL` instead of SKILL_MISMATCH - the organizer's promised "final
+ * skills assessment" becomes a queue item, not just wizard copy. Two or more levels above is still
+ * SKILL_MISMATCH regardless of the flag. Historical ELIG_V1 snapshots are untouched by this change;
+ * only the live algorithm version and the semantics for new evaluations move.
  */
 
-export const ELIGIBILITY_ALGORITHM_VERSION = 'ELIG_V1';
+export const ELIGIBILITY_ALGORITHM_VERSION = 'ELIG_V1.1';
 
 /** Ordered worst -> best is the reverse; severity rank is used for team = worst-of-members (§25.1). */
 export type EligibilityResult = 'ELIGIBLE' | 'REVIEW' | 'SKILL_MISMATCH' | 'INELIGIBLE_HARD_RULE';
@@ -44,7 +52,11 @@ export type EligibilityReasonCode =
   | 'INSUFFICIENT_EVIDENCE'
   | 'UNRATED'
   | 'SKILL_VERIFIED_REQUIRED_MISSING'
-  | 'AGE_UNKNOWN';
+  | 'AGE_UNKNOWN'
+  /** ELIG_V1.1 / §2AO decision C: CSL is exactly one level above the max and the organizer's
+   *  play-down-one-level toggle is on - REVIEW, not SKILL_MISMATCH, so it lands in the "needs
+   *  review" queue for the promised final skills assessment. */
+  | 'PLAYING_DOWN_ONE_LEVEL';
 
 /** Advisory flags (§25.4). Additive signals for the organizer; each forces at least REVIEW. */
 export type EligibilityFlag = 'HISTORICAL_SKILL_MISMATCH' | 'UNUSUAL_VOUCH_ACTIVITY';
@@ -135,6 +147,12 @@ export interface DivisionEligibilityRules {
   skillVerifiedRequired: boolean;
   /** Division-specific minimum STS, or null to fall back to the admin confidence threshold. */
   minimumSts: number | null;
+  /**
+   * §2AO decision C / ELIG_V1.1: the tournament's "Allow one level below" toggle
+   * (`tournaments.allow_play_down_one_level`). Optional so every existing caller/fixture that omits
+   * it keeps today's ELIG_V1 behaviour (undefined is falsy - never widens the floor).
+   */
+  allowPlayDownOneLevel?: boolean;
 }
 
 /** One player's eligibility inputs (§25.3). Skill fields come from player_skill_profiles. */
@@ -211,7 +229,8 @@ function uniq<T>(items: T[]): T[] {
 /**
  * Evaluate ONE player against ONE division. Pure. Order of evaluation (§25.2 before §25.4):
  *  1. Hard rules -> INELIGIBLE_HARD_RULE (short-circuits skill evaluation).
- *  2. Skill: CSL above the division max -> SKILL_MISMATCH.
+ *  2. Skill: CSL above the division max -> SKILL_MISMATCH, unless it is exactly one level above and
+ *     the organizer's play-down-one-level toggle is on, in which case -> REVIEW (ELIG_V1.1).
  *  3. Otherwise ELIGIBLE, downgraded to REVIEW by any evidence/confidence/verification gap or flag.
  */
 export function evaluatePlayerEligibility(
@@ -264,9 +283,18 @@ export function evaluatePlayerEligibility(
   let result: EligibilityResult = 'ELIGIBLE';
   const capApplies = rules.skillPolicy !== 'open' && rules.maximumSkill != null;
   if (capApplies && player.communitySkillLevel != null) {
-    if (player.communitySkillLevel > (rules.maximumSkill as number)) {
-      reasonCodes.push('SKILL_ABOVE_DIVISION_MAX');
-      result = 'SKILL_MISMATCH';
+    const max = rules.maximumSkill as number;
+    if (player.communitySkillLevel > max) {
+      // ELIG_V1.1 / §2AO decision C: exactly one level above the max, with the organizer's toggle
+      // on, is a REVIEW (the promised "final skills assessment") rather than a flat mismatch. Two or
+      // more levels above is always SKILL_MISMATCH, toggle or not.
+      if (rules.allowPlayDownOneLevel && player.communitySkillLevel === max + 1) {
+        reasonCodes.push('PLAYING_DOWN_ONE_LEVEL');
+        result = 'REVIEW';
+      } else {
+        reasonCodes.push('SKILL_ABOVE_DIVISION_MAX');
+        result = 'SKILL_MISMATCH';
+      }
     }
   }
 

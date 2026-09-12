@@ -18,6 +18,7 @@ import {
   fullName,
   toPlayerCardDTO,
   toPlayerProfileDTO,
+  type CoachVoucherDTO,
   type PlayerCardDTO,
   type PlayerProfileDTO,
   type ProfileExtras,
@@ -163,6 +164,40 @@ const fetchSkillSnapshots = unstable_cache(
     return out;
   },
   ['player-skill-snapshots'],
+  { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/**
+ * Bulk-load `player_skill_profiles.coach_vouch_count` (master_plan §2AO D2, migration 0042) for a set
+ * of ids - a plain public-safe count, never voucher identity. Deliberately a SEPARATE read from
+ * `fetchSkillSnapshots` above (not an extra column on that query) so a database that has not yet run
+ * migration 0042 (column missing, Postgres error) cannot break the V1/V2 skill read it shares a
+ * request with - it only fails this one call, and every card falls back to `coachVouched: false`.
+ */
+const fetchCoachVouchCounts = unstable_cache(
+  async (ids: string[]): Promise<Record<string, number>> => {
+    const out: Record<string, number> = {};
+    if (ids.length === 0) return out;
+    try {
+      const supabase = createPublicClient();
+      const { data, error } = await supabase
+        .from('player_skill_profiles')
+        .select('player_id, coach_vouch_count')
+        .in('player_id', ids);
+      if (error) return out;
+      for (const row of (data ?? []) as Array<{
+        player_id: string;
+        coach_vouch_count: number | null;
+      }>) {
+        out[row.player_id] = row.coach_vouch_count ?? 0;
+      }
+    } catch {
+      // Column not present yet (pre-0042) or table unavailable → every player defaults to "not
+      // coach-vouched" rather than a broken card.
+    }
+    return out;
+  },
+  ['player-coach-vouch-counts'],
   { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
 );
 
@@ -670,15 +705,18 @@ export async function listPlayers(
   const pageRows = orderedRows.slice(from, from + PAGE_SIZE);
 
   const ids = pageRows.map((r) => r.id);
-  const [facts, skills, clubs, vouchMap, newAccountBadgeDays] = await Promise.all([
-    fetchBadgeFacts(ids),
-    fetchSkillSnapshots(ids, skillVersion),
-    getUserClubsBulk(ids),
-    viewer.viewerId
-      ? getViewerVouchCooldownMap(viewer.viewerId)
-      : Promise.resolve(new Map<string, number>()),
-    getNewAccountBadgeDays(),
-  ]);
+  const [facts, skills, coachVouchCounts, clubs, vouchMap, newAccountBadgeDays] = await Promise.all(
+    [
+      fetchBadgeFacts(ids),
+      fetchSkillSnapshots(ids, skillVersion),
+      fetchCoachVouchCounts(ids),
+      getUserClubsBulk(ids),
+      viewer.viewerId
+        ? getViewerVouchCooldownMap(viewer.viewerId)
+        : Promise.resolve(new Map<string, number>()),
+      getNewAccountBadgeDays(),
+    ],
+  );
   const players = pageRows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
     const extras: ProfileExtras = {
@@ -686,6 +724,7 @@ export async function listPlayers(
       identityVerified: f.identityVerified,
       skill: skills[row.id] ?? null,
       clubs: clubs[row.id] ?? [],
+      coachVouched: (coachVouchCounts[row.id] ?? 0) > 0,
     };
     const dto = toPlayerCardDTO(row, extras, viewer, newAccountBadgeDays);
     const cooldown = vouchMap.get(row.id);
@@ -723,6 +762,78 @@ async function fetchProfileRowBySlug(slug: string): Promise<ProfileRow | null> {
   }
 }
 
+/**
+ * Coaches who publicly vouched for this player (master_plan §2AO D3), for the profile's skill-
+ * distribution avatars - PROFILE QUERY ONLY, never the directory list (that would be a per-card
+ * query the directory cannot afford). This is a SANCTIONED public read of an otherwise-anonymous
+ * table: `vouches` RLS restricts SELECT to the voucher themself or staff (migration 0004), so this
+ * reads via the service client - safe here specifically because it is filtered to
+ * `used_coach_weight = true and visibility = 'public'` at the query level, i.e. only vouches whose
+ * author explicitly chose attribution (by §2AO D1, every coach vouch from now on). Anonymous vouches
+ * are excluded at the query level and never reach this function's caller. Fails open to `[]`.
+ */
+async function fetchCoachVouchersUncached(targetId: string): Promise<CoachVoucherDTO[]> {
+  try {
+    const svc = createServiceClient();
+    const { data: rows } = await svc
+      .from('vouches')
+      .select('voucher_id, skill_level')
+      .eq('target_id', targetId)
+      .eq('status', 'active')
+      .eq('used_coach_weight', true)
+      .eq('visibility', 'public')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    const voucherRows = (rows ?? []) as Array<{ voucher_id: string; skill_level: number }>;
+    if (voucherRows.length === 0) return [];
+
+    const voucherIds = Array.from(new Set(voucherRows.map((r) => r.voucher_id)));
+    const [{ data: profiles }, { data: verified }] = await Promise.all([
+      svc
+        .from('profiles')
+        .select('id, first_name, last_name, nickname, slug, avatar_path')
+        .in('id', voucherIds),
+      svc
+        .from('identity_verifications')
+        .select('user_id')
+        .eq('status', 'approved')
+        .in('user_id', voucherIds),
+    ]);
+    const profileById = new Map(
+      (profiles ?? []).map((p) => {
+        const row = p as {
+          id: string;
+          first_name: string | null;
+          last_name: string | null;
+          nickname: string | null;
+          slug: string | null;
+          avatar_path: string | null;
+        };
+        return [row.id, row] as const;
+      }),
+    );
+    const verifiedIds = new Set((verified ?? []).map((r) => (r as { user_id: string }).user_id));
+
+    return voucherRows.map((r) => {
+      const p = profileById.get(r.voucher_id);
+      const name =
+        [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||
+        p?.nickname ||
+        'VouchPlay player';
+      return {
+        name,
+        slug: p?.slug ?? null,
+        avatarUrl: avatarUrl(p?.avatar_path ?? null),
+        verified: verifiedIds.has(r.voucher_id),
+        level: r.skill_level,
+      };
+    });
+  } catch {
+    // A missing table/column or a read error must never break the profile - no coach avatars shown.
+    return [];
+  }
+}
+
 export async function getPlayerBySlug(
   slug: string,
   viewer: ViewerContext,
@@ -735,18 +846,28 @@ export async function getPlayerBySlug(
   if (!row) return null;
 
   const skillVersion = await getActiveSkillVersion();
-  const [facts, skills, clubs, newAccountBadgeDays] = await Promise.all([
-    fetchBadgeFacts([row.id]),
-    fetchSkillSnapshots([row.id], skillVersion),
-    getUserClubs(row.id),
-    getNewAccountBadgeDays(),
-  ]);
+  const fetchCoachVouchers = unstable_cache(
+    () => fetchCoachVouchersUncached(row.id),
+    ['player-coach-vouchers', row.id],
+    { revalidate: 60, tags: [playerTag(slug)] },
+  );
+  const [facts, skills, coachVouchCounts, clubs, coachVouchers, newAccountBadgeDays] =
+    await Promise.all([
+      fetchBadgeFacts([row.id]),
+      fetchSkillSnapshots([row.id], skillVersion),
+      fetchCoachVouchCounts([row.id]),
+      getUserClubs(row.id),
+      fetchCoachVouchers(),
+      getNewAccountBadgeDays(),
+    ]);
   const f = facts[row.id] ?? emptyFacts();
   const extras: ProfileExtras = {
     roles: f.roles,
     identityVerified: f.identityVerified,
     skill: skills[row.id] ?? null,
     clubs,
+    coachVouched: (coachVouchCounts[row.id] ?? 0) > 0,
+    coachVouchers,
   };
   return toPlayerProfileDTO(row, extras, viewer, newAccountBadgeDays);
 }

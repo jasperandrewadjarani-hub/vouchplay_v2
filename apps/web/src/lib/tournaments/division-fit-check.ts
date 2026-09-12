@@ -115,8 +115,9 @@ export async function checkDivisionFit(
   );
 
   // The skill rule is the organizer's to switch on: "Only allow players at each division's level
-  // or higher". Off means skill never blocks (§2F).
-  const { enforceSkillFloor } = await getTournamentRules(div.tournament_id);
+  // or higher". Off means skill never blocks (§2F). `allowPlayDownOneLevel` (§2AO decision C) widens
+  // that floor by exactly one level rather than switching it off.
+  const { enforceSkillFloor, allowPlayDownOneLevel } = await getTournamentRules(div.tournament_id);
 
   const name = divisionName(div as Parameters<typeof divisionName>[0]);
   const band = bandLabel(div);
@@ -133,6 +134,7 @@ export async function checkDivisionFit(
       divisionMinimumSkill: div.minimum_skill,
       divisionMaximumSkill: div.maximum_skill,
       enforceSkillFloor,
+      allowPlayDownOneLevel,
       partnerSex: c.partnerSex,
       format: div.format,
     });

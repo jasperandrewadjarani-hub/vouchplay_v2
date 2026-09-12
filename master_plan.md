@@ -3742,6 +3742,311 @@ Docs (this, handover v1.67) → three Sonnet builders in parallel: **A** directo
 **B** retraction + minimal power (4-5), **C** staff activity (6) → my review, full gates, deploy. No
 migration (the new setting has a code default; `0041` seeds it for Admin visibility - optional).
 
+## 2AO. Tournament slots (pay per seat), the registration wizard, play-down-one, coach vouch surfaces, profile visibility toggles, coach-application gate (2026-09-12)
+
+Jasper's batch, in his order: (1) Admin toggles to hide the per-level vouch meter and the
+community-vouched skill from public profiles; (2) full profile shows the community chip AND the
+self-rating chip; a "coach verified" chip for players a coach has vouched for; coach vouches count in
+the CSL; the skill distribution shows a clickable avatar of the coach(es) on the level they vouched;
+a coach can vouch as a player (anonymous by default) or as a coach (always attributed); the weight
+ordering he expects; (3) the coach application requires an approved ID and a profile photo first,
+with a continuous prompt; (4) an organizer toggle allowing entry one skill level BELOW the player's
+community-vouched skill, with a clear "subject to the organizers' final skills assessment" warning;
+(5) TOURNAMENT SLOTS: a player can reserve and pay for their OWN seat, with or without a division or
+a partner; teams can be partially paid; the unpaid partner is told to settle; every team that plays
+must be confirmed and fully paid; (6) the whole registration flow becomes one step-at-a-time modal
+"like building a team in a game"; (7) remove the "looking for partner" toggle from the division
+dropdown.
+
+### Findings (audited - three read-only Explore passes plus direct reads; live data on 2026-09-12)
+
+1. **Payments are one row per TEAM registration** (`payments.unique(registration_id)`, `amount_due =
+   per-player fee x team_size`, resolved at receipt submission - §1V). Every organizer surface
+   (verify / reject / refund, the Registrations list, the Kathrina receipt email, the backfill, the
+   XLSX export, the Overview revenue tile) assumes exactly one payment per registration. Production
+   holds 43 rows: 10 verified, 32 submitted, 1 rejected - all for Hermosa, all team-scope.
+2. **A registration is per team per division**; capacity counts `confirmed | payment_submitted |
+   under_review` plus `payment_pending` with a live 30-minute hold. Nothing sweeps expired holds; they
+   simply stop counting. `verifyPayment` confirms the registration outright - including a §2AM solo
+   entry with an open seat (the payer paid the whole team).
+3. **The "Register" button scrolls to the division list**; the list holds three different inline
+   entry forms (partner search + acknowledge, "Enter now, choose a partner later", singles Register)
+   and the payment modal opens from My registrations via `?entered=`. There is no wizard or stepper
+   primitive anywhere; the only dialog primitive is `components/ui/modal.tsx` (portal, Escape,
+   overlay click, body-scroll lock, `size: md|lg`, `align: sheet|center`).
+4. **"Looking for a partner" in the division dropdown** is `LookingForPartnerInline` inside
+   `partner-invite-form.tsx` (writes the global `profiles.looking_for_partner`). The tournament-page
+   `AvailabilityCard` (§2N) is a separate control and stays.
+5. **Skill floor**: `player_fits_division` (SQL, 0030) and `evaluateDivisionFit` (TS) refuse only
+   `skill > division.maximum_skill` and only when `tournaments.enforce_skill_floor` is on (Hermosa:
+   on). ELIG_V1 marks `communitySkillLevel > maximumSkill` as `SKILL_MISMATCH` regardless of the
+   floor setting. `max_divisions_per_player` (3) and `divisions.max_entries_per_player` exist in the
+   schema and the settings seed but are enforced NOWHERE (the only live multiple-entry rule is one
+   active team per player per division, via `player_on_active_team_in_division`).
+6. **Coach vouches**: `vouches.used_coach_weight` is the coach fact; there is no forced attribution -
+   `visibility` ('anonymous' | 'public') is the voucher's own checkbox for every vouch. They already
+   count in the CSL/STS (recompute reads every active vouch; coach-ness enters through
+   `effective_weight`). No public surface shows that a coach vouched; `SkillDistribution` renders
+   per-band counts only (its docstring: "icons are a later add"). `visibility = 'public'` is stored
+   but never surfaced anywhere. Live: one active coach role, effectively zero coach vouches.
+7. **Weights today**: `weight_identity_verified_coach 2.5 > weight_coach 2.0 > weight_identity_verified
+   1.25 > weight_normal 1.0`, all x `weight_minimal_account_multiplier 0.5` for a minimal account.
+   Jasper's list places "unverified ID but Skill-Verified" between ID-verified and plain. **That tier
+   contradicts LOCKED §10.5 and the CLAUDE.md non-negotiable** ("Skill-Verified never affects vouch
+   weight" - it would make vouch rings self-reinforcing, since Skill-Verified is itself derived from
+   vouches). Not implemented; see Decisions 7.
+8. **Profile**: the self-rated chip is already public, but only as a FALLBACK when there is no
+   community skill; the two never appear together. The distribution is on `PlayerProfileDTO` for
+   every signed-in viewer, owner and public alike. Cards show the community chip (self fallback).
+9. **Coach application** (`/me/roles/coach`, `submitCoachApplication`, `submit_coach_application`)
+   gates on feature flags, an active onboarded profile, no active coach role and no open application.
+   It checks neither an approved identity verification nor a profile photo. The identity page and
+   the profile edit page do not honour a `next` parameter.
+10. **Settings plumbing** is uniform: default in `packages/config/src/settings.ts`, catalog entry in
+    `settings-catalog.ts` (group / kind / help), `loadSettingFlag` (5-minute `unstable_cache` with the
+    `system_settings` tag), seeds via `insert ... on conflict (key) do nothing`.
+
+### Decisions
+
+**A. Tournament slots - the seat is the unit of payment (§24 amendment, v1.68).**
+
+1. **New table `tournament_slots`** = one player's paid seat in one tournament (migration 0042). A
+   slot is created at receipt submission (never empty) and lives in one of three shapes:
+   - **bare** - `registration_id null`: "I reserved a slot, I'll choose my division later";
+   - **attached** - `registration_id` set: this player's seat on that team entry;
+   - **retired** - `status in (rejected, refunded)` and no longer live.
+   Columns: `id, tournament_id, player_id, registration_id null (on delete set null), division_id null
+   (informational: the division chosen at purchase), status payment_status (submitted | verified |
+   rejected | refunded), amount_due, amount_submitted, currency, method, payer_name,
+   transaction_reference, proof_storage_path (PRIVATE bucket, same `payment-proofs`),
+   early_bird_applied, submitted_at, verified_by, verified_at, rejection_reason,
+   notification_sent_at, created_at, updated_at`. Partial unique indexes: one LIVE bare slot per
+   (tournament, player); one LIVE attached slot per (registration, player). RLS: read for the player,
+   the tournament's organizers and staff; no write policies (service role only).
+   **Why a separate table and not `payments` rows:** `payments.unique(registration_id)` is what the
+   live `submitPayment` upsert keys on; changing that constraint would break the running app in the
+   window between applying the migration and the deploy landing, during Hermosa's early-bird week.
+   A second table is purely additive: the old code never reads it, the new code reads it defensively
+   (a missing table degrades to "no slots"), and the feature switches on only when the migration's
+   own seed sets `tournament_slot_reservations_enabled = true` (code default **false** - the flag is
+   the migration's proof of life, not an admin decision).
+2. **Team payment rows (`payments`) are unchanged** and still mean "one receipt for the whole team".
+   From now on a registration's money state is the COMBINATION: team payment ⊕ attached slots. The
+   one pure function that decides it is `summarizeEntryPayment` (packages/core), tested:
+   - seat `paid` = attached slot `verified` with `amount_submitted >= amount_due`; `submitted` = slot
+     under review; `topup` = verified but short (`amount_due` was raised when a cheaper bare slot was
+     attached to a pricier division); `declined` = latest slot rejected; `unpaid` = no live slot;
+     `empty` = no player in that seat yet;
+   - a `verified` team payment covers every seat; a `submitted` one puts every seat under review;
+   - `fullyPaid` = every one of `team_size` seats is `paid` (an empty seat is never paid);
+   - `state` for chips: `paid | partial | submitted | unpaid | declined | refunded`; plus
+     `paidSeats / totalSeats` and `anyReceipt`.
+3. **Confirmation = fully paid.** `settleRegistration(registrationId)` (server, after every payment or
+   slot status change and every seat change): fully paid and status in (`payment_pending`,
+   `payment_submitted`, `under_review`) → `confirmed` (+ event `payment_verified`, + the existing
+   `payment_verified` / `registration_confirmed` notifications); any receipt and status
+   `payment_pending` → `payment_submitted` with the review grace (the slot is held - one paid seat is
+   enough to hold a team slot, exactly like today's solo entry); no live receipt at all and status
+   `payment_submitted` → `payment_pending` with a re-armed hold. A team-payment verify therefore
+   still confirms in one step (unchanged behaviour for every Hermosa row). A solo entry whose owner
+   paid ONLY their seat is **not** confirmed until the partner exists and is paid - that is the
+   "fully paid" goal made literal. Free divisions are untouched (no money, organizer confirms).
+4. **Attach / detach rules (server, TS, after the existing RPCs):**
+   - entering a division through the wizard with a live bare slot attaches it to the new registration
+     (`amount_due` raised to that division's per-player quote if higher - the seat then reads `topup`);
+   - a partner accepting an invitation attaches their live bare slot if they have one; otherwise, when
+     the team has no team payment, they receive **`seat_payment_due`** (critical: in-app + email) with
+     the amount and the early-bird deadline;
+   - a partner leaving (accepted release, an unconfirmed invitee swapped or withdrawn) detaches their
+     slot (`registration_id → null`, it becomes bare again - the money travels with the person);
+   - a registration closed by the organizer (`rejected` / `cancelled`) or withdrawn detaches every
+     attached slot the same way. Team payments keep today's behaviour (money stays with the entry).
+   - `player_cancel_registration` (SQL, 0042) blocks with `payment_already_started` only when a TEAM
+     payment exists or a slot belonging to ANOTHER member is attached. A player whose own seat is the
+     only money on a solo entry may self-cancel; their slot detaches and is reusable through the
+     wizard. This restores "change division" for the common mistake without reviving §2X's bypass -
+     re-entering runs the full fit / eligibility path again.
+5. **Bare slot price** = the lowest per-player quote among the tournament's open divisions, early bird
+   applied at submission (`quoteSlotPrice` in core). No new organizer field; the wizard says plainly
+   that a pricier division will ask for the difference. A bare slot holds NO division capacity - it
+   is a paid reservation of a place in the tournament; the division place is taken when the division
+   is chosen. The wizard and the My-registrations card say both things in one line each.
+6. **Organizer surfaces:** every payment-review control works on BOTH kinds of row through one action
+   family (`verifyPayment / rejectPayment / markRefunded` gain a `kind: 'team' | 'slot'` argument;
+   slot decisions call `settleRegistration`). The Registrations list gets a `paymentSummary` per
+   entry (chip: `Check payment` when any row is submitted, `Partially paid 1/2`, `Top-up needed`,
+   `Paid`, `Awaiting payment`), a `partial` value in the Payment filter, and the detail sheet lists
+   each row (team payment, each seat) with its own Verify / Reject / Refund. A **"Reserved slots"**
+   panel above the list shows bare slots (player, amount, status, receipt, Verify / Reject) - these
+   are receipts too and need the same review. Overview adds "Fully paid teams". The Kathrina email
+   fires for slot receipts as well ("Seat payment - {player} (seat 1 of 2, {team})" or "Slot
+   reservation - no division yet"), the running summary shows teams-with-receipts AND fully-paid
+   teams, and the backfill covers slot rows (idempotent through `tournament_slots.notification_sent_at`).
+7. **Player surfaces:** My registrations shows, per doubles entry, one seat line per member ("You:
+   paid · Maria: not yet paid") from the same summary, and a "Reserved slot" card for a bare slot
+   (Receipt sent / Verified / Declined; "Choose your division" opens the wizard with the slot; the
+   registration-close date). `describeRegistrationStatus` gains seat facts so the honest checklist
+   says "Maria still needs to pay her seat" instead of "pay the fee".
+
+**B. The registration wizard (§19 / §21 / §23 UX, v1.68).** One client component,
+`RegistrationWizard`, on the shared `Modal` (`size="lg"`, `align="center"`), replaces the three
+inline entry forms and the top "Register" scroll. A step rail (Division · Partner · Pay · Receipt),
+one decision per screen, big option cards with a selection ring, one primary "Continue" and a
+plain "Back". Entry points: the top Register button, "Enter" on a division row (pre-selected), the
+`?register=1` share link, "Choose your division" on a reserved-slot card, and "Pay now" on an entry
+(opens at the Pay step for that registration - `PayNowCell` becomes a wizard launcher).
+- **Division**: every open division as a card - name, band, price per player (early bird chip),
+  and a state: *Eligible* · *One level below your skill* (selectable, amber, with the assessment
+  warning and a required tick, Decision C) · *Not eligible* (the existing plain-language reason,
+  disabled) · *Full - joins the waitlist* · *You're in this one* (link to the entry). Button: **"I'll
+  choose a division later"** (only when slots are enabled and the tournament charges a fee) - the
+  card explains that a partner is chosen after a division.
+- **Partner** (doubles only): the existing search (blocked reasons inline), the "we have agreed to
+  play together" tick, or **"I'll choose a partner later"** (shows the lock-in date). No
+  looking-for-partner toggle here (Decision F).
+- **Pay**: two cards - **"Pay for my seat"** (per-player quote) and **"Pay for the whole team"**
+  (x team size; doubles only). Early-bird deadline under the price. Below, **"I'll pay later"**
+  opens a confirm panel that says the truth for the case: a division entry holds its place for
+  about `slot_hold_minutes` and is not secured until paid; a bare reservation reserves nothing
+  until paid (nothing is created). Leaving the Pay step with a division chosen creates the team +
+  registration (the existing actions, orchestrated by one `startEntry` action) so the hold starts
+  as the payment form appears.
+- **Receipt**: amount, QR + "Save QR", instructions / methods, the receipt form (method, payer,
+  reference, proof) - the existing `PaymentModalBody`, generalised to post a team payment, a seat
+  payment or a bare-slot reservation.
+- **Done**: what was created, what is still outstanding (partner to confirm / partner to pay /
+  organizer to verify), "View my registrations".
+- The division browser stays as the public reference list (fee, band, fit reason, the viewer's own
+  chip) with one **"Enter"** control per joinable row that opens the wizard pre-selected. Rules on
+  multiple entries are untouched: one active team per player per division is still enforced by the
+  RPCs; `max_divisions_per_player` remains unenforced (Finding 5) and is listed under Deferred rather
+  than switched on mid-window.
+
+**C. Play one level down (organizer toggle, §18 / §25 amendment, v1.68).**
+`tournaments.allow_play_down_one_level boolean default false` (0042), shown in the tournament form
+under the skill-floor rule as "Allow one level below (subject to your final skills assessment)".
+`player_fits_division` (SQL v3) and `evaluateDivisionFit` (TS) accept `skill = maximum_skill + 1`
+when the floor is on and the toggle is on; the TS result gains `playingDown: true` so the UI can
+warn. ELIG_V1 → **ELIG_V1.1**: with the rule input `allowPlayDownOneLevel`, a CSL exactly one above
+the maximum yields `REVIEW` with reason `PLAYING_DOWN_ONE_LEVEL` instead of `SKILL_MISMATCH`, so the
+entry lands in the organizer's "Needs review" queue - the assessment Jasper promises the player is
+operationalised, not just worded. Wizard copy on the card and in the confirm tick: *"You're entering
+one level below your community-vouched skill. Your division is subject to the organizers' final
+skills assessment, and you may be moved to a different division to keep play fair for everyone."*
+The same sentence is stored in the eligibility snapshot note so organizer and player read the same
+words.
+
+**D. Coach vouches on the profile (§9.1, §9.2, §10.1 amendment, v1.68).**
+1. **Coach vouches are always attributed.** With "Vouch as a Coach" on, the anonymous checkbox is
+   forced off and disabled with the line "Coach vouches are always shown with your name"; the server
+   forces `visibility = 'public'` whenever `used_coach_weight` is true. A coach vouching as a player
+   keeps the ordinary default (anonymous). Existing anonymous coach vouches (effectively none) are
+   left as they are.
+2. **"Coach-vouched" chip** (preferred over "Coach verified": *Verified* is already two locked,
+   separate concepts - Identity-Verified and Skill-Verified - and a coach's vouch verifies neither).
+   Medal icon, accent-cyan like the coach badge. Shown on the profile header and both card layouts
+   when `player_skill_profiles.coach_vouch_count > 0` (new column, maintained by the recompute path
+   and backfilled by 0042; a directory page must not run a per-card query).
+3. **Coach avatars on the distribution:** the profile loads the bounded list of active, PUBLIC,
+   coach-weighted vouches on the player (voucher name, slug, avatar, level; ≤ 20) and
+   `SkillDistribution` renders their avatars (with the check disc if verified) on the band row each
+   coach vouched, each a link to the coach's profile. Anonymous vouches never appear - this is the
+   §9.2 "public voucher = actual avatar" rule, finally built, restricted to the vouches whose authors
+   chose attribution (which, by D1, is every coach vouch from now on).
+4. **Community chip + self-rating chip together** on the full profile header (community first,
+   self-rated second, each labelled by `SkillPill`'s existing source suffix). Cards keep the single
+   chip. The self-rating stays hidden from nobody; it always was public.
+5. **Coach vouches in the CSL:** already true (Finding 6). No change; documented so it is not
+   re-asked.
+
+**E. Profile visibility toggles (Admin, v1.68).**
+- `profile_show_vouch_meter` (bool, default true, group `privacy`): off → the Skill distribution
+  section is hidden from everyone except staff, the owner included ("so user and public don't know
+  how many vouched for each level").
+- `profile_show_community_skill` (bool, default true, group `privacy`): off → the community-vouched
+  chip is hidden from other players on the profile and on cards; those viewers see the self-rated
+  chip (labelled) instead. The owner and staff still see the community chip. **Assumption** (the ask
+  was cut off mid-sentence): the owner keeps seeing their own level because the registration wizard,
+  the fit messages and the newcomer/minimal strips all speak in terms of it; hiding it from its
+  owner would make those sentences unexplainable. Jasper can widen it to "owner too" in one line.
+- Both are read through `loadSettingFlag` and passed as booleans into the DTO/pages - never decided
+  in a component. Leaderboards and the eligibility engine are untouched by either flag.
+
+**F. UI cleanup.** `LookingForPartnerInline` is removed from the partner step / division dropdown;
+the `AvailabilityCard` on the tournament page keeps the flag reachable.
+
+**G. Coach application gate (§4.4 amendment, v1.68).** `/me/roles/coach` renders the form only when
+the player has an approved identity verification AND a profile photo. Otherwise a two-step gate card:
+**1. Verify your ID** (Done / Pending review / button → `/me/settings/identity?next=/me/roles/coach`)
+and **2. Add a profile photo** (Done / button → `/me/edit?next=/me/roles/coach`), in order, so the
+player is walked through both and lands back on the application. The identity and edit pages honour
+a same-origin `next`. The `submitCoachApplication` action enforces the same two facts server-side
+(defense in depth; the SQL RPC is unchanged).
+
+7. **Weight ordering - not changed.** The current order is what Jasper described minus the
+   Skill-Verified tier, which is excluded by LOCKED §10.5 for the circularity reason recorded there.
+   Coach and ID-verified tiers, the minimal-account multiplier ("new account" in his words) and the
+   coach > ID > plain > minimal order are all already live. Adding a Skill-Verified tier is Jasper's
+   call to override a locked rule, and is left out until he says so explicitly.
+
+### Better suggestions folded in / deferred
+
+- Folded in: the seat summary as ONE pure function shared by player, organizer, email and overview;
+  confirmation strictly equal to fully paid; the bare slot's money following the person (detach on
+  leave / cancel / reject); self-cancel of a seat-only solo entry (= "change division" without
+  reviving §2X); ELIG_V1.1 review reason so "subject to assessment" is a queue, not a sentence;
+  "Coach-vouched" wording; the reserved-slot organizer panel; slot receipts in the Kathrina email.
+- Deferred (phase 2): a reminder to bare-slot holders before registration closes and to unpaid
+  partners before early bird ends (would piggyback the daily cron); organizer "mark seat settled /
+  waive top-up" without a receipt; a "Remind partner" button (spam risk - the join notification is
+  the reminder for now); enforcing `max_divisions_per_player` (never enforced; switching it on
+  mid-window could block real Hermosa entries); admin toggle to hide the community chip from its
+  owner too; clicking a distribution row to list public vouchers (§9.2's last sentence); Skill-
+  Verified as a weight tier (locked - Jasper's explicit override needed).
+
+### Contracts
+
+**Migration `0042_tournament_slots_play_down_coach.sql` (+ `scripts/apply-0042.sql`):**
+`tournament_slots` (above) + RLS + two partial unique indexes + `idx_tournament_slots_registration`,
+`idx_tournament_slots_player`; `tournaments.allow_play_down_one_level boolean not null default
+false`; `player_skill_profiles.coach_vouch_count int not null default 0` backfilled from active
+`used_coach_weight` vouches; `player_fits_division(uuid, uuid)` v3 (play-down-one); 
+`player_cancel_registration(uuid, uuid)` v2 (blocks on a team payment or another member's attached
+slot only); seeds `profile_show_vouch_meter true`, `profile_show_community_skill true`,
+`tournament_slot_reservations_enabled true` (on conflict do nothing). Every security-definer function
+followed by revoke/grant (lint). Apply is safe DURING the open window: purely additive, the old code
+never touches the new table.
+
+**Core (`packages/core`):** `tournaments/seat-payments.ts` → `summarizeEntryPayment(input)` and
+`quoteSlotPrice(divisions, earlyBird, at?)` (+ tests); `division-fit.ts` → `DivisionFitInput.allowPlayDownOneLevel?`
+and `DivisionFitResult.playingDown` (+ tests); `eligibility.ts` → `ELIGIBILITY_ALGORITHM_VERSION =
+'ELIG_V1.1'`, rule input `allowPlayDownOneLevel`, reason `PLAYING_DOWN_ONE_LEVEL` (+ tests);
+notifications catalog → `seat_payment_due` (critical), `seat_payment_verified`, `slot_reservation_verified`,
+`slot_reservation_rejected` (critical). **Config:** settings + catalog for the three flags.
+**Validation:** `tournamentCreateSchema.allowPlayDownOneLevel` (checkbox).
+**Web, payments:** `lib/payments/slots.ts` (loaders + attach / detach + `settleRegistration`),
+`lib/actions/payment.ts` (`submitSeatPayment`, `submitSlotReservation`, `kind` on the three review
+actions), `lib/payments/notification.ts` (slot receipts, fully-paid count, backfill),
+`lib/actions/registration.ts` (`startEntry`, attach/detach hooks), `lib/tournaments/registration-queries.ts`
+(viewer: `paymentSummary`, `mySeat`, `bareSlot`; organizer: `paymentSummary`, `slots`, `bareSlots`),
+`entry-view.ts`. **Web, UI:** `components/tournaments/registration-wizard.tsx` (+ `wizard-steps/*`),
+`register-cta.tsx`, `division-browser.tsx`, `my-registrations.tsx`, `payment-modal.tsx`,
+`organizer-registrations.tsx`, `tournament-form.tsx`, `tournament-overview.tsx`, `registration-status.ts`.
+**Web, profile / coach:** `lib/players/{dto,queries}.ts` (`coachVouched`, `coachVouchers`,
+visibility flags), `lib/vouches/recompute.ts` (`coach_vouch_count`), `components/players/{badges,
+profile-sections,player-card,vouch-form}.tsx`, `lib/actions/vouch.ts`, `app/(app)/players/[slug]/page.tsx`,
+`app/(app)/me/roles/coach/page.tsx` + `components/roles/coach-gate.tsx`, `lib/actions/coach.ts`,
+`next` on identity / edit pages.
+
+### Execution
+
+Docs (this, handover v1.68, notes) → one Opus builder for 0042 + one Sonnet builder per lane
+(core+config+validation; payments server; wizard UI; organizer UI; profile/coach), exact file
+ownership per lane, all in parallel → my review of the migration, `settleRegistration`, the attach /
+detach hooks and the wizard's server round-trips → full gates → one commit → Jasper applies
+`scripts/apply-0042.sql` (safe before or after the push; before is preferred so the feature is live
+the moment the deploy lands), pushes → verification on both domains and a read of the new rows.
+
 ## 1. Prompt Contract
 
 ### In scope

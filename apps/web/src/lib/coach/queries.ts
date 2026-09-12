@@ -1,5 +1,5 @@
 import 'server-only';
-import type { ApplicationStatus } from '@vouchplay/db';
+import type { ApplicationStatus, IdentityVerificationStatus } from '@vouchplay/db';
 import { createServiceClient } from '@/lib/supabase/service';
 
 export interface CoachEvidenceDTO {
@@ -125,6 +125,49 @@ export async function getMyCoachState(userId: string): Promise<{
     };
   } catch {
     return { activeCoach: false, coachRole: null, application: null, available: false };
+  }
+}
+
+export interface CoachGateState {
+  hasPhoto: boolean;
+  identityStatus: 'approved' | 'pending' | 'none' | 'rejected';
+}
+
+/**
+ * The two facts the Coach application is gated on (master_plan §2AO G, handover §4.4 amendment): an
+ * approved identity verification and a profile photo. Same lookups as `lib/vouches/voucher-power.ts`
+ * (avatar_path; latest `identity_verifications` row). Unlike the read-only decorative queries
+ * elsewhere in this file, this one guards a moderation-adjacent surface, so it fails CLOSED (both
+ * facts reported "not done") rather than open - a read error must never let an application through
+ * that `submitCoachApplication` would otherwise refuse.
+ */
+export async function getCoachGateState(userId: string): Promise<CoachGateState> {
+  try {
+    const svc = createServiceClient();
+    const [{ data: profileRow }, { data: verificationRow }] = await Promise.all([
+      svc.from('profiles').select('avatar_path').eq('id', userId).maybeSingle(),
+      svc
+        .from('identity_verifications')
+        .select('status')
+        .eq('user_id', userId)
+        .order('submitted_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const avatarPath = (profileRow as { avatar_path: string | null } | null)?.avatar_path ?? null;
+    const hasPhoto = !!avatarPath && avatarPath.trim().length > 0;
+    const rawStatus = (verificationRow as { status: IdentityVerificationStatus } | null)?.status;
+    const identityStatus: CoachGateState['identityStatus'] =
+      rawStatus === 'approved'
+        ? 'approved'
+        : rawStatus === 'pending' || rawStatus === 'reviewing'
+          ? 'pending'
+          : rawStatus === 'rejected' || rawStatus === 'resubmit_required'
+            ? 'rejected'
+            : 'none';
+    return { hasPhoto, identityStatus };
+  } catch {
+    return { hasPhoto: false, identityStatus: 'none' };
   }
 }
 

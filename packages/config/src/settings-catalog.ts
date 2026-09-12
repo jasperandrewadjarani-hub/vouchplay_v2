@@ -432,6 +432,27 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: 'Feature flag for the identity verification pipeline (master_plan §2AG Phase C).',
   },
   {
+    key: 'profile_show_vouch_meter',
+    label: 'Show the vouch meter (skill distribution) on profiles',
+    group: 'privacy',
+    kind: 'bool',
+    help: 'Off hides the per-level vouch counts from everyone except staff, the profile owner included (master_plan §2AO E).',
+  },
+  {
+    key: 'profile_show_community_skill',
+    label: 'Show the community-vouched skill to other players',
+    group: 'privacy',
+    kind: 'bool',
+    help: 'Off hides the community skill chip from other players on profiles and cards; they see the self-rated chip instead. The owner and staff still see it (master_plan §2AO E).',
+  },
+  {
+    key: 'tournament_slot_reservations_enabled',
+    label: 'Tournament slots (pay per seat, reserve before choosing a division)',
+    group: 'timing',
+    kind: 'bool',
+    help: 'Seeded on by migration 0042. Off hides "Pay for my seat" and "I\'ll choose a division later" in the registration wizard (master_plan §2AO A).',
+  },
+  {
     key: 'identity_doc_retention_days',
     label: 'Identity document backstop (days from submission)',
     group: 'privacy',

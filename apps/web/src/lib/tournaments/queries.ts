@@ -30,6 +30,8 @@ export interface TournamentRules {
   enforceSkillFloor: boolean;
   requireSkillVerified: boolean;
   requireOrganizerApproval: boolean;
+  /** Organizer's "Allow one level below" toggle (migration 0042; §2AO decision C). */
+  allowPlayDownOneLevel: boolean;
 }
 
 /**
@@ -38,7 +40,11 @@ export interface TournamentRules {
  * verified/approval requirement). Once 0022 is applied the real per-tournament values take effect,
  * with the DB default enabling the skill floor for new tournaments.
  */
-export async function getTournamentRules(tournamentId: string): Promise<TournamentRules> {
+async function getSkillFloorRules(tournamentId: string): Promise<{
+  enforceSkillFloor: boolean;
+  requireSkillVerified: boolean;
+  requireOrganizerApproval: boolean;
+}> {
   try {
     const { data, error } = await createServiceClient()
       .from('tournaments')
@@ -63,6 +69,38 @@ export async function getTournamentRules(tournamentId: string): Promise<Tourname
       requireOrganizerApproval: false,
     };
   }
+}
+
+/**
+ * Organizer "Allow one level below" toggle (migration 0042; §2AO decision C). Read defensively in
+ * its OWN query, the same pattern as `getPartnerLockAt` / `getPaymentNotificationEmail`: this column
+ * lands in a LATER migration than `enforce_skill_floor` et al, so it must not share their select -
+ * combining them would make the whole read (and therefore the already-shipped skill-floor rules)
+ * fail during the window after this deploy lands but before 0042 is applied.
+ */
+async function getAllowPlayDownOneLevel(tournamentId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('allow_play_down_one_level')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (
+      (data as { allow_play_down_one_level: boolean | null } | null)?.allow_play_down_one_level ??
+      false
+    );
+  } catch {
+    return false;
+  }
+}
+
+export async function getTournamentRules(tournamentId: string): Promise<TournamentRules> {
+  const [rules, allowPlayDownOneLevel] = await Promise.all([
+    getSkillFloorRules(tournamentId),
+    getAllowPlayDownOneLevel(tournamentId),
+  ]);
+  return { ...rules, allowPlayDownOneLevel };
 }
 
 /**
@@ -718,6 +756,7 @@ export async function getTournamentBySlug(
       enforceSkillFloor: rules.enforceSkillFloor,
       requireSkillVerified: rules.requireSkillVerified,
       requireOrganizerApproval: rules.requireOrganizerApproval,
+      allowPlayDownOneLevel: rules.allowPlayDownOneLevel,
     };
   } catch {
     return null;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { EntryPaymentSummary, TeamReceiptState } from '@vouchplay/core';
 import type { OrganizerRegistration } from './registration-queries';
 import {
   amountLabel,
@@ -19,7 +20,78 @@ import {
   type EntryFilters,
 } from './entry-view';
 
+/** master_plan §2AO A2/A6: the fixture derives a sensible `paymentSummary` from `paymentStatus` (so
+ *  every pre-existing test below - written before slots existed - still describes the same money
+ *  state), while a test that needs a slot-driven state (partial/topup/declined-by-seat) can still pass
+ *  `paymentSummary` explicitly and have it win outright. */
+function summaryFromPaymentStatus(
+  paymentStatus: string | null,
+  teamSize: number,
+): EntryPaymentSummary {
+  const totalSeats = Math.max(1, teamSize);
+  const teamReceipt: TeamReceiptState =
+    paymentStatus === 'verified'
+      ? 'verified'
+      : paymentStatus === 'submitted'
+        ? 'submitted'
+        : paymentStatus === 'rejected'
+          ? 'rejected'
+          : 'none';
+  if (teamReceipt === 'verified') {
+    return {
+      state: 'paid',
+      fullyPaid: true,
+      anyReceipt: true,
+      paidSeats: totalSeats,
+      submittedSeats: 0,
+      totalSeats,
+      seats: [],
+      teamReceipt,
+      topupDue: 0,
+    };
+  }
+  if (teamReceipt === 'submitted') {
+    return {
+      state: 'submitted',
+      fullyPaid: false,
+      anyReceipt: true,
+      paidSeats: 0,
+      submittedSeats: totalSeats,
+      totalSeats,
+      seats: [],
+      teamReceipt,
+      topupDue: 0,
+    };
+  }
+  if (teamReceipt === 'rejected') {
+    return {
+      state: 'declined',
+      fullyPaid: false,
+      anyReceipt: false,
+      paidSeats: 0,
+      submittedSeats: 0,
+      totalSeats,
+      seats: [],
+      teamReceipt,
+      topupDue: 0,
+    };
+  }
+  return {
+    state: 'unpaid',
+    fullyPaid: false,
+    anyReceipt: false,
+    paidSeats: 0,
+    submittedSeats: 0,
+    totalSeats,
+    seats: [],
+    teamReceipt,
+    topupDue: 0,
+  };
+}
+
 function entry(over: Partial<OrganizerRegistration> = {}): OrganizerRegistration {
+  const teamSize = over.teamSize ?? 2;
+  const paymentStatus = over.paymentStatus ?? null;
   return {
     id: 'r1',
     teamId: 't1',
@@ -42,6 +114,8 @@ function entry(over: Partial<OrganizerRegistration> = {}): OrganizerRegistration
     amountDue: null,
     currency: null,
     hasProof: false,
+    paymentSummary: summaryFromPaymentStatus(paymentStatus, teamSize),
+    slots: [],
     ...over,
   };
 }
@@ -104,6 +178,82 @@ describe('the chip says what to do, not what the column holds', () => {
       label: 'withdrawn',
       tone: 'closed',
     });
+  });
+
+  it('shows "Partially paid X/Y" when one seat is paid and there is no top-up owed (§2AO A6)', () => {
+    const chip = statusChip(
+      entry({
+        paymentSummary: {
+          state: 'partial',
+          fullyPaid: false,
+          anyReceipt: true,
+          paidSeats: 1,
+          submittedSeats: 0,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 0,
+        },
+      }),
+    );
+    expect(chip).toEqual({ label: 'Partially paid 1/2', tone: 'waiting' });
+  });
+
+  it('shows "Top-up needed" instead when a partial state carries a topupDue (§2AO A6)', () => {
+    const chip = statusChip(
+      entry({
+        paymentSummary: {
+          state: 'partial',
+          fullyPaid: false,
+          anyReceipt: true,
+          paidSeats: 1,
+          submittedSeats: 0,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 500,
+        },
+      }),
+    );
+    expect(chip).toEqual({ label: 'Top-up needed', tone: 'action' });
+  });
+
+  it('shows "Paid" when every seat is paid via slots but settlement has not confirmed yet (§2AO A6)', () => {
+    const chip = statusChip(
+      entry({
+        paymentSummary: {
+          state: 'paid',
+          fullyPaid: true,
+          anyReceipt: true,
+          paidSeats: 2,
+          submittedSeats: 0,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 0,
+        },
+      }),
+    );
+    expect(chip).toEqual({ label: 'Paid', tone: 'done' });
+  });
+
+  it('flags a submitted attached seat receipt as "Check payment" even with no team payment', () => {
+    const chip = statusChip(
+      entry({
+        paymentSummary: {
+          state: 'submitted',
+          fullyPaid: false,
+          anyReceipt: true,
+          paidSeats: 0,
+          submittedSeats: 1,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 0,
+        },
+      }),
+    );
+    expect(chip).toEqual({ label: 'Check payment', tone: 'action' });
   });
 });
 
@@ -245,6 +395,50 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     expect(
       filterEntries(rows, { ...DEFAULT_FILTERS, payment: ['no_proof'] }).map((r) => r.id),
     ).toEqual(['a', 'c']);
+  });
+
+  it('Payment also filters to the paymentSummary state "partial"/"paid" (§2AO A6)', () => {
+    const withSeatStates = [
+      ...rows,
+      entry({
+        id: 'g',
+        divisionId: 'd1',
+        divisionName: "Men's Doubles",
+        paymentSummary: {
+          state: 'partial',
+          fullyPaid: false,
+          anyReceipt: true,
+          paidSeats: 1,
+          submittedSeats: 0,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 0,
+        },
+      }),
+      entry({
+        id: 'h',
+        divisionId: 'd1',
+        divisionName: "Men's Doubles",
+        paymentSummary: {
+          state: 'paid',
+          fullyPaid: true,
+          anyReceipt: true,
+          paidSeats: 2,
+          submittedSeats: 0,
+          totalSeats: 2,
+          seats: [],
+          teamReceipt: 'none',
+          topupDue: 0,
+        },
+      }),
+    ];
+    expect(
+      filterEntries(withSeatStates, { ...DEFAULT_FILTERS, payment: ['partial'] }).map((r) => r.id),
+    ).toEqual(['g']);
+    expect(
+      filterEntries(withSeatStates, { ...DEFAULT_FILTERS, payment: ['paid'] }).map((r) => r.id),
+    ).toEqual(['h']);
   });
 
   it('Partner filters to confirmed/unconfirmed', () => {

@@ -28,7 +28,7 @@ import { RememberListUrl } from '@/components/players/list-return';
 import { Pagination } from '@/components/ui/pagination';
 import { SignupWall } from '@/components/ui/signup-wall';
 import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
-import { getLeaderboardSettings } from '@/lib/settings';
+import { getLeaderboardSettings, getProfileVisibilityFlags } from '@/lib/settings';
 import { getLeaderboard } from '@/lib/leaderboards/queries';
 
 export const metadata: Metadata = {
@@ -55,6 +55,8 @@ async function PlayersResults({
   compact,
   authed,
   staffLinks,
+  showCommunitySkill,
+  ownSlug,
 }: {
   filters: PlayerFilters;
   viewer: ViewerContext;
@@ -63,6 +65,13 @@ async function PlayersResults({
   /** Staff-only "Activity" entry point on every card (master_plan §2AN decision 6) - derived from
    *  `viewer.isStaff` up in the page, never from the player DTO. */
   staffLinks: boolean;
+  /** §2AO E: `profile_show_community_skill` (or staff), computed once per page - see the page
+   *  component below. */
+  showCommunitySkill: boolean;
+  /** The signed-in viewer's own slug (already loaded by the page for the availability card, so this
+   *  is free) - their OWN card keeps the community chip even when the toggle hides it from other
+   *  players (master_plan §2AO E: the flag hides the chip from OTHER players, not its owner). */
+  ownSlug: string | null;
 }) {
   const { players: allPlayers, total, page, pageCount } = await listPlayers(filters, viewer);
   // Signup wall (master_plan §2AH): anonymous visitors get a taste - the first 10 players, compact,
@@ -101,6 +110,7 @@ async function PlayersResults({
               authed={authed}
               compact={compact}
               staffLinks={staffLinks}
+              showCommunitySkill={showCommunitySkill || player.slug === ownSlug}
             />
           ))}
         </div>
@@ -171,6 +181,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // The viewer's own "looking for a partner" status, so the Players tab can offer a one-tap toggle
   // right where people browse for partners (§2M). Signed-in only.
   const myProfile = authed ? await getMyProfile() : null;
+  // §2AO E: `profile_show_community_skill` (or staff) - computed once for the whole page and passed
+  // into every card, never decided in the component.
+  const profileVisibility = await getProfileVisibilityFlags();
+  const showCommunitySkill = profileVisibility.showCommunitySkill || viewer.isStaff;
 
   return (
     <div className="space-y-5">
@@ -218,6 +232,8 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           compact={compact}
           authed={authed}
           staffLinks={viewer.isStaff}
+          showCommunitySkill={showCommunitySkill}
+          ownSlug={myProfile?.slug ?? null}
         />
       </Suspense>
     </div>

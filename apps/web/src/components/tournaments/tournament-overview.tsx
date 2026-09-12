@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { CheckCheck } from 'lucide-react';
 import type { OrganizerOverview } from '@/lib/tournaments/overview';
 
 /**
@@ -8,18 +10,25 @@ function Tile({
   label,
   value,
   hint,
+  icon,
   tone = 'default',
 }: {
   label: string;
   value: string | number;
   hint?: string;
+  icon?: ReactNode;
   tone?: 'default' | 'warning' | 'success';
 }) {
   const valueColor =
     tone === 'warning' ? 'text-warning' : tone === 'success' ? 'text-success' : 'text-foreground';
   return (
     <div className="border-border bg-background rounded-xl border p-3">
-      <div className={`text-lg font-semibold tracking-tight ${valueColor}`}>{value}</div>
+      <div
+        className={`flex items-center gap-1.5 text-lg font-semibold tracking-tight ${valueColor}`}
+      >
+        {icon}
+        {value}
+      </div>
       <div className="text-foreground-muted mt-0.5 text-xs">{label}</div>
       {hint && <div className="text-foreground-muted mt-0.5 text-[11px]">{hint}</div>}
     </div>
@@ -57,6 +66,14 @@ export function TournamentOverview({
           label="Eligibility to review"
           value={overview.eligibilityReviewCount}
           tone={overview.eligibilityReviewCount > 0 ? 'warning' : 'default'}
+        />
+        {/* Every seat paid, team receipt or per-seat (master_plan §2AO A6) - distinct from "Confirmed
+            teams" above, which also counts a free-division entry the organizer confirmed manually. */}
+        <Tile
+          label="Fully paid teams"
+          value={overview.fullyPaidTeams}
+          icon={<CheckCheck size={16} aria-hidden />}
+          tone="success"
         />
         <Tile label="Revenue collected" value={money} />
       </div>

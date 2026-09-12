@@ -127,6 +127,14 @@ export async function submitVouch(
       return { error: 'Coach-weighted vouches are currently disabled.' };
     }
     const usedCoachWeight = v.asCoach && isCoach && settings.coachWeightEnabled;
+    // §2AO D1: coach vouches are always attributed. The form disables the anonymous checkbox
+    // client-side, but the server is the one that actually enforces it, regardless of what the
+    // request posted.
+    const visibility: 'anonymous' | 'public' = usedCoachWeight
+      ? 'public'
+      : v.anonymous
+        ? 'anonymous'
+        : 'public';
     // Minimal-account factor (§2AN decision 5, v1.67): a fresh read of the VOUCHER's own current power,
     // never the target's - fifth source-credibility input alongside identity verification.
     const power = await getVoucherPower(user.id);
@@ -180,7 +188,7 @@ export async function submitVouch(
         .update({
           skill_level: v.skillLevel,
           interaction_type: v.interactionType,
-          visibility: v.anonymous ? 'anonymous' : 'public',
+          visibility,
           used_coach_weight: usedCoachWeight,
           effective_weight: weight,
           weight_rule_version: WEIGHT_RULE_VERSION,
@@ -193,7 +201,7 @@ export async function submitVouch(
         previous_skill_level: existing.skill_level,
         new_skill_level: v.skillLevel,
         previous_visibility: existing.visibility,
-        new_visibility: v.anonymous ? 'anonymous' : 'public',
+        new_visibility: visibility,
         previous_weight: existing.effective_weight,
         new_weight: weight,
         changed_by: user.id,
@@ -207,7 +215,7 @@ export async function submitVouch(
           target_id: v.targetId,
           skill_level: v.skillLevel,
           interaction_type: v.interactionType,
-          visibility: v.anonymous ? 'anonymous' : 'public',
+          visibility,
           used_coach_weight: usedCoachWeight,
           effective_weight: weight,
           weight_rule_version: WEIGHT_RULE_VERSION,
@@ -220,7 +228,7 @@ export async function submitVouch(
       await svc.from('vouch_revisions').insert({
         vouch_id: vouchId,
         new_skill_level: v.skillLevel,
-        new_visibility: v.anonymous ? 'anonymous' : 'public',
+        new_visibility: visibility,
         new_weight: weight,
         changed_by: user.id,
         change_type: 'created',

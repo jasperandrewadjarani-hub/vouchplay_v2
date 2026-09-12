@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { ProfileRow } from '@vouchplay/db';
-import { ANON_VIEWER, toPlayerCardDTO, type ProfileExtras } from './dto';
+import { ANON_VIEWER, toPlayerCardDTO, toPlayerProfileDTO, type ProfileExtras } from './dto';
 
 /**
  * `isNew` boundary (master_plan §2AG A3, D5): onboarded within `new_account_badge_days` shows the
@@ -84,5 +84,53 @@ describe('toPlayerCardDTO isNew', () => {
   it('defaults to a 7-day window when the caller does not pass one', () => {
     expect(toPlayerCardDTO(row(daysAgo(3)), extras, ANON_VIEWER).isNew).toBe(true);
     expect(toPlayerCardDTO(row(daysAgo(8)), extras, ANON_VIEWER).isNew).toBe(false);
+  });
+});
+
+/**
+ * `coachVouched` (master_plan §2AO D2): true only when the caller's `player_skill_profiles.
+ * coach_vouch_count` read (queries.ts) found at least one coach-weighted active vouch. The read is
+ * defensive (a database that has not yet run migration 0042 degrades to `{}`), so `extras.coachVouched`
+ * being absent - not just `false` - must also map to `false` here.
+ */
+describe('toPlayerCardDTO coachVouched', () => {
+  it('defaults to false when extras carries no coachVouched at all (missing column)', () => {
+    const dto = toPlayerCardDTO(row(daysAgo(1)), extras, ANON_VIEWER);
+    expect(dto.coachVouched).toBe(false);
+  });
+
+  it('is false when extras.coachVouched is explicitly false', () => {
+    const dto = toPlayerCardDTO(row(daysAgo(1)), { ...extras, coachVouched: false }, ANON_VIEWER);
+    expect(dto.coachVouched).toBe(false);
+  });
+
+  it('is true when extras.coachVouched is true', () => {
+    const dto = toPlayerCardDTO(row(daysAgo(1)), { ...extras, coachVouched: true }, ANON_VIEWER);
+    expect(dto.coachVouched).toBe(true);
+  });
+});
+
+/**
+ * `coachVouchers` (master_plan §2AO D3) is a PROFILE-only field - `PlayerCardDTO` (what every
+ * directory card renders) never carries it at all, and `toPlayerProfileDTO` defaults it to an empty
+ * array when the caller (the directory list never calls this - only `getPlayerBySlug` does) omits it.
+ */
+describe('toPlayerProfileDTO coachVouchers', () => {
+  it('is absent on the card DTO entirely', () => {
+    const dto = toPlayerCardDTO(row(daysAgo(1)), extras, ANON_VIEWER);
+    expect('coachVouchers' in dto).toBe(false);
+  });
+
+  it('defaults to an empty array on the profile DTO when extras omits it', () => {
+    const dto = toPlayerProfileDTO(row(daysAgo(1)), extras, ANON_VIEWER);
+    expect(dto.coachVouchers).toEqual([]);
+  });
+
+  it('carries through whatever the caller loaded', () => {
+    const coachVouchers = [
+      { name: 'Coach Ana', slug: 'coach-ana', avatarUrl: null, verified: true, level: 4 },
+    ];
+    const dto = toPlayerProfileDTO(row(daysAgo(1)), { ...extras, coachVouchers }, ANON_VIEWER);
+    expect(dto.coachVouchers).toEqual(coachVouchers);
   });
 });

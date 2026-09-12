@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ShieldCheck, ChevronRight, Clock } from 'lucide-react';
-import { getMyProfile, requireUser } from '@/lib/auth';
+import { getMyProfile, requireUser, safeNext } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { OnboardingForm } from '@/components/auth/onboarding-form';
 
@@ -26,8 +26,17 @@ async function myIdentityStatus(userId: string): Promise<string> {
   }
 }
 
-export default async function EditProfilePage() {
-  const user = await requireUser('/me/edit');
+interface EditProfilePageProps {
+  searchParams: Promise<{ next?: string | string[] }>;
+}
+
+export default async function EditProfilePage({ searchParams }: EditProfilePageProps) {
+  const sp = await searchParams;
+  // Same-origin-only redirect target for a caller that needs the player back on a specific page after
+  // saving (master_plan §2AO decision 9) - e.g. the Coach application gate sending them here to add a
+  // photo before returning to `/me/roles/coach`. Anything unsafe/absent falls back to the default.
+  const next = safeNext(Array.isArray(sp.next) ? sp.next[0] : sp.next);
+  const user = await requireUser(next ? `/me/edit?next=${encodeURIComponent(next)}` : '/me/edit');
   const profile = await getMyProfile();
   if (!profile?.onboarded_at) redirect('/onboarding');
   const idStatus = await myIdentityStatus(user.id);
@@ -52,6 +61,7 @@ export default async function EditProfilePage() {
       <div className="border-border bg-surface rounded-2xl border p-5">
         <OnboardingForm
           mode="edit"
+          next={next}
           initial={{
             firstName: profile.first_name ?? '',
             lastName: profile.last_name ?? '',

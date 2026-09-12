@@ -140,6 +140,9 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   enforceSkillFloor: boolean;
   requireSkillVerified: boolean;
   requireOrganizerApproval: boolean;
+  /** Organizer's "Allow one level below" toggle (migration 0042; §2AO decision C). Read defensively
+   * - see `getTournamentRules` in queries.ts - so a pre-migration deploy degrades to false. */
+  allowPlayDownOneLevel: boolean;
 }
 
 const SEX_LABEL: Record<string, string> = {

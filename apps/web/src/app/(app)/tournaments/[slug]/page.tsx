@@ -13,8 +13,9 @@ import { TournamentStatusPill } from '@/components/tournaments/status-pill';
 import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { MyRegistrations } from '@/components/tournaments/my-registrations';
 import { DivisionBrowser } from '@/components/tournaments/division-browser';
+import type { WizardTournament } from '@/components/tournaments/registration-wizard';
 import { ClubRepSelector } from '@/components/tournaments/club-rep-selector';
-import { RegisterButton, RegisterAnchorScroll } from '@/components/tournaments/register-cta';
+import { RegisterButton } from '@/components/tournaments/register-cta';
 import { registerNext } from '@/lib/tournaments/register-link';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { getTournamentDemandSettings, loadSettingNumber } from '@/lib/settings';
@@ -83,6 +84,25 @@ export default async function TournamentPage({ params, searchParams }: Params) {
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
+
+  // The one slice of tournament data the registration wizard needs, assembled once so every entry
+  // point (top Register button, division-row Enter, Pay now, Choose your division) reads the same
+  // numbers (master_plan §2AO B).
+  const wizardTournament: WizardTournament = {
+    id: t.id,
+    slug: t.slug,
+    name: t.name,
+    divisions: t.divisions,
+    earlyBird: { startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt },
+    enforceSkillFloor: t.enforceSkillFloor,
+    allowPlayDownOneLevel: t.allowPlayDownOneLevel,
+    requireSkillVerified: t.requireSkillVerified,
+    paymentInstructions: t.paymentInstructions,
+    paymentMethods: t.paymentMethods,
+    registrationOpen: isOpen,
+    slotHoldMinutes,
+    registrationCloseAt: t.registrationCloseAt,
+  };
   const interestOptions = demandOptions(t.divisions);
   // Interest recorded under the old planning taxonomy is folded into the matching division, so the
   // breakdown shows one row per division rather than an old and a new row for the same thing.
@@ -93,7 +113,6 @@ export default async function TournamentPage({ params, searchParams }: Params) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <RegisterAnchorScroll />
       <Link href="/tournaments" className="text-foreground-muted hover:text-foreground text-sm">
         ← All tournaments
       </Link>
@@ -136,7 +155,13 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           {t.description && <p className="text-foreground text-sm">{t.description}</p>}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <RegisterButton slug={slug} authed={authed} open={isOpen} />
+            <RegisterButton
+              slug={slug}
+              authed={authed}
+              open={isOpen}
+              tournament={wizardTournament}
+              state={regState}
+            />
             {demandSettings.enabled && (
               <InterestButton
                 tournamentId={t.id}
@@ -182,14 +207,8 @@ export default async function TournamentPage({ params, searchParams }: Params) {
       {/* My registrations: collapsed manager of the player's own active entries, after details. */}
       {authed && regState && (
         <MyRegistrations
-          tournamentId={t.id}
-          divisions={t.divisions}
+          tournament={wizardTournament}
           state={regState}
-          registrationOpen={isOpen}
-          paymentInstructions={t.paymentInstructions}
-          paymentMethods={t.paymentMethods}
-          earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
-          slotHoldMinutes={slotHoldMinutes}
           enteredRegistrationId={typeof sp.entered === 'string' ? sp.entered : null}
         />
       )}
@@ -197,15 +216,10 @@ export default async function TournamentPage({ params, searchParams }: Params) {
       {/* Division browser: collapsed by default; registers a signed-in player into any division. */}
       <div id={authed ? 'register' : undefined} className="scroll-mt-24">
         <DivisionBrowser
-          tournamentId={t.id}
-          divisions={t.divisions}
+          tournament={wizardTournament}
           state={regState}
-          registrationOpen={isOpen}
           authed={authed}
           signInHref={loginToRegister}
-          requireSkillVerified={t.requireSkillVerified}
-          enforceSkillFloor={t.enforceSkillFloor}
-          earlyBird={{ startsAt: t.earlyBirdStartsAt, endsAt: t.earlyBirdEndsAt }}
         />
       </div>
 

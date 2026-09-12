@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeOverview, type OverviewRegInput } from './overview';
+import { computeOverview, type OverviewRegInput, type OverviewSlotInput } from './overview';
 
 const reg = (over: Partial<OverviewRegInput>): OverviewRegInput => ({
   divisionId: 'd1',
@@ -84,5 +84,45 @@ describe('computeOverview (§26.1)', () => {
       [],
     );
     expect(o.incompleteTeams).toBe(2);
+  });
+
+  it('counts active entries whose paymentSummary.fullyPaid is true as fully paid teams, excluding terminal (§2AO A6)', () => {
+    const o = computeOverview(
+      [
+        reg({ fullyPaid: true }),
+        reg({ fullyPaid: true, status: 'withdrawn' }), // terminal - excluded
+        reg({ fullyPaid: false }),
+        reg({}), // no flag - not fully paid
+      ],
+      [],
+    );
+    expect(o.fullyPaidTeams).toBe(1);
+  });
+
+  it('adds verified slot amounts (attached and bare) to revenueCollected (§2AO A6)', () => {
+    const slot = (over: Partial<OverviewSlotInput>): OverviewSlotInput => ({
+      status: 'verified',
+      amountDue: 400,
+      currency: 'PHP',
+      ...over,
+    });
+    const o = computeOverview(
+      [reg({ paymentStatus: 'verified', amountDue: 1000, currency: 'PHP' })],
+      [],
+      [
+        slot({}), // attached seat, verified
+        slot({}), // bare reservation, verified
+        slot({ status: 'submitted' }), // not yet verified - excluded
+      ],
+    );
+    expect(o.revenueCollected).toBe(1800);
+  });
+
+  it('defaults revenueCollected to team-payments-only when no slots are passed', () => {
+    const o = computeOverview(
+      [reg({ paymentStatus: 'verified', amountDue: 1000, currency: 'PHP' })],
+      [],
+    );
+    expect(o.revenueCollected).toBe(1000);
   });
 });

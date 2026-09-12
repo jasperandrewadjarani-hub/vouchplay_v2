@@ -63,7 +63,11 @@ export function isClosed(entry: Pick<OrganizerRegistration, 'status'>): boolean 
 export function queuesFor(entry: OrganizerRegistration): EntryQueue[] {
   if (isClosed(entry)) return [];
   const queues: EntryQueue[] = [];
-  if (entry.paymentStatus === 'submitted') queues.push('needs_payment_review');
+  // §2AO A6: a submitted receipt on EITHER the team payment or any attached seat needs review, not
+  // only the team-scope row `paymentStatus` used to check.
+  if (entry.paymentStatus === 'submitted' || entry.paymentSummary.submittedSeats > 0) {
+    queues.push('needs_payment_review');
+  }
   if (entry.cancellationRequest) queues.push('cancellation_requested');
   if (entry.eligibilityStatus !== 'eligible') queues.push('needs_eligibility_review');
   return queues;
@@ -97,15 +101,27 @@ export interface StatusChip {
 /**
  * One chip per entry, chosen by what the ORGANIZER must do next rather than by raw status. A list of
  * database enums is a list an organizer has to translate; this is the translation.
+ *
+ * §2AO A6: driven by `paymentSummary` (team receipt combined with every attached seat) rather than
+ * only the team-scope `paymentStatus`, so a seat-only receipt or a partially paid doubles team reads
+ * correctly too.
  */
 export function statusChip(entry: OrganizerRegistration): StatusChip {
   if (isClosed(entry)) return { label: entry.status.replace(/_/g, ' '), tone: 'closed' };
   if (entry.cancellationRequest) return { label: 'Cancellation asked', tone: 'action' };
-  if (entry.paymentStatus === 'submitted') return { label: 'Check payment', tone: 'action' };
+  const summary = entry.paymentSummary;
+  if (summary.submittedSeats > 0 || summary.teamReceipt === 'submitted') {
+    return { label: 'Check payment', tone: 'action' };
+  }
   if (entry.status === 'confirmed') return { label: 'Confirmed', tone: 'done' };
   if (entry.status === 'waitlisted') return { label: 'Waitlisted', tone: 'waiting' };
-  if (entry.paymentStatus === 'verified') return { label: 'Paid', tone: 'done' };
-  if (entry.paymentStatus === 'rejected') return { label: 'Payment rejected', tone: 'action' };
+  if (summary.state === 'partial') {
+    return summary.topupDue > 0
+      ? { label: 'Top-up needed', tone: 'action' }
+      : { label: `Partially paid ${summary.paidSeats}/${summary.totalSeats}`, tone: 'waiting' };
+  }
+  if (summary.state === 'paid') return { label: 'Paid', tone: 'done' };
+  if (summary.state === 'declined') return { label: 'Payment rejected', tone: 'action' };
   return { label: 'Awaiting payment', tone: 'waiting' };
 }
 
@@ -159,12 +175,18 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
  * combine directly instead of picking one precomputed bucket; a cancellation request still surfaces
  * via the row's own chip and still sorts to the top under the default "needs me" order.
  */
+/** §2AO A6: receipt-presence (unchanged) plus the two payment-summary states an organizer can now
+ *  filter to directly. */
+export type PaymentFilterValue = 'has_proof' | 'no_proof' | 'partial' | 'paid';
+
 export interface EntryFilters {
   /** Division ids (not names - two divisions can share a display name). Empty = every division. */
   divisions: string[];
   statuses: RegStatus[];
   eligibility: EligKind[];
-  payment: ('has_proof' | 'no_proof')[];
+  /** §2AO A6: 'partial'/'paid' read from `paymentSummary.state` alongside the existing receipt-
+   *  presence values - an entry matches if it satisfies ANY selected value (OR within the group). */
+  payment: PaymentFilterValue[];
   partner: ('confirmed' | 'unconfirmed' | 'none')[];
   /** Legacy single toggle, kept alongside the Status group (handover A5). Only decides visibility
    *  when `statuses` is empty - an explicit Status pick is a more specific ask and wins outright. */
@@ -212,8 +234,10 @@ export function filterEntries(
       return false;
 
     if (filters.payment.length > 0) {
-      const key: 'has_proof' | 'no_proof' = e.hasProof ? 'has_proof' : 'no_proof';
-      if (!filters.payment.includes(key)) return false;
+      const keys: PaymentFilterValue[] = [e.hasProof ? 'has_proof' : 'no_proof'];
+      if (e.paymentSummary.state === 'partial') keys.push('partial');
+      if (e.paymentSummary.state === 'paid') keys.push('paid');
+      if (!keys.some((k) => filters.payment.includes(k))) return false;
     }
 
     if (filters.partner.length > 0) {
@@ -245,9 +269,11 @@ export interface EntryFilterChip {
   label: string;
 }
 
-const PAYMENT_LABELS: Record<'has_proof' | 'no_proof', string> = {
+const PAYMENT_LABELS: Record<PaymentFilterValue, string> = {
   has_proof: 'Has receipt',
   no_proof: 'No receipt',
+  partial: 'Partially paid',
+  paid: 'Fully paid',
 };
 const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed' | 'none', string> = {
   confirmed: 'Partner confirmed',

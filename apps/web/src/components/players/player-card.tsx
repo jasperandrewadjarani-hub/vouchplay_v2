@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { MapPin, UserSearch, Handshake, GraduationCap } from 'lucide-react';
+import { MapPin, UserSearch, Handshake, GraduationCap, Medal } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { StaffPlayerActivityLink } from '@/components/staff/staff-player-activity-link';
@@ -13,6 +13,7 @@ import {
   SexBadge,
   SkillVerifiedBadge,
   CoachBadge,
+  CoachVouchedBadge,
   OrganizerBadge,
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
@@ -28,6 +29,7 @@ export function PlayerCard({
   authed,
   compact = false,
   staffLinks = false,
+  showCommunitySkill = true,
 }: {
   player: PlayerCardDTO;
   authed: boolean;
@@ -36,6 +38,10 @@ export function PlayerCard({
    *  `viewer.isStaff`, never from the DTO, so a cached/shared card can never leak it to a non-staff
    *  viewer. */
   staffLinks?: boolean;
+  /** §2AO E: Admin's `profile_show_community_skill` toggle (or the viewer being staff), computed ONCE
+   *  per list by the caller and passed down - never decided in this component. False falls back to
+   *  the self-rated pill only, exactly like a player with no community skill yet. */
+  showCommunitySkill?: boolean;
 }) {
   // Anonymous visitors get one warm, consistent signup prompt whenever they reach for depth
   // (master_plan §2AH): every directory card click (overlay, name, avatar - compact and detailed)
@@ -43,11 +49,12 @@ export function PlayerCard({
   const profileHref = authed
     ? `/players/${player.slug}`
     : `/signup?next=${encodeURIComponent(`/players/${player.slug}`)}`;
-  const skill = player.communitySkill
-    ? { band: player.communitySkill, source: 'community' as const }
-    : player.selfRatedSkill
-      ? { band: player.selfRatedSkill, source: 'self' as const }
-      : null;
+  const skill =
+    showCommunitySkill && player.communitySkill
+      ? { band: player.communitySkill, source: 'community' as const }
+      : player.selfRatedSkill
+        ? { band: player.selfRatedSkill, source: 'self' as const }
+        : null;
 
   if (compact) {
     return (
@@ -105,6 +112,18 @@ export function PlayerCard({
                 partner/sponsorship icons beside it, so line one stays on one line. */}
             {player.isCoach && (
               <GraduationCap size={13} className="text-primary shrink-0" aria-label="Coach" />
+            )}
+            {/* Compact marker for master_plan §2AO D2: a coach has vouched for THIS player's skill -
+                independent of whether this player is themself a coach, so it sits beside (not
+                instead of) the GraduationCap icon above. */}
+            {player.coachVouched && (
+              <span
+                className="shrink-0"
+                title="A coach has vouched for this player's skill"
+                aria-label="Coach-vouched"
+              >
+                <Medal size={13} className="text-accent-cyan" aria-hidden />
+              </span>
             )}
             {/* A small icon, not a pill, so line one still holds the name/nickname/sex without
                 wrapping (§1H/§1T). It marks who is open to a partner at a glance, and it is the same
@@ -210,6 +229,7 @@ export function PlayerCard({
           its hover text explains what it means. */}
       {(player.skillVerified ||
         player.isCoach ||
+        player.coachVouched ||
         player.isOrganizer ||
         player.lookingForPartner ||
         player.openForSponsorship ||
@@ -217,6 +237,7 @@ export function PlayerCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {player.skillVerified && <SkillVerifiedBadge />}
           {player.isCoach && <CoachBadge />}
+          {player.coachVouched && <CoachVouchedBadge />}
           {player.isOrganizer && <OrganizerBadge />}
           {player.lookingForPartner && <LookingForPartnerBadge />}
           {player.openForSponsorship && <OpenForSponsorshipBadge />}

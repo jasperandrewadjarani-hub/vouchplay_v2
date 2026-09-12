@@ -1,19 +1,18 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
 import { ClipboardCheck } from 'lucide-react';
 import { registerNext } from '@/lib/tournaments/register-link';
+import { RegistrationWizardLauncher, type WizardTournament } from './registration-wizard';
+import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 
 /**
- * Registration entry points on a tournament page (handover §19.2, §19.3, §28.1).
- *  - `RegisterButton`: the prominent "Register" call-to-action. Anonymous visitors are routed to
- *    signup carrying `next=/tournaments/{slug}?register=1`, so account creation resumes straight back
- *    on the registration options (the same resume pattern as vouching). Signed-in visitors smooth-
- *    scroll to the registration section.
- *  - `RegisterAnchorScroll`: when the page is opened via a shared registration link (`?register=1`),
- *    scrolls to and briefly highlights the registration section so it "leads directly to
- *    registration options" for whoever opens the link.
+ * The prominent "Register" call to action on a tournament page (master_plan §2AO B). Anonymous
+ * visitors are routed to signup carrying `next=/tournaments/{slug}?register=1`, so account creation
+ * resumes straight back on `?register=1` - which `RegistrationWizardLauncher` reads to open the
+ * wizard at Division. Signed-in visitors open the wizard directly; there is no more scroll-to-section
+ * behaviour (`RegisterAnchorScroll` is gone - the launcher's own `?register=1`/`?entered=` handling
+ * replaces it).
  */
 
 const btn =
@@ -23,14 +22,19 @@ export function RegisterButton({
   slug,
   authed,
   open,
+  tournament,
+  state,
 }: {
   slug: string;
   authed: boolean;
   open: boolean;
+  /** Only needed once signed in - anonymous visitors never mount the wizard. */
+  tournament?: WizardTournament;
+  state?: ViewerRegistrationState | null;
 }) {
   if (!open) return null;
 
-  if (!authed) {
+  if (!authed || !tournament) {
     return (
       <Link
         href={`/signup?next=${encodeURIComponent(registerNext(slug))}`}
@@ -43,42 +47,11 @@ export function RegisterButton({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        const el = document.getElementById('register');
-        if (!el) return;
-        // The division browser is a collapsed <details>; open it so the register actions are visible.
-        el.querySelector('details')?.setAttribute('open', '');
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }}
-      className={`${btn} vp-gradient vp-glow text-white`}
-    >
-      <ClipboardCheck size={16} aria-hidden />
-      Register
-    </button>
+    <RegistrationWizardLauncher tournament={tournament} state={state ?? null}>
+      <button type="button" className={`${btn} vp-gradient vp-glow text-white`}>
+        <ClipboardCheck size={16} aria-hidden />
+        Register
+      </button>
+    </RegistrationWizardLauncher>
   );
-}
-
-/** Scrolls to (and pulses) the #register section when the page is opened with ?register=1. */
-export function RegisterAnchorScroll() {
-  useEffect(() => {
-    let wants = false;
-    try {
-      wants = new URLSearchParams(window.location.search).get('register') === '1';
-    } catch {
-      wants = false;
-    }
-    if (!wants) return;
-    const el = document.getElementById('register');
-    if (!el) return;
-    // Defer to after paint so layout is settled.
-    const id = window.setTimeout(() => {
-      el.querySelector('details')?.setAttribute('open', '');
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.classList.add('vp-in');
-    }, 120);
-    return () => window.clearTimeout(id);
-  }, []);
-  return null;
 }

@@ -24,6 +24,7 @@ import {
   IdentityVerifiedBadge,
   SkillVerifiedBadge,
   CoachBadge,
+  CoachVouchedBadge,
   OrganizerBadge,
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
@@ -45,7 +46,7 @@ import {
   getPlayerHistory,
 } from '@/lib/players/profile-extras';
 import { getContributionProgress } from '@/lib/leaderboards/queries';
-import { getVouchSettings } from '@/lib/settings';
+import { getVouchSettings, getProfileVisibilityFlags } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
 import { countHeldVouchesForTarget } from '@/lib/vouches/held';
 import { getVoucherTierCached } from '@/lib/vouches/newcomer';
@@ -106,6 +107,7 @@ export default async function PlayerProfilePage({ params }: Params) {
     vouchSettings,
     heldVouchCount,
     identityPending,
+    visibilityFlags,
   ] = await Promise.all([
     getPlayerSkillTags(player.id, viewer.viewerId),
     getPlayerAchievements(player.id, viewer.viewerId),
@@ -116,7 +118,14 @@ export default async function PlayerProfilePage({ params }: Params) {
     // Own-profile-only, cheap bounded read (master_plan §2AG Phase C); never shown on anyone
     // else's profile and never exposes the document itself.
     player.isOwnProfile ? hasPendingIdentityVerification(player.id) : Promise.resolve(false),
+    getProfileVisibilityFlags(),
   ]);
+  // §2AO E: the two Admin profile-visibility toggles. The community chip stays visible to the owner
+  // and staff even when Admin hides it from other players (the wizard/fit messages speak in terms of
+  // it); the vouch-meter toggle deliberately does NOT carve out the owner - off means nobody but
+  // staff sees the distribution, owner included.
+  const showCommunity = visibilityFlags.showCommunitySkill || player.isOwnProfile || viewer.isStaff;
+  const showMeter = visibilityFlags.showVouchMeter || viewer.isStaff;
   const authed = viewer.viewerId !== null;
   const iBlocked =
     authed && !player.isOwnProfile
@@ -136,11 +145,6 @@ export default async function PlayerProfilePage({ params }: Params) {
       : [{ hasVouched: false, canUpdateInMs: null }, null, null];
   const newcomerLimit = viewerTier?.tier === 'newcomer' ? viewerTier.newcomerCaps.per24h : 0;
   const distributionTotal = Object.values(player.distribution).reduce((s, n) => s + n, 0);
-  const skill = player.communitySkill
-    ? { band: player.communitySkill, source: 'community' as const }
-    : player.selfRatedSkill
-      ? { band: player.selfRatedSkill, source: 'self' as const }
-      : null;
   const shareUrl = `${publicEnv.siteUrl}/players/${slug}`;
   const memberSince = formatMonthYear(player.memberSince);
 
@@ -209,9 +213,15 @@ export default async function PlayerProfilePage({ params }: Params) {
           </div>
         </div>
 
-        {/* Credentials: skill, confidence, sex, then verification / role / availability badges. */}
+        {/* Credentials: skill, confidence, sex, then verification / role / availability badges.
+            §2AO D4/E: the full profile shows the community chip AND the self-rated chip together
+            (community first) when Admin's `profile_show_community_skill` allows it for this viewer;
+            otherwise only the self-rated chip (the self-rating is never hidden from anyone). */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {skill && <SkillPill band={skill.band} source={skill.source} />}
+          {showCommunity && player.communitySkill && (
+            <SkillPill band={player.communitySkill} source="community" />
+          )}
+          {player.selfRatedSkill && <SkillPill band={player.selfRatedSkill} source="self" />}
           <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
           <SexBadge sex={player.sex} />
         </div>
@@ -236,6 +246,7 @@ export default async function PlayerProfilePage({ params }: Params) {
         {(player.identityVerified ||
           player.skillVerified ||
           player.isCoach ||
+          player.coachVouched ||
           player.isOrganizer ||
           player.lookingForPartner ||
           player.openForSponsorship ||
@@ -245,6 +256,7 @@ export default async function PlayerProfilePage({ params }: Params) {
             {player.identityVerified && <IdentityVerifiedBadge />}
             {player.skillVerified && <SkillVerifiedBadge />}
             {player.isCoach && <CoachBadge />}
+            {player.coachVouched && <CoachVouchedBadge />}
             {player.isOrganizer && <OrganizerBadge />}
             {player.lookingForPartner && <LookingForPartnerBadge />}
             {player.openForSponsorship && <OpenForSponsorshipBadge />}
@@ -288,7 +300,15 @@ export default async function PlayerProfilePage({ params }: Params) {
         </div>
       </header>
 
-      <SkillDistribution distribution={player.distribution} total={distributionTotal} />
+      {/* §2AO E: off → hidden from everyone except staff, the owner included - deliberately no
+          owner carve-out here (unlike the community chip above). */}
+      {showMeter && (
+        <SkillDistribution
+          distribution={player.distribution}
+          total={distributionTotal}
+          coachVouchers={player.coachVouchers}
+        />
+      )}
       <ContributionProgress progress={contribution} />
       <AchievementsPanel
         authed={authed}

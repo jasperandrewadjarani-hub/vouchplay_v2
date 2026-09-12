@@ -2383,6 +2383,15 @@ it done. Several fixes in this session were found only that way.
   1,799 per player and PHP 3,598 per two-player team. Saved non-destructively as the
   `_Per_Player_Team_Rates` revision (1254 x 1254 PNG).
 
+- **2026-09-12** - Completed the approved Hermosa Grand / Rise of the Empires print-poster
+  redesign. The 2:3 composition preserves the official five-logo presenter strip, removes the side
+  slogans and Fort Pilar label, makes the PHP 600,000++ prize pool and B-STEEL ownership prominent,
+  simplifies the player's kit into a checklist, adds the VouchPlay registration CTA, and includes
+  the requested JT Consulting & Analytics plus VouchPlay V platform footer. Final deliverables are a
+  3600 x 5400 PNG with 300-DPI metadata and a one-page 12 x 18 inch PDF under
+  `deliverables/tournament-poster/`. Source master plan and verification walkthrough are under
+  `working/`.
+
 ## 2026-09-10 - Deployment-skew self-healing (§2Q, handover v1.45)
 
 Players reported two error screens as common: "VouchPlay hit a snag" (global-error, no chrome) and
@@ -2923,3 +2932,31 @@ winning over the unvouched nudge; /staff/players/[slug] activity view (de-anonym
 audited per open) + staff-only "Activity" link on cards/profile.
 Deferred (phase 2): hide a disabled account's comments reversibly (needs a marker column), staff
 "minimal" indicator on cards, activity export.
+
+## 2026-09-12 - Tournament slots, registration wizard, play-down-one, coach vouch surfaces, visibility toggles, coach gate (§2AO, handover v1.68)
+Jasper's seven-part batch. Audit: payments are one row per TEAM registration (43 live rows for
+Hermosa, all team-scope); confirmation happened on verify regardless of open seats; no wizard or
+stepper primitive exists; coach vouches already count in CSL but are never attributed or surfaced;
+the skill floor is a strict ceiling; max_divisions_per_player is unenforced everywhere; the coach
+application checks neither ID nor photo.
+Design: NEW table tournament_slots (one paid SEAT; bare = no division yet, attached = seat on an
+entry) chosen over changing payments.unique(registration_id) because that constraint is what the live
+submitPayment upsert keys on - a separate additive table has no apply-vs-deploy window. Money state =
+team payment ⊕ attached slots via one pure core function (summarizeEntryPayment); CONFIRMED = fully
+paid; one paid seat holds the team slot; slots detach and follow the player (leave / cancel / reject);
+seat-only solo entries may self-cancel (restores "change division" safely). Bare slot price = lowest
+per-player quote (early bird at submission). Wizard on the shared Modal: Division (choose later) ->
+Partner (choose later) -> Pay (my seat / whole team / pay later with the honest hold warning) ->
+Receipt -> Done; division list keeps one "Enter" per row; LookingForPartnerInline removed from it.
+Play-down-one: tournaments.allow_play_down_one_level; SQL + TS fit accept max+1; ELIG_V1.1 reason
+PLAYING_DOWN_ONE_LEVEL -> REVIEW; player warned with the assessment sentence + tick. Coach: coach
+vouches always public; "Coach-vouched" chip (coach_vouch_count on player_skill_profiles, backfilled);
+coach avatars on the distribution rows; community + self chips side by side. Admin flags
+profile_show_vouch_meter / profile_show_community_skill / tournament_slot_reservations_enabled (0042
+seeds true; code default false so the feature is inert until the migration is applied). Coach
+application gate: approved ID + photo, two-step card with next= return.
+NOT changed: vouch weights - Jasper's ordering includes a Skill-Verified tier, which LOCKED §10.5 and
+CLAUDE.md forbid (circularity). Flagged for his explicit override.
+Deferred: bare-slot / unpaid-partner reminders (cron), organizer waive top-up, remind-partner button,
+max_divisions_per_player enforcement, hide community chip from owner, voucher list on a distribution
+row click.

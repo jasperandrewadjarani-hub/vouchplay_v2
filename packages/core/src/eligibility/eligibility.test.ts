@@ -164,6 +164,69 @@ describe('evaluatePlayerEligibility (ELIG_V1)', () => {
     expect(r.flags).toContain('UNUSUAL_VOUCH_ACTIVITY');
   });
 
+  // -------------------------------------------------------------------------
+  // ELIG_V1.1 / §2AO decision C - "allow play down one level": exactly one level above the max, with
+  // the organizer's toggle on, is a REVIEW (queued for the promised final skills assessment), not a
+  // flat SKILL_MISMATCH. The version bump itself is asserted separately below.
+  // -------------------------------------------------------------------------
+  it('one level above the max, toggle ON -> REVIEW with PLAYING_DOWN_ONE_LEVEL', () => {
+    const r = evaluatePlayerEligibility(
+      strongPlayer({ communitySkillLevel: 4 }),
+      { ...band, allowPlayDownOneLevel: true },
+      TH,
+    );
+    expect(r.result).toBe('REVIEW');
+    expect(r.reasonCodes).toContain('PLAYING_DOWN_ONE_LEVEL');
+    expect(r.reasonCodes).not.toContain('SKILL_ABOVE_DIVISION_MAX');
+  });
+
+  it('one level above the max, toggle OFF -> SKILL_MISMATCH as before', () => {
+    const r = evaluatePlayerEligibility(
+      strongPlayer({ communitySkillLevel: 4 }),
+      { ...band, allowPlayDownOneLevel: false },
+      TH,
+    );
+    expect(r.result).toBe('SKILL_MISMATCH');
+    expect(r.reasonCodes).toContain('SKILL_ABOVE_DIVISION_MAX');
+  });
+
+  it('two levels above the max, toggle ON -> still SKILL_MISMATCH (the toggle only widens by one)', () => {
+    const r = evaluatePlayerEligibility(
+      strongPlayer({ communitySkillLevel: 5 }),
+      { ...band, allowPlayDownOneLevel: true },
+      TH,
+    );
+    expect(r.result).toBe('SKILL_MISMATCH');
+    expect(r.reasonCodes).toContain('SKILL_ABOVE_DIVISION_MAX');
+    expect(r.reasonCodes).not.toContain('PLAYING_DOWN_ONE_LEVEL');
+  });
+
+  it('omitting the toggle entirely behaves exactly like toggle OFF', () => {
+    const { allowPlayDownOneLevel: _unused, ...bandWithoutToggle } = band as typeof band & {
+      allowPlayDownOneLevel?: boolean;
+    };
+    const r = evaluatePlayerEligibility(
+      strongPlayer({ communitySkillLevel: 4 }),
+      bandWithoutToggle,
+      TH,
+    );
+    expect(r.result).toBe('SKILL_MISMATCH');
+  });
+
+  it('a hard rule still takes precedence over PLAYING_DOWN_ONE_LEVEL', () => {
+    const r = evaluatePlayerEligibility(
+      strongPlayer({ communitySkillLevel: 4, accountActive: false }),
+      { ...band, allowPlayDownOneLevel: true },
+      TH,
+    );
+    expect(r.result).toBe('INELIGIBLE_HARD_RULE');
+    expect(r.reasonCodes).not.toContain('PLAYING_DOWN_ONE_LEVEL');
+  });
+
+  it('ELIGIBILITY_ALGORITHM_VERSION is bumped to ELIG_V1.1', () => {
+    expect(ELIGIBILITY_ALGORITHM_VERSION).toBe('ELIG_V1.1');
+  });
+
   it('open policy never yields SKILL_MISMATCH even for a high skill', () => {
     const r = evaluatePlayerEligibility(
       strongPlayer({ communitySkillLevel: 6 }),

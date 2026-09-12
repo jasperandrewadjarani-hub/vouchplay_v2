@@ -19,6 +19,13 @@
  * (`partnerSex` provided) - the same ELIG_V1-mirrored rule lives at the team level as
  * `MIXED_COMPOSITION` in `eligibility.ts`, which is the line of defence that does not depend on the
  * picker having been used at all.
+ *
+ * §2AO decision C adds an organizer toggle, `allowPlayDownOneLevel`: when the skill floor is
+ * enforced, a player exactly ONE level above the division's maximum still fits (`playingDown: true`
+ * on the result, so the UI can show the "subject to the organizers' final skills assessment"
+ * warning); two or more levels above is still refused. When the floor is NOT enforced at all, a
+ * player above the maximum already fit (organizer's call) - `playingDown` is now also set on that
+ * path so the UI can still surface the same warning even though nothing is blocked.
  */
 
 export type DivisionFitReason = 'sex' | 'sex_unknown' | 'skill_too_high' | 'mixed_pair';
@@ -46,12 +53,24 @@ export interface DivisionFitInput {
   partnerSex?: 'male' | 'female' | null;
   /** 'singles' | 'doubles' | etc. Composition only applies to doubles; singles has no partner. */
   format?: string;
+  /**
+   * §2AO decision C: the organizer's "Allow one level below" toggle. Only meaningful together with
+   * `enforceSkillFloor` - it widens the floor by exactly one level, it never replaces it.
+   */
+  allowPlayDownOneLevel?: boolean;
 }
 
 export interface DivisionFitResult {
   fits: boolean;
   /** Null when it fits. Only the FIRST failing rule is reported - see `evaluateDivisionFit`. */
   reason: DivisionFitReason | null;
+  /**
+   * True when this player is above the division's maximum skill and is entering anyway - either
+   * because the organizer's play-down-one-level toggle let exactly one level through (`fits: true`),
+   * or because the skill floor is not enforced at all and playing up/down is unrestricted (`fits:
+   * true`). Always false when the player is at or below the maximum, or when skill is unknown/open.
+   */
+  playingDown: boolean;
 }
 
 /**
@@ -68,35 +87,55 @@ export function evaluateDivisionFit(input: DivisionFitInput): DivisionFitResult 
   // Told apart on purpose. "This division is for women" is a dead end for someone who simply never
   // filled the field in; "add your gender to your profile" is a door. Roughly a third of accounts
   // have no gender recorded, so this is the common case, not the edge one.
-  if (singleSex && !input.playerSex) return { fits: false, reason: 'sex_unknown' };
-  if (sex === 'men' && input.playerSex !== 'male') return { fits: false, reason: 'sex' };
-  if (sex === 'women' && input.playerSex !== 'female') return { fits: false, reason: 'sex' };
+  if (singleSex && !input.playerSex)
+    return { fits: false, reason: 'sex_unknown', playingDown: false };
+  if (sex === 'men' && input.playerSex !== 'male')
+    return { fits: false, reason: 'sex', playingDown: false };
+  if (sex === 'women' && input.playerSex !== 'female')
+    return { fits: false, reason: 'sex', playingDown: false };
 
   // §2AM decision 1: mixed doubles is one male + one female, not "anyone". `partnerSex` is only
   // present when this check is FOR a specific other seat (the picker, an invite, an acceptance) -
   // singles has no partner, and a bare per-player fit check (partnerSex undefined) still accepts
   // anyone, because composition is a property of the PAIR, not of either player alone.
   if (sex === 'mixed' && input.partnerSex !== undefined && input.format !== 'singles') {
-    if (!input.playerSex) return { fits: false, reason: 'sex_unknown' };
+    if (!input.playerSex) return { fits: false, reason: 'sex_unknown', playingDown: false };
     if (input.partnerSex && input.playerSex === input.partnerSex) {
-      return { fits: false, reason: 'mixed_pair' };
+      return { fits: false, reason: 'mixed_pair', playingDown: false };
     }
   }
+
+  const aboveMax =
+    input.skillPolicy !== 'open' &&
+    input.effectiveSkill != null &&
+    input.divisionMaximumSkill != null &&
+    input.effectiveSkill > input.divisionMaximumSkill;
 
   // Playing UP is allowed, always. A Low Intermediate entering a High Intermediate division is
   // choosing a harder game, which no rule should stand in the way of. Only playing DOWN is refused,
   // and only when the organizer has asked for it - that is what their "level or higher" setting says
   // in so many words, and it is the whole of the skill rule.
-  if (
-    input.enforceSkillFloor &&
-    input.skillPolicy !== 'open' &&
-    input.effectiveSkill != null &&
-    input.divisionMaximumSkill != null &&
-    input.effectiveSkill > input.divisionMaximumSkill
-  ) {
-    return { fits: false, reason: 'skill_too_high' };
+  if (input.enforceSkillFloor && aboveMax) {
+    // §2AO decision C: the organizer's play-down-one-level toggle widens the floor by exactly one
+    // level - a player one level above the max still enters, flagged for the organizer's final
+    // skills assessment. Two or more levels above is still refused outright.
+    if (
+      input.allowPlayDownOneLevel &&
+      input.effectiveSkill === (input.divisionMaximumSkill as number) + 1
+    ) {
+      return { fits: true, reason: null, playingDown: true };
+    }
+    return { fits: false, reason: 'skill_too_high', playingDown: false };
   }
-  return { fits: true, reason: null };
+
+  // The floor is OFF: skill never blocks entry, but a player above the division's own maximum is
+  // still worth flagging - `playingDown` lets the wizard show the same "subject to assessment"
+  // warning even though nothing here refuses them (§2AO decision C).
+  if (!input.enforceSkillFloor && aboveMax) {
+    return { fits: true, reason: null, playingDown: true };
+  }
+
+  return { fits: true, reason: null, playingDown: false };
 }
 
 export interface FitMessageContext {

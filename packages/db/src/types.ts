@@ -189,6 +189,8 @@ export interface PlayerSkillProfileRow {
   verification_type: SkillVerificationType;
   algorithm_version: string;
   calculated_at: string;
+  /** §2AO D2 (migration 0042): active coach-weighted vouches received. Optional until applied. */
+  coach_vouch_count?: number;
 }
 
 export interface BlockRow {
@@ -407,6 +409,8 @@ export interface TournamentRow {
   club_representation_required: boolean;
   verified_clubs_only: boolean;
   enforce_skill_floor: boolean;
+  /** §2AO C (migration 0042). Optional: absent until the migration is applied. */
+  allow_play_down_one_level?: boolean;
   require_skill_verified: boolean;
   require_organizer_approval: boolean;
   created_at: string;
@@ -597,6 +601,35 @@ export interface PaymentRow {
   verified_by: string | null;
   verified_at: string | null;
   rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ---------- Tournament slots (migration 0042, master_plan §2AO A) ----------
+/**
+ * One player's paid SEAT in one tournament. `registration_id null` = a bare slot (no division chosen
+ * yet); set = this player's seat on that team entry. Created at receipt submission, never empty.
+ */
+export interface TournamentSlotRow {
+  id: string;
+  tournament_id: string;
+  player_id: string;
+  registration_id: string | null;
+  division_id: string | null;
+  status: PaymentStatus;
+  amount_due: number;
+  amount_submitted: number | null;
+  currency: string;
+  method: string | null;
+  payer_name: string | null;
+  transaction_reference: string | null;
+  proof_storage_path: string | null;
+  early_bird_applied: boolean;
+  submitted_at: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  notification_sent_at: string | null;
   created_at: string;
   updated_at: string;
 }

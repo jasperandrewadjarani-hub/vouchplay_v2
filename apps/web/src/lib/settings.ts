@@ -77,6 +77,25 @@ export async function loadSettingFlag(key: SystemSettingsKey, fallback: boolean)
   return typeof v === 'boolean' ? v : fallback;
 }
 
+/** §2AO E: the two Admin profile-visibility toggles, read once per request. */
+export async function getProfileVisibilityFlags(): Promise<{
+  showVouchMeter: boolean;
+  showCommunitySkill: boolean;
+}> {
+  const m = await loadSettings();
+  const flag = (k: SystemSettingsKey, fallback: boolean) =>
+    typeof m[k] === 'boolean' ? (m[k] as boolean) : fallback;
+  return {
+    showVouchMeter: flag('profile_show_vouch_meter', true),
+    showCommunitySkill: flag('profile_show_community_skill', true),
+  };
+}
+
+/** §2AO A: tournament slots are live only once migration 0042 has seeded this flag to true. */
+export async function isSlotReservationsEnabled(): Promise<boolean> {
+  return loadSettingFlag('tournament_slot_reservations_enabled', false);
+}
+
 /** Read a numeric setting from system_settings (handover §30.7), with a fallback default. */
 export async function loadSettingNumber(key: SystemSettingsKey, fallback: number): Promise<number> {
   const m = await loadSettings();

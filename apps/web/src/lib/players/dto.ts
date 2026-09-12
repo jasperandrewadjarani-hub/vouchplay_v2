@@ -93,6 +93,26 @@ export interface PlayerCardDTO {
    */
   viewerVouchCanUpdateInMs: number | null;
   clubs: ClubRef[];
+  /**
+   * At least one active, coach-weighted vouch exists for this player (master_plan §2AO D2), from
+   * `player_skill_profiles.coach_vouch_count` (migration 0042, maintained by the recompute path).
+   * Defaults to false when the column is not yet present - see `queries.ts`'s defensive read.
+   */
+  coachVouched: boolean;
+}
+
+/**
+ * One coach who publicly vouched for a player, for the profile's skill-distribution avatars
+ * (master_plan §2AO D3). Loaded ONLY on the profile query (never the directory list) and only from
+ * vouches whose author chose `visibility = 'public'` - anonymous coach vouches never appear here.
+ */
+export interface CoachVoucherDTO {
+  name: string;
+  slug: string | null;
+  avatarUrl: string | null;
+  verified: boolean;
+  /** The skill-band ordinal (0..6) the coach vouched at - matches `SkillBand.ordinal`. */
+  level: number;
 }
 
 export interface PlayerProfileDTO extends PlayerCardDTO {
@@ -107,6 +127,9 @@ export interface PlayerProfileDTO extends PlayerCardDTO {
   isOwnProfile: boolean;
   /** Vouch distribution by band ordinal (0..6 → count) and total unique vouchers (§9.2). */
   distribution: Record<string, number>;
+  /** Coaches who publicly vouched for this player, bounded to 20 (master_plan §2AO D3). Empty when
+   *  there are none, or when the read failed (fail-open - never blocks the profile). */
+  coachVouchers: CoachVoucherDTO[];
 }
 
 /** Exported for reuse by the directory sort (master_plan §2AG A1): the same "First Last" (falling
@@ -171,6 +194,12 @@ export interface ProfileExtras {
   identityVerified: boolean;
   clubs?: ClubRef[];
   skill?: SkillSnapshot | null;
+  /** `player_skill_profiles.coach_vouch_count > 0` (master_plan §2AO D2). Kept separate from `skill`
+   *  because it is not version-routed (STS_V1/V2) and is read defensively on its own (§2AO, migration
+   *  0042). Undefined/missing → false. */
+  coachVouched?: boolean;
+  /** Profile-query-only (§2AO D3); never populated for the directory list. See `CoachVoucherDTO`. */
+  coachVouchers?: CoachVoucherDTO[];
 }
 
 export function toPlayerCardDTO(
@@ -211,6 +240,7 @@ export function toPlayerCardDTO(
     viewerHasVouched: false,
     viewerVouchCanUpdateInMs: null,
     clubs: extras.clubs ?? [],
+    coachVouched: extras.coachVouched ?? false,
   };
 }
 
@@ -234,6 +264,7 @@ export function toPlayerProfileDTO(
     isOwnProfile: viewer.viewerId === row.id,
     distribution: extras.skill?.distribution ?? {},
     uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
+    coachVouchers: extras.coachVouchers ?? [],
   };
 }
 
