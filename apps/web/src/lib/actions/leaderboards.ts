@@ -136,8 +136,13 @@ export async function requestAndBuildLeaderboards(
       entityId: typeof requestId === 'string' ? requestId : null,
       reason: detail.slice(0, 480),
     });
+    // The one failure an admin can fix without a deploy (master_plan §2AX): the contribution
+    // builder refusing to read more vouch facts than its cap allows. Say where the dial is.
+    const hint = detail.startsWith('contribution_source_bound_exceeded')
+      ? ' Raise "Builder fact-row cap" under Admin → Settings → Contribution, then rebuild.'
+      : '';
     return {
-      error: `The rebuild failed safely. Existing active snapshots were preserved. Reason: ${detail}`,
+      error: `The rebuild failed safely. Existing active snapshots were preserved. Reason: ${detail}.${hint}`,
     };
   }
 }

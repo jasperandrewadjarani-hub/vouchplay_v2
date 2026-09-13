@@ -7,7 +7,7 @@ import {
   type SkillAlgorithmVersion,
 } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
-import type { ContributionConfig, V2Params, AnomalyParams } from '@vouchplay/core';
+import type { ContributionConfig, V2Params, AnomalyParams, PartnerWeights } from '@vouchplay/core';
 
 export const SYSTEM_SETTINGS_TAG = 'system_settings';
 
@@ -317,6 +317,38 @@ export async function getContributionSettings(): Promise<{
       streakBadgeWeeks: num(m, 'contribution_streak_badge_weeks'),
       pillarScore: num(m, 'contribution_pillar_score'),
     },
+  };
+}
+
+export interface PartnerSettings {
+  enabled: boolean;
+  weights: PartnerWeights;
+  swipeDailyLimit: number;
+  leftSwipeHideDays: number;
+  matchReminderHours: number;
+  swipePurgeDays: number;
+}
+
+/** Partner matchmaking / "swipe to partner" settings (master_plan §2AV A), seeded by migration 0047.
+ *  Read once per deck load / maintenance run - never hardcoded in the scoring or lifecycle logic. */
+export async function getPartnerSettings(): Promise<PartnerSettings> {
+  const m = await loadSettings();
+  return {
+    enabled:
+      typeof m.partner_matchmaking_enabled === 'boolean' ? m.partner_matchmaking_enabled : true,
+    weights: {
+      slot: num(m, 'partner_weight_slot'),
+      divisionOverlap: num(m, 'partner_weight_division_overlap'),
+      skillProximity: num(m, 'partner_weight_skill_proximity'),
+      reciprocity: num(m, 'partner_weight_reciprocity'),
+      city: num(m, 'partner_weight_city'),
+      trust: num(m, 'partner_weight_trust'),
+      freshness: num(m, 'partner_weight_freshness'),
+    },
+    swipeDailyLimit: num(m, 'partner_swipe_daily_limit'),
+    leftSwipeHideDays: num(m, 'partner_left_swipe_hide_days'),
+    matchReminderHours: num(m, 'partner_match_reminder_hours'),
+    swipePurgeDays: num(m, 'partner_swipe_purge_days'),
   };
 }
 

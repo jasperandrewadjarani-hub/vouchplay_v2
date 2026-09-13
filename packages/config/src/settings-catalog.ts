@@ -25,6 +25,7 @@ export type SettingGroupKey =
   | 'contribution'
   | 'leaderboards'
   | 'flags'
+  | 'partners'
   | 'announcement'
   | 'vouch_integrity'
   | 'directory';
@@ -105,6 +106,11 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     help: 'LEADER_V1 publication, privacy, category weights, and cadence (§6.1).',
   },
   { key: 'flags', label: 'Feature flags', help: 'Platform-wide switches (§30.7, §61).' },
+  {
+    key: 'partners',
+    label: 'Partner matchmaking',
+    help: 'The tournament partner deck: kill switch, score weights and limits (master_plan §2AV).',
+  },
   {
     key: 'announcement',
     label: 'Announcement banner',
@@ -694,8 +700,119 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     group: 'contribution',
     kind: 'int',
     min: 100,
-    max: 50000,
+    max: 1000000,
     sensitive: true,
+  },
+
+  // Partner matchmaking (master_plan §2AV)
+  {
+    key: 'partner_matchmaking_enabled',
+    label: 'Partner matchmaking enabled',
+    group: 'partners',
+    kind: 'bool',
+    help: 'Off hides every "Find a partner" entry point and the deck page (master_plan §2AV I).',
+  },
+  {
+    key: 'partner_weight_slot',
+    label: 'Weight: has a paid open seat',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Candidate holds a paid open seat in a common division; an entered-but-unpaid seat scores half.',
+  },
+  {
+    key: 'partner_weight_division_overlap',
+    label: 'Weight: per common division',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Added per division both players want; doubled when it is Recommended for the viewer.',
+  },
+  {
+    key: 'partner_weight_skill_proximity',
+    label: 'Weight: skill proximity',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Same band full weight, one band apart half, two or more nothing. Uses the real levels even when a rating is private.',
+  },
+  {
+    key: 'partner_weight_reciprocity',
+    label: 'Weight: they already said yes',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'The candidate already swiped right on the viewer. Sorts only - never shown.',
+  },
+  {
+    key: 'partner_weight_city',
+    label: 'Weight: same city',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Same city full weight, same region (leaderboard city-region map) half.',
+  },
+  {
+    key: 'partner_weight_trust',
+    label: 'Weight: trust',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Identity verified 0.4 + coach-vouched 0.3 + STS at or above the review threshold 0.3, times this weight.',
+  },
+  {
+    key: 'partner_weight_freshness',
+    label: 'Weight: freshness',
+    group: 'partners',
+    kind: 'float',
+    min: 0,
+    max: 100,
+    step: 0.5,
+    help: 'Full weight when the search was active in the last 24 hours, decaying to nothing at 7 days.',
+  },
+  {
+    key: 'partner_swipe_daily_limit',
+    label: 'Swipes per player per day',
+    group: 'partners',
+    kind: 'int',
+    min: 10,
+    max: 5000,
+  },
+  {
+    key: 'partner_left_swipe_hide_days',
+    label: '"Not now" hides a card for (days)',
+    group: 'partners',
+    kind: 'int',
+    min: 1,
+    max: 365,
+  },
+  {
+    key: 'partner_match_reminder_hours',
+    label: 'Remind an un-entered match after (hours)',
+    group: 'partners',
+    kind: 'int',
+    min: 1,
+    max: 720,
+  },
+  {
+    key: 'partner_swipe_purge_days',
+    label: 'Purge swipes after a search closes (days)',
+    group: 'partners',
+    kind: 'int',
+    min: 1,
+    max: 365,
   },
 
   // Home leaderboards (LEADER_V1)

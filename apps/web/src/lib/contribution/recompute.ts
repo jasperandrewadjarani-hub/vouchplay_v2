@@ -159,7 +159,10 @@ export async function recomputeAllContributions(): Promise<number> {
     ),
   ]);
   // Only a genuine overload past the configured cap is an error now; ordinary growth is paged.
-  if (vouchResult.capped) throw new Error('contribution_source_bound_exceeded');
+  if (vouchResult.capped)
+    throw new Error(
+      `contribution_source_bound_exceeded: ${vouchResult.count} active vouches exceed the builder fact-row cap of ${settings.maxFactRows}`,
+    );
   const rows = vouchResult.rows;
   const flagRows = flagResult.rows;
   const ringSubjects = new Set(

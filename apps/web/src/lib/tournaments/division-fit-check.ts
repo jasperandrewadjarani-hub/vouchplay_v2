@@ -1,5 +1,5 @@
 import 'server-only';
-import { SKILL_BANDS } from '@vouchplay/config';
+import { SKILL_BANDS, parseVisibility, fieldVisible } from '@vouchplay/config';
 import { ageAtDate, describeDivisionFit, evaluateDivisionFit } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getActiveSkillVersion } from '@/lib/settings';
@@ -102,7 +102,10 @@ export async function checkDivisionFit(
   const ids = Array.from(new Set(candidates.map((c) => c.playerId)));
   const skillVersion = await getActiveSkillVersion();
   const [{ data: profileRows, error: profileError }, { rows: skillRows }] = await Promise.all([
-    svc.from('profiles').select('id, sex, self_rated_skill, date_of_birth').in('id', ids),
+    svc
+      .from('profiles')
+      .select('id, sex, self_rated_skill, date_of_birth, profile_visibility')
+      .in('id', ids),
     // Effective skill honours the public skill-algorithm switch (§2AF rollout step 2) - falls open to
     // V1 columns when migration 0034 is not applied yet.
     selectSkillProfiles<SkillProfileRow & { player_id: string }>(
@@ -121,6 +124,7 @@ export async function checkDivisionFit(
         sex: string | null;
         self_rated_skill: number | null;
         date_of_birth: string | null;
+        profile_visibility?: unknown;
       }[]
     ).map((p) => [p.id, p]),
   );
@@ -156,12 +160,19 @@ export async function checkDivisionFit(
       divisionMaximumAge: div.maximum_age,
     });
     if (!verdict.fits && verdict.reason) {
+      // §2AW: a partner who keeps the rating that decided this private is refused WITHOUT the
+      // level named (the sentence simply omits it). The verdict itself always uses the real level.
+      const visibility = parseVisibility(p.profile_visibility);
+      const levelFromCommunity = community.get(c.playerId) != null;
+      const levelPrivate =
+        c.subject === 'partner' &&
+        !fieldVisible(visibility, levelFromCommunity ? 'community_rating' : 'self_rating');
       return describeDivisionFit(verdict.reason, {
         subject: c.subject,
         partnerName: c.name ?? null,
         divisionName: name,
         bandLabel: band,
-        playerLevel: levelLabel(effectiveSkill),
+        playerLevel: levelPrivate ? null : levelLabel(effectiveSkill),
       });
     }
   }

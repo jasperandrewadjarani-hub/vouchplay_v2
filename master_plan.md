@@ -4906,6 +4906,212 @@ onboarding prefill (sex / birthday / self-rated / nickname from the profile), or
 
 Docs → 0046 (main session) → three Sonnet lanes (server; wizard UI; organizer + onboarding) → gates →
 commit on top of `61711b7` → Jasper pushes, then applies 0045 and 0046 once Ready.
+## 2AV. Partner matchmaking ("swipe to partner"), built per the §2AR decisions (2026-09-13)
+
+Jasper's answers to §2AR's five loose ends: (1) a paid open-seat holder is NOT shown to players who do
+not fit that seat's division - hard filter; (2) ONE deck per tournament; (3) a match reveals NOTHING
+beyond the profile; (4) organizers suggesting pairings - yes, LATER; (5) weights AGREED (slot 5,
+division overlap 3 per shared division, skill proximity 3, reciprocity 3, city 1, trust 1, freshness
+1), tuned on Hermosa's data. Build now.
+
+### Ground truth that shaped the build
+
+1. "Seeking a partner" has no column today. The supply is a live solo team (`teams.status` in
+   forming/formed, exactly one confirmed member, no invitation `sent`, no whole-team receipt) - the
+   `mergeable_solo_team()` predicate from §2AT A. The demand is anyone who taps "Find a partner".
+2. The tournament page carries the GLOBAL `looking_for_partner` toggle (`AvailabilityCard`, the
+   profile flag) - a flag, not a per-tournament search; nothing lists who is looking.
+3. Player-side seating doors already exist as form actions: `invitePartner` (invite into an open
+   seat; merge-aware since §2AT) and `enterWithPendingPartner` / the wizard's partner step. No
+   partner prefill on the wizard yet.
+4. No swipe / deck / switch UI primitive exists; `Modal` is the only dialog. No bulk block check.
+5. Community skill lives in `player_skill_profiles`; city is free text validated against the PSGC
+   list, with a city→region map only as the leaderboard setting `leaderboard_city_region_map`.
+
+### Decisions
+
+**A. Data (migration 0047).** Three tables, all writes through server actions with the service client:
+- `partner_searches` (id, tournament_id, player_id, division_ids uuid[], note text ≤ 120, status
+  open|closed, closed_reason, last_active_at, created_at, updated_at; unique (tournament_id,
+  player_id)) - one search per player per tournament = one deck per tournament (answer 2). Reopening
+  reuses the row.
+- `partner_swipes` (id, tournament_id, swiper_id, target_id, direction right|left, created_at,
+  updated_at; unique (tournament_id, swiper_id, target_id)). A re-swipe updates the row. NO client
+  read policy at all - swipes are never readable outside the server (answer 3, §2AR safety).
+- `partner_matches` (id, tournament_id, player_a, player_b with a < b, division_ids uuid[] common at
+  match time, status open|entered|closed, closed_reason, door jsonb, matched_at, reminded_at,
+  lock_reminded_at; unique (tournament_id, player_a, player_b)). Readable by the two players (RLS).
+- Seeds, group `partners`: `partner_matchmaking_enabled` true, the seven weights above,
+  `partner_swipe_daily_limit` 200, `partner_left_swipe_hide_days` 14, `partner_match_reminder_hours`
+  48, `partner_swipe_purge_days` 30.
+
+**B. Opt in ("Find a partner").** Entry points: a **Find a partner** card on the tournament page
+(registration open, at least one open doubles division, onboarded viewer) replacing the global
+looking-for-partner toggle there (the global flag stays on the Players page); a **Find a partner**
+button on every open-seat entry in My registrations; a "No partner yet? Find one" link on the
+wizard's Done screen after a solo entry. The opt-in sheet asks for the divisions (multi-select from
+the viewer's Recommended + Other doubles divisions, Recommended pre-ticked, an open-seat entry's
+division locked on) and an optional one-line note; "Start looking" opens the search and lands on the
+deck. **Stop looking** closes it and every card of theirs disappears at once.
+
+**C. Effective divisions and the hard filter (answer 1).** A player who holds a live open seat (solo
+entry) is matchable ONLY in that seat's division(s) - the money is there. So: effective divisions =
+seat divisions when a seat exists, else the chosen divisions. Two players share a deck card only where
+their effective divisions intersect AND each fits that division with the other as partner
+(`evaluateDivisionFit` both ways, with `partnerSex`, age at the door, skill floor, play-down-one).
+A seat holder whose seat the viewer does not fit is therefore never shown - and the reverse.
+
+**D. Score (`scorePartnerCandidate`, pure, packages/core).** Sum of:
+- slot: paid open seat in a common division → `partner_weight_slot`; entered but unpaid → half;
+- division overlap: `partner_weight_division_overlap` per common division, doubled when the division
+  is Recommended for the viewer (fits with no playing up or down);
+- skill proximity: same band → full weight, one band apart → half, two or more → 0, either unknown →
+  0 (community level first, self-rated as fallback - the REAL values, even when private, see §2AW);
+- reciprocity: the candidate already swiped right on the viewer → `partner_weight_reciprocity`
+  (never shown - it only sorts);
+- city: same city → full weight; same region (leaderboard map) → half;
+- trust: identity verified 0.4 + coach-vouched 0.3 + STS at or above the review threshold 0.3, times
+  `partner_weight_trust`;
+- freshness: full weight when the search was active in the last 24 h, decaying linearly to 0 at 7 days.
+Weights are read once per deck load from `system_settings`. Tests cover every term and the ordering.
+
+**E. The deck (`/tournaments/{slug}/partners`).** Server loads: the viewer's search, open searches for
+the tournament (bounded 200), profiles + skill profiles in two bulk reads, divisions once, blocks in
+one read each way, the viewer's swipes, open matches; drops self, blocked pairs, non-active accounts,
+guests, players already teamed with the viewer in the tournament, players left-swiped within the
+hide window, existing matches; computes fit and score; returns the top 30 cards. Card: avatar +
+verified tick, name, community chip (self-rated when there is none; the §2AW lock chip when private),
+STS chip, city, the common divisions, **Has a slot · {division}** (green, paid) or **Entered ·
+unpaid** badge, coach-vouched, the note. Controls: ✕ **Not now** · ✓ **Let's team up** (big, round,
+under the card), swipe gestures on touch, ← → on desktop, **Undo** for the last Not now. Counter "{n}
+players looking". Empty state: "Nobody else yet - we'll tell you when someone opts in".
+
+**F. Swipe and match.** `swipePartner(tournamentId, targetId, direction)` requires an open search,
+enforces the daily limit (Manila day), upserts the swipe; a right swipe that meets an existing right
+swipe from the target creates the match (ordered pair, unique index absorbs the race) and notifies
+both `partner_match` (critical). Left = hidden `partner_left_swipe_hide_days`, private, reversible;
+right is invisible until mutual. **Doors are decided at match time and stored on the match:**
+- exactly one side holds an open seat in a common division → the server sends the INVITATION from the
+  seat holder to the other (`invitePartner` core; the holder's swipe is the consent, the invitee still
+  accepts through the normal invitation with every fit check, merge and lock) - door
+  `invited` (holder sees "Invitation sent", the other sees "Accept the invitation");
+- both hold seats → invitation from the older entry (merge on accept, §2AT A);
+- neither → door `enter_together`: "Enter together" opens the wizard at the first common division
+  with the partner pre-filled (`?register=1&division={id}&partner={slug}`).
+If the automatic invitation is refused (rules changed since the deck loaded), the door falls back to
+`enter_together` and the modal says why. The match modal is one sentence and one button.
+
+**G. Matches and lifecycle.** The deck page lists matches above the cards (partner, divisions, the
+door's state). A match becomes `entered` when both sit on one live team in the tournament (checked on
+deck load and by maintenance); a search closes when every chosen division is covered by a complete
+team (reason `entered`), when the tournament leaves `registration_open` (`registration_closed`), or by
+hand. Maintenance runs inside the existing reminders cron (`runPartnerMaintenance`): close stale
+searches, mark entered matches, remind open matches once after `partner_match_reminder_hours`
+(`partner_match_reminder`) and once at registration lock minus 3 days (`partner_match_lock_reminder`,
+critical), send the daily digest `partner_search_new_candidates` to open searches that gained new
+candidates since yesterday, and purge swipes `partner_swipe_purge_days` after a search closed.
+
+**H. Organizer.** Manage gains **Looking for partners ({n})** with the names and divisions (bounded 50)
+and the existing announcement shortcut. Organizer "Suggest partner" is DEFERRED (answer 4).
+
+**I. Rules.** Onboarded, active accounts only (guests reach the deck after verification); blocked pairs
+never see each other; reports use the profile's existing report action; fit is re-checked at the
+door; `partner_matchmaking_enabled` off hides every entry point and returns the deck page to the
+tournament. Swipes carry only (swiper, target, direction, time).
+
+### Contracts
+
+**Core:** `packages/core/src/partners/score.ts` → `scorePartnerCandidate(input, weights)`, `PartnerWeights`,
+`DEFAULT_PARTNER_WEIGHTS` + tests; catalog `partner_match` (partners, critical),
+`partner_match_reminder` (partners), `partner_match_lock_reminder` (partners, critical),
+`partner_search_new_candidates` (partners). **Config:** settings + catalog entries above (group
+`partners`). **Web server:** `lib/partners/types.ts` (shared DTOs: `PartnerCard`, `PartnerDeckData`,
+`PartnerMatchView`, `PartnerSearchState`, `SwipeResult`), `lib/partners/deck.ts` (`getPartnerDeck(slug,
+viewerId)`), `lib/partners/maintenance.ts` (`runPartnerMaintenance()`), `actions/partners.ts`
+(`openPartnerSearch`, `closePartnerSearch`, `swipePartner`, `undoLastSwipe`, `refreshPartnerDeck`);
+`invitePartner`'s body extracted to a callable core; wizard launcher accepts `?partner=`. **Web UI:**
+`app/(app)/tournaments/[slug]/partners/page.tsx`, `components/partners/{partner-deck,partner-card,
+match-modal,matches-list,find-partner-card,partner-search-sheet}.tsx`, tournament page card, My
+registrations button, wizard Done link, Manage count.
+
+## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
+
+Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the
+community-vouched rating private (hides the community chip and the vouch meter) and, separately, the
+self-rating; the Players tab cards follow; profiles are tagged when ratings are private; privacy must
+NOT stop anyone vouching or leaving vouch comments; organizers, admins and staff still see the ratings
+(make that clear when opting in); it should not affect matchmaking; the toggle must be obvious in the
+ME tab with an eye / lock control; the owner still sees their own rating, meter and comments.
+
+### Findings
+
+1. `profiles.profile_visibility` (jsonb) already carries per-field public|hidden with server-side DTO
+   projection (`packages/config/src/visibility.ts`); fields today: sex, city, age, directory,
+   leaderboards. The Admin-wide flags from §2AO E (`profile_show_community_skill`,
+   `profile_show_vouch_meter`) hide for everyone; nothing is per player.
+2. The community chip renders on the profile header, the directory card (and every card reuse: clubs,
+   invitation search, coach lists), organizer lists and the wizard's fit messages; the vouch meter only
+   on the profile. Vouch comments render unconditionally.
+3. The self-rated chip is never gated today.
+
+### Decisions
+
+**A. Two fields, jsonb, no column.** `profile_visibility.community_rating` and
+`profile_visibility.self_rating` (public|hidden, default public) join `VisibilityField`. No migration
+is needed for the data; 0047 only ships the code.
+
+**B. Who sees what.** For a viewer who is not the owner, not staff and not a *privileged organizer*:
+community hidden → the community chip AND the Skill distribution (vouch meter) are gone, replaced by a
+**Ratings private** lock chip; self hidden → the self-rated chip is gone (the same lock chip covers
+both). A **privileged organizer** = an active organizer or co-organizer of a tournament in which the
+player holds a live registration (one bounded intersection read, only when something is private).
+The owner always sees everything, with a small lock icon on the private chip and the line "Only you,
+tournament organizers and staff can see this." The Admin-wide flags still apply on top.
+
+**C. Enforcement in one place.** `toPlayerCardDTO` / the profile DTO take a viewer context
+`{ viewerId, privileged }`; when the field is hidden for that viewer the value is nulled BEFORE the
+payload leaves the server and the DTO carries `communityRatingPrivate` / `selfRatingPrivate` (the
+owner's setting, always true to the setting) so cards can render the lock chip. Organizer surfaces
+(Manage registrations, reserved slots, assign-partner search) pass `privileged: true`; every public
+surface passes the real viewer. STS, verification badges and vouch counts are trust, not ratings -
+untouched.
+
+**D. Vouching and comments unaffected.** The vouch form, request-a-vouch and the comment list keep
+working and rendering exactly as today; privacy hides the AGGREGATE, never the conversation.
+
+**E. Matchmaking and eligibility unaffected.** Fit checks, the wizard, organizer classification and the
+partner score (§2AV D) keep using the real levels server-side; only what is DISPLAYED on the deck card
+follows the privacy setting. This is the "find a way": the algorithm sees, the public does not.
+
+**F. The control.** A **Who can see my ratings** card on the ME page directly under the profile header:
+two switch rows with an eye (public) / lock (private) icon - "Community rating & vouch meter" and
+"Self-rated skill" - each with a one-line state ("Everyone can see this" / "Private - only you,
+organizers and staff"), and the disclosure under the card: "Going private hides the rating from other
+players. Tournament organizers, admins and staff can still see it, and people can still vouch for you
+and leave comments." The same card sits on Privacy settings. A new `Switch` UI primitive
+(role="switch", 44 px target) backs both rows. Action `setRatingsPrivacy(field, hidden)` writes the
+jsonb, audits `profile.ratings_privacy`, revalidates the profile, directory and card caches.
+
+### Contracts
+
+**Config:** `visibility.ts` fields + defaults + parser. **Web server:** `lib/players/privileged.ts` →
+`isPrivilegedViewerFor(viewerId, playerId)`; DTO viewer context + `communityRatingPrivate` /
+`selfRatingPrivate`; `actions/profile.ts` → `setRatingsPrivacy`. **Web UI:** `components/ui/switch.tsx`,
+`components/me/ratings-privacy-card.tsx`, `components/players/badges.tsx` → `RatingsPrivateChip`, card +
+profile header + deck card rendering, ME page + Privacy page.
+
+## 2AX. Leaderboard rebuild failure: the contribution builder's fact-row cap (2026-09-13)
+
+Admin → Leaderboards → Rebuild all snapshots failed with `contribution_source_bound_exceeded`.
+Production had 5,275 active vouches against `contribution_builder_max_fact_rows` = 5,000 (seeded by
+0017; the guard §2I made a paged read with a hard cap). The nightly leaderboard cron would fail the
+same way. Decision: the cap stays a guard, not a ceiling on growth - default and live value raised to
+100,000 (0047 updates the seed only when it is still at 5,000; the catalog max becomes 1,000,000); the
+thrown error now names the count and the cap; the Admin message says where the dial is ("Raise
+Builder fact-row cap under Admin → Settings → Contribution, then rebuild"). A run at 100,000 rows is
+three columns per row - well inside the function's memory. The Operations card's "Reminders · last
+run never" is not a fault: the cron's first 01:47 UTC run comes after the §2AS deploy.
+
 
 ## 1. Prompt Contract
 

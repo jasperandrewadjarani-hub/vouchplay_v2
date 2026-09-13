@@ -113,6 +113,7 @@ async function PlayersResults({
               compact={compact}
               staffLinks={staffLinks}
               showCommunitySkill={showCommunitySkill || player.slug === ownSlug}
+              isOwn={player.slug === ownSlug}
             />
           ))}
         </div>

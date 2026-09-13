@@ -2,7 +2,8 @@
 
 import { revalidateTag } from 'next/cache';
 import { partnerInviteSchema } from '@vouchplay/validation';
-import { SKILL_BANDS } from '@vouchplay/config';
+import { SKILL_BANDS, parseVisibility } from '@vouchplay/config';
+import { redactRatings } from '@/lib/players/dto';
 import {
   ageAtDate,
   evaluateDivisionFit,
@@ -43,6 +44,7 @@ import {
   doEnterWithPendingPartner,
   type EntryOutcome,
 } from '@/lib/registrations/entry-core';
+import { doInvitePartner } from '@/lib/registrations/invite-core';
 import { markRefunded } from './payment';
 
 export interface RegistrationActionState {
@@ -66,8 +68,6 @@ export interface RegistrationActionState {
 // `@/lib/registrations/entry-core` alongside `doRegisterSolo` / `doEnterDoublesSolo` /
 // `doEnterWithPendingPartner` themselves (master_plan §2AU: pulled out so the guest wizard can call
 // them directly with a guest profile id, bypassing the session-only gate below).
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** master_plan §2AP C3: a stale page (a decline, a cancel, a race elsewhere) can no longer act on a
  *  team it thinks it still has - this is the one sentence for that, everywhere it can surface. */
@@ -282,65 +282,17 @@ export async function invitePartner(
   const statusErr = await checkActorCanInteract(user.id);
   if (statusErr) return { error: statusErr };
 
-  const svc = createServiceClient();
-  try {
-    const [{ data: division }, { data: invitee }] = await Promise.all([
-      svc
-        .from('divisions')
-        .select('id, tournament_id, format, status')
-        .eq('id', v.divisionId)
-        .maybeSingle(),
-      svc.from('profiles').select('id, account_status').eq('slug', v.inviteeSlug).maybeSingle(),
-    ]);
-    const div = division as { tournament_id: string; format: string; status: string } | null;
-    const inv = invitee as { id: string; account_status: string } | null;
-    if (!div || div.tournament_id !== tournamentId) return { error: 'Division not found.' };
-    if (div.format !== 'doubles')
-      return { error: 'Partner invites are only for doubles divisions.' };
-    if (!inv) return { error: 'No player found with that handle.' };
-    if (inv.id === user.id) return { error: 'You cannot invite yourself.' };
-    if (inv.account_status !== 'active') return { error: 'That player is unavailable.' };
-    if (await isBlockedBetween(user.id, inv.id)) return { error: 'That invite is unavailable.' };
-    // Checked at the point the partner is NAMED, not when they answer (§2D). Sending an invitation
-    // that can only be refused wastes the invitee's decision and the inviter's time.
-    const fitError = await checkDivisionFit(v.divisionId, [
-      { playerId: user.id, subject: 'you' },
-      { playerId: inv.id, subject: 'partner', name: (await getActorMini(inv.id)).name },
-    ]);
-    if (fitError) return { error: fitError };
-    // Conflicting-team prevention is authoritatively enforced in accept_partner_invitation (§20.3).
-
-    const { error } = await svc.from('partner_invitations').insert({
-      tournament_id: tournamentId,
-      division_id: v.divisionId,
-      inviter_id: user.id,
-      invitee_id: inv.id,
-      message: v.message ? v.message.trim() : null,
-      expires_at: new Date(Date.now() + 7 * DAY_MS).toISOString(),
-    });
-    if (error) {
-      if (String(error.message).includes('uq_partner_invitations_pending')) {
-        return { error: 'You already have a pending invite to this player for this division.' };
-      }
-      return { error: 'Could not send the invite. Please try again.' };
-    }
-    const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
-    await notify({
-      recipientId: inv.id,
-      type: 'partner_invite_received',
-      actorId: user.id,
-      params: { actorName: me.name, tournamentName: tm.name },
-      // The invitee ACCEPTS / declines this on the Partner invitations card, not in the registration
-      // wizard `?register=1` used to open (§2AS fix).
-      link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
-      entityType: 'tournament',
-      entityId: tournamentId,
-    });
-    await revalTournament(tournamentId);
-  } catch {
-    return { error: 'Invites are temporarily unavailable. Please try again shortly.' };
-  }
-  return { ok: true, message: 'Partner invite sent.' };
+  // Thin wrapper (master_plan §2AV F): the actual body lives in `doInvitePartner`
+  // (`lib/registrations/invite-core.ts`), shared byte-for-byte with the partner-matchmaking match
+  // door, which calls it directly with the other player's id instead of a form-submitted slug.
+  const outcome = await doInvitePartner(user.id, {
+    tournamentId,
+    divisionId: v.divisionId,
+    inviteeSlug: v.inviteeSlug,
+    message: v.message,
+  });
+  if (outcome.error) return { error: outcome.error };
+  return { ok: true, message: outcome.message ?? 'Partner invite sent.' };
 }
 
 // ---------------------------------------------------------------------------
@@ -663,17 +615,25 @@ export async function searchInvitablePlayers(
   /** The acting/inviting player, for the mixed-doubles composition check below (§2AM decision 1).
    *  Defaults to the signed-in user - the acting user is the inviter on every current caller. */
   inviterId?: string,
+  /** master_plan §2AW: true on an organizer-scoped caller (e.g. the organizer's "Assign partner"
+   *  form) - the candidate's real community/self rating is used in the fit-mismatch reason text
+   *  instead of being redacted. The eligibility VERDICT itself never depends on this - it always uses
+   *  the real effective skill, exactly as before (§2AW decision E: matchmaking is unaffected). */
+  privileged = false,
 ): Promise<PlayerSearchResult[]> {
   const user = await getOptionalUser();
   if (!user) return [];
   const actorId = inviterId ?? user.id;
   const term = q.trim();
   if (term.length < 2) return [];
+  const staffSearcher = privileged || (await viewerIsStaff());
   const svc = createServiceClient();
   const safe = term.replace(/[%,()]/g, ' ');
   const { data } = await svc
     .from('profiles')
-    .select('id, slug, first_name, last_name, nickname, city, sex, self_rated_skill, date_of_birth')
+    .select(
+      'id, slug, first_name, last_name, nickname, city, sex, self_rated_skill, date_of_birth, profile_visibility',
+    )
     .eq('account_status', 'active')
     .not('onboarded_at', 'is', null)
     .neq('id', user.id)
@@ -690,6 +650,7 @@ export async function searchInvitablePlayers(
       sex: string | null;
       self_rated_skill: number | null;
       date_of_birth: string | null;
+      profile_visibility: unknown;
     }[]
   ).filter((p) => p.slug);
 
@@ -748,6 +709,10 @@ export async function searchInvitablePlayers(
         return min ?? max;
       })();
       for (const p of named) {
+        // The VERDICT always uses the real effective skill, unaffected by the candidate's own
+        // ratings-privacy setting (master_plan §2AW decision E - matchmaking sees the real numbers;
+        // only what is DISPLAYED follows the setting). Redaction only touches the "Their level is…"
+        // text below.
         const effectiveSkill = community.get(p.id) ?? p.self_rated_skill ?? null;
         const verdict = evaluateDivisionFit({
           playerSex: p.sex,
@@ -764,6 +729,24 @@ export async function searchInvitablePlayers(
           divisionMaximumAge: div.maximum_age,
         });
         if (!verdict.fits && verdict.reason) {
+          // §2AW: an unprivileged searcher never sees a candidate's actual private rating in the
+          // reason text, even though the verdict above already used it correctly.
+          const displayRatings = staffSearcher
+            ? {
+                communitySkillLevel: community.get(p.id) ?? null,
+                selfRatedSkill: p.self_rated_skill,
+              }
+            : redactRatings(
+                {
+                  id: p.id,
+                  communitySkillLevel: community.get(p.id) ?? null,
+                  selfRatedSkill: p.self_rated_skill,
+                },
+                parseVisibility(p.profile_visibility),
+                { viewerId: actorId, privileged: false },
+              );
+          const displayEffectiveSkill =
+            displayRatings.communitySkillLevel ?? displayRatings.selfRatedSkill ?? null;
           reasons.set(
             p.id,
             describeDivisionFit(verdict.reason, {
@@ -772,9 +755,9 @@ export async function searchInvitablePlayers(
               divisionName: divisionName(div),
               bandLabel,
               playerLevel:
-                effectiveSkill == null
+                displayEffectiveSkill == null
                   ? null
-                  : (SKILL_BANDS.find((b) => b.ordinal === effectiveSkill)?.label ?? null),
+                  : (SKILL_BANDS.find((b) => b.ordinal === displayEffectiveSkill)?.label ?? null),
             }),
           );
         }
@@ -901,6 +884,47 @@ export async function searchInvitablePlayers(
   }));
 }
 
+export interface PlayerBySlugResult {
+  slug: string;
+  name: string;
+}
+
+/**
+ * Minimal exact-slug lookup for the partner-matchmaking wizard prefill (`?partner=<slug>`, master_plan
+ * §2AV F "enter together" door) - `searchInvitablePlayers` above only matches by name (min 2 chars),
+ * so a direct slug link needs its own tiny lookup instead of stretching that search. The candidate
+ * already passed the partner-fit check both ways when the deck offered the swipe, so this is just a
+ * display-name resolve for the wizard's pre-selected screen, not a second eligibility pass - the real
+ * check still happens at `createEntry`/`startEntry` like every other partner pick.
+ */
+export async function getPlayerBySlugForInvite(slug: string): Promise<PlayerBySlugResult | null> {
+  const user = await getOptionalUser();
+  if (!user) return null;
+  const trimmed = slug.trim();
+  if (!trimmed) return null;
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('profiles')
+    .select('slug, first_name, last_name, nickname')
+    .eq('slug', trimmed)
+    .eq('account_status', 'active')
+    .not('onboarded_at', 'is', null)
+    .neq('id', user.id)
+    .maybeSingle();
+  if (!data) return null;
+  const row = data as {
+    slug: string;
+    first_name: string | null;
+    last_name: string | null;
+    nickname: string | null;
+  };
+  const name =
+    [row.first_name, row.last_name].filter(Boolean).join(' ').trim() ||
+    row.nickname ||
+    'VouchPlay player';
+  return { slug: row.slug, name };
+}
+
 /**
  * Candidates for `assignPartner` (master_plan §2AQ A3). `searchInvitablePlayers` already accepts an
  * `inviterId` used purely for the mixed-doubles composition check against the OTHER seat's sex - so
@@ -922,7 +946,9 @@ export async function searchAssignablePlayers(
   const confirmed = (
     (memberRows ?? []) as { player_id: string; confirmed_at: string | null }[]
   ).find((m) => m.confirmed_at);
-  return searchInvitablePlayers(q, divisionId, confirmed?.player_id);
+  // master_plan §2AW: this is always an organizer-scoped search (Manage → assign a partner), so the
+  // fit-mismatch reason may name the candidate's real rating rather than redacting it.
+  return searchInvitablePlayers(q, divisionId, confirmed?.player_id, true);
 }
 
 /** Map an `organizer_assign_partner` refusal to player-facing copy (master_plan §2AQ A3). Distinct

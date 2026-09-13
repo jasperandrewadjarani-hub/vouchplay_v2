@@ -13,6 +13,7 @@ import { notify } from '@/lib/notifications/create';
 import { getSlotsByRegistration } from '@/lib/payments/slots';
 import { formatDateTime } from '@/lib/format-date';
 import { getPartnerLockAt } from './queries';
+import { runPartnerMaintenance } from '@/lib/partners/maintenance';
 
 /**
  * Reminders cron loader (master_plan §2AQ A1, Decision A1, migration-free). Evaluated per open
@@ -363,6 +364,18 @@ export async function runReminders(now: Date = new Date()): Promise<Record<strin
     } catch {
       // One tournament's failure must not abort the run for the other 49 (§ best-effort pattern).
     }
+  }
+
+  // master_plan §2AV G: partner matchmaking's own lifecycle sweep (close stale searches, promote
+  // entered matches, match/lock reminders, the new-candidates digest, swipe purge) rides this same
+  // nightly cron and Admin "Run reminders now" button rather than a separate schedule - merged
+  // straight into `counts` so both callers' audit rows include it for free. `runPartnerMaintenance`
+  // never throws (each of its own phases is independently guarded), but it is wrapped here too so a
+  // future change to that contract can never take the rest of this run down with it.
+  try {
+    Object.assign(counts, await runPartnerMaintenance());
+  } catch {
+    // best-effort - see above.
   }
 
   return counts;

@@ -160,11 +160,15 @@ export function MyRegistrations({
   tournament,
   state,
   enteredRegistrationId = null,
+  partnerMatchmakingEnabled = false,
 }: {
   tournament: WizardTournament;
   state: ViewerRegistrationState;
   /** A registration just created by this visit: open the panel straight onto it (§1Y). */
   enteredRegistrationId?: string | null;
+  /** master_plan §2AV B: `partner_matchmaking_enabled` AND the viewer may use it - threaded down to
+   *  each open-seat Partner block's secondary "Find a partner" link. */
+  partnerMatchmakingEnabled?: boolean;
 }) {
   const { divisions, registrationOpen } = tournament;
   const byId = new Map(divisions.map((d) => [d.id, d]));
@@ -448,6 +452,7 @@ export function MyRegistrations({
                   <PartnerChangeActions
                     teamId={team.teamId}
                     tournamentId={tournament.id}
+                    tournamentSlug={tournament.slug}
                     divisionId={divisionId}
                     viewerId={state.viewerId}
                     pendingPartnerName={team.pendingPartner?.name ?? null}
@@ -457,6 +462,7 @@ export function MyRegistrations({
                     releaseRequest={team.releaseRequest}
                     partnerLockAt={state.partnerLockAt}
                     partnerChangesOpen={state.partnerChangesOpen}
+                    partnerMatchmakingEnabled={partnerMatchmakingEnabled}
                   />
                 )}
               </li>

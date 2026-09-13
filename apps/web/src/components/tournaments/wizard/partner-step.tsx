@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
-import { searchInvitablePlayers, type PlayerSearchResult } from '@/lib/actions/registration';
+import {
+  searchInvitablePlayers,
+  getPlayerBySlugForInvite,
+  type PlayerSearchResult,
+} from '@/lib/actions/registration';
 import { Field, Input } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { formatMonthDay } from '@/lib/format-date';
@@ -24,10 +28,14 @@ type SearchResult = PlayerSearchResult & { mergeNote?: string | null };
 export function PartnerStep({
   divisionId,
   state,
+  prefillSlug = null,
   onContinue,
 }: {
   divisionId: string;
   state: ViewerRegistrationState;
+  /** `?partner=<slug>` (master_plan §2AV F) - resolved once on mount via a minimal exact-slug lookup
+   *  and dropped straight onto the acknowledgement screen, skipping the search box. */
+  prefillSlug?: string | null;
   onContinue: (partner: WizardPartner | null, acknowledgedPartner: boolean) => void;
 }) {
   const [q, setQ] = useState('');
@@ -35,7 +43,29 @@ export function PartnerStep({
   const [chosen, setChosen] = useState<SearchResult | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [prefillPending, setPrefillPending] = useState(Boolean(prefillSlug));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!prefillSlug) {
+      setPrefillPending(false);
+      return;
+    }
+    let cancelled = false;
+    setPrefillPending(true);
+    void getPlayerBySlugForInvite(prefillSlug).then((found) => {
+      if (cancelled) return;
+      if (found) {
+        setChosen({ slug: found.slug, name: found.name, city: null, blockedReason: null });
+      }
+      setPrefillPending(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Runs once per mount for a given prefill target - the step remounts fresh each time the wizard
+    // returns to it (Back to Division and forward again), which is the natural place to re-apply it.
+  }, [prefillSlug]);
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -55,6 +85,10 @@ export function PartnerStep({
       if (timer.current) clearTimeout(timer.current);
     };
   }, [q, divisionId]);
+
+  if (prefillPending) {
+    return <p className="text-foreground-muted text-sm">Loading your partner…</p>;
+  }
 
   if (chosen) {
     return (

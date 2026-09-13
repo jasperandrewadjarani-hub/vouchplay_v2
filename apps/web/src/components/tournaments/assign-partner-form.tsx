@@ -46,7 +46,9 @@ export function AssignPartnerForm({
     }
     setSearching(true);
     timer.current = setTimeout(async () => {
-      setMatches(await searchInvitablePlayers(query, divisionId));
+      // master_plan §2AW: this form only ever renders on the organizer's Manage screen (see
+      // organizer-registrations.tsx), so a fit-mismatch reason may name the candidate's real rating.
+      setMatches(await searchInvitablePlayers(query, divisionId, undefined, true));
       setSearching(false);
     }, 250);
     return () => {

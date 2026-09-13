@@ -7,6 +7,7 @@ import {
   Trophy,
   Clock,
   Medal,
+  Lock,
 } from 'lucide-react';
 import type { SkillBand } from '@vouchplay/config';
 
@@ -196,6 +197,26 @@ export function SexBadge({
     >
       <span aria-hidden>{male ? '♂' : '♀'}</span>
       {male ? 'Male' : 'Female'}
+    </span>
+  );
+}
+
+/**
+ * "Ratings private" (master_plan §2AW): stands in for the community and/or self-rated chip when the
+ * player hides them from the public. `own` renders the owner's reminder that they still see theirs.
+ */
+export function RatingsPrivateChip({ own = false }: { own?: boolean }) {
+  return (
+    <span
+      className={`${chip} bg-surface-muted text-foreground-muted border-border border`}
+      title={
+        own
+          ? 'Only you, tournament organizers and staff can see this rating.'
+          : 'This player keeps their ratings private.'
+      }
+    >
+      <Lock size={12} aria-hidden />
+      {own ? 'Private' : 'Ratings private'}
     </span>
   );
 }

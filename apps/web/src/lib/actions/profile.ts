@@ -1,16 +1,17 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidateTag } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { onboardingSchema } from '@vouchplay/validation';
-import { LEGAL } from '@vouchplay/config';
+import { LEGAL, type VisibilityLevel } from '@vouchplay/config';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
-import { safeNext } from '@/lib/auth';
+import { safeNext, getOptionalUser } from '@/lib/auth';
 import { AVATARS_BUCKET } from '@/lib/storage';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { AVATAR_IMAGE_PROFILE, normalizeUploadedImage } from '@/lib/images/normalize-upload-image';
 import { reweightGivenVouches } from '@/lib/vouches/reweight';
+import { writeAudit } from '@/lib/moderation/audit';
 
 type AvatarUploadResult = { path?: string; error?: string };
 
@@ -311,4 +312,66 @@ export async function setLookingForPartner(value: boolean): Promise<Availability
 
 export async function setOpenForSponsorship(value: boolean): Promise<AvailabilityResult> {
   return setAvailabilityFlag('open_for_sponsorship', value);
+}
+
+export interface RatingsPrivacyResult {
+  ok?: true;
+  error?: string;
+}
+
+/**
+ * master_plan §2AW: sets whether the signed-in player's community rating (with the vouch meter) or
+ * self-rating is hidden from the public. Merges into the existing `profile_visibility` jsonb (never
+ * overwrites the other fields it already carries - sex/city/age/directory/leaderboards), writes an
+ * append-only audit entry, and revalidates every surface that reads the setting: the directory, this
+ * player's own profile page, and both ME pages that host the control.
+ */
+export async function setRatingsPrivacy(
+  field: 'community_rating' | 'self_rating',
+  hidden: boolean,
+): Promise<RatingsPrivacyResult> {
+  try {
+    const user = await getOptionalUser();
+    if (!user) return { error: 'Please sign in.' };
+    const svc = createServiceClient();
+    const { data } = await svc
+      .from('profiles')
+      .select('slug, profile_visibility')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (!data) return { error: 'Profile not found.' };
+    const row = data as { slug: string | null; profile_visibility: Record<string, unknown> | null };
+    const visibility = row.profile_visibility ?? {};
+    const before: VisibilityLevel = visibility[field] === 'hidden' ? 'hidden' : 'public';
+    const after: VisibilityLevel = hidden ? 'hidden' : 'public';
+
+    const { error } = await svc
+      .from('profiles')
+      .update({ profile_visibility: { ...visibility, [field]: after } })
+      .eq('id', user.id);
+    if (error) return { error: 'Could not save your ratings privacy setting.' };
+
+    await writeAudit({
+      actorId: user.id,
+      actorRole: 'player',
+      action: 'profile.ratings_privacy',
+      entityType: 'profile',
+      entityId: user.id,
+      before: { [field]: before },
+      after: { [field]: after },
+      reason: `Player set ${field === 'community_rating' ? 'community rating' : 'self-rating'} visibility to ${after}`,
+    });
+
+    revalidateTag(PLAYERS_LIST_TAG);
+    if (row.slug) {
+      revalidateTag(playerTag(row.slug));
+      revalidatePath(`/players/${row.slug}`);
+    }
+    revalidatePath('/players');
+    revalidatePath('/me');
+    revalidatePath('/me/settings/privacy');
+    return { ok: true };
+  } catch {
+    return { error: 'That is temporarily unavailable. Please try again shortly.' };
+  }
 }

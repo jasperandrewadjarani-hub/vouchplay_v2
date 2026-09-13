@@ -3,8 +3,10 @@ import Link from 'next/link';
 import { getOptionalUser, getMyProfile } from '@/lib/auth';
 import { viewerIsStaff, viewerIsAdmin } from '@/lib/moderation/staff';
 import { createServiceClient } from '@/lib/supabase/service';
+import { parseVisibility } from '@vouchplay/config';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { OrganizerApply } from '@/components/roles/organizer-apply';
+import { RatingsPrivacyCard } from '@/components/me/ratings-privacy-card';
 import { ButtonLink } from '@/components/ui/button';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 
@@ -41,7 +43,7 @@ export default async function MePage({
 
   // Organizer role state (§17.1) for the apply-as-organizer card.
   const svc = createServiceClient();
-  const [{ data: orgRole }, { data: orgApp }] = await Promise.all([
+  const [{ data: orgRole }, { data: orgApp }, { data: visibilityRow }] = await Promise.all([
     svc
       .from('user_roles')
       .select('id')
@@ -56,9 +58,15 @@ export default async function MePage({
       .eq('role_requested', 'organizer')
       .in('status', ['pending', 'reviewing'])
       .maybeSingle(),
+    // master_plan §2AW: read directly rather than widen the shared `getMyProfile` select - only this
+    // card and the Privacy settings page need the raw visibility jsonb.
+    svc.from('profiles').select('profile_visibility').eq('id', user.id).maybeSingle(),
   ]);
   const isOrganizer = !!orgRole;
   const hasPendingOrgApp = !!orgApp;
+  const ratingsVisibility = parseVisibility(
+    (visibilityRow as { profile_visibility?: unknown } | null)?.profile_visibility,
+  );
   const organizerIntent = (Array.isArray(sp.organizer) ? sp.organizer[0] : sp.organizer) === '1';
 
   return (
@@ -95,6 +103,13 @@ export default async function MePage({
       </div>
 
       {profile?.onboarded_at && (
+        <RatingsPrivacyCard
+          communityHidden={ratingsVisibility.community_rating === 'hidden'}
+          selfHidden={ratingsVisibility.self_rating === 'hidden'}
+        />
+      )}
+
+      {profile?.onboarded_at && (
         <OrganizerApply
           isOrganizer={isOrganizer}
           hasPending={hasPendingOrgApp}
@@ -122,7 +137,10 @@ export default async function MePage({
         <SettingsLink href="/me/blocked" label="Blocked users" />
         <SettingsLink href="/me/support" label="Support & appeals" />
         <SettingsLink href="/me/settings/identity" label="Verify my identity" />
-        <SettingsLink href="/me/settings/privacy" label="Privacy & leaderboard visibility" />
+        <SettingsLink
+          href="/me/settings/privacy"
+          label="Privacy, ratings & leaderboard visibility"
+        />
         <SettingsLink href="/me/settings/notifications" label="Notification preferences" />
         <SettingsLink href="/me/settings/security" label="Security & two-factor" />
         <SettingsLink href="/me/settings/password" label="Password" />

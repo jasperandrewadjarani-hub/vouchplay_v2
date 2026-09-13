@@ -1033,6 +1033,14 @@ Optional:
 
 ## 7.4 Sex & Age Privacy
 
+**v1.74 - ratings privacy (master_plan §2AW):** `profile_visibility` also carries `community_rating` and
+`self_rating` (public | hidden). Hidden means other players see a "Ratings private" lock chip instead
+of the community chip (and no vouch meter) and/or the self-rated chip. The owner, staff and organizers
+of a tournament the player is entered in always see the real values. Vouching, vouch comments,
+eligibility checks and partner matchmaking are unaffected - only the public display changes. The
+control lives on the ME page ("Who can see my ratings") and on Privacy settings.
+
+
 Sex is stored for tournament eligibility. V1 supports:
 - Male
 - Female
@@ -2262,6 +2270,19 @@ respects §33.5A loading feedback like every other control.
 # 20. Partner Finder
 
 ## 20.1 Looking for Partner
+
+**v1.74 (master_plan §2AV):** the tournament partner finder is a per-tournament search plus a swipe
+deck. A player opts in from the tournament page ("Find a partner"), from an open-seat entry or after a
+solo entry, choosing the doubles divisions they want and an optional one-line note; the deck at
+`/tournaments/{slug}/partners` shows other open searches in the same tournament, one card at a time,
+best matches first (weights are Admin settings: slot, division overlap, skill proximity, reciprocity,
+city, trust, freshness). A player holding a paid open seat is shown only to players who fit that seat's
+division. "Let's team up" from both sides is a match; the server then sends the partner invitation
+from the seat holder (the normal invitation, fit checks and lock apply) or offers "Enter together",
+which opens the wizard with the partner pre-filled. Left swipes are private and expire; right swipes
+are private until mutual; a match reveals nothing beyond the profile. The global `looking_for_partner`
+flag remains a directory signal only. The list below is the original V1 intent.
+
 
 Player can enable:
 - global `Looking for Partner`,
@@ -6429,6 +6450,27 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.74 (2026-09-13)
+
+_Partner matchmaking (master_plan §2AV), private ratings (§2AW), leaderboard cap (§2AX). Migration `0047`._
+
+- **Partner matchmaking (§20.1 rewritten):** "Find a partner" on the tournament page, on an open-seat
+  entry and after a solo entry opens a per-tournament search (divisions + a note) and a swipe deck at
+  `/tournaments/{slug}/partners`: one card at a time, Not now / Let's team up, best matches first by a
+  transparent score whose weights are Admin settings (slot 5, division overlap 3, skill proximity 3,
+  reciprocity 3, city 1, trust 1, freshness 1). A seat holder is only shown to players who fit that
+  seat's division. A mutual right swipe is a match; the server sends the partner invitation from the
+  seat holder, or offers "Enter together" (wizard with the partner pre-filled). Nothing beyond the
+  profile is revealed. Matches list, reminders and a daily digest ride the reminders cron; organizers
+  see "Looking for partners (n)". Organizer "Suggest partner" is deferred.
+- **Private ratings (§7.4 amended):** a player can hide the community rating (with the vouch meter)
+  and, separately, the self-rating from other players; a "Ratings private" lock chip replaces the
+  hidden chips on cards and the profile. The owner, staff and organizers of tournaments the player is
+  entered in still see them; vouching, comments, eligibility and matchmaking are unaffected. Control:
+  "Who can see my ratings" on the ME page and Privacy settings.
+- **Leaderboards:** the contribution builder's fact-row cap (5,000) blocked rebuilds once active
+  vouches passed it; default and live value are 100,000 and the Admin error names the dial.
+
 
 ## v1.73 (2026-09-13)
 

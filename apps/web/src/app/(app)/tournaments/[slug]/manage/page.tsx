@@ -30,6 +30,8 @@ import { DivisionBuilder } from '@/components/tournaments/division-builder';
 import { AnnouncementForm } from '@/components/tournaments/announcement-form';
 import { CoOrganizerManager } from '@/components/tournaments/co-organizer-manager';
 import { OrganizerRegistrations } from '@/components/tournaments/organizer-registrations';
+import { PartnerSearchersPanel } from '@/components/tournaments/partner-searchers-panel';
+import { listPartnerSearchers } from '@/lib/partners/deck';
 import { ReservedSlotsPanel } from '@/components/tournaments/reserved-slots-panel';
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
@@ -62,17 +64,23 @@ function ManageSection({
   title,
   defaultOpen = false,
   danger = false,
+  id,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
   danger?: boolean;
+  /** Lets another section deep-link here, e.g. the "Looking for partners" shortcut into
+   *  Announcements (master_plan §2AV H) - the section opens closed either way, the id is just an
+   *  anchor to scroll to. */
+  id?: string;
   children: ReactNode;
 }) {
   return (
     <details
+      id={id}
       open={defaultOpen}
-      className={`group rounded-2xl border p-5 ${
+      className={`group scroll-mt-24 rounded-2xl border p-5 ${
         danger ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface'
       }`}
     >
@@ -104,19 +112,28 @@ export default async function ManageTournamentPage({ params }: Params) {
   // `paymentNotificationEmail` receipt-forwarding address) - compute once and reuse for both.
   const emailReady = emailChannelEnabled();
 
-  const [registrations, clubOverrideParticipants, pendingReceiptCount, bareSlots, slotsEnabled] =
-    await Promise.all([
-      getOrganizerRegistrations(t.id),
-      getClubOverrideParticipants(t.id),
-      // §2AL: only meaningful once an organizer has saved a notification address - otherwise there
-      // is nothing to backfill into, so skip the read entirely.
-      t.paymentNotificationEmail ? getPendingReceiptNotificationCount(t.id) : Promise.resolve(0),
-      // Reserved slots (master_plan §2AO A5/A6). Read defensively - `getOrganizerBareSlots` and its
-      // `tournament_slots` table arrive with migration 0042, so a pre-migration deploy degrades to
-      // "no reserved slots" instead of breaking Manage.
-      getOrganizerBareSlots(t.id).catch(() => []),
-      isSlotReservationsEnabled(),
-    ]);
+  const [
+    registrations,
+    clubOverrideParticipants,
+    pendingReceiptCount,
+    bareSlots,
+    slotsEnabled,
+    partnerSearchers,
+  ] = await Promise.all([
+    getOrganizerRegistrations(t.id),
+    getClubOverrideParticipants(t.id),
+    // §2AL: only meaningful once an organizer has saved a notification address - otherwise there
+    // is nothing to backfill into, so skip the read entirely.
+    t.paymentNotificationEmail ? getPendingReceiptNotificationCount(t.id) : Promise.resolve(0),
+    // Reserved slots (master_plan §2AO A5/A6). Read defensively - `getOrganizerBareSlots` and its
+    // `tournament_slots` table arrive with migration 0042, so a pre-migration deploy degrades to
+    // "no reserved slots" instead of breaking Manage.
+    getOrganizerBareSlots(t.id).catch(() => []),
+    isSlotReservationsEnabled(),
+    // master_plan §2AV H: "Looking for partners" - read defensively, `listPartnerSearchers` arrives
+    // from a parallel lane.
+    listPartnerSearchers(t.id).catch(() => ({ count: 0, players: [] })),
+  ]);
 
   // §2AQ Decision C/D: kept in a separate `Promise.all` from the block above - both reads depend on
   // lane-B contracts that do not exist yet, and mixing an eventually-`any` branch into the main
@@ -209,6 +226,11 @@ export default async function ManageTournamentPage({ params }: Params) {
               teamSize: d.teamSize,
             }))}
             divisions={divisionCapacity}
+          />
+          <PartnerSearchersPanel
+            count={partnerSearchers.count}
+            players={partnerSearchers.players}
+            slug={slug}
           />
         </div>
       </ManageSection>
@@ -305,7 +327,7 @@ export default async function ManageTournamentPage({ params }: Params) {
         />
       </ManageSection>
 
-      <ManageSection title="Announcements">
+      <ManageSection title="Announcements" id="announcements">
         <AnnouncementForm tournamentId={t.id} slug={slug} />
       </ManageSection>
 

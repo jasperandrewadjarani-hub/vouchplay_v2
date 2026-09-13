@@ -89,6 +89,19 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   tournament_slot_reservations_enabled: false,
   // §2AU G: register before an account. Kill switch for the guest wizard (seeded true by 0046).
   guest_registration_enabled: true,
+  // §2AV: partner matchmaking (kill switch, the seven agreed weights, limits; seeded by 0047).
+  partner_matchmaking_enabled: true,
+  partner_weight_slot: 5,
+  partner_weight_division_overlap: 3,
+  partner_weight_skill_proximity: 3,
+  partner_weight_reciprocity: 3,
+  partner_weight_city: 1,
+  partner_weight_trust: 1,
+  partner_weight_freshness: 1,
+  partner_swipe_daily_limit: 200,
+  partner_left_swipe_hide_days: 14,
+  partner_match_reminder_hours: 48,
+  partner_swipe_purge_days: 30,
   identity_doc_retention_days: 7,
 
   // Safety & moderation abuse limits (handover §14, §11.3, §30.7). Rolling 24h windows.
@@ -141,7 +154,7 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   contribution_newcomer_badge_count: 5,
   contribution_streak_badge_weeks: 4,
   contribution_pillar_score: 500,
-  contribution_builder_max_fact_rows: 5000,
+  contribution_builder_max_fact_rows: 100000,
 
   // Home leaderboards (LEADER_V1, Phase 13D). Most Bidded stays off until §16A.
   leaderboards_enabled: true,

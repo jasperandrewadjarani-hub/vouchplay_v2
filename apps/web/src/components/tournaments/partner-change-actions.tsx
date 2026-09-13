@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, Loader2, UserPlus, UserMinus, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
+import { Clock, Loader2, UserPlus, UserMinus, TriangleAlert, UserSearch } from 'lucide-react';
 import {
   replacePendingPartner,
   searchInvitablePlayers,
@@ -35,6 +36,7 @@ import type { ReleaseRequestView } from '@/lib/tournaments/registration-queries'
 export function PartnerChangeActions({
   teamId,
   tournamentId,
+  tournamentSlug,
   divisionId,
   viewerId,
   pendingPartnerName,
@@ -44,9 +46,13 @@ export function PartnerChangeActions({
   releaseRequest,
   partnerLockAt,
   partnerChangesOpen,
+  partnerMatchmakingEnabled = false,
 }: {
   teamId: string;
   tournamentId: string;
+  /** Only needed to link the "Find a partner" secondary action below - optional so the other call
+   *  site (division-browser.tsx) is unaffected. */
+  tournamentSlug?: string;
   divisionId: string;
   viewerId: string;
   pendingPartnerName: string | null;
@@ -58,6 +64,10 @@ export function PartnerChangeActions({
   partnerLockAt: string | null;
   /** Tournament status in (registration_open, registration_closed) AND now before the lock. */
   partnerChangesOpen: boolean;
+  /** master_plan §2AV B: `partner_matchmaking_enabled` AND the viewer may use it - adds a secondary
+   *  "Find a partner" link beside the open-seat search. Defaults false so the other call site is
+   *  unchanged unless it opts in. */
+  partnerMatchmakingEnabled?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -180,12 +190,25 @@ export function PartnerChangeActions({
   // a. Open seat - choose a partner (any open seat: never named, declined, expired, or cancelled).
   if (seatOpen) {
     return (
-      <ChoosePartner
-        teamId={teamId}
-        tournamentId={tournamentId}
-        divisionId={divisionId}
-        partnerLockAt={partnerLockAt}
-      />
+      <div className="space-y-2">
+        <ChoosePartner
+          teamId={teamId}
+          tournamentId={tournamentId}
+          divisionId={divisionId}
+          partnerLockAt={partnerLockAt}
+        />
+        {/* master_plan §2AV B: naming someone directly isn't the only way in - let the deck find a
+            fit instead. */}
+        {partnerMatchmakingEnabled && tournamentSlug && (
+          <Link
+            href={`/tournaments/${tournamentSlug}/partners`}
+            className="border-border text-foreground hover:bg-surface-muted inline-flex min-h-10 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
+          >
+            <UserSearch size={13} aria-hidden />
+            Find a partner
+          </Link>
+        )}
+      </div>
     );
   }
 

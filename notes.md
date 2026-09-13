@@ -3089,3 +3089,19 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   RegisterButton (opens the guest wizard = the registration form; falls back to /signup only when the
   guest kill switch is off); copy now "Register now - you can create your account at the end." Removed
   the now-unused ClipboardCheck import and signupToRegister const. No migration; gates green.
+
+## 2026-09-13 - Partner matchmaking build (§2AV), private ratings (§2AW), leaderboard cap fix (§2AX)
+- Leaderboard rebuild failed with contribution_source_bound_exceeded: 5,275 active vouches > the
+  5,000 fact-row cap seeded by 0017. Default + live value -> 100,000 (0047 seed update, catalog max
+  1,000,000); the error names count/cap and the Admin message points at the setting.
+- Matchmaking per Jasper's five answers: hard filter on a seat holder's division; one deck per
+  tournament (partner_searches unique per player+tournament); match reveals nothing beyond the
+  profile (swipes have no client read policy; reciprocity only sorts); organizer suggest-pairing
+  deferred; weights seeded as settings (group partners). Doors decided at match time: auto-invitation
+  from the seat holder (invitePartner core) or Enter together (wizard ?partner= prefill). Maintenance
+  rides the reminders cron.
+- Private ratings: profile_visibility.community_rating / self_rating; DTO-level redaction with a
+  viewer context; privileged = owner, staff, organizer of a tournament the player is entered in;
+  lock chip on cards/profile; ME-page card with Switch rows; algorithms unaffected.
+- Migration 0047: partner tables + RLS + seeds; contribution cap seed bump. Jasper applies
+  scripts/apply-0047.sql; safe during the open window (new tables only).

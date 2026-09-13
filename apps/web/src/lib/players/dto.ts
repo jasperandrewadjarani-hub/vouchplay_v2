@@ -17,6 +17,7 @@ import {
   skillByOrdinal,
   type SkillBand,
   type SkillAlgorithmVersion,
+  type ProfileVisibility,
 } from '@vouchplay/config';
 import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { avatarUrl } from '@/lib/storage';
@@ -26,6 +27,15 @@ export interface ViewerContext {
   viewerId: string | null;
   /** Authorized moderation/admin - sees otherwise-hidden fields. */
   isStaff: boolean;
+  /**
+   * master_plan §2AW: true when the caller has already resolved this viewer as a privileged
+   * organizer for private-ratings purposes - `isPrivilegedViewerFor(viewerId, playerId)`, or `true`
+   * outright on a surface that is inherently organizer-scoped (Manage registrations, reserved slots,
+   * assignable-player search, organizer exports). Defaults to false. Staff and the profile owner
+   * already see everything via `isStaff`/`viewerId` above; this only ever ADDS organizer privilege on
+   * top for the two ratings fields - it has no effect on sex/city/age visibility.
+   */
+  ratingsPrivileged?: boolean;
 }
 
 export const ANON_VIEWER: ViewerContext = { viewerId: null, isStaff: false };
@@ -47,10 +57,22 @@ export interface PlayerCardDTO {
   avatarUrl: string | null;
   sex: 'male' | 'female' | null;
   city: string | null;
-  /** Community Skill Level (Phase 3). Null until vouches exist. */
+  /** Community Skill Level (Phase 3). Null until vouches exist, OR when the owner has set
+   *  `community_rating` to hidden and this viewer is neither the owner, staff, nor a privileged
+   *  organizer (master_plan §2AW) - see `communityRatingPrivate` to tell the two apart. */
   communitySkill: SkillBand | null;
-  /** Self-rated band - shown (clearly labeled) when there is no community skill yet. */
+  /** Self-rated band - shown (clearly labeled) when there is no community skill yet. Null when the
+   *  owner has set `self_rating` to hidden and this viewer is not privileged - see
+   *  `selfRatingPrivate` (master_plan §2AW). */
   selfRatedSkill: SkillBand | null;
+  /**
+   * The owner's `community_rating` visibility SETTING (master_plan §2AW) - always reflects the
+   * setting itself, regardless of who is viewing or whether `communitySkill` above was redacted for
+   * THIS viewer. Cards/profiles use it to render the "Ratings private" lock chip.
+   */
+  communityRatingPrivate: boolean;
+  /** The owner's `self_rating` visibility SETTING - see `communityRatingPrivate` above. */
+  selfRatingPrivate: boolean;
   /** Skill-Trust Score 0–5 (Phase 3). Null until computed. Never used to rank the directory. */
   sts: number | null;
   /**
@@ -175,6 +197,36 @@ function bandFromOrdinal(ordinal: number | null): SkillBand | null {
   return skillByOrdinal(ordinal) ?? null;
 }
 
+/**
+ * master_plan §2AW: null out a player's community/self rating for a viewer they have NOT chosen to
+ * show it to. `viewer.privileged` is the caller's already-resolved OR of staff / a privileged
+ * organizer (see `ViewerContext.ratingsPrivileged`); ownership is checked here from `row.id` against
+ * `viewer.viewerId` so every caller applies the exact same rule the owner always sees their own real
+ * values. Exported so the few surfaces that read `community_skill_level` straight off a row instead
+ * of through `toPlayerCardDTO`/`toPlayerProfileDTO` (the wizard's partner fit messages, invitation
+ * search results) apply this same rule locally rather than reimplementing it.
+ */
+export function redactRatings(
+  row: { id: string; communitySkillLevel: number | null; selfRatedSkill: number | null },
+  visibility: ProfileVisibility,
+  viewer: { viewerId: string | null; privileged: boolean },
+): {
+  communitySkillLevel: number | null;
+  selfRatedSkill: number | null;
+  communityHidden: boolean;
+  selfHidden: boolean;
+} {
+  const allowed = viewer.privileged || (viewer.viewerId != null && viewer.viewerId === row.id);
+  const communityHidden = !allowed && !fieldVisible(visibility, 'community_rating');
+  const selfHidden = !allowed && !fieldVisible(visibility, 'self_rating');
+  return {
+    communitySkillLevel: communityHidden ? null : row.communitySkillLevel,
+    selfRatedSkill: selfHidden ? null : row.selfRatedSkill,
+    communityHidden,
+    selfHidden,
+  };
+}
+
 /** Computed community-skill snapshot (from player_skill_profiles; Phase 3). */
 export interface SkillSnapshot {
   communitySkillLevel: number | null;
@@ -214,6 +266,15 @@ export function toPlayerCardDTO(
   const privileged = viewer.isStaff || viewer.viewerId === row.id;
   const showSex = privileged || fieldVisible(visibility, 'sex');
   const showCity = privileged || fieldVisible(visibility, 'city');
+  const ratings = redactRatings(
+    {
+      id: row.id,
+      communitySkillLevel: extras.skill?.communitySkillLevel ?? null,
+      selfRatedSkill: row.self_rated_skill,
+    },
+    visibility,
+    { viewerId: viewer.viewerId, privileged: viewer.isStaff || Boolean(viewer.ratingsPrivileged) },
+  );
 
   return {
     slug: row.slug ?? row.id,
@@ -223,8 +284,10 @@ export function toPlayerCardDTO(
     avatarUrl: avatarUrl(row.avatar_path),
     sex: showSex ? row.sex : null,
     city: showCity ? row.city : null,
-    communitySkill: bandFromOrdinal(extras.skill?.communitySkillLevel ?? null),
-    selfRatedSkill: bandFromOrdinal(row.self_rated_skill),
+    communitySkill: bandFromOrdinal(ratings.communitySkillLevel),
+    selfRatedSkill: bandFromOrdinal(ratings.selfRatedSkill),
+    communityRatingPrivate: !fieldVisible(visibility, 'community_rating'),
+    selfRatingPrivate: !fieldVisible(visibility, 'self_rating'),
     sts: extras.skill?.sts ?? null,
     uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
     evidenceCount: extras.skill?.evidenceCount ?? null,
@@ -253,6 +316,15 @@ export function toPlayerProfileDTO(
   const visibility = parseVisibility(row.profile_visibility);
   const privileged = viewer.isStaff || viewer.viewerId === row.id;
   const showAge = privileged || fieldVisible(visibility, 'age');
+  const ratings = redactRatings(
+    {
+      id: row.id,
+      communitySkillLevel: extras.skill?.communitySkillLevel ?? null,
+      selfRatedSkill: row.self_rated_skill,
+    },
+    visibility,
+    { viewerId: viewer.viewerId, privileged: viewer.isStaff || Boolean(viewer.ratingsPrivileged) },
+  );
 
   return {
     ...toPlayerCardDTO(row, extras, viewer, newAccountBadgeDays),
@@ -262,7 +334,9 @@ export function toPlayerProfileDTO(
     age: showAge ? ageFromDob(row.date_of_birth) : null,
     memberSince: row.created_at,
     isOwnProfile: viewer.viewerId === row.id,
-    distribution: extras.skill?.distribution ?? {},
+    // §2AW: hiding the community rating hides the vouch meter with it - an emptied distribution means
+    // `SkillDistribution` (and the total it derives from) has nothing to render.
+    distribution: ratings.communityHidden ? {} : (extras.skill?.distribution ?? {}),
     uniqueVoucherCount: extras.skill?.uniqueVoucherCount ?? 0,
     coachVouchers: extras.coachVouchers ?? [],
   };

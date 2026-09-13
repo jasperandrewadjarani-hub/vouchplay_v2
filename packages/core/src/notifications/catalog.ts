@@ -175,6 +175,38 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `${who(p)} left your team for ${tour(p)} - the new partner will need to pay their slot`,
   ),
 
+  // --- Partner matchmaking / "swipe to partner" (§2AV F, G) ---
+  // Critical: a mutual match is the moment the door (invite or "enter together") opens, and it is
+  // the only signal telling either side to act before the other loses interest.
+  partner_match: t(
+    'partners',
+    true,
+    (p) => `You matched with ${who(p)}`,
+    (p) => `For ${p.divisionName ?? 'doubles'} at ${tour(p)}. Tap to team up.`,
+  ),
+  // Non-critical: a nudge, not a blocker - the match still stands either way, so it is fine to mute.
+  partner_match_reminder: t(
+    'partners',
+    false,
+    (p) => `Still want to team up with ${who(p)}?`,
+    (p) => `Your match for ${tour(p)} hasn't become an entry yet. Tap to finish it.`,
+  ),
+  // Critical: sent once at registration lock minus 3 days - the last practical chance to act before
+  // the match cannot become an entry at all, same time-boxed reasoning as partner_lock_soon.
+  partner_match_lock_reminder: t(
+    'partners',
+    true,
+    (p) => `Partner lock-in is near for ${tour(p)}`,
+    (p) => `You and ${who(p)} matched but aren't entered yet. Enter before registration locks.`,
+  ),
+  // Non-critical: the daily "new candidates" digest for an open search - informational, mutable.
+  partner_search_new_candidates: t(
+    'partners',
+    false,
+    (p) => `New players are looking for a partner at ${tour(p)}`,
+    () => "Open your deck to see who's new.",
+  ),
+
   // --- Registrations (§27.1 / §27.3) ---
   // Critical: a player has asked to undo a payment that reached the organizer directly, so it must
   // not be mutable and must be able to reach them by email (master_plan §1Y).

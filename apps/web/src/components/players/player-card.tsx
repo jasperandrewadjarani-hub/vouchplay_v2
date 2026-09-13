@@ -18,6 +18,7 @@ import {
   LookingForPartnerBadge,
   OpenForSponsorshipBadge,
   NewBadge,
+  RatingsPrivateChip,
 } from './badges';
 
 /**
@@ -30,6 +31,7 @@ export function PlayerCard({
   compact = false,
   staffLinks = false,
   showCommunitySkill = true,
+  isOwn = false,
 }: {
   player: PlayerCardDTO;
   authed: boolean;
@@ -42,6 +44,10 @@ export function PlayerCard({
    *  per list by the caller and passed down - never decided in this component. False falls back to
    *  the self-rated pill only, exactly like a player with no community skill yet. */
   showCommunitySkill?: boolean;
+  /** master_plan §2AW: true when this card is the signed-in viewer's OWN card - shows their private-
+   *  ratings reminder chip after the pill instead of nothing. The caller derives this (e.g.
+   *  `player.slug === ownSlug`), never this component. */
+  isOwn?: boolean;
 }) {
   // Anonymous visitors get one warm, consistent signup prompt whenever they reach for depth
   // (master_plan §2AH): every directory card click (overlay, name, avatar - compact and detailed)
@@ -55,6 +61,18 @@ export function PlayerCard({
       : player.selfRatedSkill
         ? { band: player.selfRatedSkill, source: 'self' as const }
         : null;
+  // §2AW: when the skill slot would otherwise render nothing because the field that would have gone
+  // there is private for this viewer, show one lock chip instead. When it DID come through (the
+  // owner's own card, or a privileged viewer), append the owner's own reminder chip after the pill -
+  // never for anyone else's card.
+  const communityChipHidden = player.communityRatingPrivate && !player.communitySkill;
+  const selfChipHidden = player.selfRatingPrivate && !player.selfRatedSkill;
+  const showPrivacyLock = !skill && (communityChipHidden || selfChipHidden);
+  const showOwnPrivacyReminder =
+    isOwn &&
+    skill != null &&
+    ((skill.source === 'community' && player.communityRatingPrivate) ||
+      (skill.source === 'self' && player.selfRatingPrivate));
 
   if (compact) {
     return (
@@ -149,9 +167,11 @@ export function PlayerCard({
           {/* Line two: the skill pill, plus the neutral "New" pill when it applies (§2AG A3). Club
               logos used to sit beside the skill pill and pushed longer pills onto a second line,
               which leaves the whole list ragged (§1H, §1T) - nothing else joins this line. */}
-          {(skill || player.isNew) && (
+          {(skill || showPrivacyLock || player.isNew) && (
             <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
               {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+              {showPrivacyLock && <RatingsPrivateChip />}
+              {showOwnPrivacyReminder && <RatingsPrivateChip own />}
               {player.isNew && <NewBadge />}
             </span>
           )}
@@ -221,6 +241,8 @@ export function PlayerCard({
           longer conditional on there being a score to show. */}
       <div className="flex flex-wrap items-center gap-2">
         {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
+        {showPrivacyLock && <RatingsPrivateChip />}
+        {showOwnPrivacyReminder && <RatingsPrivateChip own />}
         <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
       </div>
 

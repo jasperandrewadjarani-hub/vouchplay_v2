@@ -10,6 +10,7 @@ import {
   hasPendingIdentityVerification,
 } from '@/lib/players/queries';
 import { hasViewerBlocked } from '@/lib/moderation/enforcement';
+import { isPrivilegedViewerFor } from '@/lib/players/privileged';
 import { publicEnv } from '@/lib/env';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { ClubStack } from '@/components/players/club-stack';
@@ -30,6 +31,7 @@ import {
   OpenForSponsorshipBadge,
   NewBadge,
   PendingIdentityBadge,
+  RatingsPrivateChip,
 } from '@/components/players/badges';
 import {
   SkillDistribution,
@@ -95,8 +97,24 @@ export default async function PlayerProfilePage({ params }: Params) {
     redirect(`/signup?next=${encodeURIComponent(`/players/${slug}`)}`);
   }
   const viewer = await getViewerContext();
-  const player = await getPlayerBySlug(slug, viewer);
+  let player = await getPlayerBySlug(slug, viewer);
   if (!player) notFound();
+  // master_plan §2AW: the owner and staff already see everything (the DTO's own ownership/isStaff
+  // check), so the extra organizer-privilege lookup only ever needs to run for someone ELSE viewing a
+  // profile that actually has something private - never on every single profile view.
+  const needsPrivilegeCheck =
+    !viewer.isStaff &&
+    viewer.viewerId !== player.id &&
+    (player.communityRatingPrivate || player.selfRatingPrivate);
+  const privileged =
+    viewer.isStaff ||
+    (needsPrivilegeCheck ? await isPrivilegedViewerFor(viewer.viewerId, player.id) : false);
+  if (privileged && needsPrivilegeCheck) {
+    // Re-resolve the DTO now that the viewer is known to be a privileged organizer, so the real
+    // community/self rating values (and the vouch-meter distribution) come through unredacted.
+    player = await getPlayerBySlug(slug, { ...viewer, ratingsPrivileged: true });
+    if (!player) notFound();
+  }
 
   const comments = await getPlayerComments(player.id);
   const [
@@ -126,6 +144,17 @@ export default async function PlayerProfilePage({ params }: Params) {
   // staff sees the distribution, owner included.
   const showCommunity = visibilityFlags.showCommunitySkill || player.isOwnProfile || viewer.isStaff;
   const showMeter = visibilityFlags.showVouchMeter || viewer.isStaff;
+  // master_plan §2AW: whichever field this viewer cannot see (its setting is private AND no real
+  // value came through the DTO for them) collapses into ONE shared lock chip - never one per field,
+  // and never shown to the owner (who sees their own real values above regardless, plus their own
+  // reminder chip + disclosure line below whenever either setting is actually hidden).
+  const communityLockedForViewer =
+    showCommunity && player.communityRatingPrivate && !player.communitySkill;
+  const selfLockedForViewer = player.selfRatingPrivate && !player.selfRatedSkill;
+  const showRatingsPrivateChip =
+    !player.isOwnProfile && (communityLockedForViewer || selfLockedForViewer);
+  const ownRatingsArePrivate =
+    player.isOwnProfile && (player.communityRatingPrivate || player.selfRatingPrivate);
   const authed = viewer.viewerId !== null;
   const iBlocked =
     authed && !player.isOwnProfile
@@ -231,7 +260,16 @@ export default async function PlayerProfilePage({ params }: Params) {
           )}
           <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
           {player.selfRatedSkill && <SkillPill band={player.selfRatedSkill} source="self" />}
+          {/* §2AW: one lock chip stands in for whichever chip(s) this viewer cannot see. */}
+          {showRatingsPrivateChip && <RatingsPrivateChip />}
+          {ownRatingsArePrivate && <RatingsPrivateChip own />}
         </div>
+
+        {ownRatingsArePrivate && (
+          <p className="text-foreground-muted mt-1 text-xs">
+            Only you, tournament organizers and staff can see this.
+          </p>
+        )}
 
         {heldVouchCount > 0 && (
           <p className="text-foreground-muted mt-1 flex items-center gap-1.5 text-xs">

@@ -60,6 +60,10 @@ export function DoneStep({
   if (outcome.partnerChosenLater) bullets.push('Choose your partner before the lock-in date.');
   if (bullets.length === 0) bullets.push('The organizer will confirm your entry.');
 
+  // master_plan §2AV B: a solo doubles entry ("choose a partner later") can also let the deck find a
+  // fit, right where the outcome is fresh.
+  const showFindPartnerLink = outcome.partnerChosenLater && tournament.partnerMatchmakingEnabled;
+
   // "Represent a club" (master_plan §2AT Decision G) - a real card only once there is a club to pick
   // from; otherwise a single line pointing at the one thing that would unlock it. Either way this is
   // wholly optional - "Decide later" (i.e. just tapping the button below without touching this card)
@@ -81,6 +85,17 @@ export function DoneStep({
           </li>
         ))}
       </ul>
+
+      {showFindPartnerLink && (
+        <p className="text-sm">
+          <Link
+            href={`/tournaments/${tournament.slug}/partners`}
+            className="text-primary font-medium hover:underline"
+          >
+            No partner yet? Find one
+          </Link>
+        </p>
+      )}
 
       <div className="border-border bg-surface-muted rounded-xl border p-3 text-left">
         <p className="text-foreground-muted mb-2 text-xs">

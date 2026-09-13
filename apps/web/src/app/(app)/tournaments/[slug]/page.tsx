@@ -19,7 +19,8 @@ import {
   type RegistrationHeadline,
 } from '@/lib/tournaments/registration-status';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
-import { AvailabilityCard } from '@/components/players/availability-toggles';
+import { getPartnerSummary } from '@/lib/partners/deck';
+import { FindPartnerCard } from '@/components/partners/find-partner-card';
 import { MyRegistrations } from '@/components/tournaments/my-registrations';
 import { PartnerInvitationsCard } from '@/components/tournaments/partner-invitations-card';
 import { DivisionBrowser } from '@/components/tournaments/division-browser';
@@ -133,13 +134,15 @@ export default async function TournamentPage({ params, searchParams }: Params) {
   const authed = viewer.viewerId !== null;
   const isOpen = t.status === 'registration_open';
   const registerable = isOpen || t.status === 'published';
-  const [regState, slotHoldMinutes] = authed
+  const [regState, slotHoldMinutes, partnerSummary] = authed
     ? await Promise.all([
         getViewerRegistrationState(t.id, viewer.viewerId as string),
         // How long an unpaid entry holds its slot, for the honest "pay later" warning (§2J).
         loadSettingNumber('slot_hold_minutes', DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes),
+        // master_plan §2AV B: the Find-a-partner entry card's counts, gated per viewer.
+        getPartnerSummary(t.id, viewer.viewerId),
       ])
-    : [null, DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes];
+    : [null, DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes, await getPartnerSummary(t.id, null)];
   // Shareable link that lands on the registration options (§28.1) when registration is relevant.
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
@@ -166,6 +169,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
     registrationCloseAt: t.registrationCloseAt,
     maxClubsPerPlayer: t.maxClubsPerPlayer,
     startAt: t.startAt,
+    partnerMatchmakingEnabled: partnerSummary.enabled,
   };
   // The header pill beside the tournament status pill (master_plan §2AS B) - nothing when the viewer
   // holds no entry and no reservation. Also carries the registration (if any) behind the worst
@@ -292,14 +296,22 @@ export default async function TournamentPage({ params, searchParams }: Params) {
         </div>
       </header>
 
-      {/* Availability, right where a player weighs partnering and being noticed at this event (§2N).
-          Onboarded viewers only, so the toggles are never shown to someone who cannot use them. */}
-      {authed && regState?.viewerOnboarded && (
-        <AvailabilityCard
-          lookingForPartner={regState.viewerLookingForPartner}
-          openForSponsorship={regState.viewerOpenForSponsorship}
-        />
-      )}
+      {/* Find a partner (master_plan §2AV B) - replaces the global looking-for-partner toggle that
+          used to sit here (that flag stays on the Players page, unchanged). Onboarded viewers only,
+          same gate as the toggle it replaces, plus the feature flag and an actual open doubles
+          division to search in. */}
+      {authed &&
+        regState?.viewerOnboarded &&
+        partnerSummary.enabled &&
+        partnerSummary.hasOpenDoublesDivisions &&
+        isOpen && (
+          <FindPartnerCard
+            tournamentSlug={slug}
+            lookingCount={partnerSummary.lookingCount}
+            viewerSearchOpen={partnerSummary.viewerSearchOpen}
+            openMatches={partnerSummary.openMatches}
+          />
+        )}
 
       {/* Partner invitations: split out above My registrations so a decision the OTHER team made
           never reads as one of the viewer's own entries (master_plan §2AP D). */}
@@ -313,6 +325,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           tournament={wizardTournament}
           state={regState}
           enteredRegistrationId={typeof sp.entered === 'string' ? sp.entered : null}
+          partnerMatchmakingEnabled={partnerSummary.enabled}
         />
       )}
 

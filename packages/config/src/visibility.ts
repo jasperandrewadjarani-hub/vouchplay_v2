@@ -18,7 +18,17 @@
 export type VisibilityLevel = 'public' | 'hidden';
 
 /** Fields whose public visibility a player can control. */
-export type VisibilityField = 'sex' | 'city' | 'age' | 'directory' | 'leaderboards';
+export type VisibilityField =
+  | 'sex'
+  | 'city'
+  | 'age'
+  | 'directory'
+  | 'leaderboards'
+  // §2AW private ratings: the community-vouched rating (with the vouch meter) and the self-rating.
+  // Hidden = other players see a "Ratings private" lock chip; the owner, staff and organizers of a
+  // tournament the player is entered in always see the real values.
+  | 'community_rating'
+  | 'self_rating';
 
 export type ProfileVisibility = Partial<Record<VisibilityField, VisibilityLevel>>;
 
@@ -30,6 +40,8 @@ export const VISIBILITY_DEFAULTS: Record<VisibilityField, VisibilityLevel> = {
   // (Individual profile pages remain reachable by direct link; this only affects listing.)
   directory: 'public',
   leaderboards: 'public',
+  community_rating: 'public',
+  self_rating: 'public',
 };
 
 /** Coerce an unknown jsonb value into a safe ProfileVisibility map. */
@@ -37,7 +49,15 @@ export function parseVisibility(raw: unknown): ProfileVisibility {
   if (!raw || typeof raw !== 'object') return {};
   const out: ProfileVisibility = {};
   const obj = raw as Record<string, unknown>;
-  for (const field of ['sex', 'city', 'age', 'directory', 'leaderboards'] as const) {
+  for (const field of [
+    'sex',
+    'city',
+    'age',
+    'directory',
+    'leaderboards',
+    'community_rating',
+    'self_rating',
+  ] as const) {
     if (obj[field] === 'public' || obj[field] === 'hidden') {
       out[field] = obj[field] as VisibilityLevel;
     }

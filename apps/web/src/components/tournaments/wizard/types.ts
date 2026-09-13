@@ -33,6 +33,9 @@ export interface WizardTournament {
    *  needs it to compute age-at-the-door (`ageAtDate`) before any account/state exists at all. Null
    *  when the tournament has no scheduled start yet, same as `ViewerRegistrationState.tournamentStartAt`. */
   startAt: string | null;
+  /** `partner_matchmaking_enabled` AND the viewer may use it (master_plan §2AV) - gates the Done
+   *  step's "No partner yet? Find one" link after a solo doubles entry. */
+  partnerMatchmakingEnabled: boolean;
 }
 
 export type WizardMode = 'player' | 'guest';
@@ -56,6 +59,9 @@ export interface WizardInitial {
   divisionId?: string | null;
   registrationId?: string | null;
   payFor?: WizardPayFor;
+  /** `?partner=<slug>` (master_plan §2AV F "enter together" door) - pre-selects this player on the
+   *  Partner step instead of landing on the search box. Player mode only. */
+  partnerSlug?: string | null;
 }
 
 export interface WizardPartner {

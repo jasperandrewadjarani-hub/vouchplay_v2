@@ -559,6 +559,7 @@ export function RegistrationWizard({
               <PartnerStep
                 divisionId={division.id}
                 state={effectiveState}
+                prefillSlug={initial.partnerSlug ?? null}
                 onContinue={handlePartnerContinue}
               />
             )
@@ -727,10 +728,13 @@ export function RegistrationWizardLauncher({
     }
     if (params.get('register') === '1') {
       const divisionId = params.get('division');
+      // `?partner=<slug>` (master_plan §2AV F "enter together" door) - carried through to the
+      // Partner step below; player mode only, a guest has no accounts to pre-select from.
+      const partnerSlug = params.get('partner');
       setInitial(
         mode === 'guest'
           ? { step: 'about-you' }
-          : { step: 'division', divisionId: divisionId || null },
+          : { step: 'division', divisionId: divisionId || null, partnerSlug: partnerSlug || null },
       );
       setOpen(true);
     }
