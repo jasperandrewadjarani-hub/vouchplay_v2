@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { MapPin, CalendarDays, Settings, ExternalLink, ClipboardCheck } from 'lucide-react';
+import { MapPin, CalendarDays, Settings, ExternalLink } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
 import {
@@ -142,7 +142,6 @@ export default async function TournamentPage({ params, searchParams }: Params) {
     : [null, DEFAULT_SYSTEM_SETTINGS.slot_hold_minutes];
   // Shareable link that lands on the registration options (§28.1) when registration is relevant.
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
-  const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
   // master_plan §2AU Decision H: the guest wizard's kill switch, tournament-scoped (Admin setting AND
   // registration_open - see `TournamentDetailDTO.guestRegistrationEnabled` in queries.ts).
@@ -361,16 +360,19 @@ export default async function TournamentPage({ params, searchParams }: Params) {
               <div className="mt-3">
                 <p className="text-foreground text-sm font-medium">Join this tournament</p>
                 <p className="text-foreground-muted mt-1 text-sm">
-                  Create a free account to register. You&apos;ll come right back here.
+                  {guestRegistrationEnabled
+                    ? 'Register now - you can create your account at the end.'
+                    : 'Register for this tournament.'}
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Link
-                    href={signupToRegister}
-                    className="vp-gradient vp-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-                  >
-                    <ClipboardCheck size={16} aria-hidden />
-                    Create account &amp; register
-                  </Link>
+                  <RegisterButton
+                    slug={slug}
+                    authed={authed}
+                    open={isOpen}
+                    tournament={wizardTournament}
+                    state={regState}
+                    guestRegistrationEnabled={guestRegistrationEnabled}
+                  />
                   <Link
                     href={loginToRegister}
                     className="border-border text-foreground hover:bg-surface-muted inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold"

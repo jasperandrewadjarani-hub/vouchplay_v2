@@ -3078,3 +3078,14 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
 - entry-view DEFAULT_SORT: needs_me/asc -> registered_at/desc (newest submission first) per owner
   request; the default "Has receipt" payment filter (DEFAULT_FILTERS.payment=['has_proof']) is
   unchanged. Test updated. Gates green; folded into a small commit (no migration).
+
+## 2026-09-13 - Guest registration: birthday optional; anon prompt uses the Register button
+- Guest "About you" step: birthday is now OPTIONAL (label hint "Optional - only needed for age-limited
+  divisions"). about-you-step validation drops the dob requirement; guest-registration zod makes
+  dateOfBirth optional/'' ; the 5-100 age check runs only when a dob is given; profile write stores
+  date_of_birth || null. An age-limited division still refuses an unknown birthday at the door
+  (§2AP B, unchanged), so nothing regresses there.
+- Anonymous tournament register prompt: replaced the "Create account & register" signup Link with the
+  RegisterButton (opens the guest wizard = the registration form; falls back to /signup only when the
+  guest kill switch is off); copy now "Register now - you can create your account at the end." Removed
+  the now-unused ClipboardCheck import and signupToRegister const. No migration; gates green.

@@ -44,11 +44,10 @@ export function AboutYouStep({
       !lastName.trim() ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ||
       !sex ||
-      !dateOfBirth ||
       selfRatedSkill == null ||
       !acceptedTerms
     ) {
-      setError('Please fill in every field and agree to the Terms to continue.');
+      setError('Please fill in your details and agree to the Terms to continue.');
       return;
     }
     setError(null);
@@ -150,14 +149,17 @@ export function AboutYouStep({
         </div>
       </div>
 
-      <Field label="Birthday" htmlFor="ay-dob" required>
+      <Field
+        label="Birthday"
+        htmlFor="ay-dob"
+        hint="Optional - only needed for age-limited divisions."
+      >
         <Input
           id="ay-dob"
           type="date"
           value={dateOfBirth}
           onChange={(e) => setDateOfBirth(e.target.value)}
           max={TODAY}
-          required
         />
       </Field>
 

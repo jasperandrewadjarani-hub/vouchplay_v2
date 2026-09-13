@@ -46,10 +46,14 @@ const guestEntrySchema = z.object({
   firstName: z.string().trim().min(1, 'First name is required').max(80),
   lastName: z.string().trim().min(1, 'Last name is required').max(80),
   sex: z.enum(['male', 'female'], { message: 'Select a sex' }),
+  // Optional (owner request, 2026-09-13): a guest need not give a birthday. It is only needed to enter
+  // an age-limited division, where the door check refuses an unknown birthday with a clear message.
   dateOfBirth: z
     .string()
     .trim()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date of birth'),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a valid date of birth')
+    .optional()
+    .or(z.literal('')),
   selfRatedSkill: z.number().int().min(0, 'Select your skill level').max(6, 'Invalid skill level'),
   acceptedTerms: z.boolean().refine((v) => v === true, {
     message: 'Please agree to the Terms of Service and Privacy Policy to continue.',
@@ -147,8 +151,11 @@ export async function startGuestEntry(
     return { error: parsed.error.issues[0]?.message ?? 'Please check your input.' };
   }
   const v = parsed.data;
-  const age = ageToday(v.dateOfBirth);
-  if (age === null || age < 5 || age > 100) return { error: 'Enter a valid date of birth.' };
+  // Age is validated only when a birthday was given; it is optional now (owner request, 2026-09-13).
+  if (v.dateOfBirth) {
+    const age = ageToday(v.dateOfBirth);
+    if (age === null || age < 5 || age > 100) return { error: 'Enter a valid date of birth.' };
+  }
 
   const svc = createServiceClient();
 
@@ -215,7 +222,7 @@ export async function startGuestEntry(
         last_name: v.lastName,
         nickname: v.firstName,
         sex: v.sex,
-        date_of_birth: v.dateOfBirth,
+        date_of_birth: v.dateOfBirth || null,
         self_rated_skill: v.selfRatedSkill,
         slug,
         terms_accepted_version: LEGAL.version,
