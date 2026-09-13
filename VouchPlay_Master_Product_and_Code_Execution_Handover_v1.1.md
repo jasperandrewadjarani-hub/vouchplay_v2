@@ -2010,6 +2010,10 @@ Cover-media save contract:
 
 ## 17.4 Co-organizers
 
+**v1.70 (master_plan §2AQ A4, B):** each co-organizer row carries `show_publicly` (default false). The
+public tournament page names the owner and only the co-organizers the owner switched on ("Organized
+by {owner} with {names}"). The "approved Organizer" requirement is unchanged.
+
 Organizer may assign:
 - another approved Organizer,
 - a verified club.
@@ -2377,6 +2381,10 @@ Block:
 
 ## 21.5 Open seat, consented partner change, and the partner lock-in (v1.66, master_plan §2AM)
 
+**v1.70 (master_plan §2AQ A2, A3):** the paying player may remind an unpaid partner once per 24 h;
+an organizer with approve-registrations permission may ASSIGN a fitting player into an open seat with a
+reason (`organizer_assign_partner`, audited, not subject to the lock-in); both players are notified.
+
 **v1.69 (master_plan §2AP C):** a team on which the viewer's own seat is still UNCONFIRMED is an
 invitation, not one of the viewer's entries - it never shows Leave / Change / Pay controls, and a seat
 payment requires an accepted seat. Any stale-page refusal ("this team has changed") refreshes the page.
@@ -2520,6 +2528,10 @@ Organizer registration tables must support:
 Critical operations must be transactional.
 
 ## 23.1 Default Slot Hold
+
+**v1.70 (master_plan §2AQ A1):** a daily reminders job notifies unpaid slots 48 h before early bird
+ends and 72 h before registration closes, bare-slot holders 72 h before close, and open / unconfirmed
+seats 72 h before the partner lock-in. Each reminder is sent at most once (notification existence).
 
 When a valid team is formed and begins registration:
 
@@ -6390,6 +6402,28 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.70 (2026-09-13)
+
+_The items deferred by §2AO / §2AP are built; the co-organizer write bug is fixed; the organizer
+registration sheet is redesigned around one decision per screen (master_plan §2AQ). Migration `0044`
+(`tournament_organizers.show_publicly`, `organizer_assign_partner`). §2AR records the partner-matching
+brainstorm (no code)._
+
+- **Reminders cron** (`/api/cron/reminders`, daily): early bird ending (48 h), registration closing
+  (72 h) for unpaid slots and bare-slot holders, partner lock-in (72 h) for open / unconfirmed seats.
+  Idempotent by notification existence. **Remind partner** button (once per 24 h per entry).
+- **Organizer assign partner** (§21.5): audited RPC that seats a fitting player into an open seat with
+  a reason; the lock does not apply to the organizer.
+- **Public organizers** (§17.4): per co-organizer "Show on the public page" (default hidden); the page
+  reads "Organized by {owner} with {opted-in names}". The co-organizer add now works (the write used
+  `ON CONFLICT` against a partial index and always failed).
+- **Manage**: all reads in parallel and the registrations loader batched (≤ 10 queries); "Clear all"
+  truly clears; a "Wants to cancel" filter; the registration sheet shows one status line, at most two
+  primary actions (Verify payment / Decline receipt; Confirm entry for free divisions), an overflow
+  menu for the rest, a collapsed eligibility panel without evidence chips, payment rows without
+  repeated names; Reserved slots lists live slots only ("Show declined" toggle); border tokens raised
+  in both themes. The wizard remembers "Hide ineligible".
 
 ## v1.69 (2026-09-13)
 

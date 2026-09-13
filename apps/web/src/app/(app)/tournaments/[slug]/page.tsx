@@ -152,6 +152,24 @@ export default async function TournamentPage({ params, searchParams }: Params) {
             ) : (
               t.ownerName
             )}
+            {t.publicOrganizers.length > 0 && (
+              <>
+                {' '}
+                with{' '}
+                {t.publicOrganizers.map((o, i) => (
+                  <span key={o.slug ?? o.name}>
+                    {i > 0 && ', '}
+                    {o.slug ? (
+                      <Link href={`/players/${o.slug}`} className="text-primary">
+                        {o.name}
+                      </Link>
+                    ) : (
+                      o.name
+                    )}
+                  </span>
+                ))}
+              </>
+            )}
           </p>
           {t.description && <p className="text-foreground text-sm">{t.description}</p>}
 

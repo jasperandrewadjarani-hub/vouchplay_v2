@@ -33,6 +33,7 @@ import {
   tournamentAnnouncementsTag,
 } from '@/lib/tournaments/queries';
 import { notifyMany } from '@/lib/notifications/create';
+import { writeAudit } from '@/lib/moderation/audit';
 import { getTournamentMini, getTournamentParticipantIds } from '@/lib/notifications/recipients';
 import { loadSettingFlag, loadSettingNumber } from '@/lib/settings';
 import { prepareTournamentCover } from '@/lib/tournaments/cover-image';
@@ -1057,13 +1058,40 @@ export async function addCoOrganizer(
     const permissions: Record<string, boolean> = {};
     for (const key of PERM_KEYS) permissions[key] = bool(formData, `perm_${key}`);
 
-    const { error } = await svc
+    // master_plan §2AQ Finding 1 / Decision B: `tournament_organizers` has no non-partial unique
+    // constraint on (tournament_id, user_id) - the only index is PARTIAL (`where status in
+    // ('invited','active')`, migration 0007) - so Postgres refuses `upsert(..., { onConflict })`
+    // outright and EVERY add failed with the generic "Could not add the co-organizer." Select the
+    // live row first; update it (reviving 'invited' -> 'active' if needed) or insert fresh. Same
+    // result, no `ON CONFLICT`.
+    const { data: existing, error: existingError } = await svc
       .from('tournament_organizers')
-      .upsert(
-        { tournament_id: tournamentId, user_id: targetUserId, permissions, status: 'active' },
-        { onConflict: 'tournament_id,user_id' },
-      );
-    if (error) return { error: 'Could not add the co-organizer.' };
+      .select('id')
+      .eq('tournament_id', tournamentId)
+      .eq('user_id', targetUserId)
+      .in('status', ['invited', 'active'])
+      .maybeSingle();
+    if (existingError) {
+      console.error('[addCoOrganizer]', existingError);
+      return { error: 'Could not add the co-organizer.' };
+    }
+    const { error } = existing
+      ? await svc
+          .from('tournament_organizers')
+          .update({ permissions, status: 'active' })
+          .eq('id', (existing as { id: string }).id)
+      : await svc.from('tournament_organizers').insert({
+          tournament_id: tournamentId,
+          user_id: targetUserId,
+          permissions,
+          status: 'active',
+        });
+    if (error) {
+      // Never surface the raw Postgres message to the player - log it so a future "why did this
+      // fail" question has an answer without exposing schema details client-side.
+      console.error('[addCoOrganizer]', error);
+      return { error: 'Could not add the co-organizer.' };
+    }
     invalidate(slug, tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -1153,4 +1181,59 @@ export async function removeCoOrganizer(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Co-organizer removed.' };
+}
+
+/**
+ * Owner-only per-co-organizer public visibility (migration 0044; master_plan §2AQ A4/Finding 2): the
+ * public tournament page reads "Organized by {owner}" and, for every co-organizer with
+ * `show_publicly = true`, "with {names}". Default is hidden - this is the "hide from public" ask,
+ * inverted so nothing is exposed until the owner switches it on. Defensive update: the column arrives
+ * with migration 0044, so a pre-migration deploy fails closed with a clear message instead of a raw
+ * Postgres error.
+ */
+export async function setCoOrganizerVisibility(
+  tournamentId: string,
+  userId: string,
+  show: boolean,
+): Promise<TournamentActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_organizers'))) {
+    return { error: 'Only the tournament owner can manage co-organizers.' };
+  }
+  try {
+    const svc = createServiceClient();
+    const { error, count } = await svc
+      .from('tournament_organizers')
+      .update({ show_publicly: show }, { count: 'exact' })
+      .eq('tournament_id', tournamentId)
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    if (error) {
+      console.error('[setCoOrganizerVisibility]', error);
+      return { error: 'Could not update public visibility. Please try again.' };
+    }
+    if (!count) return { error: 'That co-organizer could not be found.' };
+    await writeAudit({
+      actorId: user.id,
+      actorRole: 'organizer',
+      action: 'organizer.visibility',
+      entityType: 'tournament_organizer',
+      entityId: userId,
+      after: { tournamentId, userId, showPublicly: show },
+    });
+    const { data: t } = await svc
+      .from('tournaments')
+      .select('slug')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    const tSlug = (t as { slug: string } | null)?.slug;
+    if (tSlug) revalidateTag(tournamentTag(tSlug));
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return {
+    ok: true,
+    message: show ? 'Now shown on the public page.' : 'Hidden from the public page.',
+  };
 }

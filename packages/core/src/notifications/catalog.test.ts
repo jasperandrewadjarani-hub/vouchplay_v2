@@ -140,3 +140,88 @@ describe('seat release notifications (§2AP C)', () => {
     expect(def.body({})).toBe('Choose a division any time before registration closes.');
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2AQ A1/A2/A3 - reminders cron + remind-partner + organizer assign-partner.
+// ---------------------------------------------------------------------------
+describe('reminder + assign-partner notifications (§2AQ A)', () => {
+  it('early_bird_ending is critical, payments-category, and names the tournament + deadline', () => {
+    const def = notificationDef('early_bird_ending')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Early bird for Hermosa Open ends soon',
+    );
+    expect(def.body({ deadline: 'Sep 15, 2026' })).toBe(
+      'Pay by Sep 15, 2026 to keep the early-bird price.',
+    );
+  });
+
+  it('early_bird_ending falls back gracefully with no deadline given', () => {
+    const def = notificationDef('early_bird_ending')!;
+    expect(def.body({})).toBe('Pay by the deadline to keep the early-bird price.');
+  });
+
+  it('registration_closing_unpaid is critical, payments-category, and needs no deadline param', () => {
+    const def = notificationDef('registration_closing_unpaid')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Registration for Hermosa Open closes soon - your slot is not paid',
+    );
+  });
+
+  it('registration_closing_choose_division is critical, registrations-category, and names the deadline', () => {
+    const def = notificationDef('registration_closing_choose_division')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open', deadline: 'Sep 16, 2026' })).toBe(
+      'Choose your division for Hermosa Open before Sep 16, 2026',
+    );
+  });
+
+  it('partner_lock_soon is critical, partners-category, and names the lock date', () => {
+    const def = notificationDef('partner_lock_soon')!;
+    expect(def.category).toBe('partners');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open', deadline: 'Oct 9, 2026' })).toBe(
+      'Partner lock-in for Hermosa Open is Oct 9, 2026 - your seat is still open',
+    );
+  });
+
+  it('seat_payment_reminder is critical, payments-category, and names the actor who is waiting', () => {
+    const def = notificationDef('seat_payment_reminder')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ actorName: 'Mark', tournamentName: 'Hermosa Open' })).toBe(
+      'Mark is waiting for you to pay your slot for Hermosa Open',
+    );
+  });
+
+  it('partner_assigned is critical, partners-category, names the actor, and carries the reason when given', () => {
+    const def = notificationDef('partner_assigned')!;
+    expect(def.category).toBe('partners');
+    expect(def.critical).toBe(true);
+    expect(def.title({ actorName: 'Mandi', tournamentName: 'Hermosa Open' })).toBe(
+      'The organizer assigned Mandi as your partner for Hermosa Open',
+    );
+    expect(def.body({ reason: 'Fit checked and seat was open' })).toBe(
+      'Fit checked and seat was open',
+    );
+    expect(def.body({})).toBeUndefined();
+  });
+
+  it('all six new types are critical (in-app + email eligible, §27.5) and none is mutable', () => {
+    const types = [
+      'early_bird_ending',
+      'registration_closing_unpaid',
+      'registration_closing_choose_division',
+      'partner_lock_soon',
+      'seat_payment_reminder',
+      'partner_assigned',
+    ];
+    for (const type of types) {
+      expect(notificationDef(type)!.critical, type).toBe(true);
+    }
+  });
+});

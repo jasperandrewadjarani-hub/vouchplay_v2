@@ -62,6 +62,26 @@ export function DivisionStep({
   const [hideIneligible, setHideIneligible] = useState(false);
   const [revealedReasons, setRevealedReasons] = useState<Set<string>>(new Set());
 
+  // Sticky "Hide ineligible" (master_plan §2AQ A5) - read once on mount (never during render, so SSR
+  // and the first client render stay in sync) and written back on every change. Both sides fail
+  // silently: a blocked/unavailable localStorage should never break the wizard.
+  useEffect(() => {
+    try {
+      setHideIneligible(localStorage.getItem('vp.wizard.hideIneligible') === '1');
+    } catch {
+      // ignore - localStorage unavailable (private mode, disabled storage, etc.)
+    }
+  }, []);
+
+  function setHideIneligiblePersisted(value: boolean) {
+    setHideIneligible(value);
+    try {
+      localStorage.setItem('vp.wizard.hideIneligible', value ? '1' : '0');
+    } catch {
+      // ignore - see above
+    }
+  }
+
   const visible = tournament.divisions.filter(
     (d) => d.status !== 'draft' && d.status !== 'cancelled',
   );
@@ -404,7 +424,7 @@ export function DivisionStep({
             <input
               type="checkbox"
               checked={hideIneligible}
-              onChange={(e) => setHideIneligible(e.target.checked)}
+              onChange={(e) => setHideIneligiblePersisted(e.target.checked)}
               className="peer sr-only"
             />
             <span

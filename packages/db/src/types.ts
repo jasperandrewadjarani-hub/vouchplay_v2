@@ -424,6 +424,8 @@ export interface TournamentOrganizerRow {
   source_club_id: string | null;
   permissions: Record<string, unknown>;
   status: TournamentOrganizerStatus;
+  /** master_plan §2AQ A4 (migration 0044). Optional: absent until the migration is applied. */
+  show_publicly?: boolean;
   created_at: string;
 }
 

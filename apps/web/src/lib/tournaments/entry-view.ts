@@ -181,6 +181,11 @@ export interface EntryCounts {
   needsPaymentReview: number;
   cancellationRequested: number;
   needsEligibilityReview: number;
+  /** §2AQ D: the count badge for the "Requests -> Wants to cancel" filter button. Same underlying
+   *  entries as `cancellationRequested` (both come from `queuesFor`'s `cancellation_requested`) -
+   *  named separately because the two surfaces are asked different questions ("what needs a
+   *  decision" vs. "how many match this filter"). */
+  wantsToCancel: number;
 }
 
 export function countEntries(entries: readonly OrganizerRegistration[]): EntryCounts {
@@ -190,6 +195,7 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
     needsPaymentReview: 0,
     cancellationRequested: 0,
     needsEligibilityReview: 0,
+    wantsToCancel: 0,
   };
   for (const e of entries) {
     if (isClosed(e)) {
@@ -199,7 +205,10 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
     counts.open += 1;
     const queues = queuesFor(e);
     if (queues.includes('needs_payment_review')) counts.needsPaymentReview += 1;
-    if (queues.includes('cancellation_requested')) counts.cancellationRequested += 1;
+    if (queues.includes('cancellation_requested')) {
+      counts.cancellationRequested += 1;
+      counts.wantsToCancel += 1;
+    }
     if (queues.includes('needs_eligibility_review')) counts.needsEligibilityReview += 1;
   }
   return counts;
@@ -223,6 +232,9 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
  *  filter to directly. */
 export type PaymentFilterValue = 'has_proof' | 'no_proof' | 'partial' | 'paid';
 
+/** §2AQ D: a Status-adjacent group for the one player-initiated request an organizer must act on. */
+export type RequestFilterValue = 'wants_to_cancel';
+
 export interface EntryFilters {
   /** Division ids (not names - two divisions can share a display name). Empty = every division. */
   divisions: string[];
@@ -232,6 +244,8 @@ export interface EntryFilters {
    *  presence values - an entry matches if it satisfies ANY selected value (OR within the group). */
   payment: PaymentFilterValue[];
   partner: ('confirmed' | 'unconfirmed' | 'none')[];
+  /** §2AQ D: entries with an open cancellation request (`entry.cancellationRequest != null`). */
+  requests: RequestFilterValue[];
   /** Legacy single toggle, kept alongside the Status group (handover A5). Only decides visibility
    *  when `statuses` is empty - an explicit Status pick is a more specific ask and wins outright. */
   includeClosed: boolean;
@@ -247,6 +261,7 @@ export const DEFAULT_FILTERS: EntryFilters = {
   eligibility: [],
   payment: ['has_proof'],
   partner: [],
+  requests: [],
   includeClosed: false,
   search: '',
 };
@@ -296,6 +311,11 @@ export function filterEntries(
       if (!filters.partner.includes(key)) return false;
     }
 
+    if (filters.requests.length > 0) {
+      const keys: RequestFilterValue[] = e.cancellationRequest != null ? ['wants_to_cancel'] : [];
+      if (!keys.some((k) => filters.requests.includes(k))) return false;
+    }
+
     if (needle) {
       const haystack = `${teamLabel(e)} ${e.divisionName}`.toLowerCase();
       if (!haystack.includes(needle)) return false;
@@ -307,7 +327,14 @@ export function filterEntries(
 
 /** One removable chip for an active filter, plus enough to clear it again. */
 export type EntryFilterGroup =
-  'divisions' | 'statuses' | 'eligibility' | 'payment' | 'partner' | 'includeClosed' | 'search';
+  | 'divisions'
+  | 'statuses'
+  | 'eligibility'
+  | 'payment'
+  | 'partner'
+  | 'requests'
+  | 'includeClosed'
+  | 'search';
 
 export interface EntryFilterChip {
   group: EntryFilterGroup;
@@ -326,6 +353,9 @@ const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed' | 'none', string> = {
   confirmed: 'Partner confirmed',
   unconfirmed: 'Partner not confirmed',
   none: 'No partner yet',
+};
+const REQUEST_LABELS: Record<RequestFilterValue, string> = {
+  wants_to_cancel: 'Wants to cancel',
 };
 
 /**
@@ -353,6 +383,9 @@ export function describeEntryChips(
   for (const p of filters.partner) {
     chips.push({ group: 'partner', value: p, label: PARTNER_LABELS[p] });
   }
+  for (const r of filters.requests) {
+    chips.push({ group: 'requests', value: r, label: REQUEST_LABELS[r] });
+  }
   if (filters.includeClosed) {
     chips.push({ group: 'includeClosed', value: '', label: 'Showing closed' });
   }
@@ -379,6 +412,8 @@ export function clearEntryFilter(
       return { ...filters, payment: filters.payment.filter((v) => v !== value) };
     case 'partner':
       return { ...filters, partner: filters.partner.filter((v) => v !== value) };
+    case 'requests':
+      return { ...filters, requests: filters.requests.filter((v) => v !== value) };
     case 'includeClosed':
       return { ...filters, includeClosed: false };
     case 'search':
@@ -386,9 +421,24 @@ export function clearEntryFilter(
   }
 }
 
-/** Back to "Any" everywhere. */
+/**
+ * §2AQ D: back to TRULY "Any" everywhere - not `DEFAULT_FILTERS`, whose `payment: ['has_proof']`
+ * chip is a starting point an organizer can already remove one tap at a time. "Clear all" is the
+ * other button on the same screen and organizers expect it to mean "show me everything, no
+ * exceptions" - returning `DEFAULT_FILTERS` here made it a no-op on first open of Manage (§2AQ
+ * Findings 3).
+ */
 export function clearAllEntryFilters(): EntryFilters {
-  return { ...DEFAULT_FILTERS };
+  return {
+    divisions: [],
+    statuses: [],
+    eligibility: [],
+    payment: [],
+    partner: [],
+    requests: [],
+    includeClosed: false,
+    search: '',
+  };
 }
 
 // ---------------------------------------------------------------------------

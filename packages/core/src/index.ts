@@ -31,6 +31,7 @@ export * from './tournaments/division-order';
 export * from './tournaments/division-fit';
 export * from './tournaments/partner-lock';
 export * from './tournaments/seat-payments';
+export * from './tournaments/reminders';
 export * from './offers/lifecycle';
 export * from './offers/targeting';
 export * from './time/ph-time';

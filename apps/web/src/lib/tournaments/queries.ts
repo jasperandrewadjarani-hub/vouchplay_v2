@@ -145,6 +145,32 @@ export async function getPartnerLockAt(tournamentId: string): Promise<string | n
   }
 }
 
+/**
+ * Public co-organizer visibility (migration 0044; master_plan §2AQ A4), read via the SERVICE client
+ * so it never depends on `tournament_organizers` RLS or the viewer's session - the public page reads
+ * the same opted-in names regardless of who (or whether anyone) is signed in. Read defensively: the
+ * `show_publicly` column arrives with 0044, so a pre-migration deploy degrades to an empty map
+ * (everyone reads as hidden, matching the column's own default).
+ */
+async function getCoOrganizerVisibility(tournamentId: string): Promise<Map<string, boolean>> {
+  const map = new Map<string, boolean>();
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('tournament_organizers')
+      .select('user_id, show_publicly')
+      .eq('tournament_id', tournamentId)
+      .eq('status', 'active');
+    if (error) throw error;
+    for (const r of (data ?? []) as { user_id: string; show_publicly: boolean | null }[]) {
+      map.set(r.user_id, Boolean(r.show_publicly));
+    }
+  } catch {
+    // Column not present yet (migration 0044 pending) - every co-organizer reads as hidden.
+  }
+  return map;
+}
+
 async function getDemandSummary(tournamentId: string): Promise<TournamentDemandDTO> {
   const fallback: TournamentDemandDTO = { total: 0, divisions: {}, avatars: [] };
   try {
@@ -658,7 +684,10 @@ export async function getTournamentBySlug(
       user_id: string;
       permissions: Record<string, unknown>;
     }>;
-    const names = await resolveNames([row.owner_organizer_id, ...orgRows.map((o) => o.user_id)]);
+    const [names, showPubliclyByUserId] = await Promise.all([
+      resolveNames([row.owner_organizer_id, ...orgRows.map((o) => o.user_id)]),
+      getCoOrganizerVisibility(row.id),
+    ]);
     const owner = names.get(row.owner_organizer_id) ?? null;
 
     const organizers: OrganizerDTO[] = [
@@ -668,6 +697,7 @@ export async function getTournamentBySlug(
         slug: owner?.slug ?? null,
         isOwner: true,
         permissions: {},
+        showPublicly: true,
       },
       ...orgRows.map((o) => ({
         userId: o.user_id,
@@ -675,8 +705,15 @@ export async function getTournamentBySlug(
         slug: names.get(o.user_id)?.slug ?? null,
         isOwner: false,
         permissions: o.permissions ?? {},
+        showPublicly: showPubliclyByUserId.get(o.user_id) ?? false,
       })),
     ];
+    const publicOrganizers = orgRows
+      .filter((o) => showPubliclyByUserId.get(o.user_id))
+      .map((o) => ({
+        name: names.get(o.user_id)?.name ?? 'Organizer',
+        slug: names.get(o.user_id)?.slug ?? null,
+      }));
 
     const isOwner = viewer.viewerId === row.owner_organizer_id;
     const isCo = orgRows.some((o) => o.user_id === viewer.viewerId);
@@ -742,6 +779,7 @@ export async function getTournamentBySlug(
         ),
       ),
       organizers,
+      publicOrganizers,
       announcements,
       interestedCount: demand.total,
       myInterest,

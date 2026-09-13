@@ -4241,6 +4241,292 @@ status; server; wizard + player UI; organizer UI; players tab) → review of the
 classifier and the banner query → full gates → one commit → Jasper applies `scripts/apply-0043.sql`
 and pushes → verification on both domains.
 
+## 2AQ. Deferred items built (reminders cron, remind partner, assign partner, public organizers, sticky toggle), co-organizer write bug, organizer registration sheet overhaul, filters, speed, slots panel, border contrast (2026-09-13)
+
+Jasper: build the items deferred by §2AO / §2AP, then fix: co-organizer still cannot be added
+("Could not add the co-organizer." - screenshot); no way to hide added organizers from the public
+"Tournament by"; "Clear all" does nothing on first open of Manage; Manage often loads slowly; a
+section / filter for teams and slot holders who paid but want to cancel; the individual registration
+sheet is too texty with too many buttons (Confirm slot, Reject, Approve, Reclassify, Verify, Reject
+payment...), too many nested dropdowns, evidence chips (skill, STS, vouches) that belong on the
+profile, "Needs review" open by default, names repeated left of every payment status, "Worth a look
+before confirming"; box borders too faint in both themes; the Reserved slots panel still lists
+declined slots. Plus a brainstorm (no code) for Tinder-style partner matching - §2AR.
+
+### Findings (screenshots + code + production read 2026-09-13)
+
+1. **Co-organizer write fails by construction.** `addCoOrganizer` runs
+   `upsert(..., { onConflict: 'tournament_id,user_id' })`, but the only unique index on
+   `tournament_organizers` is PARTIAL (`where status in ('invited','active')`, 0007). Postgres refuses
+   `ON CONFLICT` without a matching non-partial constraint, so EVERY add fails with the generic
+   "Could not add the co-organizer." - the picker was never the problem (§2AP fixed a second, real
+   defect in front of this one). Both people Jasper tried (himself, Christine) hold the organizer role.
+   Spec §17.4 requires "another approved Organizer" - that rule stays.
+2. **Public organizer names.** Only the owner is rendered ("Organized by B-Steel Sports"). There is no
+   column for a co-organizer's public visibility, so "hide from public" cannot exist yet.
+3. **Clear all.** §2AP made `DEFAULT_FILTERS.payment = ['has_proof']`; "Clear all" resets to
+   `DEFAULT_FILTERS`, i.e. back to the same chip - it looks dead on first open.
+4. **Manage speed.** The manage page awaits several independent organizer reads in sequence and the
+   registrations loader resolves names, payments, slots and summaries in separate passes (the
+   explorer's count is recorded in the execution notes). No caching is possible (organizer-private),
+   so the fix is fewer round trips, all in parallel.
+5. **Registration sheet** (screenshots): header → name · raw status → Confirm slot / Reject →
+   eligibility chip → an always-open panel (explainer sentence, name, four evidence chips, reason
+   bullets, Approve / Reclassify, "Request a skill review:" + a name button) → optional reject form →
+   Payments (name repeated per row, View proof / Verify / Reject) → cancellation callout → award
+   selector. Eight actions on one screen for a single decision.
+6. **Reserved slots panel** shows every bare slot including `rejected` / `refunded`.
+7. **Borders.** `--border` was `#dfe6f0` on `#ffffff` (light) and `#1e2a40` on `#101827` (dark): both
+   under 1.2:1 against their surfaces.
+8. **Hermosa timing** matters for reminders: early bird ends 2026-09-15 15:59 UTC, registration closes
+   2026-09-16 17:00 UTC, partner lock 2026-10-09; 43 open registrations are unpaid or unverified. A
+   reminder job that runs on the next nightly cron (01:17 UTC) is worth real money to the organizer.
+
+### Decisions
+
+**A. Deferred items, built now.**
+1. **Reminders cron** (`/api/cron/reminders`, daily 01:47 UTC, same `CRON_SECRET` bearer auth and
+   audit pattern as the leaderboard cron; `vercel.json` gains the second cron). Windows, evaluated
+   per open tournament (`registration_open`): (a) **early bird ending** - within 48 h of
+   `early_bird_ends_at`, every confirmed member whose own slot is unpaid gets
+   `early_bird_ending` ("Pay by {date} to keep the early-bird price"); (b) **registration closing** -
+   within 72 h of `registration_close_at`: unpaid slots get `registration_closing_unpaid`, live bare
+   slot holders get `registration_closing_choose_division`; (c) **partner lock** - within 72 h of the
+   effective lock: entries with an open or unconfirmed seat get `partner_lock_soon`. All critical
+   (in-app + email). **Idempotent by existence**: a reminder is skipped when a `notifications` row
+   with the same `type`, `recipient_id` and `entity_id` (registration or tournament) already exists -
+   no new table. Bounded (registrations per tournament ≤ 1000), best-effort per recipient, one audit
+   row per run with counts. Manual trigger: the same route accepts the bearer from an Admin "Run
+   reminders now" button (deferred; the cron is enough for Hermosa).
+2. **Remind partner** - on a doubles entry where the partner's slot is unpaid, the paying player
+   gets a "Remind {name}" button (My registrations, next to the seat line). Sends
+   `seat_payment_reminder` (critical) to the partner, at most once per 24 h per entry (the last
+   reminder's `created_at` is the throttle; the button shows "Reminded · try again tomorrow").
+3. **Organizer assign partner** - migration 0044 adds `organizer_assign_partner(p_team_id, p_actor,
+   p_player, p_reason)`: owner / `approve_registrations` permission, the seat must be open, the
+   player must fit the division (age, sex, skill - `player_fits_division`), composition must hold,
+   no conflict; seats the player CONFIRMED immediately, cancels any pending invitation on the team,
+   writes `registration_events` `partner_assigned_by_organizer` + an `audit_logs` row with the
+   reason, and (server) attaches the player's bare slot if any, settles, notifies both players
+   `partner_assigned`. The lock does not apply to the organizer. UI: in the sheet, when a seat is
+   open, "Assign partner" opens the same player search (results already filtered by fit) + a reason.
+4. **Public organizers line** - migration 0044 adds `tournament_organizers.show_publicly boolean
+   default false`. The public page reads "Organized by {owner}" and, when any co-organizer opted in,
+   "with {names}". The co-organizer manager gets a per-row "Show on the public page" switch (owner
+   sets it; default hidden - this is the "hide from public" ask, inverted so nothing is exposed
+   until chosen). `is_tournament_organizer` and the §2AP read policy are untouched; the public
+   read is a service-client select of opted-in rows only.
+5. **Sticky hide-ineligible** - the wizard remembers the toggle in `localStorage`
+   (`vp.wizard.hideIneligible`), read on mount, written on change, failing silently.
+
+**B. Co-organizer.** Replace the upsert with: select the live row for (tournament, user); if found →
+update permissions (and revive `invited` → `active` if needed); else insert. Same result, no `ON
+CONFLICT`. Surface the raw Postgres message in the server log (never to the user) and keep the
+friendly copy. The picker and role rule are unchanged.
+
+**C. Manage page.** Every organizer read on the page runs in one `Promise.all`; the registrations
+loader is collapsed to a fixed number of round trips (registrations, teams+members, profiles, payments,
+slots, cancellation events, divisions) and derives every summary in memory; bare slots and the
+pending-receipt count reuse the same slot read. Target: ≤ 10 queries for the page regardless of
+entry count (from ~4 per entry today).
+
+**D. Filters.** "Clear all" clears to truly empty (`payment: []`, everything "Any"); the default
+"Has receipt" chip stays removable. New Status-adjacent filter group **"Requests"** with one value
+**Wants to cancel** (entries with a cancellation request) and a count badge in the filter button;
+`queuesFor` already surfaces `cancellation_requested`, so the queue count line reads "{n} want to
+cancel" when any exist. Slot holders cannot request cancellation yet (a bare slot has no request
+concept) - added to Deferred as "Cancel my reservation" request.
+
+**E. Registration sheet overhaul (one decision per screen, §2AP I continued).**
+- Header: team name, division. Under it ONE status line (the money tag + the three-state headline
+  for the player's view, e.g. "Under review · 1 of 2 slots paid").
+- **Primary action row** decided by state, never more than two buttons:
+  · receipt submitted → **Verify payment** (primary) · **Decline receipt** (secondary, reason);
+  · no receipt, free division → **Confirm entry** (primary);
+  · no receipt, paid division → no primary (nothing to verify) - the row shows "Waiting for
+    payment" and the secondary "Reject entry";
+  · confirmed → **Withdraw confirmation**? No - confirmed entries show the Award selector and
+    "Reject entry" only in the overflow.
+  Verification confirms the entry through `settleRegistration`, so **"Confirm slot" is removed
+  from the main row**; it survives as "Confirm without payment" inside the overflow (⋯) menu with
+  a one-line confirm, for the organizer who takes cash at the venue.
+- **Overflow (⋯) menu**: Confirm without payment · Reject entry (reason) · Refund payment · Request a
+  skill review · Assign partner (when a seat is open).
+- **Eligibility**: a single chip ("Eligible" / "Needs review" / "Rule not met") that toggles a
+  COLLAPSED panel (closed by default, even for Needs review); inside: the reason lines only
+  (labels), then **Approve** · **Reclassify** buttons. The evidence chips (community skill, STS,
+  active vouches, Skill-Verified) are removed - the player's name links to their profile, which is
+  where that evidence lives. "A fixed division rule is not met. Overriding requires a reason."
+  becomes the Approve button's inline reason field placeholder; the explainer sentence is gone.
+- **Payments**: rows are "Team receipt" / "Slot 1" / "Slot 2" (the player names are in the header
+  and, for slots, as the seat label "Slot · Maria") - the duplicated bold name left of each status
+  is removed; each row keeps View proof and its own Verify / Decline only when a receipt exists.
+- **Cancellation requested**: kept as the amber callout with the quoted reason; its action is the
+  overflow's Reject entry (the callout says "Use Reject entry to cancel").
+- No "Worth a look before confirming", no "Request a skill review:" label + name button (it is one
+  overflow item, one player per tap when doubles - shown as two items "Request skill review · Mark",
+  "… · Mandi").
+- Borders: `--border` becomes `#c9d3e1` (light) and `#2c3b57` (dark); the top bar keeps its own pin.
+
+**F. Reserved slots panel.** Lists LIVE bare slots (submitted, verified) by default; declined /
+refunded are behind "Show declined (n)". A rejected slot's row keeps View proof and the reason.
+
+### Better suggestions folded in / deferred
+
+- Folded in: reminders as existence-idempotent notifications (no schema); verify = confirm (one
+  action instead of two); overflow menu for the rare actions; evidence on the profile, not the sheet;
+  the public organizers line as opt-in per organizer (safer than a global hide); assign-partner as
+  an audited RPC rather than a UI shortcut.
+- Deferred: Admin "Run reminders now" button; "Cancel my reservation" request for bare slots; a
+  refund request flow for declined slots; organizer bulk actions (verify several receipts at once).
+
+### Contracts
+
+**Migration 0044:** `tournament_organizers.show_publicly boolean not null default false`;
+`organizer_assign_partner(uuid, uuid, uuid, text) returns jsonb` (security definer, revoke/grant);
+`registration_events` uses the existing free-text `event_type`.
+**Core:** notifications catalog: `early_bird_ending`, `registration_closing_unpaid`,
+`registration_closing_choose_division`, `partner_lock_soon`, `seat_payment_reminder`,
+`partner_assigned` (all critical except none); `packages/core/src/tournaments/reminders.ts` →
+`selectReminders(input)` pure (which recipients get which reminder for a tournament given now,
+windows, entries, slots, existing notification keys) + tests.
+**Web server:** `app/api/cron/reminders/route.ts`; `lib/tournaments/reminders.ts` (loader + sender);
+`vercel.json` cron; `actions/registration.ts` → `remindPartner(registrationId)`,
+`assignPartner(teamId, playerSlug, reason)`; `actions/tournament.ts` → `addCoOrganizer` fixed,
+`setCoOrganizerVisibility(tournamentId, userId, show)`; `lib/tournaments/queries.ts` →
+`TournamentDetailDTO.publicOrganizers: { name, slug }[]`; `registration-queries.ts` →
+`getOrganizerRegistrations` batched, `OrganizerRegistration.lastPartnerReminderAt` for the viewer's
+entries via a small `getMyPartnerReminders`; `entry-view.ts` → `requests: ('wants_to_cancel')[]`
+filter group, `clearAllEntryFilters()` returns truly empty.
+**Web UI:** `organizer-registrations.tsx` (sheet overhaul, overflow menu, requests filter, clear
+all), `reserved-slots-panel.tsx` (live/declined), `co-organizer-manager.tsx` (visibility switch),
+`assign-partner-form.tsx` (new), `my-registrations.tsx` (Remind button), tournament page
+(organizers line), `wizard/division-step.tsx` (sticky toggle), `globals.css` (done).
+
+### Execution
+
+Docs → 0044 (main session) → four Sonnet lanes (core+cron logic; server; organizer UI; player UI)
+→ review of the RPC, the reminder selector and the batched loader → gates → commit → Jasper applies
+`scripts/apply-0044.sql`, pushes → verification, and the first reminder run is read from the audit
+log after 01:47 UTC.
+
+## 2AR. Brainstorm only: partner matching ("swipe to partner") for tournaments (2026-09-13)
+
+Jasper's ask: a Tinder-style flow on the Players tab where players looking for a partner for a
+tournament swipe right / left; algorithmic ("best matches first"); the goal is engagement and
+tournament conversion; he wants the mechanics, rules, UX, call to action and loose ends thought
+through. No code in this batch.
+
+### What it is for (and what it is not)
+
+The job is to turn "I want to play Hermosa but I have no partner" into a paid team. Everything
+else (fun, engagement) is a means. So the unit is **a tournament + a division**, not a person in the
+abstract: "find me a partner for Men's Doubles Novice at Hermosa" - the wizard's "I'll choose a
+partner later" and the open-seat entries are the supply, and the demand is the same population.
+It is NOT dating: no free-text bios, no photos-first; the card leads with the facts a partner
+actually cares about.
+
+### Mechanics
+
+1. **Opt in per tournament** - "Find a partner" on the tournament page (and on the wizard's partner
+   step, and on an entry with an open seat). Opting in creates a `partner_search` row: tournament,
+   the divisions the player wants (multi-select from their Recommended + Other), an optional
+   one-line note ("Weekday evenings, Alabang"), and - decisive - whether they already hold a paid
+   slot / open-seat entry (**"has a slot"** badge; that is the strongest conversion signal, and
+   players with money down should be shown first).
+2. **The deck** - cards for OTHER players opted in for the same tournament with at least one
+   division in common, ordered by the match score (below). Each card: avatar with the verified
+   check, name, community skill chip (+ self-rated when no community skill), STS chip, city, the
+   divisions in common, the "Has a slot · {division}" badge, coach-vouched chip, one-line note.
+   Swipe right = **"Let's team up"**; swipe left = **"Not now"**; tap = full profile.
+3. **Match** = both swiped right. On match: a modal "You matched with Maria for Men's Doubles
+   Novice" with ONE call to action decided by the state: if either already holds an open-seat entry
+   in a common division → **"Invite Maria into your team"** (fires `replace_pending_partner` on that
+   entry, so the existing invitation flow, fit checks and lock all apply); otherwise → **"Enter
+   together"** (opens the wizard at Division pre-filtered to the common divisions, with Maria
+   pre-filled as the partner - the acknowledgement tick still applies). Until one of those happens
+   the match sits in a "Matches" tab with the same button and a 48-hour nudge.
+4. **Left swipes are private and reversible** - a "Not now" hides the card for 14 days; nothing is
+   ever shown to the other player; there is no "they passed on you". Right swipes are private until
+   mutual (the other player only learns on a match).
+5. **Expiry** - the search closes at the partner lock-in (or when the player's entry is complete);
+   a matched-but-not-entered pair is reminded once at 48 h and once at lock minus 3 days.
+
+### Algorithm ("best matches first") - transparent, tunable, no ML
+
+Score = weighted sum, every weight an Admin setting:
+- **Division overlap** (hard filter, then +weight per shared division; the player's Recommended
+  division counts double);
+- **Skill proximity** - closer community skill = higher; a one-band gap is fine, two is discounted;
+  both-unknown pairs are neither boosted nor penalised;
+- **Has a slot** - a paid open seat is the biggest boost (conversion), then "entered, unpaid";
+- **Sex composition** - for mixed divisions only male↔female pairs are shown; for men's / women's
+  divisions the sex filter is hard;
+- **Trust** - STS above the review threshold, ID verified, coach-vouched: small boosts (tie-breaks,
+  never a gate);
+- **Proximity** - same city > same region (using the PSGC data from §2AI);
+- **Reciprocity hint** - if the other player already swiped right on you, boost (the match closes
+  in one tap - this is where Tinder gets its dopamine);
+- **Freshness** - recently active players first; searches older than 7 days decay;
+- **Exclusions** - blocked pairs (`blocks`), already-teamed pairs, players on a hold / suspended,
+  minors in adult divisions (age at the door applies).
+
+### UX (simple, big, one card at a time)
+
+- Entry points: a "Find a partner" button on the tournament page next to Register (only while
+  registration is open), the same button on the wizard's partner step ("No partner yet? Find one"),
+  and a "Looking for a partner" strip on the Players tab that lists tournaments with open searches.
+- The deck lives at `/tournaments/{slug}/partners`: full-width card, two big round buttons under it
+  (✕ Not now · ✓ Let's team up), swipe gestures on touch, keyboard ← → on desktop, "Undo" for the
+  last left swipe. A small counter ("12 players looking") and an empty state that says what to do
+  ("Nobody else yet - we'll notify you when someone opts in").
+- Match modal: confetti-free, one sentence, one button (above). Matches tab lists pairs with the
+  same button and the partner's phone-free contact line (in-app message is out of scope - the
+  invitation IS the message; a one-line note travels with it).
+- Copy is plain: "Let's team up", "Not now", "You matched", "Enter together". No hearts.
+
+### Call to action → conversion
+
+- Every match ends in the SAME two doors the app already has (invite into an open seat, or enter
+  together through the wizard), so a match cannot dead-end.
+- Players with a paid slot are surfaced first and badged - the unpaid player is nudged to "match
+  with someone who already paid" and the paid player fills their seat.
+- Organizer view: a "Looking for partners ({n})" count on Manage with an announcement shortcut
+  ("Tell them the lock-in is Oct 9").
+- Notifications: `partner_match` (critical), `partner_search_new_candidates` (daily digest, opt-out),
+  the two match reminders.
+
+### Rules and safety
+
+- Only onboarded, active accounts; no one under a hold; blocked pairs never see each other; a
+  player can close their search any time and every card of theirs disappears at once.
+- Swipes are personal data: stored minimal (searcher, target, direction, at), never exposed, purged
+  when the search closes + 30 days. Reports from the deck go to the existing moderation queue.
+- Fit is re-checked at the door (the match does not bypass any division rule); a match on a
+  division that later closes offers the next common division.
+- Rate limit: 200 swipes / day (Admin setting) to keep the deck honest.
+
+### Loose ends to decide before building
+
+1. Should a player with an open-seat entry be shown to people whose skill would not fit that
+   division? (Proposal: no - hard filter on the seat's division fit.)
+2. Multiple tournaments at once - one search per tournament, deck per tournament (proposal), or a
+   global "partners" tab that groups by tournament.
+3. Does a match reveal the note and city only, or also the phone contact? (Proposal: nothing beyond
+   the profile; the invitation is the channel.)
+4. Should organizers be able to "match" two solo entries themselves (a third door)? This pairs with
+   §2AQ A3 assign-partner; proposal: yes, later, as "Suggest partner" from Manage.
+5. Weights: start with slot 5, division overlap 3/shared, skill proximity 3, reciprocity 3, city 1,
+   trust 1, freshness 1 - all `system_settings`, tuned on Hermosa's data.
+
+### Rough scope (for a later decision record)
+
+Migration: `partner_searches`, `partner_swipes`, `partner_matches` (+ RLS: own rows only; matches
+readable by both). Core: `scorePartnerCandidate()` pure + tests. Server: opt-in / close, deck loader
+(bounded, cached per searcher 60 s), swipe, match detection, the two doors. UI: the deck page, the
+match modal, the Matches tab, entry buttons, the organizer count. Notifications: 4 types. Roughly the
+size of §2AO.
+
 ## 1. Prompt Contract
 
 ### In scope

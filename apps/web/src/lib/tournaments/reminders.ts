@@ -1,0 +1,263 @@
+import 'server-only';
+import {
+  selectReminders,
+  partnerLockEffectiveAt,
+  summarizeEntryPayment,
+  type ReminderEntry,
+  type ReminderBareSlot,
+} from '@vouchplay/core';
+import { createServiceClient } from '@/lib/supabase/service';
+import { notify } from '@/lib/notifications/create';
+import { getSlotsByRegistration } from '@/lib/payments/slots';
+import { formatDateTime } from '@/lib/format-date';
+import { getPartnerLockAt } from './queries';
+
+/**
+ * Reminders cron loader (master_plan §2AQ A1, Decision A1, migration-free). Evaluated per open
+ * tournament (`registration_open`, bounded 50) against the pure `selectReminders` (packages/core):
+ * early-bird ending, registration closing (unpaid seat / choose-a-division bare slot), partner lock
+ * soon. Idempotent by EXISTENCE - a reminder is skipped whenever a `notifications` row with the same
+ * (type, recipient, entity) already exists in the trailing window, so there is no new table and a
+ * re-run (or a slightly-late cron) never double-sends.
+ *
+ * Every read is bounded and scoped to one tournament at a time; a single tournament's failure is
+ * caught and skipped rather than aborting the whole run (§1 defensive pattern used throughout this
+ * codebase for pre-migration/partial-failure resilience).
+ */
+
+const MAX_TOURNAMENTS = 50;
+const MAX_REGISTRATIONS_PER_TOURNAMENT = 1000;
+/** How far back to look for an already-sent reminder before treating a candidate as new. Generous
+ *  relative to the longest reminder window (partner lock, up to ~72h before) so a slow cron run never
+ *  re-sends. */
+const SENT_WINDOW_DAYS = 30;
+const CLOSED_REG_STATUSES = ['withdrawn', 'cancelled', 'rejected'];
+const REMINDER_TYPES = [
+  'early_bird_ending',
+  'registration_closing_unpaid',
+  'registration_closing_choose_division',
+  'partner_lock_soon',
+];
+
+interface TournamentReminderContext {
+  entries: ReminderEntry[];
+  bareSlots: ReminderBareSlot[];
+  sent: Set<string>;
+}
+
+/** This tournament's LIVE (submitted | verified) bare slots. Defensive - `tournament_slots` arrives
+ *  with migration 0042, so a missing table degrades to "no bare slots" rather than failing the run. */
+async function loadLiveBareSlots(tournamentId: string): Promise<ReminderBareSlot[]> {
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('tournament_slots')
+      .select('player_id, status')
+      .eq('tournament_id', tournamentId)
+      .is('registration_id', null)
+      .in('status', ['submitted', 'verified']);
+    if (error) throw error;
+    return ((data ?? []) as { player_id: string; status: string }[]).map((s) => ({
+      playerId: s.player_id,
+      status: s.status,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Registrations + members + payments + slots for one tournament, in one batched round trip - the
+ *  same pattern as `getOrganizerRegistrations` in `registration-queries.ts` (§2AQ Decision C), scoped
+ *  to entries that can still receive a reminder (not withdrawn/cancelled/rejected). */
+async function loadTournamentReminderContext(
+  tournamentId: string,
+  now: Date,
+): Promise<TournamentReminderContext> {
+  const svc = createServiceClient();
+  const { data: regRows } = await svc
+    .from('registrations')
+    .select('id, team_id, division_id, status')
+    .eq('tournament_id', tournamentId)
+    .not('status', 'in', `(${CLOSED_REG_STATUSES.join(',')})`)
+    .limit(MAX_REGISTRATIONS_PER_TOURNAMENT);
+  const regs = (regRows ?? []) as {
+    id: string;
+    team_id: string;
+    division_id: string;
+    status: string;
+  }[];
+
+  const regIds = regs.map((r) => r.id);
+  const teamIds = Array.from(new Set(regs.map((r) => r.team_id)));
+  const divisionIds = Array.from(new Set(regs.map((r) => r.division_id)));
+  const since = new Date(now.getTime() - SENT_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // A tournament-level reminder (registration_closing_choose_division keys off the tournament id, not
+  // a registration) may key off the tournament id itself, alongside every entry id.
+  const sentEntityIds = [tournamentId, ...regIds];
+
+  const [
+    { data: memberRows },
+    { data: divRows },
+    { data: payRows },
+    slotsByReg,
+    liveBareSlots,
+    { data: sentRows },
+  ] = await Promise.all([
+    teamIds.length
+      ? svc.from('team_members').select('team_id, player_id, confirmed_at').in('team_id', teamIds)
+      : Promise.resolve({ data: [] }),
+    divisionIds.length
+      ? svc.from('divisions').select('id, team_size, fee_amount').in('id', divisionIds)
+      : Promise.resolve({ data: [] }),
+    regIds.length
+      ? svc.from('payments').select('registration_id, status').in('registration_id', regIds)
+      : Promise.resolve({ data: [] }),
+    getSlotsByRegistration(regIds),
+    loadLiveBareSlots(tournamentId),
+    svc
+      .from('notifications')
+      .select('type, recipient_id, entity_id')
+      .in('type', REMINDER_TYPES)
+      .in('entity_id', sentEntityIds)
+      .gte('created_at', since),
+  ]);
+
+  const membersByTeam = new Map<string, { player_id: string; confirmed_at: string | null }[]>();
+  for (const m of (memberRows ?? []) as {
+    team_id: string;
+    player_id: string;
+    confirmed_at: string | null;
+  }[]) {
+    const list = membersByTeam.get(m.team_id) ?? [];
+    list.push(m);
+    membersByTeam.set(m.team_id, list);
+  }
+  const divisionById = new Map<string, { team_size: number; fee_amount: number }>();
+  for (const d of (divRows ?? []) as { id: string; team_size: number; fee_amount: number }[]) {
+    divisionById.set(d.id, d);
+  }
+  const payStatusByReg = new Map<string, string>();
+  for (const p of (payRows ?? []) as { registration_id: string; status: string }[]) {
+    payStatusByReg.set(p.registration_id, p.status);
+  }
+
+  const entries: ReminderEntry[] = regs.map((r) => {
+    const division = divisionById.get(r.division_id);
+    const teamSize = division?.team_size ?? 2;
+    const teamMembers = membersByTeam.get(r.team_id) ?? [];
+    const slots = (slotsByReg.get(r.id) ?? []).map((s) => ({
+      playerId: s.player_id,
+      status: s.status,
+      amountDue: Number(s.amount_due),
+      amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
+      createdAt: s.created_at,
+    }));
+    const teamPaymentStatus = payStatusByReg.get(r.id) ?? null;
+    // The shared verdict (master_plan §2AO A2) - the same function every other seat-state read in the
+    // app uses, so the reminders cron can never disagree with the player's own card about who is
+    // still unpaid. Seats are passed through UNFILTERED (empty seats included, playerId null) - the
+    // pure selector needs the empty-seat signal for `partner_lock_soon`.
+    const summary = summarizeEntryPayment({
+      teamSize,
+      memberIds: teamMembers.map((m) => m.player_id),
+      teamPayment: teamPaymentStatus ? { status: teamPaymentStatus } : null,
+      slots,
+      feeOwed: (division?.fee_amount ?? 0) > 0,
+    });
+    return {
+      registrationId: r.id,
+      teamSize,
+      members: teamMembers.map((m) => ({
+        playerId: m.player_id,
+        confirmed: Boolean(m.confirmed_at),
+      })),
+      seats: summary.seats.map((s) => ({ playerId: s.playerId, state: s.state })),
+      status: r.status,
+    };
+  });
+
+  const sent = new Set<string>();
+  for (const n of (sentRows ?? []) as {
+    type: string;
+    recipient_id: string;
+    entity_id: string | null;
+  }[]) {
+    if (n.entity_id) sent.add(`${n.type}:${n.recipient_id}:${n.entity_id}`);
+  }
+
+  return { entries, bareSlots: liveBareSlots, sent };
+}
+
+/** Run one reminders pass. Returns counts per notification type actually sent, for the cron audit
+ *  row. `now` is injectable for tests / a manual re-run against a fixed clock. */
+export async function runReminders(now: Date = new Date()): Promise<Record<string, number>> {
+  const svc = createServiceClient();
+  const counts: Record<string, number> = {};
+  const nowIso = now.toISOString();
+
+  const { data: tournRows } = await svc
+    .from('tournaments')
+    .select('id, name, slug, start_at, early_bird_ends_at, registration_close_at')
+    .eq('status', 'registration_open')
+    .limit(MAX_TOURNAMENTS);
+  const tournaments = (
+    (tournRows ?? []) as {
+      id: string;
+      name: string;
+      slug: string | null;
+      start_at: string | null;
+      early_bird_ends_at: string | null;
+      registration_close_at: string | null;
+    }[]
+  )
+    // A tournament with no slug yet cannot build a real deep link and is not player-visible anyway -
+    // skip it rather than sending a reminder that points nowhere useful.
+    .filter((t): t is typeof t & { slug: string } => Boolean(t.slug));
+
+  for (const t of tournaments) {
+    try {
+      const partnerLockAtRaw = await getPartnerLockAt(t.id);
+      const partnerLockEffAt = partnerLockEffectiveAt(t.start_at, partnerLockAtRaw);
+      const { entries, bareSlots, sent } = await loadTournamentReminderContext(t.id, now);
+      if (entries.length === 0 && bareSlots.length === 0) continue;
+
+      const results = selectReminders({
+        now: nowIso,
+        tournament: {
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          earlyBirdEndsAt: t.early_bird_ends_at,
+          registrationCloseAt: t.registration_close_at,
+          partnerLockEffectiveAt: partnerLockEffAt,
+        },
+        entries,
+        bareSlots,
+        sent,
+      });
+
+      for (const r of results) {
+        const link =
+          r.entityType === 'registration'
+            ? `/tournaments/${t.slug}?entered=${r.entityId}#my-registrations`
+            : `/tournaments/${t.slug}?register=1`;
+        await notify({
+          recipientId: r.recipientId,
+          type: r.type,
+          params: {
+            tournamentName: t.name,
+            deadline: formatDateTime(r.deadlineIso),
+          },
+          link,
+          entityType: r.entityType,
+          entityId: r.entityId,
+        });
+        counts[r.type] = (counts[r.type] ?? 0) + 1;
+      }
+    } catch {
+      // One tournament's failure must not abort the run for the other 49 (§ best-effort pattern).
+    }
+  }
+
+  return counts;
+}

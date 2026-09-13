@@ -4,5 +4,8 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace @vouchplay/web",
   "outputDirectory": "apps/web/.next",
-  "crons": [{ "path": "/api/cron/leaderboards", "schedule": "17 1 * * *" }]
+  "crons": [
+    { "path": "/api/cron/leaderboards", "schedule": "17 1 * * *" },
+    { "path": "/api/cron/reminders", "schedule": "47 1 * * *" }
+  ]
 }

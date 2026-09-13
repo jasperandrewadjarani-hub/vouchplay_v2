@@ -490,6 +490,7 @@ describe('counts', () => {
       needsPaymentReview: 1,
       cancellationRequested: 1,
       needsEligibilityReview: 1,
+      wantsToCancel: 1,
     });
   });
 });
@@ -661,6 +662,31 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     ).toEqual(['f']);
   });
 
+  it('Requests filters to entries with an open cancellation request (§2AQ D)', () => {
+    const withRequest = [
+      ...rows,
+      entry({
+        id: 'j',
+        divisionId: 'd1',
+        divisionName: "Men's Doubles",
+        cancellationRequest: { reason: 'injured', requestedAt: '2026-09-09T00:00:00Z' },
+      }),
+    ];
+    expect(
+      filterEntries(withRequest, {
+        ...DEFAULT_FILTERS,
+        payment: [],
+        requests: ['wants_to_cancel'],
+      }).map((r) => r.id),
+    ).toEqual(['j']);
+  });
+
+  it('an empty Requests group applies no constraint', () => {
+    expect(filterEntries(rows, { ...DEFAULT_FILTERS, payment: [], requests: [] })).toEqual(
+      filterEntries(rows, { ...DEFAULT_FILTERS, payment: [] }),
+    );
+  });
+
   it('AND across groups: Division AND Payment both narrow the result', () => {
     expect(
       filterEntries(rows, {
@@ -694,6 +720,7 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     expect(filterEntries(rows, { ...base, eligibility: [] })).toEqual(filterEntries(rows, base));
     expect(filterEntries(rows, { ...base, payment: [] })).toEqual(filterEntries(rows, base));
     expect(filterEntries(rows, { ...base, partner: [] })).toEqual(filterEntries(rows, base));
+    expect(filterEntries(rows, { ...base, requests: [] })).toEqual(filterEntries(rows, base));
   });
 
   it('§2AP I: payment "partial" also matches a CONFIRMED entry whose summary is only partial', () => {
@@ -741,6 +768,7 @@ describe('chip description + clearing', () => {
       eligibility: ['review'],
       payment: ['has_proof'],
       partner: ['unconfirmed'],
+      requests: ['wants_to_cancel'],
       includeClosed: true,
       search: 'maria',
     };
@@ -751,6 +779,7 @@ describe('chip description + clearing', () => {
       { group: 'eligibility', value: 'review', label: 'Needs review' },
       { group: 'payment', value: 'has_proof', label: 'Has receipt' },
       { group: 'partner', value: 'unconfirmed', label: 'Partner not confirmed' },
+      { group: 'requests', value: 'wants_to_cancel', label: 'Wants to cancel' },
       { group: 'includeClosed', value: '', label: 'Showing closed' },
       { group: 'search', value: '', label: '"maria"' },
     ]);
@@ -767,27 +796,42 @@ describe('chip description + clearing', () => {
     expect(next.statuses).toEqual(['confirmed']);
   });
 
+  it('clears one value from the requests group without touching the others (§2AQ D)', () => {
+    const filters: EntryFilters = {
+      ...DEFAULT_FILTERS,
+      requests: ['wants_to_cancel'],
+      statuses: ['confirmed'],
+    };
+    const next = clearEntryFilter(filters, 'requests', 'wants_to_cancel');
+    expect(next.requests).toEqual([]);
+    expect(next.statuses).toEqual(['confirmed']);
+  });
+
   it('clears the two scalar groups outright', () => {
     const filters: EntryFilters = { ...DEFAULT_FILTERS, includeClosed: true, search: 'x' };
     expect(clearEntryFilter(filters, 'includeClosed', '').includeClosed).toBe(false);
     expect(clearEntryFilter(filters, 'search', '').search).toBe('');
   });
 
-  it('clearAllEntryFilters resets to defaults', () => {
-    const filters: EntryFilters = {
-      divisions: ['d1'],
-      statuses: ['confirmed'],
-      eligibility: ['review'],
-      payment: ['has_proof'],
-      partner: ['unconfirmed'],
-      includeClosed: true,
-      search: 'x',
-    };
-    expect(clearAllEntryFilters()).toEqual(DEFAULT_FILTERS);
-    expect(filterEntries([entry()], clearAllEntryFilters())).toEqual(
-      filterEntries([entry()], DEFAULT_FILTERS),
-    );
-    void filters;
+  it('clearAllEntryFilters returns TRULY empty filters, not DEFAULT_FILTERS (§2AQ D, Findings 3)', () => {
+    // §2AP had made DEFAULT_FILTERS.payment = ['has_proof'] - a prior "Clear all" that reset to
+    // DEFAULT_FILTERS therefore looked like a no-op on first open of Manage. "Clear all" must mean
+    // "show me everything", so it returns a wholly empty filter set instead.
+    const empty = clearAllEntryFilters();
+    expect(empty).toEqual({
+      divisions: [],
+      statuses: [],
+      eligibility: [],
+      payment: [],
+      partner: [],
+      requests: [],
+      includeClosed: false,
+      search: '',
+    });
+    expect(empty).not.toEqual(DEFAULT_FILTERS);
+    // DEFAULT_FILTERS keeps its removable receipts chip unchanged (§2AP I still applies on load).
+    expect(DEFAULT_FILTERS.payment).toEqual(['has_proof']);
+    expect(describeEntryChips(empty, [])).toEqual([]);
   });
 });
 

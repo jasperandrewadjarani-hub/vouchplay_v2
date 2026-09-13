@@ -55,6 +55,7 @@ const t = (
 
 const who = (p: NotificationParams) => p.actorName ?? 'Someone';
 const tour = (p: NotificationParams) => p.tournamentName ?? 'a tournament';
+const when = (p: NotificationParams) => p.deadline ?? 'the deadline';
 
 export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
   // --- Vouches (§27.1) ---
@@ -401,6 +402,45 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     'security',
     true,
     (p) => `Security update on your account`,
+    (p) => p.reason,
+  ),
+
+  // --- Reminders cron + organizer assign-partner (§2AQ A1/A2/A3) - all critical: money-adjacent or
+  // time-boxed action, and Hermosa's reminders must reach email as well as in-app (§27.5). ---
+  early_bird_ending: t(
+    'payments',
+    true,
+    (p) => `Early bird for ${tour(p)} ends soon`,
+    (p) => `Pay by ${when(p)} to keep the early-bird price.`,
+  ),
+  registration_closing_unpaid: t(
+    'payments',
+    true,
+    (p) => `Registration for ${tour(p)} closes soon - your slot is not paid`,
+  ),
+  registration_closing_choose_division: t(
+    'registrations',
+    true,
+    (p) => `Choose your division for ${tour(p)} before ${when(p)}`,
+  ),
+  partner_lock_soon: t(
+    'partners',
+    true,
+    (p) => `Partner lock-in for ${tour(p)} is ${when(p)} - your seat is still open`,
+  ),
+  // §2AQ A2: the paying player's "Remind {name}" button on My registrations, throttled to once/24h
+  // by the caller (this catalog only owns the copy).
+  seat_payment_reminder: t(
+    'payments',
+    true,
+    (p) => `${who(p)} is waiting for you to pay your slot for ${tour(p)}`,
+  ),
+  // §2AQ A3: organizer_assign_partner seats a player immediately (no invite to accept) - both players
+  // must still be told, and the reason the organizer gave belongs in the body when there is one.
+  partner_assigned: t(
+    'partners',
+    true,
+    (p) => `The organizer assigned ${who(p)} as your partner for ${tour(p)}`,
     (p) => p.reason,
   ),
 };

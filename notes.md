@@ -2980,3 +2980,26 @@ shell chain. Partner invitations card separated from divisions. Players tab: "Se
 40 px controls, single view toggle. Organizer list: collapsed capacity summary, default Has receipt,
 row money tags (Team paid / 1 of 2 slots paid / Slot paid · no partner yet), prose cut.
 Deferred: persist hide toggle; remind partner; assign partner; reminders cron; public Organizers line.
+
+## 2026-09-13 - Deferred items built, co-organizer write bug, registration sheet overhaul, filters, speed, slots panel, borders (§2AQ, handover v1.70); partner-matching brainstorm (§2AR)
+Co-organizer: addCoOrganizer used upsert ON CONFLICT (tournament_id,user_id) but the only unique index
+is PARTIAL (status in invited/active) -> Postgres refuses -> "Could not add the co-organizer." every
+time (screenshot). Fix = select-then-insert/update. §17.4's "approved Organizer" rule kept. Public
+names: new tournament_organizers.show_publicly (0044), owner-controlled, default hidden; page reads
+"Organized by {owner} with {names}".
+Deferred items built: reminders cron /api/cron/reminders (01:47 UTC; early bird 48 h, close 72 h for
+unpaid + bare slots, partner lock 72 h; idempotent via notifications existence; audit row per run) -
+Hermosa early bird ends 09-15 15:59 UTC, close 09-16 17:00 UTC, 43 open unpaid/unverified entries;
+Remind partner (once/24 h); organizer_assign_partner RPC (0044; fit + composition + conflict, lock
+ignored, audited, both notified); sticky hide-ineligible (localStorage).
+Manage: all reads Promise.all; getOrganizerRegistrations batched (target <= 10 queries); Clear all ->
+truly empty; "Wants to cancel" filter; sheet = one status line, <= 2 primary actions (Verify payment /
+Decline receipt; Confirm entry only for free divisions), overflow menu (Confirm without payment, Reject
+entry, Refund, Request skill review, Assign partner), eligibility panel collapsed + no evidence chips
+(name links to profile), payment rows without repeated names, "Worth a look" removed; Reserved slots
+= live only + Show declined; --border #c9d3e1 light / #2c3b57 dark.
+§2AR = partner matching brainstorm only (per-tournament opt-in, deck ordered by a transparent
+weighted score with paid-slot holders first, mutual match -> the two existing doors: invite into open
+seat / enter together; private left swipes; loose ends listed). No code.
+Deferred: Admin "Run reminders now"; cancel-my-reservation request for bare slots; refund request for
+declined slots; organizer bulk verify; §2AR build.

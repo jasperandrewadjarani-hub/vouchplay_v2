@@ -114,6 +114,10 @@ export interface ViewerRegistration {
   paymentSummary: EntryPaymentSummary | null;
   /** This viewer's own seat state within `paymentSummary`, or null when they hold no seat in it. */
   mySeat: SeatState | null;
+  /** The most recent `seat_payment_reminder` THIS viewer sent their partner on this entry, or null.
+   *  Drives the "Remind {name}" button's 24h throttle copy (master_plan §2AQ A2) without a second
+   *  round trip when the button renders. */
+  lastPartnerReminderAt: string | null;
 }
 export interface ViewerInvitation {
   id: string;
@@ -463,6 +467,31 @@ export async function getViewerRegistrationState(
         });
       }
     }
+    // §2AQ A2: the viewer's own sent `seat_payment_reminder` history for these registrations, so the
+    // "Remind {name}" button's 24h throttle can render without a second round trip per entry. Bounded
+    // by the number of divisions this viewer has entered - never a tournament-wide scan.
+    const lastReminderByReg = new Map<string, string>();
+    if (regList.length > 0) {
+      const { data: reminderRows } = await svc
+        .from('notifications')
+        .select('entity_id, created_at')
+        .eq('actor_id', userId)
+        .eq('type', 'seat_payment_reminder')
+        .in(
+          'entity_id',
+          regList.map((r) => r.id),
+        )
+        .order('created_at', { ascending: false });
+      for (const row of (reminderRows ?? []) as {
+        entity_id: string | null;
+        created_at: string;
+      }[]) {
+        if (row.entity_id && !lastReminderByReg.has(row.entity_id)) {
+          lastReminderByReg.set(row.entity_id, row.created_at);
+        }
+      }
+    }
+
     for (const r of regList) {
       const pay = paymentByReg.get(r.id);
       registrationsByDivision[r.division_id] = {
@@ -474,6 +503,7 @@ export async function getViewerRegistrationState(
         paymentRejectionReason: pay?.rejection_reason ?? null,
         paymentSummary: null,
         mySeat: null,
+        lastPartnerReminderAt: lastReminderByReg.get(r.id) ?? null,
       };
     }
 
@@ -790,14 +820,28 @@ export async function getOrganizerRegistrations(
   tournamentId: string,
 ): Promise<OrganizerRegistration[]> {
   const svc = createServiceClient();
-  const { data: regs } = await svc
-    .from('registrations')
-    .select(
-      'id, division_id, team_id, status, eligibility_status, eligibility_snapshot, slot_hold_expires_at, created_at',
-    )
-    .eq('tournament_id', tournamentId)
-    .order('created_at', { ascending: true })
-    .limit(1000);
+
+  // master_plan §2AQ Finding 4/Decision C: this loader was already a FIXED number of round trips
+  // (never one query per entry), but every read after the first ran sequentially even though most of
+  // them depend only on `tournamentId` or on `regRows`'s ids - not on each other. Grouped into two
+  // `Promise.all` stages, the query COUNT is unchanged; the round-trip LATENCY for ~90 entries drops
+  // from ~7 sequential awaits to 2 (registrations+divisions, then everything keyed off their ids).
+  const [{ data: regs }, { data: divs }] = await Promise.all([
+    svc
+      .from('registrations')
+      .select(
+        'id, division_id, team_id, status, eligibility_status, eligibility_snapshot, slot_hold_expires_at, created_at',
+      )
+      .eq('tournament_id', tournamentId)
+      .order('created_at', { ascending: true })
+      .limit(1000),
+    svc
+      .from('divisions')
+      .select(
+        'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age, team_size, fee_amount',
+      )
+      .eq('tournament_id', tournamentId),
+  ]);
   const regRows = (regs ?? []) as {
     id: string;
     division_id: string;
@@ -810,12 +854,6 @@ export async function getOrganizerRegistrations(
   }[];
   if (regRows.length === 0) return [];
 
-  const { data: divs } = await svc
-    .from('divisions')
-    .select(
-      'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age, team_size, fee_amount',
-    )
-    .eq('tournament_id', tournamentId);
   const divName = new Map<string, string>();
   const divTeamSize = new Map<string, number>();
   type DivNameRow = { id: string; team_size: number; fee_amount: number } & Parameters<
@@ -827,10 +865,32 @@ export async function getOrganizerRegistrations(
   }
 
   const teamIds = regRows.map((r) => r.team_id);
-  const { data: memberRows } = await svc
-    .from('team_members')
-    .select('team_id, player_id, member_order, confirmed_at')
-    .in('team_id', teamIds);
+  const regIds = regRows.map((r) => r.id);
+
+  // These four reads depend only on `teamIds`/`regIds` above, never on each other's results, so they
+  // run as one round trip instead of four sequential ones.
+  const [{ data: memberRows }, { data: cancelRows }, { data: pays }, slotsByReg] =
+    await Promise.all([
+      svc
+        .from('team_members')
+        .select('team_id, player_id, member_order, confirmed_at')
+        .in('team_id', teamIds),
+      // Open cancellation requests, so the organizer can find and answer them (§1Z).
+      svc
+        .from('registration_events')
+        .select('registration_id, metadata, created_at')
+        .in('registration_id', regIds)
+        .eq('event_type', 'cancellation_requested')
+        .order('created_at', { ascending: false }),
+      // Payments for these registrations.
+      svc
+        .from('payments')
+        .select('id, registration_id, status, amount_due, currency, proof_storage_path')
+        .in('registration_id', regIds),
+      // §2AO A2/A6: one shared money-state verdict + attached-slot list per registration, from a single
+      // bounded `tournament_slots` read (defensive - degrades to "no slots" before migration 0042).
+      getSlotsByRegistration(regIds),
+    ]);
   const members = (memberRows ?? []) as {
     team_id: string;
     player_id: string;
@@ -838,16 +898,6 @@ export async function getOrganizerRegistrations(
     confirmed_at: string | null;
   }[];
 
-  // Open cancellation requests, so the organizer can find and answer them (§1Z).
-  const { data: cancelRows } = await svc
-    .from('registration_events')
-    .select('registration_id, metadata, created_at')
-    .in(
-      'registration_id',
-      regRows.map((r) => r.id),
-    )
-    .eq('event_type', 'cancellation_requested')
-    .order('created_at', { ascending: false });
   const cancelByReg = new Map<string, { reason: string; requestedAt: string }>();
   for (const c of (cancelRows ?? []) as {
     registration_id: string;
@@ -860,16 +910,9 @@ export async function getOrganizerRegistrations(
       requestedAt: c.created_at,
     });
   }
+  // Depends on `members`, so it cannot join the batch above - one more round trip.
   const profiles = await resolve(members.map((m) => m.player_id));
 
-  // Payments for these registrations.
-  const { data: pays } = await svc
-    .from('payments')
-    .select('id, registration_id, status, amount_due, currency, proof_storage_path')
-    .in(
-      'registration_id',
-      regRows.map((r) => r.id),
-    );
   const payByReg = new Map<
     string,
     {
@@ -891,9 +934,6 @@ export async function getOrganizerRegistrations(
     payByReg.set(p.registration_id, p);
   }
 
-  // §2AO A2/A6: one shared money-state verdict + attached-slot list per registration, from a single
-  // bounded `tournament_slots` read (defensive - degrades to "no slots" before migration 0042).
-  const slotsByReg = await getSlotsByRegistration(regRows.map((r) => r.id));
   const membersByTeam = new Map<string, string[]>();
   for (const m of members) {
     const list = membersByTeam.get(m.team_id) ?? [];
@@ -981,6 +1021,9 @@ export interface OrganizerBareSlot {
   /** The division chosen at purchase (informational only - a bare slot holds no division capacity),
    *  or null when none was recorded. */
   divisionName: string | null;
+  /** True for `submitted`/`verified` (master_plan §2AQ F): the panel defaults to these, with declined
+   *  and refunded rows behind "Show declined (n)". */
+  live: boolean;
 }
 
 export async function getOrganizerBareSlots(tournamentId: string): Promise<OrganizerBareSlot[]> {
@@ -1019,6 +1062,7 @@ export async function getOrganizerBareSlots(tournamentId: string): Promise<Organ
     submittedAt: s.submitted_at,
     rejectionReason: s.rejection_reason,
     divisionName: s.division_id ? (divNameById.get(s.division_id) ?? 'Division') : null,
+    live: s.status === 'submitted' || s.status === 'verified',
   }));
 }
 

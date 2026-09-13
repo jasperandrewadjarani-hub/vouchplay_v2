@@ -8,6 +8,7 @@ import {
   addCoOrganizer,
   removeCoOrganizer,
   searchEligibleOrganizers,
+  setCoOrganizerVisibility,
   type TournamentActionState,
   type OrganizerSearchResult,
 } from '@/lib/actions/tournament';
@@ -59,6 +60,29 @@ export function CoOrganizerManager({
   // were an exact match.
   const [chosen, setChosen] = useState<OrganizerSearchResult | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // §2AQ Decision A4: optimistic per-row "show on the public page" switch. This component is only
+  // ever rendered on the owner's own Manage page (see `manage/page.tsx`'s `t.isOwner` gate), so every
+  // row here already belongs to an owner - no extra prop needed to re-check that.
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(organizers.map((o) => [o.userId, o.showPublicly ?? false])),
+  );
+  const [visPending, setVisPending] = useState<Record<string, boolean>>({});
+  const [visErrors, setVisErrors] = useState<Record<string, string>>({});
+
+  async function toggleVisibility(userId: string, next: boolean) {
+    setVisibility((v) => ({ ...v, [userId]: next }));
+    setVisErrors((e) => ({ ...e, [userId]: '' }));
+    setVisPending((p) => ({ ...p, [userId]: true }));
+    const res = await setCoOrganizerVisibility(tournamentId, userId, next);
+    setVisPending((p) => ({ ...p, [userId]: false }));
+    if (res.error) {
+      // Roll back - the switch reflects what actually saved, not what was clicked.
+      setVisibility((v) => ({ ...v, [userId]: !next }));
+      setVisErrors((e) => ({ ...e, [userId]: res.error as string }));
+      return;
+    }
+    router.refresh();
+  }
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -91,37 +115,53 @@ export function CoOrganizerManager({
     <div className="space-y-4">
       <ul className="space-y-2">
         {organizers.map((o) => (
-          <li
-            key={o.userId}
-            className="border-border flex items-center justify-between gap-2 rounded-xl border p-2.5"
-          >
-            <span className="text-foreground text-sm">
-              {o.slug ? (
-                <Link href={`/players/${o.slug}`} className="hover:text-primary font-medium">
-                  {o.name}
-                </Link>
-              ) : (
-                <span className="font-medium">{o.name}</span>
-              )}
-              <span className="text-foreground-muted ml-1.5 text-xs">
-                {o.isOwner ? '· owner' : '· co-organizer'}
+          <li key={o.userId} className="border-border space-y-1.5 rounded-xl border p-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-foreground text-sm">
+                {o.slug ? (
+                  <Link href={`/players/${o.slug}`} className="hover:text-primary font-medium">
+                    {o.name}
+                  </Link>
+                ) : (
+                  <span className="font-medium">{o.name}</span>
+                )}
+                <span className="text-foreground-muted ml-1.5 text-xs">
+                  {o.isOwner ? '· owner' : '· co-organizer'}
+                </span>
               </span>
-            </span>
+              {!o.isOwner && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    start(async () => {
+                      const res = await removeCoOrganizer(tournamentId, slug, o.userId);
+                      setMsg(res.error ?? null);
+                      if (res.ok) router.refresh();
+                    })
+                  }
+                  className="text-danger border-border rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+            {/* §2AQ Decision A4: hidden from the public tournament page by default - opting a
+                co-organizer in is the owner's explicit choice, never the other way around. */}
             {!o.isOwner && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  start(async () => {
-                    const res = await removeCoOrganizer(tournamentId, slug, o.userId);
-                    setMsg(res.error ?? null);
-                    if (res.ok) router.refresh();
-                  })
-                }
-                className="text-danger border-border rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
-              >
-                Remove
-              </button>
+              <label className="text-foreground-muted flex min-h-10 cursor-pointer items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={visibility[o.userId] ?? false}
+                  disabled={!!visPending[o.userId]}
+                  onChange={(e) => toggleVisibility(o.userId, e.target.checked)}
+                  className="h-4 w-4"
+                />
+                Show on the public page
+              </label>
+            )}
+            {visErrors[o.userId] && (
+              <p className="text-danger text-[11px]">{visErrors[o.userId]}</p>
             )}
           </li>
         ))}
@@ -129,6 +169,12 @@ export function CoOrganizerManager({
       {msg && <p className="text-danger text-xs">{msg}</p>}
       {coOrganizers.length === 0 && (
         <p className="text-foreground-muted text-xs">No co-organizers yet.</p>
+      )}
+      {coOrganizers.length > 0 && (
+        <p className="text-foreground-muted text-xs">
+          Hidden co-organizers still manage the tournament; only the names shown here appear
+          publicly.
+        </p>
       )}
 
       <form

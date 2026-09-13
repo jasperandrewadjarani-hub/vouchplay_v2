@@ -19,7 +19,7 @@
   --success: #1f9d57;
   --foreground: #111827;
   --foreground-muted: #5b6575;
-  --border: #dfe6f0;
+  --border: #c9d3e1;
   --ring: #246beb;
   /* Bold-sporty accents (§33): gradient endpoints + primary glow. */
   --primary-from: #246beb;
@@ -41,7 +41,7 @@
   --success: #4de48a;
   --foreground: #f4f7fb;
   --foreground-muted: #9aa8bc;
-  --border: #1e2a40;
+  --border: #2c3b57;
   --ring: #42e8ff;
   --primary-from: #2d7cff;
   --primary-to: #42e8ff;

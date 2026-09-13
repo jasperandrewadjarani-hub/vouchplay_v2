@@ -71,6 +71,11 @@ export interface OrganizerDTO {
   slug: string | null;
   isOwner: boolean;
   permissions: Record<string, unknown>;
+  /** master_plan §2AQ A4: whether this co-organizer's name appears on the public tournament page
+   *  ("Organized by {owner} with {names}"). Always true for the owner. Read defensively - the
+   *  column arrives with migration 0044, so a pre-migration deploy degrades every co-organizer to
+   *  false (hidden), matching the column's own default. */
+  showPublicly: boolean;
 }
 
 export interface AnnouncementDTO {
@@ -115,6 +120,11 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   maxClubsPerPlayer: number;
   divisions: DivisionDTO[];
   organizers: OrganizerDTO[];
+  /** master_plan §2AQ A4: active co-organizers who opted in to public display, in addition to the
+   *  owner (`ownerName`/`ownerSlug`, always shown). Read via the service client so the public page
+   *  never depends on tournament_organizers RLS. Empty until someone opts in - nothing is exposed by
+   *  default. */
+  publicOrganizers: { name: string; slug: string | null }[];
   announcements: AnnouncementDTO[];
   interestedCount: number;
   myInterest: boolean;

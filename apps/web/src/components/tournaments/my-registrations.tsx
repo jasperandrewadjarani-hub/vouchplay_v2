@@ -17,6 +17,7 @@ import { RegisterActions } from './register-actions';
 import { PayNowCell } from './payment-modal';
 import { PaidEntryActions } from './paid-entry-actions';
 import { PartnerChangeActions } from './partner-change-actions';
+import { RemindPartnerButton } from './remind-partner-button';
 import { Button } from '@/components/ui/button';
 import { RegistrationWizard, type WizardTournament } from './registration-wizard';
 import type { WizardInitial } from './wizard/types';
@@ -220,7 +221,25 @@ export function MyRegistrations({
                       const isMe = seat.playerId === state.viewerId;
                       const memberName = team?.members.find((m) => m.id === seat.playerId)?.name;
                       const who = isMe ? 'You' : (memberName ?? partnerName ?? 'Partner');
-                      return <li key={i}>{seatLineText(seat.state, who)}</li>;
+                      // The paying player can nudge the OTHER member's unpaid/declined seat, once
+                      // their own seat is settled (master_plan §2AQ A2) - one button, right-aligned.
+                      const canRemind =
+                        !isMe &&
+                        (seat.state === 'unpaid' || seat.state === 'declined') &&
+                        (reg.mySeat === 'paid' || reg.mySeat === 'submitted');
+                      return (
+                        <li key={i} className="flex items-center justify-between gap-2">
+                          <span>{seatLineText(seat.state, who)}</span>
+                          {canRemind && (
+                            <RemindPartnerButton
+                              registrationId={reg.id}
+                              tournamentId={tournament.id}
+                              partnerName={who}
+                              lastReminderAt={reg.lastPartnerReminderAt}
+                            />
+                          )}
+                        </li>
+                      );
                     })}
                   </ul>
                 )}

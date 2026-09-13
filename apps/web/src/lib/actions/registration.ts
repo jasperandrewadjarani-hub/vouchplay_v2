@@ -29,7 +29,12 @@ import {
   getTeamMemberIds,
 } from '@/lib/notifications/recipients';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
-import { attachBareSlot, detachSlots, settleRegistration } from '@/lib/payments/slots';
+import {
+  attachBareSlot,
+  detachSlots,
+  settleRegistration,
+  summarizeRegistration,
+} from '@/lib/payments/slots';
 
 export interface RegistrationActionState {
   /** Set when an action creates a registration, so the UI can go straight to its payment step. */
@@ -839,6 +844,333 @@ export async function searchInvitablePlayers(
     city: p.city,
     blockedReason: reasons.get(p.id) ?? null,
   }));
+}
+
+/**
+ * Candidates for `assignPartner` (master_plan §2AQ A3). `searchInvitablePlayers` already accepts an
+ * `inviterId` used purely for the mixed-doubles composition check against the OTHER seat's sex - so
+ * passing the team's confirmed member here reuses that same fit filtering verbatim, checked against
+ * the actual seat-holder rather than the organizer running the search. No new filtering logic.
+ */
+export async function searchAssignablePlayers(
+  q: string,
+  divisionId: string,
+  teamId: string,
+): Promise<PlayerSearchResult[]> {
+  const user = await getOptionalUser();
+  if (!user) return [];
+  const svc = createServiceClient();
+  const { data: memberRows } = await svc
+    .from('team_members')
+    .select('player_id, confirmed_at')
+    .eq('team_id', teamId);
+  const confirmed = (
+    (memberRows ?? []) as { player_id: string; confirmed_at: string | null }[]
+  ).find((m) => m.confirmed_at);
+  return searchInvitablePlayers(q, divisionId, confirmed?.player_id);
+}
+
+/** Map an `organizer_assign_partner` refusal to player-facing copy (master_plan §2AQ A3). Distinct
+ *  from the shared `RPC_ERRORS`/`friendly()` above: the same raw code (e.g. `seat_not_vacant`) reads
+ *  differently from the organizer's side of the desk than from a player's. */
+const ASSIGN_PARTNER_ERRORS: Record<string, string> = {
+  reason_required: 'Add a short reason.',
+  team_not_found: 'That team could not be found.',
+  team_not_active: 'This team is no longer active.',
+  not_organizer: "Only this tournament's organizers can do that.",
+  no_confirmed_member: 'This team has no open seat.',
+  self_partner: 'That player is already on this team.',
+  seat_not_vacant: 'This team has no open seat.',
+  player_does_not_fit: "That player doesn't meet this division's rules.",
+  mixed_pair: 'Mixed doubles needs one male and one female player.',
+  partner_conflict: 'One of you is already on a team in this division.',
+};
+function friendlyAssignPartner(msg: string | undefined): string {
+  if (!msg) return 'That action failed. Please try again.';
+  for (const [key, text] of Object.entries(ASSIGN_PARTNER_ERRORS))
+    if (msg.includes(key)) return text;
+  return 'That action failed. Please try again.';
+}
+async function assignPartnerLogged(
+  actorId: string,
+  message: string | undefined,
+  teamId: string,
+): Promise<{ error: string }> {
+  await logRpcRefusal({
+    actorId,
+    fn: 'organizer_assign_partner',
+    code: message ?? 'unknown',
+    entityType: 'team',
+    entityId: teamId,
+  });
+  return { error: friendlyAssignPartner(message) };
+}
+
+/**
+ * Organizer override: seat a player into a team's open seat as CONFIRMED, with a reason (master_plan
+ * §2AQ A3, migration 0044 `organizer_assign_partner`). Fit, composition and conflict rules apply; the
+ * partner lock-in does not - this exists for exactly the "partner never confirmed / never named"
+ * cases the lock surfaces. Any pending invitation on the team is cancelled by the RPC; an unconfirmed
+ * invitee displaced that way is told separately below (the RPC itself only writes the audit trail).
+ */
+export async function assignPartner(
+  teamId: string,
+  tournamentId: string,
+  playerSlug: string,
+  reason: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) {
+    return { error: "Only this tournament's organizers can do that." };
+  }
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 3) return { error: 'Add a short reason.' };
+
+  const svc = createServiceClient();
+  try {
+    const { data: player, error: playerError } = await svc
+      .from('profiles')
+      .select('id, account_status, onboarded_at')
+      .eq('slug', playerSlug)
+      .maybeSingle();
+    if (playerError) return { error: 'Could not look up that player. Please try again.' };
+    const p = player as { id: string; account_status: string; onboarded_at: string | null } | null;
+    if (!p) return { error: 'No player found with that handle.' };
+    if (p.account_status !== 'active' || !p.onboarded_at) {
+      return {
+        error: 'That player cannot be assigned yet. Ask them to finish their profile first.',
+      };
+    }
+
+    // Snapshot the unconfirmed member (if any) BEFORE the RPC runs - it cancels any pending invite on
+    // the team, and whoever that invite named needs to be told afterwards that they were displaced.
+    const { data: beforeMembers } = await svc
+      .from('team_members')
+      .select('player_id, confirmed_at')
+      .eq('team_id', teamId);
+    const displacedCandidateId = (
+      (beforeMembers ?? []) as { player_id: string; confirmed_at: string | null }[]
+    ).find((m) => !m.confirmed_at)?.player_id;
+
+    const { data, error } = await svc.rpc('organizer_assign_partner', {
+      p_team_id: teamId,
+      p_actor: user.id,
+      p_player: p.id,
+      p_reason: trimmedReason,
+    });
+    if (error) return await assignPartnerLogged(user.id, error.message, teamId);
+
+    const result = data as {
+      team_id: string;
+      registration_id: string | null;
+      other_member: string | null;
+      assigned: string;
+    } | null;
+    const registrationId = result?.registration_id ?? null;
+    const otherMember = result?.other_member ?? null;
+
+    // Best-effort follow-through: the seat is already assigned, so a failure past this point must not
+    // be reported as a failed assignment.
+    try {
+      if (registrationId) {
+        const { data: regRow } = await svc
+          .from('registrations')
+          .select('division_id')
+          .eq('id', registrationId)
+          .maybeSingle();
+        const divisionId = (regRow as { division_id: string } | null)?.division_id ?? null;
+        if (divisionId) {
+          const { data: divRow } = await svc
+            .from('divisions')
+            .select('fee_amount, early_bird_fee_amount')
+            .eq('id', divisionId)
+            .maybeSingle();
+          const div = divRow as { fee_amount: number; early_bird_fee_amount: number | null } | null;
+          if (div && Number(div.fee_amount) > 0) {
+            const { data: tournRow } = await svc
+              .from('tournaments')
+              .select('early_bird_starts_at, early_bird_ends_at')
+              .eq('id', tournamentId)
+              .maybeSingle();
+            const tr = tournRow as {
+              early_bird_starts_at: string | null;
+              early_bird_ends_at: string | null;
+            } | null;
+            // §2AO A4 pattern (same as `startEntry`): the assigned player's own live bare slot, if any,
+            // attaches immediately at the division's per-player quote.
+            const quote = quoteFee({
+              feeAmount: Number(div.fee_amount),
+              earlyBirdFeeAmount:
+                div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
+              earlyBirdStartsAt: tr?.early_bird_starts_at ?? null,
+              earlyBirdEndsAt: tr?.early_bird_ends_at ?? null,
+              teamSize: 1,
+            });
+            await attachBareSlot(tournamentId, p.id, registrationId, quote.perPlayer);
+          }
+        }
+        await settleRegistration(registrationId, user.id);
+      }
+
+      const [assignedMini, otherMini, tm] = await Promise.all([
+        getActorMini(p.id),
+        otherMember ? getActorMini(otherMember) : Promise.resolve(null),
+        getTournamentMini(tournamentId),
+      ]);
+      const link = tm.slug
+        ? `/tournaments/${tm.slug}?entered=${registrationId ?? ''}#my-registrations`
+        : '/tournaments';
+      if (otherMember) {
+        await notify({
+          recipientId: otherMember,
+          type: 'partner_assigned',
+          actorId: user.id,
+          params: { actorName: assignedMini.name, tournamentName: tm.name, reason: trimmedReason },
+          link,
+          entityType: 'registration',
+          entityId: registrationId ?? teamId,
+        });
+      }
+      await notify({
+        recipientId: p.id,
+        type: 'partner_assigned',
+        actorId: user.id,
+        params: {
+          actorName: otherMini?.name ?? 'your partner',
+          tournamentName: tm.name,
+          reason: trimmedReason,
+        },
+        link,
+        entityType: 'registration',
+        entityId: registrationId ?? teamId,
+      });
+
+      // The displaced unconfirmed invitee (their invite was cancelled by the RPC) is told separately -
+      // they are neither `assigned` nor `other_member` in the RPC's result.
+      if (
+        displacedCandidateId &&
+        displacedCandidateId !== p.id &&
+        displacedCandidateId !== otherMember
+      ) {
+        await notify({
+          recipientId: displacedCandidateId,
+          type: 'partner_removed',
+          actorId: user.id,
+          params: { actorName: assignedMini.name, tournamentName: tm.name, reason: trimmedReason },
+          link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+          entityType: 'team',
+          entityId: teamId,
+        });
+      }
+
+      await revalTournament(tournamentId);
+    } catch {
+      // best-effort
+    }
+
+    return {
+      ok: true,
+      teamId,
+      registrationId: registrationId ?? undefined,
+      message: 'Partner assigned.',
+    };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/** Seat states that count as "paid enough to ask your partner to hurry up" / "still owes money"
+ *  (master_plan §2AQ A2). */
+const REMINDER_SELF_PAID_STATES = new Set<string>(['paid', 'submitted', 'topup']);
+const REMINDER_PARTNER_UNPAID_STATES = new Set<string>(['unpaid', 'declined']);
+
+/**
+ * A paying player nudges their unpaid doubles partner (master_plan §2AQ A2). Throttled to once per
+ * 24 h per entry, checked against the partner's own `seat_payment_reminder` history for this
+ * registration (existence-based - no new table).
+ */
+export async function remindPartner(
+  registrationId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('team_id, division_id')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as { team_id: string; division_id: string } | null;
+    if (!reg) return { error: 'That registration could not be found.' };
+
+    const { data: memberRows } = await svc
+      .from('team_members')
+      .select('player_id, confirmed_at')
+      .eq('team_id', reg.team_id);
+    const members = (memberRows ?? []) as { player_id: string; confirmed_at: string | null }[];
+    const me = members.find((m) => m.player_id === user.id && m.confirmed_at);
+    if (!me) return await staleTeamError(user.id, 'remindPartner', registrationId);
+    const partner = members.find((m) => m.player_id !== user.id && m.confirmed_at);
+    if (!partner) return { error: 'There is no confirmed partner on this team yet.' };
+
+    const summary = await summarizeRegistration(registrationId);
+    if (!summary) return { error: 'That registration could not be found.' };
+    const mySeat = summary.seats.find((s) => s.playerId === user.id);
+    const partnerSeat = summary.seats.find((s) => s.playerId === partner.player_id);
+    if (!mySeat || !REMINDER_SELF_PAID_STATES.has(mySeat.state)) {
+      return { error: 'Pay your own seat first.' };
+    }
+    if (!partnerSeat || !REMINDER_PARTNER_UNPAID_STATES.has(partnerSeat.state)) {
+      return { error: "Your partner's seat is already settled." };
+    }
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await svc
+      .from('notifications')
+      .select('id')
+      .eq('type', 'seat_payment_reminder')
+      .eq('recipient_id', partner.player_id)
+      .eq('entity_id', registrationId)
+      .gte('created_at', since)
+      .limit(1);
+    if (recent && recent.length > 0) {
+      return { error: 'Reminded already - try again tomorrow.' };
+    }
+
+    const { data: divRow } = await svc
+      .from('divisions')
+      .select('currency')
+      .eq('id', reg.division_id)
+      .maybeSingle();
+    const currency = (divRow as { currency: string } | null)?.currency ?? 'PHP';
+
+    const [actorMini, tm] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(tournamentId),
+    ]);
+    await notify({
+      recipientId: partner.player_id,
+      type: 'seat_payment_reminder',
+      actorId: user.id,
+      params: {
+        actorName: actorMini.name,
+        tournamentName: tm.name,
+        amount: formatFee(currency, partnerSeat.amountDue),
+        currency,
+      },
+      link: tm.slug
+        ? `/tournaments/${tm.slug}?entered=${registrationId}#my-registrations`
+        : '/tournaments',
+      entityType: 'registration',
+      entityId: registrationId,
+    });
+    return { ok: true, message: 'Reminder sent.' };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
 }
 
 export async function respondInvitation(
