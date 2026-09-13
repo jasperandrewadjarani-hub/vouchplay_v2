@@ -312,7 +312,9 @@ export async function invitePartner(
       type: 'partner_invite_received',
       actorId: user.id,
       params: { actorName: me.name, tournamentName: tm.name },
-      link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+      // The invitee ACCEPTS / declines this on the Partner invitations card, not in the registration
+      // wizard `?register=1` used to open (§2AS fix).
+      link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
       entityType: 'tournament',
       entityId: tournamentId,
     });
@@ -425,7 +427,8 @@ async function doEnterWithPendingPartner(
     type: 'partner_named_paid',
     actorId: userId,
     params: { actorName: me.name, tournamentName: tm.name },
-    link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+    // The named partner confirms on the Partner invitations card, not the registration wizard (§2AS).
+    link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
     entityType: 'tournament',
     entityId: tournamentId,
   });
@@ -552,7 +555,8 @@ export async function replacePendingPartner(
       type: 'partner_named_paid',
       actorId: user.id,
       params: { actorName: me.name, tournamentName: tm.name },
-      link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+      // The named partner confirms on the Partner invitations card, not the registration wizard (§2AS).
+      link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
       entityType: 'tournament',
       entityId: tournamentId,
     });
@@ -660,7 +664,9 @@ export async function changePartner(
       type: 'partner_named_paid',
       actorId: user.id,
       params: { actorName: me.name, tournamentName: tm.name },
-      link,
+      // The named partner confirms on the Partner invitations card (§2AS fix); the removed player
+      // below keeps the re-register link since they are now off the team.
+      link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
       entityType: 'tournament',
       entityId: tournamentId,
     });
@@ -1308,7 +1314,8 @@ export async function respondInvitation(
         type: 'partner_accepted',
         actorId: user.id,
         params: { actorName: me.name, tournamentName: tm.name },
-        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        // The inviter manages their now-formed team in My registrations, not the wizard (§2AS fix).
+        link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
         entityType: 'tournament',
         entityId: row.tournament_id,
       });
@@ -1330,7 +1337,8 @@ export async function respondInvitation(
         type: 'partner_declined',
         actorId: user.id,
         params: { actorName: me.name, tournamentName: tm.name },
-        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        // The inviter re-invites into the now-open seat from My registrations, not the wizard (§2AS).
+        link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
         entityType: 'tournament',
         entityId: row.tournament_id,
       });
@@ -1471,7 +1479,9 @@ export async function requestPartnerRelease(
         type: 'partner_release_requested',
         actorId: user.id,
         params: { actorName: me.name, tournamentName: tm.name },
-        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        // The approver ACTS on this in My registrations (Accept / Decline the release), so land them
+        // there - not on `?register=1`, which opened the registration wizard instead (§2AS fix).
+        link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
         entityType: 'tournament',
         entityId: tournamentId,
       });
@@ -1603,7 +1613,9 @@ export async function respondPartnerRelease(
         type: 'partner_release_declined',
         actorId: user.id,
         params: { actorName: me.name, tournamentName: tm.name },
-        link,
+        // The requester is still on the team - send them to their entry, not the registration
+        // wizard (§2AS fix). `accepted`/`removed` keep the re-register link: those players are off.
+        link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
         entityType: 'tournament',
         entityId: row.tournament_id,
       });
@@ -2201,7 +2213,8 @@ export async function decideSlotCancellation(
         type: 'slot_cancel_declined',
         actorId: user.id,
         params: { tournamentName: tm.name },
-        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        // The player still holds the reserved slot - it lives in My registrations, not the wizard (§2AS).
+        link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
         entityType: 'tournament_slot',
         entityId: slotId,
       });

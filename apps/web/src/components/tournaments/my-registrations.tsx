@@ -99,11 +99,15 @@ export function MyRegistrations({
   const isNew = Boolean(
     enteredRegistrationId && entries.some((e) => e.reg.id === enteredRegistrationId),
   );
+  // A pending partner-release request needs an answer here (Accept / Decline), so the panel opens on
+  // it - the release notification links to `#my-registrations` and must not land on a collapsed panel
+  // (master_plan §2AS fix).
+  const hasReleaseRequest = Object.values(state.teamsByDivision).some((t) => t.releaseRequest);
 
   return (
     <>
       <details
-        open={isNew || Boolean(bareSlot)}
+        open={isNew || Boolean(bareSlot) || hasReleaseRequest}
         id="my-registrations"
         className="border-primary/30 bg-primary/5 scroll-mt-24 rounded-2xl border"
       >

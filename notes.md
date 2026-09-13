@@ -3016,3 +3016,19 @@ cron); confirmation email on settle-confirm with caveats + link, per-tournament 
 idempotent; bulk verify (rows + bare slots); cancel-my-reservation (Refund / Keep). Admin: Run
 reminders now + last run. Deferred and to raise after this batch: refund request for declined slots;
 §2AR partner matching build.
+
+## 2026-09-13 - Fix: partner-action notifications opened the registration wizard instead of the action surface (§2AS follow-up)
+Bug (Jasper): the notification to answer a partner's cancel/leave request opened the registration
+process instead of My registrations with the Accept/Decline (release) buttons. Cause: every partner
+notification linked to `/tournaments/{slug}?register=1`, which the RegistrationWizardLauncher reads to
+open the wizard. Fixed the link per notification's true destination:
+- partner_release_requested (approver acts) + partner_release_declined (requester still on team) ->
+  `#my-registrations`; My registrations now also auto-opens its panel when any team has a pending
+  release request, so the buttons are visible, not collapsed.
+- partner_invite_received + partner_named_paid (x3: enterWithPendingPartner, replace_pending_partner,
+  change_partner) -> `#partner-invitations` (the invitee Accepts/Declines on that card).
+- partner_accepted + partner_declined (inviter) + slot_cancel_declined (player still holds the slot)
+  -> `#my-registrations`.
+Left on `?register=1` deliberately (recipient is off the team / free to re-enter): partner_removed,
+partner_invite_withdrawn, partner_team_left, and the waitlist registerLink. No schema/logic change;
+gates green; folded into the same unpushed deploy.
