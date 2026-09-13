@@ -5046,6 +5046,27 @@ where they already have a search, then by how many others are looking. Component
 `components/partners/partner-looking-strip.tsx` renders nothing when empty. No migration, no new
 settings; gated by `partner_matchmaking_enabled` like every other entry point.
 
+### 2AV addendum 2: deck cold-start supply + chip padding (2026-09-13)
+
+Live check: the deck showed "Nobody else yet" because it drew candidates ONLY from explicit
+`partner_searches` rows, and a brand-new opt-in feature is empty until people opt in - nobody opts
+into an empty deck. Fixed by seeding the deck from the population already available to partner, which
+is what §2AR always intended ("open-seat entries are the supply"):
+`loadSupplyCandidates(tournamentId, eligibleIds)` unions four sources - open searches, live open-seat
+solo entries (their entry division locked), paid bare reservations ("bought their slot only"), and
+profiles flagged `looking_for_partner` globally (any division they fit). The first three are
+tournament-specific and count as "looking here"; the global flag fills the deck but is not counted.
+Every candidate is still hard-filtered by pairwise division fit, so an ill-fitting global looker never
+appears. `candidateEffectiveDivisions` falls back to "every open division the candidate fits" for a
+passive candidate who declared none. `swipePartner` no longer requires the TARGET to have an open
+search (only the viewer) - a right swipe on a passive candidate is valid discovery, and a match still
+needs their own reciprocal swipe, so nobody is invited without their action. The deck header's
+"N players looking" now means "cards available to you" (never "0" over a full deck); the tournament
+card / directory count stays tournament-specific supply. Also: the "Slot not secured" chip used the
+button's tight right padding even when rendered without the Pay-now button (tournament card), so the
+text was jammed to the edge - now symmetric `px-2.5` when there is no button. No migration.
+Production supply for Hermosa at fix time: 2 searches, 51 open-seat entries, 1 bare slot, 91 global.
+
 ## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
 
 Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the

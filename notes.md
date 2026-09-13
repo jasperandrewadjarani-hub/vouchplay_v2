@@ -3111,3 +3111,13 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   lib/partners/deck.ts (bounded/cached/fail-open) + partner-looking-strip.tsx, wired into the
   players page under the availability card. Lists open-search tournaments (registration_open only),
   viewer's own tournaments first, one tap to the deck. No migration/settings. Gates green, build ok.
+
+## 2026-09-13 - Partner deck cold-start fix + Slot-not-secured chip padding
+- Deck was empty ("Nobody else yet") because candidates came only from partner_searches. Added
+  loadSupplyCandidates: union of open searches + open-seat solo entries + paid bare slots + global
+  looking_for_partner profiles; hard division-fit filter unchanged. candidateEffectiveDivisions
+  falls back to all-fitting divisions for passive candidates. swipePartner no longer requires the
+  target's search. Deck header lookingCount = cards available to viewer; summary/strip count stays
+  tournament-specific. Verified prod supply for Hermosa: 2/51/1/91. No migration.
+- ViewerStatusPill "Slot not secured": symmetric px-2.5 when no Pay-now button (was pr-0.5, text
+  jammed on the tournament card). Gates green, build ok.

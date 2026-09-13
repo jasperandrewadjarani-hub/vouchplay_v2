@@ -32,8 +32,15 @@ export function ViewerStatusPill({
     );
   }
 
+  // With a "Pay now" button the right padding is tight so the white pill sits snug; WITHOUT it (the
+  // tournament card just states the status) the chip needs symmetric padding, or the text is jammed
+  // against the right edge (the reported "too condensed" bug).
   return (
-    <span className="bg-danger inline-flex items-center gap-1.5 rounded-full py-0.5 pr-0.5 pl-2 text-xs font-semibold text-white">
+    <span
+      className={`bg-danger inline-flex items-center gap-1.5 rounded-full py-0.5 text-xs font-semibold text-white ${
+        href ? 'pr-0.5 pl-2' : 'px-2.5'
+      }`}
+    >
       Slot not secured
       {href && (
         <Link

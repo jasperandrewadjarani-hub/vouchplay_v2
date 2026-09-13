@@ -649,6 +649,196 @@ function emptyDeck(tournament: {
   };
 }
 
+interface SupplyCandidate {
+  playerId: string;
+  /** Declared or locked divisions; empty = "any division this player fits" (a global looker). */
+  divisionIds: string[];
+  note: string | null;
+  lastActiveAt: string;
+  /** Tied to THIS tournament (search / open seat / paid slot) - counts as "looking here". A global
+   *  looker fills the deck for cold-start but is not counted. */
+  tournamentSpecific: boolean;
+}
+
+/**
+ * The partner-deck supply for a tournament (master_plan §2AV, cold-start fix). A brand-new opt-in
+ * feature is empty until people opt in, and nobody opts into an empty deck - so the deck is seeded
+ * from the population already available to partner by their own prior actions:
+ *  1. an open partner search here (explicit opt-in);
+ *  2. a live open-seat solo entry in an open doubles division ("no partner yet" - their entry's
+ *     division is locked, the same money rule as a seat);
+ *  3. a paid / awaiting bare reservation with no team yet ("bought their slot only");
+ *  4. a profile flagged "looking for a partner" globally (any division they fit).
+ * (1)-(3) are tournament-specific and count as "looking here"; (4) fills the deck but is not counted.
+ * Every candidate is still hard-filtered by division fit downstream, so an ill-fitting global looker
+ * never actually appears. All reads bounded; never throws (a failure yields whatever was gathered).
+ */
+async function loadSupplyCandidates(
+  tournamentId: string,
+  eligibleDivisionIds: Set<string>,
+): Promise<Map<string, SupplyCandidate>> {
+  const svc = createServiceClient();
+  const map = new Map<string, SupplyCandidate>();
+  const merge = (c: SupplyCandidate) => {
+    const existing = map.get(c.playerId);
+    if (!existing) {
+      map.set(c.playerId, c);
+      return;
+    }
+    existing.divisionIds = Array.from(new Set([...existing.divisionIds, ...c.divisionIds]));
+    existing.tournamentSpecific = existing.tournamentSpecific || c.tournamentSpecific;
+    existing.note = existing.note ?? c.note;
+    if ((c.lastActiveAt ?? '') > (existing.lastActiveAt ?? ''))
+      existing.lastActiveAt = c.lastActiveAt;
+  };
+
+  // 1. Explicit searches.
+  try {
+    const { data } = await svc
+      .from('partner_searches')
+      .select('player_id, division_ids, note, last_active_at')
+      .eq('tournament_id', tournamentId)
+      .eq('status', 'open')
+      .order('last_active_at', { ascending: false })
+      .limit(MAX_SEARCHES);
+    for (const s of (data ?? []) as {
+      player_id: string;
+      division_ids: string[] | null;
+      note: string | null;
+      last_active_at: string;
+    }[]) {
+      merge({
+        playerId: s.player_id,
+        divisionIds: (s.division_ids ?? []).filter((id) => eligibleDivisionIds.has(id)),
+        note: s.note,
+        lastActiveAt: s.last_active_at,
+        tournamentSpecific: true,
+      });
+    }
+  } catch {
+    /* fail open */
+  }
+
+  // 2. Open-seat solo entries: a live team in an eligible division with exactly one confirmed member.
+  if (eligibleDivisionIds.size > 0) {
+    try {
+      const { data: teamRows } = await svc
+        .from('teams')
+        .select('id, division_id, status, updated_at, created_at')
+        .eq('tournament_id', tournamentId)
+        .in('division_id', Array.from(eligibleDivisionIds))
+        .in('status', ['forming', 'formed', 'locked'])
+        .limit(500);
+      const teams = (teamRows ?? []) as {
+        id: string;
+        division_id: string;
+        updated_at: string | null;
+        created_at: string;
+      }[];
+      if (teams.length > 0) {
+        const { data: memberRows } = await svc
+          .from('team_members')
+          .select('team_id, player_id, confirmed_at')
+          .in(
+            'team_id',
+            teams.map((t) => t.id),
+          )
+          .not('confirmed_at', 'is', null)
+          .limit(2000);
+        const membersByTeam = new Map<string, string[]>();
+        for (const m of (memberRows ?? []) as { team_id: string; player_id: string }[]) {
+          const arr = membersByTeam.get(m.team_id) ?? [];
+          arr.push(m.player_id);
+          membersByTeam.set(m.team_id, arr);
+        }
+        for (const t of teams) {
+          const members = membersByTeam.get(t.id) ?? [];
+          if (members.length !== 1) continue; // an open seat = one confirmed player, one empty slot
+          merge({
+            playerId: members[0]!,
+            divisionIds: [t.division_id],
+            note: null,
+            lastActiveAt: t.updated_at ?? t.created_at,
+            tournamentSpecific: true,
+          });
+        }
+      }
+    } catch {
+      /* fail open */
+    }
+  }
+
+  // 3. Bare reservations ("bought their slot only"): a paid/awaiting slot with no team yet.
+  try {
+    const { data } = await svc
+      .from('tournament_slots')
+      .select('player_id, division_id, status, created_at')
+      .eq('tournament_id', tournamentId)
+      .is('registration_id', null)
+      .in('status', ['submitted', 'verified'])
+      .limit(500);
+    for (const s of (data ?? []) as {
+      player_id: string;
+      division_id: string | null;
+      created_at: string;
+    }[]) {
+      merge({
+        playerId: s.player_id,
+        divisionIds: s.division_id && eligibleDivisionIds.has(s.division_id) ? [s.division_id] : [],
+        note: null,
+        lastActiveAt: s.created_at,
+        tournamentSpecific: true,
+      });
+    }
+  } catch {
+    /* fail open */
+  }
+
+  // 4. Globally looking players (any division they fit). Bounded; not tournament-specific.
+  try {
+    const { data } = await svc
+      .from('profiles')
+      .select('id, updated_at')
+      .eq('looking_for_partner', true)
+      .eq('account_status', 'active')
+      .not('onboarded_at', 'is', null)
+      .limit(300);
+    for (const p of (data ?? []) as { id: string; updated_at: string | null }[]) {
+      merge({
+        playerId: p.id,
+        divisionIds: [],
+        note: null,
+        lastActiveAt: p.updated_at ?? '',
+        tournamentSpecific: false,
+      });
+    }
+  } catch {
+    /* fail open */
+  }
+
+  return map;
+}
+
+/** A candidate's effective divisions (master_plan §2AV C, cold-start extension): their live seat
+ *  divisions when they hold any (the money rule), else the divisions they declared, else - for a
+ *  passive candidate who declared none (a global looker or a slot with no division) - every open
+ *  division they fit as a solo, so the pairwise fit filter downstream can still find common ground. */
+function candidateEffectiveDivisions(
+  candidateId: string,
+  candidateFit: FitProfile,
+  seatMap: Map<string, Map<string, unknown>>,
+  declaredIds: string[],
+  divisions: DivisionRow[],
+  eligibleIds: Set<string>,
+  rules: TournamentRules,
+): string[] {
+  const seats = seatMap.get(candidateId);
+  if (seats && seats.size > 0) return Array.from(seats.keys());
+  const declared = declaredIds.filter((id) => eligibleIds.has(id));
+  if (declared.length > 0) return declared;
+  return divisions.filter((d) => soloFit(candidateFit, d, rules).fits).map((d) => d.id);
+}
+
 export async function getPartnerDeck(
   slug: string,
   viewerId: string,
@@ -718,19 +908,10 @@ export async function getPartnerDeck(
     })
     .filter((d): d is PartnerDivisionRef => d !== null);
 
-  // --- Candidates -----------------------------------------------------------------------------
-  const { data: searchRows } = await svc
-    .from('partner_searches')
-    .select('id, player_id, division_ids, note, status, last_active_at, created_at')
-    .eq('tournament_id', tournament.id)
-    .eq('status', 'open')
-    .neq('player_id', viewerId)
-    .order('last_active_at', { ascending: false })
-    .limit(MAX_SEARCHES);
-  const searches = (searchRows ?? []) as SearchRow[];
-  const lookingCount = searches.length;
-
-  let candidateIds = searches.map((s) => s.player_id);
+  // --- Candidates (master_plan §2AV, cold-start supply) ---------------------------------------
+  const supplyByCandidate = await loadSupplyCandidates(tournament.id, eligibleIds);
+  supplyByCandidate.delete(viewerId);
+  let candidateIds = Array.from(supplyByCandidate.keys());
 
   const [profiles, skills, blocked, viewerSwipeRows, teammateIds, matchRows] = await Promise.all([
     loadProfiles(candidateIds),
@@ -811,22 +992,25 @@ export async function getPartnerDeck(
   const cards: PartnerCard[] = [];
   for (const candidateId of candidateIds) {
     const profile = profiles.get(candidateId);
-    const search = searches.find((s) => s.player_id === candidateId);
-    if (!profile || !search) continue;
+    const supply = supplyByCandidate.get(candidateId);
+    if (!profile || !supply) continue;
     const skill = skills.get(candidateId);
     const candidateFit = toFitProfile(candidateId, profile, tournament.start_at, skill);
     const candidateSeats = candidateSeatMap.get(candidateId) ?? new Map();
-    const candidateEffectiveDivisions = effectiveDivisionIds(
+    const candEffectiveDivisions = candidateEffectiveDivisions(
       candidateId,
+      candidateFit,
       candidateSeatMap,
-      search.division_ids ?? [],
+      supply.divisionIds,
+      divisions,
       eligibleIds,
+      rules,
     );
     const common = commonDivisionsFor(
       viewerFit,
       candidateFit,
       viewerEffectiveDivisions,
-      candidateEffectiveDivisions,
+      candEffectiveDivisions,
       divisionsById,
       rules,
     );
@@ -871,7 +1055,7 @@ export async function getPartnerDeck(
       candidateIdentityVerified: publicFacts.get(candidateId)?.identityVerified ?? false,
       candidateCoachVouched: (skill?.coach_vouch_count ?? 0) > 0,
       candidateStsAtOrAboveThreshold: Number(skill?.sts ?? 0) >= thresholds.reviewBelowSts,
-      candidateSearchLastActiveAt: search.last_active_at,
+      candidateSearchLastActiveAt: supply.lastActiveAt,
       now: nowIso,
     };
     const { score } = scorePartnerCandidate(scoreInput, settings.weights);
@@ -893,7 +1077,7 @@ export async function getPartnerDeck(
       coachVouched: (skill?.coach_vouch_count ?? 0) > 0,
       commonDivisions: common.map((c) => ({ id: c.id, name: c.name })),
       seat,
-      note: search.note,
+      note: supply.note,
       score,
     });
   }
@@ -901,11 +1085,11 @@ export async function getPartnerDeck(
     comparePartnerScores(
       {
         score: a.score,
-        lastActiveAt: searches.find((s) => s.player_id === a.playerId)?.last_active_at ?? '',
+        lastActiveAt: supplyByCandidate.get(a.playerId)?.lastActiveAt ?? '',
       },
       {
         score: b.score,
-        lastActiveAt: searches.find((s) => s.player_id === b.playerId)?.last_active_at ?? '',
+        lastActiveAt: supplyByCandidate.get(b.playerId)?.lastActiveAt ?? '',
       },
     ),
   );
@@ -992,7 +1176,10 @@ export async function getPartnerDeck(
         }
       : null,
     cards: topCards,
-    lookingCount,
+    // The header's "N players looking" = everyone the deck can actually offer this viewer (those who
+    // fit at least one common division), not the raw opt-in count, so it never says "0 looking" over
+    // a full deck (master_plan §2AV cold-start supply).
+    lookingCount: cards.length,
     matches,
     swipesLeftToday,
     canUndo,
@@ -1099,44 +1286,41 @@ export const getPartnerSummary = cache(async function getPartnerSummary(
 }> {
   const settings = await getPartnerSettings();
   const svc = createServiceClient();
-  const lookingQuery = svc
-    .from('partner_searches')
-    .select('id', { count: 'exact', head: true })
-    .eq('tournament_id', tournamentId)
-    .eq('status', 'open');
-  const [{ count: lookingCount }, { count: divCount }, searchRow, { count: openMatches }] =
-    await Promise.all([
-      viewerId ? lookingQuery.neq('player_id', viewerId) : lookingQuery,
-      svc
-        .from('divisions')
-        .select('id', { count: 'exact', head: true })
-        .eq('tournament_id', tournamentId)
-        .eq('format', DOUBLES)
-        .eq('status', 'open'),
-      viewerId
-        ? svc
-            .from('partner_searches')
-            .select('status')
-            .eq('tournament_id', tournamentId)
-            .eq('player_id', viewerId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      viewerId
-        ? svc
-            .from('partner_matches')
-            .select('id', { count: 'exact', head: true })
-            .eq('tournament_id', tournamentId)
-            .eq('status', 'open')
-            .or(`player_a.eq.${viewerId},player_b.eq.${viewerId}`)
-        : Promise.resolve({ count: 0 }),
-    ]);
+  // The eligible (open doubles) divisions bound the supply scan; also answer hasOpenDoublesDivisions.
+  const eligibleDivisions = await loadEligibleDivisions(tournamentId);
+  const eligibleIds = new Set(eligibleDivisions.map((d) => d.id));
+  const [supply, searchRow, { count: openMatches }] = await Promise.all([
+    loadSupplyCandidates(tournamentId, eligibleIds),
+    viewerId
+      ? svc
+          .from('partner_searches')
+          .select('status')
+          .eq('tournament_id', tournamentId)
+          .eq('player_id', viewerId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    viewerId
+      ? svc
+          .from('partner_matches')
+          .select('id', { count: 'exact', head: true })
+          .eq('tournament_id', tournamentId)
+          .eq('status', 'open')
+          .or(`player_a.eq.${viewerId},player_b.eq.${viewerId}`)
+      : Promise.resolve({ count: 0 }),
+  ]);
+  // "Looking here" = tournament-specific supply (opt-in / open seat / paid slot), excluding the
+  // viewer; a globally looking player fills the deck but is not counted (master_plan §2AV).
+  let lookingCount = 0;
+  for (const [playerId, c] of supply) {
+    if (playerId !== viewerId && c.tournamentSpecific) lookingCount += 1;
+  }
   const viewerSearchOpen = (searchRow.data as { status: string } | null)?.status === 'open';
   return {
     enabled: settings.enabled,
-    lookingCount: lookingCount ?? 0,
+    lookingCount,
     viewerSearchOpen,
     openMatches: openMatches ?? 0,
-    hasOpenDoublesDivisions: (divCount ?? 0) > 0,
+    hasOpenDoublesDivisions: eligibleIds.size > 0,
   };
 });
 

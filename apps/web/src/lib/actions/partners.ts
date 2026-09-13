@@ -205,35 +205,24 @@ export async function swipePartner(
   if (!tournament) return { ok: false, error: 'Tournament not found.' };
 
   const svc = createServiceClient();
-  const [{ data: viewerSearchRow }, { data: targetSearchRow }] = await Promise.all([
-    svc
-      .from('partner_searches')
-      .select('id, status, note, last_active_at')
-      .eq('tournament_id', tournamentId)
-      .eq('player_id', viewerId)
-      .maybeSingle(),
-    svc
-      .from('partner_searches')
-      .select('id, status, note, last_active_at')
-      .eq('tournament_id', tournamentId)
-      .eq('player_id', targetId)
-      .maybeSingle(),
-  ]);
+  // Only the VIEWER needs an open search - they are the one actively looking. The target does NOT
+  // (master_plan §2AV cold-start fix): the deck surfaces open-seat entries, slot holders and
+  // globally looking players who never opened a search here, and a right swipe on them is valid
+  // discovery. A match still needs the target's own reciprocal right swipe, which they can only make
+  // after opening their own search, so nobody is matched or invited without their action.
+  const { data: viewerSearchRow } = await svc
+    .from('partner_searches')
+    .select('id, status, note, last_active_at')
+    .eq('tournament_id', tournamentId)
+    .eq('player_id', viewerId)
+    .maybeSingle();
   const viewerSearch = viewerSearchRow as {
-    id: string;
-    status: string;
-    note: string | null;
-  } | null;
-  const targetSearch = targetSearchRow as {
     id: string;
     status: string;
     note: string | null;
   } | null;
   if (!viewerSearch || viewerSearch.status !== 'open') {
     return { ok: false, error: 'Start looking for a partner here first.' };
-  }
-  if (!targetSearch || targetSearch.status !== 'open') {
-    return { ok: false, error: 'That player is no longer looking for a partner.' };
   }
   if (await isBlockedBetween(viewerId, targetId)) {
     return { ok: false, error: 'That player is unavailable.' };
