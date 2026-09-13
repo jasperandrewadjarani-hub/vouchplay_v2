@@ -22,6 +22,8 @@ import { PlayerCard } from '@/components/players/player-card';
 import { PlayerListSkeleton } from '@/components/players/player-list-skeleton';
 import { SearchFilters } from '@/components/players/search-filters';
 import { AvailabilityCard } from '@/components/players/availability-toggles';
+import { PartnerLookingStrip } from '@/components/partners/partner-looking-strip';
+import { getPartnerLookingStrip } from '@/lib/partners/deck';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
@@ -188,6 +190,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // into every card, never decided in the component.
   const profileVisibility = await getProfileVisibilityFlags();
   const showCommunitySkill = profileVisibility.showCommunitySkill || viewer.isStaff;
+  // Where people are looking for a partner right now (master_plan §2AV directory strip). Bounded,
+  // cached and fail-open, so it can never take the directory down or slow it materially.
+  const partnerLooking = await getPartnerLookingStrip(viewer.viewerId);
 
   return (
     <div className="space-y-5">
@@ -208,6 +213,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           openForSponsorship={Boolean(myProfile.open_for_sponsorship)}
         />
       )}
+
+      {/* Directory strip: the tournaments where players are looking for a partner right now, each a
+          one-tap route to that tournament's deck (master_plan §2AV). Renders nothing when empty. */}
+      <PartnerLookingStrip tournaments={partnerLooking} />
 
       {/* Search, filters, sort and the availability card are signed-in features (master_plan §2AH):
           a guest sees the header, the leaders card and a fixed 10-player preview, nothing to tune. */}

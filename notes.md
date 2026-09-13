@@ -3105,3 +3105,9 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   lock chip on cards/profile; ME-page card with Switch rows; algorithms unaffected.
 - Migration 0047: partner tables + RLS + seeds; contribution cap seed bump. Jasper applies
   scripts/apply-0047.sql; safe during the open window (new tables only).
+
+## 2026-09-13 - Partner matchmaking directory strip (§2AV follow-up)
+- Added the deferred Players-directory "Looking for a partner" strip: getPartnerLookingStrip in
+  lib/partners/deck.ts (bounded/cached/fail-open) + partner-looking-strip.tsx, wired into the
+  players page under the availability card. Lists open-search tournaments (registration_open only),
+  viewer's own tournaments first, one tap to the deck. No migration/settings. Gates green, build ok.

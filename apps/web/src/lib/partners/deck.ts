@@ -1188,3 +1188,138 @@ export async function listPartnerSearchers(
   });
   return { count: count ?? 0, players };
 }
+
+// ---------------------------------------------------------------------------
+// Players-directory strip (master_plan §2AV, directory follow-up): where are people
+// looking for a partner right now? A discovery aid on /players, before the funnel.
+// ---------------------------------------------------------------------------
+
+export interface PartnerLookingTournament {
+  slug: string;
+  name: string;
+  /** OTHER players with an open search here (the viewer's own search is never counted). */
+  lookingCount: number;
+  /** The viewer already has an open search here - the strip says "Open my deck". */
+  viewerSearchOpen: boolean;
+  /** The viewer already holds an entry or reservation here - surfaced first (strong signal). */
+  viewerEntered: boolean;
+}
+
+/**
+ * Tournaments with at least one open partner search, for the directory strip. Bounded and cheap:
+ * one read of open searches (most-recently-active first), one read of the tournaments they belong
+ * to (only `registration_open` ones survive), one read of the viewer's own entries so their
+ * tournaments float to the top. Ordering: the viewer's entered tournaments first, then the ones
+ * where they already have a search, then by how many others are looking. Capped small - this is a
+ * nudge, not a list. Never throws: any failure degrades to an empty strip.
+ */
+export const getPartnerLookingStrip = cache(
+  async (viewerId: string | null, limit = 4): Promise<PartnerLookingTournament[]> => {
+    try {
+      const settings = await getPartnerSettings();
+      if (!settings.enabled) return [];
+      const svc = createServiceClient();
+
+      // A generous but bounded scan of open searches; grouped by tournament in memory.
+      const { data: searchRows } = await svc
+        .from('partner_searches')
+        .select('tournament_id, player_id, last_active_at')
+        .eq('status', 'open')
+        .order('last_active_at', { ascending: false })
+        .limit(500);
+      const searches = (searchRows ?? []) as {
+        tournament_id: string;
+        player_id: string;
+        last_active_at: string;
+      }[];
+      if (searches.length === 0) return [];
+
+      const othersByTournament = new Map<string, number>();
+      const viewerSearchTournaments = new Set<string>();
+      const lastActiveByTournament = new Map<string, string>();
+      for (const s of searches) {
+        if (viewerId && s.player_id === viewerId) {
+          viewerSearchTournaments.add(s.tournament_id);
+        } else {
+          othersByTournament.set(
+            s.tournament_id,
+            (othersByTournament.get(s.tournament_id) ?? 0) + 1,
+          );
+        }
+        if (!lastActiveByTournament.has(s.tournament_id)) {
+          lastActiveByTournament.set(s.tournament_id, s.last_active_at);
+        }
+      }
+
+      const tournamentIds = Array.from(new Set(searches.map((s) => s.tournament_id)));
+      const { data: tournRows } = await svc
+        .from('tournaments')
+        .select('id, slug, name, status')
+        .in('id', tournamentIds)
+        .eq('status', 'registration_open');
+      const openTournaments = (tournRows ?? []) as {
+        id: string;
+        slug: string | null;
+        name: string;
+        status: string;
+      }[];
+      if (openTournaments.length === 0) return [];
+
+      // The viewer's own live entries, so tournaments they are already in surface first. One bounded
+      // read of their confirmed team memberships mapped to tournaments (mirrors the unpaid-nudge scan).
+      const enteredTournamentIds = new Set<string>();
+      if (viewerId) {
+        const { data: memberRows } = await svc
+          .from('team_members')
+          .select('team_id')
+          .eq('player_id', viewerId)
+          .not('confirmed_at', 'is', null)
+          .limit(50);
+        const teamIds = Array.from(
+          new Set(((memberRows ?? []) as { team_id: string }[]).map((m) => m.team_id)),
+        );
+        if (teamIds.length > 0) {
+          const { data: regRows } = await svc
+            .from('registrations')
+            .select('tournament_id, status')
+            .in('team_id', teamIds)
+            .not('status', 'in', '("withdrawn","cancelled","rejected","refunded")')
+            .limit(100);
+          for (const r of (regRows ?? []) as { tournament_id: string }[]) {
+            enteredTournamentIds.add(r.tournament_id);
+          }
+        }
+      }
+
+      const rows: (PartnerLookingTournament & { _lastActive: string })[] = openTournaments
+        .filter((t) => t.slug)
+        .map((t) => ({
+          slug: t.slug as string,
+          name: t.name,
+          lookingCount: othersByTournament.get(t.id) ?? 0,
+          viewerSearchOpen: viewerSearchTournaments.has(t.id),
+          viewerEntered: enteredTournamentIds.has(t.id),
+          _lastActive: lastActiveByTournament.get(t.id) ?? '',
+        }))
+        // Nothing to say about a tournament where only the viewer is looking and they know it.
+        .filter((t) => t.lookingCount > 0 || t.viewerSearchOpen);
+
+      rows.sort((a, b) => {
+        if (a.viewerEntered !== b.viewerEntered) return a.viewerEntered ? -1 : 1;
+        if (a.viewerSearchOpen !== b.viewerSearchOpen) return a.viewerSearchOpen ? -1 : 1;
+        if (b.lookingCount !== a.lookingCount) return b.lookingCount - a.lookingCount;
+        return b._lastActive.localeCompare(a._lastActive);
+      });
+
+      return rows.slice(0, limit).map((r) => ({
+        slug: r.slug,
+        name: r.name,
+        lookingCount: r.lookingCount,
+        viewerSearchOpen: r.viewerSearchOpen,
+        viewerEntered: r.viewerEntered,
+      }));
+    } catch {
+      return [];
+    }
+  },
+);

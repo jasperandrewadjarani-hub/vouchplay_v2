@@ -5034,6 +5034,18 @@ viewerId)`), `lib/partners/maintenance.ts` (`runPartnerMaintenance()`), `actions
 match-modal,matches-list,find-partner-card,partner-search-sheet}.tsx`, tournament page card, My
 registrations button, wizard Done link, Manage count.
 
+### 2AV addendum: Players-directory "Looking for a partner" strip (2026-09-13)
+
+Built the third entry point from the §2AR brainstorm that the first §2AV pass deferred: a strip on
+the Players directory (below the viewer's own availability card) listing the tournaments where
+players are looking for a partner right now, each a one-tap route to that tournament's deck. Reader
+`getPartnerLookingStrip(viewerId, limit=4)` in `lib/partners/deck.ts` (bounded: one scan of open
+searches grouped in memory, one read of their `registration_open` tournaments, one read of the
+viewer's live entries), cached and fail-open. Ordering: the viewer's entered tournaments first, then
+where they already have a search, then by how many others are looking. Component
+`components/partners/partner-looking-strip.tsx` renders nothing when empty. No migration, no new
+settings; gated by `partner_matchmaking_enabled` like every other entry point.
+
 ## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
 
 Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the
