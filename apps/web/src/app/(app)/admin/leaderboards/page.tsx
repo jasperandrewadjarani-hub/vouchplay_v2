@@ -4,34 +4,39 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { RebuildForm, ExclusionForm, ActivateForm } from '@/components/leaderboards/action-forms';
 import { ButtonLink } from '@/components/ui/button';
 import { NightlyRebuildPanel } from '@/components/leaderboards/nightly-rebuild-panel';
+import { OperationsPanel } from '@/components/admin/operations-panel';
 import { getCronStatus } from '@/lib/leaderboards/cron-status';
+import { getLastReminderRun } from '@/lib/tournaments/reminders';
 import { formatDateTime } from '@/lib/format-date';
 
 export const metadata: Metadata = { title: 'Leaderboard operations' };
 export default async function AdminLeaderboardsPage() {
   await requireAdminPage('/admin/leaderboards');
   const db = createServiceClient();
-  const [{ data: runs }, { data: requests }, { data: exclusions }, cronStatus] = await Promise.all([
-    db
-      .from('leaderboard_snapshot_runs')
-      .select(
-        'id, category, scope_type, scope_value, period, scoring_version, status, active, row_count, published_at, created_at',
-      )
-      .order('created_at', { ascending: false })
-      .limit(20),
-    db
-      .from('leaderboard_rebuild_requests')
-      .select('id, status, reason, requested_at, completed_at, error_code')
-      .order('requested_at', { ascending: false })
-      .limit(10),
-    db
-      .from('leaderboard_exclusions')
-      .select('id, entity_type, entity_id, category, reason, created_at')
-      .eq('active', true)
-      .order('created_at', { ascending: false })
-      .limit(25),
-    getCronStatus(),
-  ]);
+  const [{ data: runs }, { data: requests }, { data: exclusions }, cronStatus, lastReminderRun] =
+    await Promise.all([
+      db
+        .from('leaderboard_snapshot_runs')
+        .select(
+          'id, category, scope_type, scope_value, period, scoring_version, status, active, row_count, published_at, created_at',
+        )
+        .order('created_at', { ascending: false })
+        .limit(20),
+      db
+        .from('leaderboard_rebuild_requests')
+        .select('id, status, reason, requested_at, completed_at, error_code')
+        .order('requested_at', { ascending: false })
+        .limit(10),
+      db
+        .from('leaderboard_exclusions')
+        .select('id, entity_type, entity_id, category, reason, created_at')
+        .eq('active', true)
+        .order('created_at', { ascending: false })
+        .limit(25),
+      getCronStatus(),
+      // §2AQ Decision G: read defensively - `getLastReminderRun` lands from a parallel lane.
+      getLastReminderRun().catch(() => null),
+    ]);
   return (
     <div className="space-y-5">
       <header>
@@ -46,6 +51,7 @@ export default async function AdminLeaderboardsPage() {
         </ButtonLink>
       </header>
       <NightlyRebuildPanel status={cronStatus} />
+      <OperationsPanel lastRun={lastReminderRun} />
       <div className="grid gap-4 lg:grid-cols-2">
         <RebuildForm />
         <ExclusionForm />

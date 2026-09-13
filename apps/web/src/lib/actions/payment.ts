@@ -24,6 +24,12 @@ import {
   getReceiptsToNotify,
   type PaymentNotificationInput,
 } from '@/lib/payments/notification';
+import {
+  emailConfirmedRegistrations,
+  getConfirmationEmailBacklog as getConfirmationEmailBacklogCount,
+} from '@/lib/payments/confirmation-email';
+import { listUnpaidRecipients } from '@/lib/tournaments/reminders';
+import { formatDateTime } from '@/lib/format-date';
 import { publicEnv } from '@/lib/env';
 
 export interface PaymentActionState {
@@ -1237,6 +1243,219 @@ export async function sendAllPaymentReceipts(
     const message =
       `Emailed ${sent} receipt(s) to ${to}.` + (failed > 0 ? ` ${failed} failed.` : '');
     return { ok: true, sent, failed, message };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Organizer pay-nudge blast (master_plan §2AS C) - "Remind unpaid players ({n})".
+// ---------------------------------------------------------------------------
+
+/** §2AS C: the nearer of the early-bird end / registration close, formatted PH-time - only when that
+ *  cutoff is still in the future. `earlyBird: true` when the nearer cutoff is the early-bird one, so
+ *  the catalog copy (`organizer_payment_nudge`) can say which deadline it means. */
+async function loadNudgeDeadline(
+  tournamentId: string,
+): Promise<{ iso: string; earlyBird: boolean } | null> {
+  const svc = createServiceClient();
+  const { data } = await svc
+    .from('tournaments')
+    .select('early_bird_ends_at, registration_close_at')
+    .eq('id', tournamentId)
+    .maybeSingle();
+  const t = data as {
+    early_bird_ends_at: string | null;
+    registration_close_at: string | null;
+  } | null;
+  if (!t) return null;
+  const now = Date.now();
+  const candidates: { ms: number; iso: string; earlyBird: boolean }[] = [];
+  const eb = t.early_bird_ends_at ? Date.parse(t.early_bird_ends_at) : NaN;
+  if (!Number.isNaN(eb) && eb > now)
+    candidates.push({ ms: eb, iso: t.early_bird_ends_at as string, earlyBird: true });
+  const rc = t.registration_close_at ? Date.parse(t.registration_close_at) : NaN;
+  if (!Number.isNaN(rc) && rc > now) {
+    candidates.push({ ms: rc, iso: t.registration_close_at as string, earlyBird: false });
+  }
+  candidates.sort((a, b) => a.ms - b.ms);
+  const nearest = candidates[0];
+  return nearest ? { iso: nearest.iso, earlyBird: nearest.earlyBird } : null;
+}
+
+/**
+ * Organizer "Remind unpaid players ({n})" (master_plan §2AS C) - notifies every CURRENTLY unpaid
+ * recipient (`listUnpaidRecipients`, the same selection the reminders cron uses) with
+ * `organizer_payment_nudge` (critical). Throttled to once per recipient per entity per 24h via a
+ * `notifications` existence check, the same pattern as `remindPartner` in `actions/registration.ts`.
+ */
+export async function nudgeUnpaidPlayers(
+  tournamentId: string,
+): Promise<PaymentActionState & { sent?: number; skipped?: number }> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { error: 'You do not have permission to review payments.' };
+  }
+  try {
+    const recipients = await listUnpaidRecipients(tournamentId);
+    if (recipients.length === 0) {
+      return { ok: true, sent: 0, skipped: 0, message: 'Reminded 0 · 0 skipped (reminded today).' };
+    }
+
+    const svc = createServiceClient();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const entityIds = Array.from(new Set(recipients.map((r) => r.entityId)));
+    const { data: recentRows } = await svc
+      .from('notifications')
+      .select('recipient_id, entity_id')
+      .eq('type', 'organizer_payment_nudge')
+      .in('entity_id', entityIds)
+      .gte('created_at', since);
+    const alreadyReminded = new Set(
+      ((recentRows ?? []) as { recipient_id: string; entity_id: string | null }[]).map(
+        (n) => `${n.recipient_id}:${n.entity_id}`,
+      ),
+    );
+
+    const [tm, deadline] = await Promise.all([
+      getTournamentMini(tournamentId),
+      loadNudgeDeadline(tournamentId),
+    ]);
+
+    let sent = 0;
+    let skipped = 0;
+    for (const r of recipients) {
+      const key = `${r.recipientId}:${r.entityId}`;
+      if (alreadyReminded.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      const link =
+        r.entityType === 'registration'
+          ? `/tournaments/${tm.slug}?entered=${r.entityId}#my-registrations`
+          : `/tournaments/${tm.slug}`;
+      await notify({
+        recipientId: r.recipientId,
+        type: 'organizer_payment_nudge',
+        actorId: user.id,
+        params: {
+          tournamentName: tm.name,
+          deadline: deadline ? formatDateTime(deadline.iso) : undefined,
+          earlyBird: deadline?.earlyBird,
+        },
+        link: tm.slug ? link : '/tournaments',
+        entityType: r.entityType,
+        entityId: r.entityId,
+      });
+      sent += 1;
+    }
+
+    await writeAudit({
+      actorId: user.id,
+      action: 'organizer.payment_nudge',
+      entityType: 'tournament',
+      entityId: tournamentId,
+      after: { sent, skipped },
+    });
+
+    return {
+      ok: true,
+      sent,
+      skipped,
+      message: `Reminded ${sent} · ${skipped} skipped (reminded today)`,
+    };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Bulk verify (master_plan §2AS E) - "Verify {n} receipts".
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify up to 50 team-payment or seat/reservation receipts in one tap (master_plan §2AS E).
+ * Sequential (never parallel - the same DB rows can be touched by adjacent items), never throws: each
+ * item's outcome is reported individually so the caller can name which team/slot failed and why.
+ */
+export async function verifyPaymentsBulk(
+  tournamentId: string,
+  items: { id: string; kind: 'team' | 'slot' }[],
+): Promise<{
+  ok: boolean;
+  results: { id: string; ok: boolean; error?: string }[];
+  message: string;
+}> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, results: [], message: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, results: [], message: 'You do not have permission to review payments.' };
+  }
+  const bounded = items.slice(0, 50);
+  const results: { id: string; ok: boolean; error?: string }[] = [];
+  for (const item of bounded) {
+    try {
+      const res = await verifyPayment(item.id, tournamentId, item.kind);
+      results.push({ id: item.id, ok: !!res.ok, error: res.ok ? undefined : res.error });
+    } catch {
+      results.push({ id: item.id, ok: false, error: 'That action is temporarily unavailable.' });
+    }
+  }
+  const okCount = results.filter((r) => r.ok).length;
+  const failCount = results.length - okCount;
+  return {
+    ok: failCount === 0,
+    results,
+    message:
+      failCount === 0
+        ? `Verified ${okCount} receipt(s).`
+        : `Verified ${okCount} receipt(s). ${failCount} failed.`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation email (master_plan §2AS D) - thin organizer-authorized wrappers around
+// `lib/payments/confirmation-email.ts`.
+// ---------------------------------------------------------------------------
+
+/** §2AS D: how many confirmed registrations for this tournament have not been emailed yet. */
+export async function getConfirmationEmailBacklog(tournamentId: string): Promise<number> {
+  return getConfirmationEmailBacklogCount(tournamentId);
+}
+
+/** §2AS D: "Email confirmed players ({n} not yet emailed)" backfill. Organizer manage_payments only. */
+export async function emailConfirmedPlayers(
+  tournamentId: string,
+): Promise<{ ok?: boolean; error?: string; message?: string; sent?: number; failed?: number }> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { error: 'You cannot manage this tournament.' };
+  }
+  try {
+    const { sent, failed, total } = await emailConfirmedRegistrations(tournamentId);
+    if (total === 0) {
+      return {
+        ok: true,
+        sent: 0,
+        failed: 0,
+        message: 'All confirmed players have already been emailed.',
+      };
+    }
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.confirmation_backfill',
+      entityType: 'tournament',
+      entityId: tournamentId,
+      after: { sent, failed, total },
+    });
+    return {
+      ok: true,
+      sent,
+      failed,
+      message: `Emailed ${sent} confirmed player(s).` + (failed > 0 ? ` ${failed} failed.` : ''),
+    };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }

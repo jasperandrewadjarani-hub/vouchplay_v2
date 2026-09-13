@@ -37,6 +37,12 @@ export interface NotificationParams {
   currency?: string;
   /** Preformatted deadline (e.g. "Sep 20, 2026") - the early-bird cutoff, when one applies. */
   deadline?: string;
+  /**
+   * §2AS C - disambiguates which cutoff `deadline` refers to for a copy that reads differently for
+   * each (organizer_payment_nudge): true for the early-bird cutoff, false/absent for the registration
+   * close date. Mirrors the existing `quoteSlotPrice(divisions, earlyBird, at?)` boolean convention.
+   */
+  earlyBird?: boolean;
 }
 
 export interface NotificationTypeDef {
@@ -442,6 +448,38 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     true,
     (p) => `The organizer assigned ${who(p)} as your partner for ${tour(p)}`,
     (p) => p.reason,
+  ),
+
+  // --- §2AS C/F - organizer pay-nudge blast + cancel-my-reservation ---
+  // Critical: it is the organizer's direct "pay now or lose your slot" blast, same money-adjacent
+  // reasoning as seat_payment_due/early_bird_ending - must not be mutable and must reach email.
+  organizer_payment_nudge: t(
+    'payments',
+    true,
+    (p) => `${tour(p)}: pay now to secure your slot`,
+    (p) => {
+      const base = 'Your slot is not secured until you pay.';
+      if (!p.deadline) return base;
+      const suffix = p.earlyBird
+        ? `Early bird ends ${when(p)}.`
+        : `Registration closes ${when(p)}.`;
+      return `${base} ${suffix}`;
+    },
+  ),
+  // §2AS F: a bare-slot cancellation request goes to the organizer - not money-adjacent for the
+  // organizer themselves and not time-boxed, so this one is fine to mute.
+  slot_cancel_requested: t(
+    'registrations',
+    false,
+    (p) => `${who(p)} asked to cancel their reserved slot for ${tour(p)}`,
+  ),
+  // Critical: this is the "Keep" outcome telling a player their paid slot stays despite their
+  // cancellation request - money-adjacent and must not be missed, same as slot_reservation_rejected.
+  slot_cancel_declined: t(
+    'payments',
+    true,
+    (p) => `Your reserved slot for ${tour(p)} stays - the organizer kept it`,
+    () => 'Your cancellation request was not accepted.',
   ),
 };
 

@@ -1,15 +1,8 @@
 import Link from 'next/link';
-import {
-  Trophy,
-  MapPin,
-  CalendarDays,
-  Heart,
-  TicketCheck,
-  CheckCircle2,
-  Clock,
-} from 'lucide-react';
+import { Trophy, MapPin, CalendarDays, Heart, TicketCheck, CheckCircle2 } from 'lucide-react';
 import type { TournamentCardDTO } from '@/lib/tournaments/dto';
 import { TournamentStatusPill } from './status-pill';
+import { ViewerStatusPill } from './viewer-status-pill';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { formatDate } from '@/lib/format-date';
 
@@ -84,19 +77,14 @@ export function TournamentCard({ tournament }: { tournament: TournamentCardDTO }
               <TicketCheck size={12} aria-hidden />
               {tournament.joiningCount} joining
             </span>
-            {/* A provisional entry never gets the green tick or "joining" - only a confirmed one
-                reads as done. An unpaid/under-review entry says so, to keep the urgency to pay
-                (§2G). */}
+            {/* The one three-state headline (master_plan §2AS B) - Confirmed / Payment for
+                verification / Slot not secured - same vocabulary everywhere a chip appears. A
+                provisional entry never reads as done; an unsecured one reads as a warning, not
+                advice (§2G, §2AS). */}
             {tournament.viewerSecured ? (
-              <span className="text-success inline-flex items-center gap-1 font-semibold">
-                <CheckCircle2 size={12} aria-hidden />
-                You&rsquo;re in
-              </span>
-            ) : tournament.viewerJoining ? (
-              <span className="text-warning inline-flex items-center gap-1 font-semibold">
-                <Clock size={12} aria-hidden />
-                Not secured yet
-              </span>
+              <ViewerStatusPill headline="confirmed" />
+            ) : tournament.viewerHeadline ? (
+              <ViewerStatusPill headline={tournament.viewerHeadline} />
             ) : (
               tournament.viewerInterested && (
                 <span className="text-primary inline-flex items-center gap-1 font-semibold">

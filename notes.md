@@ -3003,3 +3003,16 @@ weighted score with paid-slot holders first, mutual match -> the two existing do
 seat / enter together; private left swipes; loose ends listed). No code.
 Deferred: Admin "Run reminders now"; cancel-my-reservation request for bare slots; refund request for
 declined slots; organizer bulk verify; §2AR build.
+
+## 2026-09-13 - Same-deploy batch 4 (§2AS, handover v1.71): wizard back + 3-step rail, "Slot not secured" everywhere in red, organizer nudge blast, confirmation emails, bulk verify, cancel-my-reservation, Admin run-reminders
+Folded into the §2AQ deployment (0044 unapplied, so its four new columns joined it:
+tournament_slots.cancel_requested_at/cancel_reason, tournaments.confirmation_email_enabled,
+registrations.confirmation_email_sent_at). Bug: Back on step 2 re-advanced because the Division step
+treated the pre-selected division as a tap on every mount - consumed once now. Rail = Division ·
+Partner · Pay; receipt screen has a "Paying for" switch. Headline vocabulary on the tournament card
+chip and a header pill; unsecured = danger tone; strip one line. Organizer: "Remind unpaid players"
+(organizer_payment_nudge, critical -> email too, 24 h throttle, shared unpaid selection with the
+cron); confirmation email on settle-confirm with caveats + link, per-tournament switch, backfill,
+idempotent; bulk verify (rows + bare slots); cancel-my-reservation (Refund / Keep). Admin: Run
+reminders now + last run. Deferred and to raise after this batch: refund request for declined slots;
+§2AR partner matching build.

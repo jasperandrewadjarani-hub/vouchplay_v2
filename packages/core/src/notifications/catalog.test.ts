@@ -225,3 +225,63 @@ describe('reminder + assign-partner notifications (§2AQ A)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2AS C/F - organizer pay-nudge blast + cancel-my-reservation notifications.
+// ---------------------------------------------------------------------------
+describe('organizer pay-nudge + cancel-my-reservation notifications (§2AS C/F)', () => {
+  it('organizer_payment_nudge is critical, payments-category, and names the tournament in the title', () => {
+    const def = notificationDef('organizer_payment_nudge')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Hermosa Open: pay now to secure your slot',
+    );
+  });
+
+  it('organizer_payment_nudge body is the base line alone when no deadline is given', () => {
+    const def = notificationDef('organizer_payment_nudge')!;
+    expect(def.body({})).toBe('Your slot is not secured until you pay.');
+  });
+
+  it('organizer_payment_nudge mentions the early-bird cutoff when earlyBird is true', () => {
+    const def = notificationDef('organizer_payment_nudge')!;
+    expect(def.body({ deadline: 'Sep 20, 2026', earlyBird: true })).toBe(
+      'Your slot is not secured until you pay. Early bird ends Sep 20, 2026.',
+    );
+  });
+
+  it('organizer_payment_nudge mentions registration closing when earlyBird is false/absent', () => {
+    const def = notificationDef('organizer_payment_nudge')!;
+    expect(def.body({ deadline: 'Sep 20, 2026' })).toBe(
+      'Your slot is not secured until you pay. Registration closes Sep 20, 2026.',
+    );
+    expect(def.body({ deadline: 'Sep 20, 2026', earlyBird: false })).toBe(
+      'Your slot is not secured until you pay. Registration closes Sep 20, 2026.',
+    );
+  });
+
+  it('slot_cancel_requested is non-critical, registrations-category, and names the requester', () => {
+    const def = notificationDef('slot_cancel_requested')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(false);
+    expect(def.title({ actorName: 'Mark', tournamentName: 'Hermosa Open' })).toBe(
+      'Mark asked to cancel their reserved slot for Hermosa Open',
+    );
+  });
+
+  it('slot_cancel_declined is critical, payments-category, and tells the player the organizer kept their slot', () => {
+    const def = notificationDef('slot_cancel_declined')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Your reserved slot for Hermosa Open stays - the organizer kept it',
+    );
+    expect(def.body({})).toBeTruthy();
+  });
+
+  it('slot_cancel_requested is mutable (registrations has other non-critical types too)', () => {
+    expect(MUTABLE_CATEGORIES).toContain('registrations');
+    expect(notificationDef('slot_cancel_requested')!.critical).toBe(false);
+  });
+});

@@ -413,6 +413,9 @@ export interface TournamentRow {
   allow_play_down_one_level?: boolean;
   require_skill_verified: boolean;
   require_organizer_approval: boolean;
+  /** §2AS D (migration 0044, extended). Optional: absent until the migration is applied; defaults to
+   *  true both when unset and when the column itself is missing. */
+  confirmation_email_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -554,6 +557,9 @@ export interface RegistrationRow {
   confirmed_at: string | null;
   reviewed_by: string | null;
   review_reason: string | null;
+  /** §2AS D (migration 0044, extended). Optional: absent until the migration is applied - the
+   *  idempotency marker for the confirmation email. */
+  confirmation_email_sent_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -632,6 +638,9 @@ export interface TournamentSlotRow {
   verified_at: string | null;
   rejection_reason: string | null;
   notification_sent_at: string | null;
+  /** §2AS F (migration 0044, extended). Optional: absent until the migration is applied. */
+  cancel_requested_at?: string | null;
+  cancel_reason?: string | null;
   created_at: string;
   updated_at: string;
 }

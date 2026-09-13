@@ -4,12 +4,21 @@ import { notFound } from 'next/navigation';
 import { MapPin, CalendarDays, Settings, ExternalLink, ClipboardCheck } from 'lucide-react';
 import { getViewerContext } from '@/lib/auth';
 import { getTournamentBySlug } from '@/lib/tournaments/queries';
-import { getViewerRegistrationState } from '@/lib/tournaments/registration-queries';
+import {
+  getViewerRegistrationState,
+  type ViewerRegistrationState,
+} from '@/lib/tournaments/registration-queries';
 import { publicEnv } from '@/lib/env';
 import { ShareButton } from '@/components/players/share-button';
 import { InterestButton } from '@/components/tournaments/interest-button';
 import { TournamentDemandSummary } from '@/components/tournaments/demand-summary';
 import { TournamentStatusPill } from '@/components/tournaments/status-pill';
+import { ViewerStatusPill } from '@/components/tournaments/viewer-status-pill';
+import {
+  describeRegistrationStatus,
+  type RegistrationHeadline,
+} from '@/lib/tournaments/registration-status';
+import type { DivisionDTO } from '@/lib/tournaments/dto';
 import { AvailabilityCard } from '@/components/players/availability-toggles';
 import { MyRegistrations } from '@/components/tournaments/my-registrations';
 import { PartnerInvitationsCard } from '@/components/tournaments/partner-invitations-card';
@@ -63,6 +72,51 @@ function fmtDay(dt: string | null): string | null {
   return dt ? formatDate(dt) : null;
 }
 
+/**
+ * The viewer's own WORST payment state across every entry plus a bare reservation (master_plan §2AS
+ * B) - the header pill beside the tournament status pill. Confirmed < verifying < unsecured, so one
+ * unsecured entry among several confirmed ones still reads as the loud "pay now" state. Reuses the
+ * same `describeRegistrationStatus` headline every other chip reads, so this can never disagree with
+ * the tournament card or the My-registrations card. `null` when the viewer holds nothing at all.
+ */
+function viewerWorstHeadline(
+  regState: ViewerRegistrationState,
+  divisions: DivisionDTO[],
+): RegistrationHeadline | null {
+  const rank: Record<RegistrationHeadline, number> = { confirmed: 0, verifying: 1, unsecured: 2 };
+  const byId = new Map(divisions.map((d) => [d.id, d]));
+  let worst: RegistrationHeadline | null = null;
+  const consider = (headline: RegistrationHeadline) => {
+    if (worst === null || rank[headline] > rank[worst]) worst = headline;
+  };
+
+  for (const [divisionId, reg] of Object.entries(regState.registrationsByDivision)) {
+    const division = byId.get(divisionId);
+    if (!division) continue;
+    consider(
+      describeRegistrationStatus({
+        regStatus: reg.status,
+        paymentStatus: reg.paymentStatus,
+        fee: division.feeAmount,
+        paymentSummary: reg.paymentSummary,
+        mySeat: reg.mySeat,
+      }).headline,
+    );
+  }
+
+  if (regState.bareSlot) {
+    consider(
+      regState.bareSlot.status === 'verified'
+        ? 'confirmed'
+        : regState.bareSlot.status === 'rejected'
+          ? 'unsecured'
+          : 'verifying',
+    );
+  }
+
+  return worst;
+}
+
 export default async function TournamentPage({ params, searchParams }: Params) {
   const { slug } = await params;
   const sp = (await searchParams) ?? {};
@@ -104,6 +158,9 @@ export default async function TournamentPage({ params, searchParams }: Params) {
     slotHoldMinutes,
     registrationCloseAt: t.registrationCloseAt,
   };
+  // The header pill beside the tournament status pill (master_plan §2AS B) - nothing when the viewer
+  // holds no entry and no reservation.
+  const viewerHeadline = regState ? viewerWorstHeadline(regState, t.divisions) : null;
   const interestOptions = demandOptions(t.divisions);
   // Interest recorded under the old planning taxonomy is folded into the matching division, so the
   // breakdown shows one row per division rather than an old and a new row for the same thing.
@@ -126,6 +183,12 @@ export default async function TournamentPage({ params, searchParams }: Params) {
         <div className="space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <TournamentStatusPill status={t.status} />
+            {viewerHeadline && (
+              <ViewerStatusPill
+                headline={viewerHeadline}
+                href={viewerHeadline === 'unsecured' ? '#my-registrations' : undefined}
+              />
+            )}
             {t.visibility === 'unlisted' && <span className="vp-label">Unlisted</span>}
           </div>
           <h1 className="text-foreground text-2xl font-semibold tracking-tight">{t.name}</h1>

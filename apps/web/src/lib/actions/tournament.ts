@@ -245,6 +245,18 @@ export async function createTournament(
       // Column not present yet (migration 0042 pending). The rest of the save already succeeded.
     }
 
+    // Confirmation email switch (migration 0044, extended; master_plan §2AS D). Its own defensive
+    // update, separate from every other column group, so a pre-0044 deploy still creates the
+    // tournament even if 0022/0040/0042 are already applied and this one is not.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ confirmation_email_enabled: bool(formData, 'confirmationEmailEnabled') })
+        .eq('id', t.id);
+    } catch {
+      // Column not present yet (migration 0044 pending). The rest of the save already succeeded.
+    }
+
     const [configuredCapacity, configuredFee] = await Promise.all([
       loadSettingNumber(
         'default_division_capacity_teams',
@@ -432,6 +444,18 @@ export async function updateTournament(
         .eq('id', tournamentId);
     } catch {
       // Column not present yet (migration 0042 pending). The rest of the save already succeeded.
+    }
+
+    // Confirmation email switch (migration 0044, extended; master_plan §2AS D). Its own defensive
+    // update, separate from every other column group (including the 0022 rules group above), so an
+    // update deploy before 0044 lands still saves the rest of the form.
+    try {
+      await svc
+        .from('tournaments')
+        .update({ confirmation_email_enabled: bool(formData, 'confirmationEmailEnabled') })
+        .eq('id', tournamentId);
+    } catch {
+      // Column not present yet (migration 0044 pending). The rest of the save already succeeded.
     }
     invalidate(slug, tournamentId);
   } catch {

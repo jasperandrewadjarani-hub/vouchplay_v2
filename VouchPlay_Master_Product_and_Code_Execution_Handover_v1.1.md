@@ -2612,6 +2612,12 @@ V1 does not need partial payment unless explicitly enabled by Admin.
 
 ## 24.4 Organizer Review
 
+**v1.71 (master_plan §2AS D, E):** verification that confirms an entry also emails every confirmed
+member (when `confirmation_email_enabled`) with the caveats: division placement remains subject to the
+organizers' final skills assessment and reclassification; cancellation / refund requests are subject to
+the organizers' final decision. Sent once per registration (`confirmation_email_sent_at`), with a
+backfill button. Receipts can be verified in bulk.
+
 Organizer can:
 - verify,
 - reject with reason,
@@ -2648,6 +2654,10 @@ concurrency-limited, audited; used once to backfill the receipts uploaded before
 (re)submission, so no address is ever double-emailed.
 
 ## 24.6 Tournament slots - the seat as the unit of payment (v1.68, master_plan §2AO A)
+
+**v1.71 (master_plan §2AS F):** a reserved-slot holder may request cancellation (reason); organizers
+see "Wants to cancel" on the slot and Refund or Keep it. Unpaid slot holders receive the organizer's
+"pay to secure your slot" nudge and the nightly reminders by email as well as in-app.
 
 A **tournament slot** (`tournament_slots`, §36.28A) is one player's paid seat in one tournament. It is
 created at receipt submission and is either BARE (no division chosen yet - priced at the lowest
@@ -6402,6 +6412,22 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.71 (2026-09-13)
+
+_Same deployment as v1.70 (master_plan §2AS). Migration `0044` extended with four columns._
+
+- **Wizard:** Back on step 2 works (the pre-selected division no longer re-advances); the rail is
+  Division · Partner · Pay (three circles; two for singles) with a "Paying for: My slot / Whole team"
+  switch on the receipt screen.
+- **"Slot not secured" everywhere (§2G):** the tournament card chip and a new pill beside the
+  tournament status show the player's own headline; unsecured surfaces use the danger tone (white on
+  red) and the top strip is one compact line - a call to action, not advice.
+- **Organizer:** "Remind unpaid players" blast (in-app + email, once per player per entry per 24 h);
+  confirmation email on verification with the assessment / reclassification / refund caveats and the
+  tournament link (per-tournament switch, backfill button, idempotent); bulk verify of receipts and
+  reserved slots; reserved-slot holders can request cancellation (organizer: Refund / Keep).
+- **Admin:** "Run reminders now" with the last run shown.
 
 ## v1.70 (2026-09-13)
 

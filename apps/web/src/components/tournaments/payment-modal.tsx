@@ -210,10 +210,12 @@ export function PayNowCell({
   const [open, setOpen] = useState(autoOpen);
   return (
     <div className="mt-2">
+      {/* Danger, not the usual gradient CTA (master_plan §2AS B) - a call to action to pay and
+          secure the slot, not just another primary button. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="vp-gradient vp-glow inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white"
+        className="bg-danger inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white"
       >
         <ShieldCheck size={16} aria-hidden />
         Pay now to secure your slot

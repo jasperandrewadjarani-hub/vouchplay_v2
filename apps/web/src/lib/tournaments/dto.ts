@@ -37,6 +37,11 @@ export interface TournamentCardDTO {
    * done - only a secured one gets the green "You're in" (§2G).
    */
   viewerSecured: boolean;
+  /** master_plan §2AS B: the viewer's own worst payment state across their active entries on this
+   *  tournament, in the same "Slot not secured / Payment for verification / Confirmed" vocabulary as
+   *  the tournament page header pill - confirmed > verifying > unsecured (worst wins when the viewer
+   *  holds more than one entry here). Null when the viewer has no active entry. */
+  viewerHeadline: 'confirmed' | 'verifying' | 'unsecured' | null;
   engagementAvailable: boolean;
 }
 
@@ -153,6 +158,10 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
   /** Organizer's "Allow one level below" toggle (migration 0042; §2AO decision C). Read defensively
    * - see `getTournamentRules` in queries.ts - so a pre-migration deploy degrades to false. */
   allowPlayDownOneLevel: boolean;
+  /** Organizer's "Email players when their slot is confirmed" switch (migration 0044, extended;
+   *  master_plan §2AS D). Read defensively - see `getConfirmationEmailEnabled` in queries.ts - so a
+   *  pre-migration deploy (and an unset flag) both degrade to true, the feature's default. */
+  confirmationEmailEnabled: boolean;
 }
 
 const SEX_LABEL: Record<string, string> = {
@@ -230,6 +239,7 @@ export function toTournamentCardDTO(
       | 'viewerInterested'
       | 'viewerJoining'
       | 'viewerSecured'
+      | 'viewerHeadline'
       | 'engagementAvailable'
     >
   >,
@@ -249,6 +259,7 @@ export function toTournamentCardDTO(
     viewerInterested: engagement?.viewerInterested ?? false,
     viewerJoining: engagement?.viewerJoining ?? false,
     viewerSecured: engagement?.viewerSecured ?? false,
+    viewerHeadline: engagement?.viewerHeadline ?? null,
     engagementAvailable: engagement?.engagementAvailable ?? false,
   };
 }

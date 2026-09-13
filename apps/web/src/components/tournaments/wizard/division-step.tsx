@@ -41,16 +41,23 @@ export function DivisionStep({
   tournament,
   state,
   preselectedId = null,
+  initialSelectedId = null,
   onClose,
   onContinue,
   onChooseLater,
 }: {
   tournament: WizardTournament;
   state: ViewerRegistrationState;
-  /** Pre-selects a card, e.g. from "Enter" on a specific division row (master_plan §2AO B). A
-   *  recommended pre-selection auto-advances immediately, matching a real tap; an "other" one opens
-   *  its confirm panel so the player still ticks before continuing. */
+  /** Pre-selects a card, e.g. from "Enter" on a specific division row (master_plan §2AO B), and
+   *  behaves exactly like a real tap: a recommended pre-selection auto-advances immediately; an
+   *  "other" one opens its confirm panel so the player still ticks before continuing. Only ever set
+   *  on the wizard's first mount (master_plan §2AS A1/Finding 1) - never on a Back re-mount. */
   preselectedId?: string | null;
+  /** Highlights the previously-chosen division after Back (master_plan §2AS A1/Decision A) WITHOUT
+   *  auto-advancing: a recommended card gets a subtle "selected" ring, an "other" card opens its
+   *  confirm panel already selected - either way the player still has to tap Continue. Mutually
+   *  exclusive with `preselectedId` in practice (the wizard passes only one at a time). */
+  initialSelectedId?: string | null;
   /** Closes the whole wizard - used by the "You're in this one" / "See your invitation" links. */
   onClose: () => void;
   onContinue: (divisionId: string, playingDown: boolean) => void;
@@ -146,7 +153,8 @@ export function DivisionStep({
   const ineligible = rows.filter((r) => r.kind === 'ineligible');
 
   // A pre-selection from "Enter" on a specific division row behaves exactly like a real tap: a
-  // recommended one auto-advances, an "other" one opens its confirm panel.
+  // recommended one auto-advances, an "other" one opens its confirm panel. ONLY `preselectedId` ever
+  // auto-advances - see the wizard's own Back handling (master_plan §2AS A1/Finding 1).
   useEffect(() => {
     if (!preselectedId) return;
     const row = rows.find((r) => r.d.id === preselectedId);
@@ -157,6 +165,20 @@ export function DivisionStep({
       setSelectedId(row.d.id);
     }
     // Runs once on mount only - this mirrors a single tap, not a live binding to `rows`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Coming back to Division after Back (master_plan §2AS A1/Decision A): highlight the previous
+  // choice, never advance. An "other" division gets the same selected/confirm-panel state a real tap
+  // would set; a recommended one is flagged via `isPreselectedRecommended` below for a subtle ring.
+  useEffect(() => {
+    if (!initialSelectedId) return;
+    const row = rows.find((r) => r.d.id === initialSelectedId);
+    if (!row) return;
+    if (row.kind === 'other_up' || row.kind === 'other_down' || row.kind === 'full') {
+      setSelectedId(row.d.id);
+    }
+    // Runs once on mount only, same rationale as the effect above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -264,17 +286,24 @@ export function DivisionStep({
             Recommended for you
           </p>
           <ul className="space-y-2">
-            {recommended.map((r) => (
-              <li key={r.d.id}>
-                <button
-                  type="button"
-                  onClick={() => onContinue(r.d.id, false)}
-                  className={cardShell}
-                >
-                  <CardHeader r={r} />
-                </button>
-              </li>
-            ))}
+            {recommended.map((r) => {
+              // Highlight-only after Back (master_plan §2AS A1/Decision A) - a subtle ring, not
+              // another auto-advance. `preselectedId`, not this, is what re-triggers a real tap.
+              const isPreselected = initialSelectedId === r.d.id;
+              return (
+                <li key={r.d.id}>
+                  <button
+                    type="button"
+                    onClick={() => onContinue(r.d.id, false)}
+                    className={`${cardShell} ${
+                      isPreselected ? 'ring-primary border-primary bg-primary/5 ring-2' : ''
+                    }`}
+                  >
+                    <CardHeader r={r} isSelected={isPreselected} />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

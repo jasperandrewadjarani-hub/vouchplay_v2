@@ -52,6 +52,11 @@ interface InternalState {
   paidNow: boolean;
   submitting: boolean;
   error: string | null;
+  /** True once the initial pre-selected division has been handled (master_plan §2AS A1/Finding 1) -
+   *  a recommended pre-selection behaves like a real tap and should only ever fire ONCE, on the
+   *  wizard's very first mount. Set the first time Division's `onContinue` fires; from then on Back
+   *  re-mounts Division with the previous choice merely highlighted, never auto-advancing again. */
+  preselectConsumed: boolean;
 }
 
 function initialState(initial: WizardInitial): InternalState {
@@ -69,6 +74,7 @@ function initialState(initial: WizardInitial): InternalState {
     paidNow: false,
     submitting: false,
     error: null,
+    preselectConsumed: false,
   };
 }
 
@@ -145,19 +151,33 @@ export function RegistrationWizard({
         divisionId,
         playingDown,
         reservationOnly: false,
+        preselectConsumed: true,
         step: 'partner',
       }));
       return;
     }
     if (d.feeAmount <= 0) {
-      setWizard((w) => ({ ...w, divisionId, playingDown, reservationOnly: false }));
+      setWizard((w) => ({
+        ...w,
+        divisionId,
+        playingDown,
+        reservationOnly: false,
+        preselectConsumed: true,
+      }));
       void (async () => {
         const res = await createEntry();
         if (res.ok) setWizard((w) => ({ ...w, step: 'done' }));
       })();
       return;
     }
-    setWizard((w) => ({ ...w, divisionId, playingDown, reservationOnly: false, step: 'pay' }));
+    setWizard((w) => ({
+      ...w,
+      divisionId,
+      playingDown,
+      reservationOnly: false,
+      preselectConsumed: true,
+      step: 'pay',
+    }));
   }
 
   function handleChooseDivisionLater() {
@@ -213,6 +233,12 @@ export function RegistrationWizard({
     setWizard((w) => ({ ...w, paidNow: true, step: 'done' }));
   }
 
+  /** The receipt screen's "Paying for: My slot / Whole team" switch (master_plan §2AS A/Decision A) -
+   *  changes what is owed without a trip back through Pay. */
+  function handleChangePayFor(payFor: WizardPayFor) {
+    setWizard((w) => ({ ...w, payFor }));
+  }
+
   function handleViewRegistrations() {
     const regId = wizard.registrationId;
     onClose();
@@ -263,7 +289,8 @@ export function RegistrationWizard({
           <DivisionStep
             tournament={tournament}
             state={state}
-            preselectedId={wizard.divisionId}
+            preselectedId={wizard.preselectConsumed ? null : wizard.divisionId}
+            initialSelectedId={wizard.preselectConsumed ? wizard.divisionId : null}
             onClose={onClose}
             onContinue={handleDivisionContinue}
             onChooseLater={handleChooseDivisionLater}
@@ -292,6 +319,7 @@ export function RegistrationWizard({
             state={state}
             registrationId={wizard.registrationId}
             payFor={wizard.payFor}
+            onChangePayFor={handleChangePayFor}
             onSuccess={handleReceiptSuccess}
           />
         )}

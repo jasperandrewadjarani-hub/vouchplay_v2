@@ -146,6 +146,29 @@ export async function getPartnerLockAt(tournamentId: string): Promise<string | n
 }
 
 /**
+ * Organizer's "Email players when their slot is confirmed" switch (migration 0044, extended; master_
+ * plan §2AS D). Read defensively, the same pattern as `getPaymentNotificationEmail`/`getPartnerLockAt`
+ * above: before the migration is applied the column does not exist, and BOTH that case and an unset
+ * flag degrade to true - the feature defaults on, not off.
+ */
+export async function getConfirmationEmailEnabled(tournamentId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('confirmation_email_enabled')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (
+      (data as { confirmation_email_enabled: boolean | null } | null)?.confirmation_email_enabled ??
+      true
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Public co-organizer visibility (migration 0044; master_plan §2AQ A4), read via the SERVICE client
  * so it never depends on `tournament_organizers` RLS or the viewer's session - the public page reads
  * the same opted-in names regardless of who (or whether anyone) is signed in. Read defensively: the
@@ -282,39 +305,72 @@ export async function withTournamentCardEngagement(
         engagementAvailable: true,
       });
     }
-    // Which of these does the viewer hold a CONFIRMED entry in? `viewer_joining` from the RPC is
-    // true for any active entry, unpaid ones included, so the card cannot tell secured from
-    // provisional without this. One indexed read, no migration (§2G).
-    const securedIds = await fetchViewerSecuredTournamentIds(
+    // Which of these does the viewer hold a CONFIRMED entry in - and what is their worst payment
+    // state overall (§2AS B)? `viewer_joining` from the RPC is true for any active entry, unpaid
+    // ones included, so the card cannot tell secured/verifying/unsecured apart without this. One
+    // indexed read, no migration (§2G).
+    const statusesByTournament = await fetchViewerRegistrationStatuses(
       svc,
       viewerId,
       cards.map((c) => c.id),
     );
-    return cards.map((card) => ({
-      ...card,
-      ...(byId.get(card.id) ?? {}),
-      viewerSecured: securedIds.has(card.id),
-    }));
+    return cards.map((card) => {
+      const statuses = statusesByTournament.get(card.id) ?? [];
+      return {
+        ...card,
+        ...(byId.get(card.id) ?? {}),
+        viewerSecured: statuses.includes('confirmed'),
+        viewerHeadline: deriveViewerHeadline(statuses),
+      };
+    });
   } catch {
     // Migration 0021 has not landed yet, so card discovery stays available without the aggregates.
     return cards;
   }
 }
 
+/** Rank used by `deriveViewerHeadline` below - lower is WORSE (less secure), so `Math.min` over a set
+ *  of statuses always keeps the least-secure headline, matching §2AS Decision B's "worst state". */
+const HEADLINE_RANK: Record<'unsecured' | 'verifying' | 'confirmed', number> = {
+  unsecured: 0,
+  verifying: 1,
+  confirmed: 2,
+};
+
+/** One registration status -> the §2AS B headline vocabulary, or null for a status this headline
+ *  does not speak about (e.g. a closed entry). */
+function statusToHeadline(status: string): 'confirmed' | 'verifying' | 'unsecured' | null {
+  if (status === 'confirmed') return 'confirmed';
+  if (status === 'payment_submitted' || status === 'under_review') return 'verifying';
+  if (status === 'payment_pending' || status === 'waitlisted') return 'unsecured';
+  return null;
+}
+
+/** The viewer's WORST headline across every one of their (possibly several) entries on a tournament
+ *  (master_plan §2AS Decision B). Null when none of the given statuses map to a headline state. */
+function deriveViewerHeadline(statuses: string[]): 'confirmed' | 'verifying' | 'unsecured' | null {
+  let worst: 'confirmed' | 'verifying' | 'unsecured' | null = null;
+  for (const status of statuses) {
+    const headline = statusToHeadline(status);
+    if (!headline) continue;
+    if (worst === null || HEADLINE_RANK[headline] < HEADLINE_RANK[worst]) worst = headline;
+  }
+  return worst;
+}
+
 /**
- * Tournament ids (from the given set) where this viewer has a CONFIRMED registration (§2G).
- *
- * `registrations` is keyed by team, not player, so the viewer's entries are reached through
- * team_members -> teams -> registrations - the same path getViewerRegistrationState uses. Writing
- * `.eq('player_id', ...)` on `registrations` would silently return nothing (no such column), which
- * is exactly the unchecked-select trap v1.31 shipped, so it is deliberately not done that way.
+ * Every registration status this viewer holds (from the given tournament set), grouped by tournament
+ * (§2G/§2AS B). `registrations` is keyed by team, not player, so the viewer's entries are reached
+ * through team_members -> teams -> registrations - the same path `getViewerRegistrationState` uses.
+ * Writing `.eq('player_id', ...)` on `registrations` would silently return nothing (no such column),
+ * which is exactly the unchecked-select trap v1.31 shipped, so it is deliberately not done that way.
  */
-async function fetchViewerSecuredTournamentIds(
+async function fetchViewerRegistrationStatuses(
   svc: ReturnType<typeof createServiceClient>,
   viewerId: string | null,
   tournamentIds: string[],
-): Promise<Set<string>> {
-  const out = new Set<string>();
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
   if (!viewerId || tournamentIds.length === 0) return out;
 
   const { data: memberRows } = await svc
@@ -328,11 +384,14 @@ async function fetchViewerSecuredTournamentIds(
 
   const { data } = await svc
     .from('registrations')
-    .select('tournament_id, status, team_id')
+    .select('tournament_id, status')
     .in('team_id', teamIds)
-    .eq('status', 'confirmed')
     .in('tournament_id', tournamentIds);
-  for (const r of (data ?? []) as { tournament_id: string }[]) out.add(r.tournament_id);
+  for (const r of (data ?? []) as { tournament_id: string; status: string }[]) {
+    const list = out.get(r.tournament_id) ?? [];
+    list.push(r.status);
+    out.set(r.tournament_id, list);
+  }
   return out;
 }
 
@@ -652,9 +711,10 @@ export async function getTournamentBySlug(
     const partnerLockAt = await getPartnerLockAt(row.id);
     const partnerLockEffAt = partnerLockEffectiveAt(row.start_at, partnerLockAt);
 
-    const [demand, rules] = await Promise.all([
+    const [demand, rules, confirmationEmailEnabled] = await Promise.all([
       getDemandSummary(row.id),
       getTournamentRules(row.id),
+      getConfirmationEmailEnabled(row.id),
     ]);
 
     let myInterest = false;
@@ -795,6 +855,7 @@ export async function getTournamentBySlug(
       requireSkillVerified: rules.requireSkillVerified,
       requireOrganizerApproval: rules.requireOrganizerApproval,
       allowPlayDownOneLevel: rules.allowPlayDownOneLevel,
+      confirmationEmailEnabled,
     };
   } catch {
     return null;

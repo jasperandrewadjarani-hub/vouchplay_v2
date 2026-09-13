@@ -16,6 +16,7 @@ import {
   getSlotsByRegistration,
   getLatestBareSlot,
   getOrganizerSlots,
+  getSlotCancelRequests,
 } from '@/lib/payments/slots';
 import { divisionName } from './dto';
 import { getPartnerLockAt } from './queries';
@@ -198,6 +199,10 @@ export interface ViewerRegistrationState {
     currency: string;
     rejectionReason: string | null;
     submittedAt: string | null;
+    /** master_plan §2AS F: set when the viewer has asked to cancel this reservation. Read
+     *  defensively - see `getSlotCancelRequests` in `lib/payments/slots.ts` - so a pre-migration
+     *  deploy degrades to null. */
+    cancelRequestedAt: string | null;
   } | null;
   /** The cheapest per-player quote among the tournament's open, fee-charging divisions - what a bare
    *  reservation costs right now. Null when no open division charges a fee, or `slotsEnabled` is
@@ -580,6 +585,7 @@ export async function getViewerRegistrationState(
         .eq('tournament_id', tournamentId),
     ]);
     if (slotRow) {
+      const cancelRequests = await getSlotCancelRequests([slotRow.id]);
       bareSlot = {
         id: slotRow.id,
         status: slotRow.status,
@@ -588,6 +594,7 @@ export async function getViewerRegistrationState(
         currency: slotRow.currency,
         rejectionReason: slotRow.rejection_reason,
         submittedAt: slotRow.submitted_at,
+        cancelRequestedAt: cancelRequests.get(slotRow.id)?.cancelRequestedAt ?? null,
       };
     }
     const divisionsForQuote = (
@@ -1024,6 +1031,11 @@ export interface OrganizerBareSlot {
   /** True for `submitted`/`verified` (master_plan §2AQ F): the panel defaults to these, with declined
    *  and refunded rows behind "Show declined (n)". */
   live: boolean;
+  /** master_plan §2AS F: set when the player has asked to cancel this live reserved slot. Read
+   *  defensively - see `getSlotCancelRequests` in `lib/payments/slots.ts` - so a pre-migration
+   *  deploy degrades to null. */
+  cancelRequestedAt: string | null;
+  cancelReason: string | null;
 }
 
 export async function getOrganizerBareSlots(tournamentId: string): Promise<OrganizerBareSlot[]> {
@@ -1031,9 +1043,10 @@ export async function getOrganizerBareSlots(tournamentId: string): Promise<Organ
   const bare = all.filter((s) => !s.registration_id);
   if (bare.length === 0) return [];
 
-  const [profiles, divisionIdsSet] = [
+  const [profiles, divisionIdsSet, cancelRequests] = [
     await resolve(bare.map((s) => s.player_id)),
     new Set(bare.map((s) => s.division_id).filter((id): id is string => !!id)),
+    await getSlotCancelRequests(bare.map((s) => s.id)),
   ];
   const divisionIds = Array.from(divisionIdsSet);
   const divNameById = new Map<string, string>();
@@ -1063,6 +1076,8 @@ export async function getOrganizerBareSlots(tournamentId: string): Promise<Organ
     rejectionReason: s.rejection_reason,
     divisionName: s.division_id ? (divNameById.get(s.division_id) ?? 'Division') : null,
     live: s.status === 'submitted' || s.status === 'verified',
+    cancelRequestedAt: cancelRequests.get(s.id)?.cancelRequestedAt ?? null,
+    cancelReason: cancelRequests.get(s.id)?.cancelReason ?? null,
   }));
 }
 

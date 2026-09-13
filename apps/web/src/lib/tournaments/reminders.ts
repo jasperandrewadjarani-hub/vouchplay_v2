@@ -1,10 +1,12 @@
 import 'server-only';
 import {
   selectReminders,
+  selectUnpaidRecipients,
   partnerLockEffectiveAt,
   summarizeEntryPayment,
   type ReminderEntry,
   type ReminderBareSlot,
+  type UnpaidRecipient,
 } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { notify } from '@/lib/notifications/create';
@@ -45,9 +47,12 @@ interface TournamentReminderContext {
   sent: Set<string>;
 }
 
-/** This tournament's LIVE (submitted | verified) bare slots. Defensive - `tournament_slots` arrives
- *  with migration 0042, so a missing table degrades to "no bare slots" rather than failing the run. */
-async function loadLiveBareSlots(tournamentId: string): Promise<ReminderBareSlot[]> {
+/** This tournament's bare slots relevant to reminders/nudges: LIVE (submitted | verified) for
+ *  "choose your division" and `selectReminders`, plus `rejected` for §2AS C/F's
+ *  "reserved-slot holders whose slot was declined" (`selectUnpaidRecipients`'s `slot_declined` kind).
+ *  Defensive - `tournament_slots` arrives with migration 0042, so a missing table degrades to "no bare
+ *  slots" rather than failing the run. */
+async function loadBareSlotsForReminders(tournamentId: string): Promise<ReminderBareSlot[]> {
   try {
     const svc = createServiceClient();
     const { data, error } = await svc
@@ -55,7 +60,7 @@ async function loadLiveBareSlots(tournamentId: string): Promise<ReminderBareSlot
       .select('player_id, status')
       .eq('tournament_id', tournamentId)
       .is('registration_id', null)
-      .in('status', ['submitted', 'verified']);
+      .in('status', ['submitted', 'verified', 'rejected']);
     if (error) throw error;
     return ((data ?? []) as { player_id: string; status: string }[]).map((s) => ({
       playerId: s.player_id,
@@ -113,7 +118,7 @@ async function loadTournamentReminderContext(
       ? svc.from('payments').select('registration_id, status').in('registration_id', regIds)
       : Promise.resolve({ data: [] }),
     getSlotsByRegistration(regIds),
-    loadLiveBareSlots(tournamentId),
+    loadBareSlotsForReminders(tournamentId),
     svc
       .from('notifications')
       .select('type, recipient_id, entity_id')
@@ -260,4 +265,54 @@ export async function runReminders(now: Date = new Date()): Promise<Record<strin
   }
 
   return counts;
+}
+
+const REMINDER_RUN_AUDIT_ACTIONS = ['cron.reminders', 'admin.reminders.run'];
+
+/**
+ * §2AS C: who currently owes money for this tournament, right now - the SAME context loader and
+ * `selectUnpaidRecipients` (packages/core) the cron itself feeds, so the organizer's "Remind unpaid
+ * players" blast (`actions/payment.ts` `nudgeUnpaidPlayers`) and the unpaid banner can never disagree
+ * with the cron about who is unpaid.
+ */
+export async function listUnpaidRecipients(tournamentId: string): Promise<UnpaidRecipient[]> {
+  const { entries, bareSlots } = await loadTournamentReminderContext(tournamentId, new Date());
+  return selectUnpaidRecipients({ tournamentId, entries, bareSlots });
+}
+
+/**
+ * §2AS G: the most recent reminders run, from either the nightly cron (`cron.reminders`) or the
+ * Admin "Run reminders now" button (`admin.reminders.run`) - whichever happened last. Server-only
+ * helper (not a server action) so the Admin Operations card and `runRemindersNow` share one read.
+ */
+export async function getLastReminderRun(): Promise<{
+  at: string;
+  counts: Record<string, number> | null;
+  outcome: string;
+} | null> {
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('audit_logs')
+      .select('created_at, after_snapshot')
+      .in('action', REMINDER_RUN_AUDIT_ACTIONS)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const row = data as { created_at: string; after_snapshot: Record<string, unknown> | null };
+    const after = row.after_snapshot ?? {};
+    const counts =
+      after.counts && typeof after.counts === 'object'
+        ? (after.counts as Record<string, number>)
+        : null;
+    return {
+      at: row.created_at,
+      counts,
+      outcome: typeof after.outcome === 'string' ? after.outcome : 'unknown',
+    };
+  } catch {
+    return null;
+  }
 }

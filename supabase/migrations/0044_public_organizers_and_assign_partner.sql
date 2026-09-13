@@ -28,6 +28,28 @@ comment on column public.tournament_organizers.show_publicly is
   'Owner-controlled (master_plan §2AQ A4): true = this co-organizer''s name appears on the public '
   'tournament page after the owner''s. Default false - nothing is exposed until switched on.';
 
+-- ---------- 1b. Same-deploy additions (master_plan §2AS D, F) ----------
+-- Confirmation email on verification (per-tournament switch; sent once per registration) and the
+-- reserved-slot cancellation request (reason; organizer refunds or keeps).
+alter table public.tournaments
+  add column if not exists confirmation_email_enabled boolean not null default true;
+comment on column public.tournaments.confirmation_email_enabled is
+  'Organizer switch (master_plan §2AS D): email every confirmed member when their entry is confirmed, '
+  'with the skills-assessment / reclassification / refund caveats and the tournament link.';
+
+alter table public.registrations
+  add column if not exists confirmation_email_sent_at timestamptz;
+comment on column public.registrations.confirmation_email_sent_at is
+  'Set when the confirmation email went out for this entry (master_plan §2AS D); makes the send and '
+  'the backfill idempotent.';
+
+alter table public.tournament_slots
+  add column if not exists cancel_requested_at timestamptz,
+  add column if not exists cancel_reason text;
+comment on column public.tournament_slots.cancel_requested_at is
+  'A reserved-slot holder asked to cancel (master_plan §2AS F). The organizer refunds the slot or keeps '
+  'it (which clears this).';
+
 -- ---------- 2. organizer_assign_partner (§2AQ A3) ----------
 create or replace function public.organizer_assign_partner(
   p_team_id uuid,

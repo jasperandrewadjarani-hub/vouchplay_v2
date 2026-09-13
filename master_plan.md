@@ -4527,6 +4527,134 @@ readable by both). Core: `scorePartnerCandidate()` pure + tests. Server: opt-in 
 match modal, the Matches tab, entry buttons, the organizer count. Notifications: 4 types. Roughly the
 size of §2AO.
 
+## 2AS. Same-deploy batch: wizard back bug + 3-step rail, "Slot not secured" everywhere, red call-to-pay, organizer pay-nudge blast, confirmation emails, bulk verify, cancel-my-reservation, Admin run-reminders (2026-09-13)
+
+Jasper, before the §2AQ deploy goes out: build three of the just-deferred items (Admin "Run
+reminders now", cancel-my-reservation for reserved slots, organizer bulk verify); defer the refund
+request and the §2AR partner matching (remind him after this batch). Fix: Back does nothing on the
+wizard's step 2; the step rail shows four circles although Pay is the last step - show three.
+UI: the tournament card must say "Slot not secured" (not "Not secured yet"); the tournament page
+must show the player's own payment state next to the tournament status pill; the top payment banner
+is misaligned and too tall; every payment reminder should read as a warning (red background, white
+text) - the purpose is a call to action to pay and secure the slot. Organizer: a button that blasts an
+in-app "pay to secure your slot" notification to CURRENT unpaid registrations; email notifications
+(switchable) when a payment / slot is verified and confirmed, with the caveats about final skill
+assessment, reclassification and cancellation / refund decisions and a link to the tournament page,
+with a backfill for entries confirmed before the feature; and email (not just in-app) for pending
+payments, with the link.
+
+### Findings
+
+1. **Back on step 2** - `goBack()` returns to the Division step with `preselectedId = wizard.divisionId`;
+   the step's mount effect treats a recommended pre-selection as a tap and calls `onContinue` again,
+   so Back lands on Division for one frame and bounces forward. Only the FIRST mount of the wizard
+   should honour the pre-selection.
+2. **Rail** - Division · Partner · Pay · Receipt (four circles; singles three). Pay and Receipt are one
+   decision ("how do I pay, and here is my receipt"), split across two screens for room.
+3. **Copy** - `tournament-card.tsx` says "Not secured yet"; the status module's headline label is
+   "Slot not secured". The tournament page header shows only the tournament status pill.
+4. **Banner** - the unpaid strip wraps its icon, text and link in a flex-wrap row with a 44 px link
+   inside a 2-line strip; the link is taller than the text, hence "misaligned". Amber like the
+   reputation nudges - it reads as advice, not as "you will lose your place".
+5. **Email today** - `sendCriticalEmail` emails any critical notification when the recipient has
+   email enabled (the app SMTP path); `payment_verified` is critical but its copy is a one-liner
+   with no caveats and no tournament link. Nothing emails a confirmation on organizer verification
+   beyond that, and nothing can be re-sent.
+6. **Reserved slots** have no cancellation concept; `registrations` have `cancellation_requested`
+   events and a callout on Manage.
+7. **Reminders cron** exists (§2AQ) with no manual trigger; `runReminders()` returns per-type counts.
+
+### Decisions
+
+**A. Wizard.** (1) `initial.divisionId` is consumed once: the wizard passes `autoAdvance` only on the
+first Division mount; after Back the step mounts with the previous choice highlighted and no auto
+advance. (2) The rail becomes **Division · Partner · Pay** (singles: Division · Pay). Internally
+`pay` and `receipt` stay two screens but share circle 3; the receipt screen carries a compact
+"Paying for: My slot / Whole team" segmented switch at the top so the choice is changeable without
+Back, and Back from the receipt returns to the choice screen. Done keeps the rail complete.
+
+**B. "Slot not secured" everywhere, red.** The three-state headline (§2AP E) is the one vocabulary:
+- tournament card chip: **Slot not secured** / **Payment for verification** / **Confirmed**, from
+  the same headline logic (the card DTO gains `viewerHeadline`);
+- tournament page header: a second pill beside the status pill with the player's WORST state across
+  their entries and reserved slot ("Slot not secured · Pay now" links to `#my-registrations`;
+  "Payment for verification"; "Confirmed"); nothing when the viewer has no entry;
+- every unsecured surface uses the **danger** tone: white text on `--danger` for the chip and the top
+  strip, a `--danger` border on the My registrations card header, the "Pay now" control as a white
+  pill on red. Verifying stays amber-neutral, Confirmed stays green.
+- the top strip is one line: icon · "Your slot for {tournament} isn't secured" · **Pay now** (white
+  pill, 32 px), `min-h-11` on the strip itself, no wrap below 360 px (the tournament name truncates).
+
+**C. Organizer pay-nudge blast.** Manage → Payment notifications → **"Remind unpaid players ({n})"**:
+notifies every confirmed member whose own slot is unpaid / declined on a live entry, plus reserved-slot
+holders whose slot was declined, with `organizer_payment_nudge` (critical → in-app + email through the
+existing critical path, with the tournament link and the early-bird / close deadline when known).
+Throttle: one per recipient per entry per 24 h (existence check, like Remind partner); the button says
+"Reminded {n} · {m} skipped (reminded today)". Audited `organizer.payment_nudge`. Uses the same
+recipient selection as the cron (shared helper), so the two never disagree about who is "unpaid".
+
+**D. Confirmation email.** `tournaments.confirmation_email_enabled` (default true, Details form
+switch under Payment notifications: "Email players when their slot is confirmed"). When
+`settleRegistration` confirms an entry (fully paid) and the flag is on, every confirmed member with
+email enabled gets **"Your slot for {tournament} is confirmed"**: division, team, amount verified,
+the tournament link, and the caveat paragraph verbatim: *"Your division placement remains subject to
+the organizers' final skills assessment and you may be reclassified to keep play fair. Any
+cancellation or refund request is subject to the organizers' final decision."* Idempotent through
+`registrations.confirmation_email_sent_at`. Manage gets **"Email confirmed players ({n} not yet
+emailed)"** - the backfill for entries confirmed before this feature, same idempotency. Free-division
+confirmations (organizer Confirm entry) send it too. The existing `payment_verified` in-app
+notification stays.
+
+**E. Bulk verify.** Registrations list → **Select** toggles checkboxes on rows with a submitted receipt
+(team or slot); a sticky bar "Verify {n} receipts" runs `verifyPaymentsBulk` (sequential, per-item
+result, stops for nothing - each failure is reported by team name); the Reserved slots panel gets the
+same for submitted bare slots. Confirmation emails (D) fire per confirmed entry as usual.
+
+**F. Cancel my reservation.** Reserved-slot card → **"Cancel my reservation"** (reason, min 5 chars)
+→ `tournament_slots.cancel_requested_at / cancel_reason`; organizers are notified
+`slot_cancel_requested`; the Reserved slots panel tags the row **Wants to cancel** with the reason and
+offers **Refund** (existing) or **Keep** (clears the request, notifies the player
+`slot_cancel_declined`). A live bare slot only (a slot attached to an entry uses the entry's request).
+
+**G. Admin "Run reminders now".** Admin → Leaderboards page gains an "Operations" card: last reminder
+run (from the `cron.reminders` audit row) and a **Run reminders now** button (Admin + AAL2, same
+`runReminders()`, audited `admin.reminders.run`, shows the counts).
+
+### Better suggestions folded in / deferred
+
+- Folded in: one shared "who is unpaid" selection for cron, blast and banner; the confirmation email
+  as a settle hook (so bulk verify, single verify and free confirmations all trigger it once); the
+  header pill as the same headline vocabulary; the segmented pay-for switch instead of a fourth step.
+- Deferred and to be RAISED after this batch: refund request for declined slots; §2AR partner
+  matching build.
+
+### Contracts
+
+**Migration 0044 (extended, still unapplied):** `tournament_slots.cancel_requested_at timestamptz`,
+`tournament_slots.cancel_reason text`, `tournaments.confirmation_email_enabled boolean not null
+default true`, `registrations.confirmation_email_sent_at timestamptz`.
+**Core:** catalog `organizer_payment_nudge` (critical), `slot_cancel_requested` (organizers,
+non-critical), `slot_cancel_declined` (critical); `reminders.ts` gains `selectUnpaidRecipients(input)`
+(entries + bare slots → recipients with entity ids; the blast and the banner reuse it).
+**Web server:** `lib/tournaments/reminders.ts` → `listUnpaidRecipients(tournamentId)`;
+`actions/payment.ts` → `nudgeUnpaidPlayers(tournamentId)`, `verifyPaymentsBulk(tournamentId, items:
+{ id, kind }[])`, `emailConfirmedPlayers(tournamentId)`, `getConfirmationEmailBacklog(tournamentId)`;
+`lib/payments/confirmation-email.ts` (builder + `sendConfirmationEmailForRegistration`, hooked in
+`settleRegistration`'s confirmed branch and in `confirmRegistration`); `actions/registration.ts` →
+`requestSlotCancellation(slotId, tournamentId, reason)`, `decideSlotCancellation(slotId, tournamentId,
+keep: boolean)`; `actions/admin-*.ts` → `runRemindersNow()`; `actions/tournament.ts` reads
+`confirmationEmailEnabled`; queries: `TournamentCardDTO.viewerHeadline`, `TournamentDetailDTO.confirmationEmailEnabled`,
+`OrganizerBareSlot.cancelRequestedAt / cancelReason`, `ViewerRegistrationState.bareSlot.cancelRequestedAt`.
+**Web UI:** wizard (rail 3, back fix, pay-for switch), `tournament-card.tsx`, page header pill,
+`unpaid-slot-strip.tsx`, `my-registrations.tsx` (danger header, cancel reservation), Manage
+(nudge + confirmation email section, bulk select bar), `reserved-slots-panel.tsx` (cancel tag,
+Keep, bulk), `tournament-form.tsx` (switch), Admin leaderboards page (Operations card).
+
+### Execution
+
+Docs → 0044 extended (main session) → four Sonnet lanes (core; server; organizer + admin UI; player UI)
+→ gates → one commit on top of `464cee2` → Jasper applies `scripts/apply-0044.sql` once and pushes once.
+
 ## 1. Prompt Contract
 
 ### In scope

@@ -13,10 +13,16 @@ import {
 import { isClosed, hasOpenSeat, hasUnconfirmedPartner } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
-import { getPendingReceiptNotificationCount } from '@/lib/actions/payment';
+import {
+  getPendingReceiptNotificationCount,
+  getConfirmationEmailBacklog,
+} from '@/lib/actions/payment';
+import { listUnpaidRecipients } from '@/lib/tournaments/reminders';
 import { TournamentForm } from '@/components/tournaments/tournament-form';
 import { PaymentNotificationTestButton } from '@/components/tournaments/payment-notification-test-button';
 import { PaymentReceiptBackfillButton } from '@/components/tournaments/payment-receipt-backfill-button';
+import { PaymentNudgeButton } from '@/components/tournaments/payment-nudge-button';
+import { ConfirmationEmailBackfillButton } from '@/components/tournaments/confirmation-email-backfill-button';
 import { emailChannelEnabled } from '@/lib/notifications/email';
 import { isSlotReservationsEnabled } from '@/lib/settings';
 import { LifecycleControls } from '@/components/tournaments/lifecycle-controls';
@@ -93,6 +99,11 @@ export default async function ManageTournamentPage({ params }: Params) {
   if (!t) notFound();
   if (!t.canManage) redirect(`/tournaments/${slug}`);
 
+  // §2AQ Decision C/D: the pay-nudge blast and the confirmation-email backfill both need the app's
+  // email channel switched on (they email players directly, independent of the organizer's own
+  // `paymentNotificationEmail` receipt-forwarding address) - compute once and reuse for both.
+  const emailReady = emailChannelEnabled();
+
   const [registrations, clubOverrideParticipants, pendingReceiptCount, bareSlots, slotsEnabled] =
     await Promise.all([
       getOrganizerRegistrations(t.id),
@@ -106,6 +117,21 @@ export default async function ManageTournamentPage({ params }: Params) {
       getOrganizerBareSlots(t.id).catch(() => []),
       isSlotReservationsEnabled(),
     ]);
+
+  // §2AQ Decision C/D: kept in a separate `Promise.all` from the block above - both reads depend on
+  // lane-B contracts that do not exist yet, and mixing an eventually-`any` branch into the main
+  // tuple above would collapse that whole destructure's inference to `any` in the meantime.
+  const [unpaidRecipients, confirmationBacklog] = await Promise.all([
+    // §2AQ Decision C: read defensively - `listUnpaidRecipients` lands from a parallel lane.
+    emailReady
+      ? listUnpaidRecipients(t.id).catch(
+          () => [] as Awaited<ReturnType<typeof listUnpaidRecipients>>,
+        )
+      : Promise.resolve([] as Awaited<ReturnType<typeof listUnpaidRecipients>>),
+    // §2AQ Decision D: same defensive read for the confirmation-email backlog count.
+    emailReady ? getConfirmationEmailBacklog(t.id).catch(() => 0) : Promise.resolve(0),
+  ]);
+  const unpaidCount = unpaidRecipients.length;
   const overview = computeOverview(
     registrations.map((r) => ({
       divisionId: r.divisionId,
@@ -190,30 +216,44 @@ export default async function ManageTournamentPage({ params }: Params) {
       {/* Payment notifications (§2AK/§2AL) as its own visible section - the receipt-email actions were
           buried inside the Details form, where an organizer could not find them. Auto-opens when there
           are uploaded receipts still to email, so the backfill is the first thing the organizer sees. */}
-      <ManageSection title="Payment notifications" defaultOpen={pendingReceiptCount > 0}>
-        {t.paymentNotificationEmail ? (
-          <div className="space-y-3">
+      <ManageSection
+        title="Payment notifications"
+        defaultOpen={pendingReceiptCount > 0 || unpaidCount > 0 || confirmationBacklog > 0}
+      >
+        <div className="space-y-4">
+          {t.paymentNotificationEmail ? (
+            <div className="space-y-3">
+              <p className="text-foreground-muted text-sm">
+                Every uploaded payment receipt is emailed to{' '}
+                <span className="text-foreground font-medium">{t.paymentNotificationEmail}</span>.
+                Change the address in{' '}
+                <span className="text-foreground font-medium">Details → Payment</span>.
+              </p>
+              <PaymentReceiptBackfillButton
+                tournamentId={t.id}
+                pendingCount={pendingReceiptCount}
+                email={t.paymentNotificationEmail}
+              />
+              <PaymentNotificationTestButton tournamentId={t.id} />
+            </div>
+          ) : (
             <p className="text-foreground-muted text-sm">
-              Every uploaded payment receipt is emailed to{' '}
-              <span className="text-foreground font-medium">{t.paymentNotificationEmail}</span>.
-              Change the address in{' '}
-              <span className="text-foreground font-medium">Details → Payment</span>.
+              No receipt notifications yet. Add an email under{' '}
+              <span className="text-foreground font-medium">Details → Payment</span> (&ldquo;Send
+              receipt notifications to&rdquo;) to email every uploaded receipt to whoever checks the
+              bank account.
             </p>
-            <PaymentReceiptBackfillButton
-              tournamentId={t.id}
-              pendingCount={pendingReceiptCount}
-              email={t.paymentNotificationEmail}
-            />
-            <PaymentNotificationTestButton tournamentId={t.id} />
-          </div>
-        ) : (
-          <p className="text-foreground-muted text-sm">
-            No receipt notifications yet. Add an email under{' '}
-            <span className="text-foreground font-medium">Details → Payment</span> (&ldquo;Send
-            receipt notifications to&rdquo;) to email every uploaded receipt to whoever checks the
-            bank account.
-          </p>
-        )}
+          )}
+          {/* §2AQ Decision C/D: blast unpaid players a pay-now reminder, and backfill the
+              settle-time confirmation email - both email players directly, so both need the app's
+              email channel rather than the organizer's own receipt-forwarding address above. */}
+          {emailReady && (
+            <div className="border-border space-y-4 border-t pt-4">
+              <PaymentNudgeButton tournamentId={t.id} unpaidCount={unpaidCount} />
+              <ConfirmationEmailBackfillButton tournamentId={t.id} backlog={confirmationBacklog} />
+            </div>
+          )}
+        </div>
       </ManageSection>
 
       <ManageSection title="Export">
@@ -260,6 +300,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             requireSkillVerified: t.requireSkillVerified,
             requireOrganizerApproval: t.requireOrganizerApproval,
             allowPlayDownOneLevel: t.allowPlayDownOneLevel,
+            confirmationEmailEnabled: t.confirmationEmailEnabled,
           }}
         />
       </ManageSection>

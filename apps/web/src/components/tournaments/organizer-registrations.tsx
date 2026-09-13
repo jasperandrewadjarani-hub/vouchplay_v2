@@ -34,6 +34,7 @@ import {
   rejectPayment,
   markRefunded,
   getProofSignedUrl,
+  verifyPaymentsBulk,
 } from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
 import {
@@ -113,6 +114,23 @@ const ELIGIBILITY_OPTIONS: EligKind[] = [
 /** Toggles `value` into/out of an array - the OR-within-a-group building block every chip uses. */
 function toggleIn<T>(list: readonly T[], value: T): T[] {
   return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
+}
+
+/** True when an entry has a receipt on file worth bulk-verifying - a submitted team payment or any
+ *  submitted seat (master_plan §2AQ Decision E: bulk verify). Rows without one get no checkbox. */
+function hasSubmittedReceipt(entry: OrganizerRegistration): boolean {
+  const teamSubmitted = entry.paymentStatus === 'submitted' && !!entry.paymentId;
+  const submittedSlots = (entry.slots ?? []).filter((s) => s.status === 'submitted');
+  return teamSubmitted || submittedSlots.length > 0;
+}
+
+/** `verifyPaymentsBulk` items for one selected entry - the team receipt when it is the one submitted,
+ *  else every submitted seat (master_plan §2AQ Decision E). */
+function bulkItemsFor(entry: OrganizerRegistration): { id: string; kind: 'team' | 'slot' }[] {
+  const teamSubmitted = entry.paymentStatus === 'submitted' && !!entry.paymentId;
+  if (teamSubmitted) return [{ id: entry.paymentId as string, kind: 'team' }];
+  const submittedSlots = (entry.slots ?? []).filter((s) => s.status === 'submitted');
+  return submittedSlots.map((s) => ({ id: s.id, kind: 'slot' as const }));
 }
 
 /** One labelled group of multi-select chips (Division/Status/Eligibility/Payment/Partner/Requests).
@@ -265,10 +283,19 @@ export function OrganizerRegistrations({
   /** Per-division capacity + counts for the strip and the Division filter chips. */
   divisions: DivisionCapacityRow[];
 }) {
+  const router = useRouter();
   const [filters, setFilters] = useState<EntryFilters>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<EntrySort>(DEFAULT_SORT);
   const [showFilters, setShowFilters] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  // Bulk verify (master_plan §2AQ Decision E) - a "Select" mode over the list, independent of the
+  // detail sheet above.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ tone: 'success' | 'danger'; text: string } | null>(
+    null,
+  );
 
   if (registrations.length === 0) {
     return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
@@ -305,6 +332,48 @@ export function OrganizerRegistrations({
   }
   function removeChip(group: EntryFilterGroup, value: string) {
     setFilters((f) => clearEntryFilter(f, group, value));
+  }
+
+  function exitSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function runBulkVerify() {
+    const targets = registrations.filter((r) => selectedIds.has(r.id));
+    const items = targets.flatMap(bulkItemsFor);
+    if (items.length === 0) return;
+    setBulkPending(true);
+    setBulkResult(null);
+    const res = await verifyPaymentsBulk(tournamentId, items);
+    setBulkPending(false);
+    type BulkItemResult = { id: string; ok: boolean; error?: string };
+    const failures = ((res.results as BulkItemResult[] | undefined) ?? []).filter((r) => !r.ok);
+    if (failures.length > 0) {
+      const labelById = new Map<string, string>();
+      for (const t of targets) {
+        if (t.paymentId) labelById.set(t.paymentId, teamLabel(t));
+        for (const s of t.slots ?? []) labelById.set(s.id, teamLabel(t));
+      }
+      setBulkResult({
+        tone: 'danger',
+        text:
+          `Verified ${items.length - failures.length} of ${items.length}. ` +
+          failures.map((f) => `${labelById.get(f.id) ?? f.id}: ${f.error ?? 'failed'}`).join(' · '),
+      });
+    } else {
+      setBulkResult({ tone: 'success', text: res.message ?? `Verified ${items.length}.` });
+    }
+    exitSelectMode();
+    router.refresh();
   }
 
   return (
@@ -377,6 +446,20 @@ export function OrganizerRegistrations({
               {wantsToCancelCount} want{wantsToCancelCount === 1 ? 's' : ''} to cancel
             </button>
           )}
+          {/* Bulk verify (master_plan §2AQ Decision E) - toggles select mode; Cancel in the sticky
+              bar below exits it too. */}
+          <button
+            type="button"
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            aria-pressed={selectMode}
+            className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium ${
+              selectMode
+                ? 'border-primary bg-primary/10 text-foreground'
+                : 'border-border bg-surface text-foreground hover:bg-surface-muted'
+            }`}
+          >
+            {selectMode ? 'Cancel select' : 'Select'}
+          </button>
           <button
             type="button"
             onClick={() => setShowFilters((v) => !v)}
@@ -493,12 +576,28 @@ export function OrganizerRegistrations({
         {visible.length} {isDefaultReceiptFilterOnly ? 'with receipts' : 'shown'}
       </p>
 
+      {bulkResult && (
+        <p
+          role={bulkResult.tone === 'danger' ? 'alert' : undefined}
+          className={`text-xs ${bulkResult.tone === 'danger' ? 'text-danger' : 'text-success'}`}
+        >
+          {bulkResult.text}
+        </p>
+      )}
+
       {visible.length === 0 ? (
         <p className="text-foreground-muted text-sm">Nothing here. Try a different filter.</p>
       ) : (
         <ul className="border-border divide-border divide-y overflow-hidden rounded-2xl border">
           {visible.map((r) => (
-            <EntryRow key={r.id} entry={r} onOpen={() => setOpenId(r.id)} />
+            <EntryRow
+              key={r.id}
+              entry={r}
+              onOpen={() => setOpenId(r.id)}
+              selectMode={selectMode}
+              selected={selectedIds.has(r.id)}
+              onToggleSelect={() => toggleSelected(r.id)}
+            />
           ))}
         </ul>
       )}
@@ -512,6 +611,32 @@ export function OrganizerRegistrations({
         >
           <RegRow tournamentId={tournamentId} reg={selected} divisions={eligibilityDivisions} />
         </Modal>
+      )}
+
+      {/* Sticky bulk-verify bar (master_plan §2AQ Decision E) - fixed above the tab bar so it never
+          scrolls away while an organizer is mid-selection. */}
+      {selectMode && (
+        <div className="border-border bg-surface fixed inset-x-0 bottom-16 z-20 flex items-center justify-between gap-3 border-t px-4 py-3 shadow-lg">
+          <span className="text-foreground text-sm font-semibold">{selectedIds.size} selected</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exitSelectMode}
+              disabled={bulkPending}
+              className="border-border text-foreground hover:bg-surface-muted inline-flex min-h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={runBulkVerify}
+              disabled={bulkPending || selectedIds.size === 0}
+              className="vp-gradient inline-flex min-h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold text-white transition-colors disabled:opacity-60"
+            >
+              {bulkPending ? 'Verifying…' : 'Verify receipts'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -542,20 +667,56 @@ function reasonLabel(code: string): string {
 /**
  * One entry, scannable in a glance: who, which division, what it needs, how much. The whole row is
  * the control - a small "Manage" link beside a tall row is a smaller target than the row itself.
+ *
+ * In select mode (master_plan §2AQ Decision E) a row with a submitted receipt gets a checkbox and
+ * the row toggles selection instead of opening the detail sheet; a row with nothing to verify is
+ * dimmed and inert.
  */
-function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () => void }) {
+function EntryRow({
+  entry,
+  onOpen,
+  selectMode,
+  selected,
+  onToggleSelect,
+}: {
+  entry: OrganizerRegistration;
+  onOpen: () => void;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+}) {
   const chip = statusChip(entry);
   const money = moneyTag(entry);
   const amount = amountLabel(entry);
   const openSeat = hasOpenSeat(entry);
   const unconfirmed = !openSeat && hasUnconfirmedPartner(entry);
+  const selectable = hasSubmittedReceipt(entry);
   return (
     <li>
       <button
         type="button"
-        onClick={onOpen}
-        className="hover:bg-surface-muted flex w-full items-center gap-3 px-3 py-3 text-left"
+        onClick={() => {
+          if (selectMode) {
+            if (selectable) onToggleSelect();
+            return;
+          }
+          onOpen();
+        }}
+        disabled={selectMode && !selectable}
+        className={`hover:bg-surface-muted flex w-full items-center gap-3 px-3 py-3 text-left ${
+          selectMode && !selectable ? 'opacity-50' : ''
+        }`}
       >
+        {selectMode && selectable && (
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggleSelect}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select ${teamLabel(entry)} for bulk verify`}
+            className="h-4 w-4 shrink-0"
+          />
+        )}
         <span className="min-w-0 flex-1">
           <span className="text-foreground block truncate text-sm font-semibold">
             {teamLabel(entry)}
@@ -595,7 +756,9 @@ function EntryRow({ entry, onOpen }: { entry: OrganizerRegistration; onOpen: () 
             )}
           </span>
         </span>
-        <ChevronRight size={16} className="text-foreground-muted shrink-0" aria-hidden />
+        {!selectMode && (
+          <ChevronRight size={16} className="text-foreground-muted shrink-0" aria-hidden />
+        )}
       </button>
     </li>
   );

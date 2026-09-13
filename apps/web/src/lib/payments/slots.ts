@@ -12,6 +12,7 @@ import { isSlotReservationsEnabled, loadSettingNumber } from '@/lib/settings';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { notify } from '@/lib/notifications/create';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
+import { sendConfirmationEmailForRegistration } from './confirmation-email';
 
 /**
  * The seat as the unit of payment (master_plan §2AO Decision A). This module is the ONLY place that
@@ -156,6 +157,39 @@ export async function getOrganizerSlots(tournamentId: string): Promise<SlotRow[]
   } catch {
     return [];
   }
+}
+
+/** §2AS F: `cancel_requested_at`/`cancel_reason` for a bounded set of slot ids, in its OWN query -
+ *  these columns arrive with migration 0044 (extended, still unapplied), so they must not share
+ *  `SLOT_COLUMNS` (combining them would make the whole slot read fail before that migration lands).
+ *  A missing column/table degrades to "no cancel requests" rather than breaking the caller. */
+export async function getSlotCancelRequests(
+  slotIds: string[],
+): Promise<Map<string, { cancelRequestedAt: string | null; cancelReason: string | null }>> {
+  const map = new Map<string, { cancelRequestedAt: string | null; cancelReason: string | null }>();
+  const ids = Array.from(new Set(slotIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('tournament_slots')
+      .select('id, cancel_requested_at, cancel_reason')
+      .in('id', ids);
+    if (error) throw error;
+    for (const row of (data ?? []) as {
+      id: string;
+      cancel_requested_at: string | null;
+      cancel_reason: string | null;
+    }[]) {
+      map.set(row.id, {
+        cancelRequestedAt: row.cancel_requested_at,
+        cancelReason: row.cancel_reason,
+      });
+    }
+  } catch {
+    // Columns not present yet (migration 0044 extended pending) - degrade to "no cancel requests".
+  }
+  return map;
 }
 
 export interface BuiltEntryPayment {
@@ -406,6 +440,9 @@ export async function settleRegistration(
         to_status: 'confirmed',
       });
       await notifyRegistrationTeam(registrationId, registration.tournament_id, 'payment_verified');
+      // §2AS D: best-effort confirmation email, never throws - covers single verify, bulk verify,
+      // and every other path that reaches this branch (they all funnel through `settleRegistration`).
+      await sendConfirmationEmailForRegistration(registrationId);
       await revalTournament(registration.tournament_id);
       return summary;
     }

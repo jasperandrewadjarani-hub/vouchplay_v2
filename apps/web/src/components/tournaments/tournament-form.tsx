@@ -44,6 +44,8 @@ export interface TournamentFormInitial {
   /** Play one level down (migration 0042, master_plan §2AO C). Only meaningful alongside
    *  `enforceSkillFloor`; the checkbox is nested under it in the form. */
   allowPlayDownOneLevel?: boolean;
+  /** Confirmation email switch (migration 0044, master_plan §2AQ Decision D). Defaults to true. */
+  confirmationEmailEnabled?: boolean;
 }
 
 const textarea =
@@ -405,6 +407,26 @@ export function TournamentForm({
             )}
             {testButton}
           </div>
+          {/* Confirmation email switch (master_plan §2AQ Decision D) - one settle-time email to a
+              confirmed member, with the final-decision caveat spelled out here so an organizer knows
+              exactly what it says before turning it on. */}
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="confirmationEmailEnabled"
+              defaultChecked={initial.confirmationEmailEnabled ?? true}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">
+                Email players when their slot is confirmed
+              </span>
+              <span className="text-foreground-muted block text-xs">
+                Includes the note that division placement and any cancellation or refund are subject
+                to your final decision.
+              </span>
+            </span>
+          </label>
           <Field
             label="Payment QR"
             htmlFor="paymentQr"

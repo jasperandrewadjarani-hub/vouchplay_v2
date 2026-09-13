@@ -1,5 +1,5 @@
 -- =============================================================================
--- VouchPlay v2 - apply 0044: public co-organizer opt-in, organizer assign-partner
+-- VouchPlay v2 - apply 0044: public co-organizer opt-in, organizer assign-partner, §2AS columns
 -- Paste-and-run copy of supabase/migrations/0044_public_organizers_and_assign_partner.sql, with a
 -- verification SELECT appended. Statements are byte-identical to the migration.
 -- =============================================================================
@@ -11,6 +11,28 @@ alter table public.tournament_organizers
 comment on column public.tournament_organizers.show_publicly is
   'Owner-controlled (master_plan §2AQ A4): true = this co-organizer''s name appears on the public '
   'tournament page after the owner''s. Default false - nothing is exposed until switched on.';
+
+-- ---------- 1b. Same-deploy additions (master_plan §2AS D, F) ----------
+-- Confirmation email on verification (per-tournament switch; sent once per registration) and the
+-- reserved-slot cancellation request (reason; organizer refunds or keeps).
+alter table public.tournaments
+  add column if not exists confirmation_email_enabled boolean not null default true;
+comment on column public.tournaments.confirmation_email_enabled is
+  'Organizer switch (master_plan §2AS D): email every confirmed member when their entry is confirmed, '
+  'with the skills-assessment / reclassification / refund caveats and the tournament link.';
+
+alter table public.registrations
+  add column if not exists confirmation_email_sent_at timestamptz;
+comment on column public.registrations.confirmation_email_sent_at is
+  'Set when the confirmation email went out for this entry (master_plan §2AS D); makes the send and '
+  'the backfill idempotent.';
+
+alter table public.tournament_slots
+  add column if not exists cancel_requested_at timestamptz,
+  add column if not exists cancel_reason text;
+comment on column public.tournament_slots.cancel_requested_at is
+  'A reserved-slot holder asked to cancel (master_plan §2AS F). The organizer refunds the slot or keeps '
+  'it (which clears this).';
 
 -- ---------- 2. organizer_assign_partner (§2AQ A3) ----------
 create or replace function public.organizer_assign_partner(
@@ -104,11 +126,17 @@ revoke all on function public.organizer_assign_partner(uuid, uuid, uuid, text) f
 grant execute on function public.organizer_assign_partner(uuid, uuid, uuid, text) to service_role;
 
 -- ---------- Verification ----------
-select column_name, data_type, column_default
+select table_name, column_name
   from information_schema.columns
  where table_schema = 'public'
-   and table_name = 'tournament_organizers'
-   and column_name = 'show_publicly';
+   and (table_name, column_name) in (
+     ('tournament_organizers', 'show_publicly'),
+     ('tournaments', 'confirmation_email_enabled'),
+     ('registrations', 'confirmation_email_sent_at'),
+     ('tournament_slots', 'cancel_requested_at'),
+     ('tournament_slots', 'cancel_reason')
+   )
+ order by table_name, column_name;
 
 select proname, prosecdef
   from pg_proc

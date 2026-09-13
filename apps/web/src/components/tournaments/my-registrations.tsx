@@ -1,23 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  CircleCheck,
-  CircleDollarSign,
-  Clock,
-  ListChecks,
-  ShieldAlert,
-  TriangleAlert,
-} from 'lucide-react';
+import { ListChecks, ShieldAlert, TriangleAlert } from 'lucide-react';
 import { formatFee } from '@vouchplay/core';
 import type { SeatState } from '@vouchplay/core';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
+import { describeRegistrationStatus } from '@/lib/tournaments/registration-status';
 import { RegisterActions } from './register-actions';
 import { PayNowCell } from './payment-modal';
 import { PaidEntryActions } from './paid-entry-actions';
 import { PartnerChangeActions } from './partner-change-actions';
 import { RemindPartnerButton } from './remind-partner-button';
+import { ViewerStatusPill } from './viewer-status-pill';
+import { CancelReservationForm } from './cancel-reservation-form';
 import { Button } from '@/components/ui/button';
 import { RegistrationWizard, type WizardTournament } from './registration-wizard';
 import type { WizardInitial } from './wizard/types';
@@ -38,12 +33,6 @@ const ACTIVE = new Set([
   'waitlisted',
   'confirmed',
 ]);
-
-function ToneIcon({ tone }: { tone: SlotTone }) {
-  if (tone === 'action') return <CircleDollarSign size={15} className="text-warning" aria-hidden />;
-  if (tone === 'waiting') return <Clock size={15} className="text-foreground-muted" aria-hidden />;
-  return <CircleCheck size={15} className="text-success" aria-hidden />;
-}
 
 /** "You: paid" / "Maria: not yet paid" / "Open seat" / "Maria: receipt sent" / "Top-up needed"
  *  (master_plan §2AO A7). */
@@ -171,6 +160,18 @@ export function MyRegistrations({
                   </Button>
                 )}
               </div>
+              {/* A live bare slot can ask the organizer to cancel it (master_plan §2AS Decision F) -
+                  a slot already attached to an entry uses PaidEntryActions' own request instead. */}
+              <div className="mt-2">
+                {bareSlot.cancelRequestedAt ? (
+                  <p className="text-foreground-muted flex items-start gap-2 text-sm" role="status">
+                    <ShieldAlert size={15} className="text-primary mt-0.5 shrink-0" aria-hidden />
+                    <span>Cancellation requested - the organizer will decide.</span>
+                  </p>
+                ) : (
+                  <CancelReservationForm slotId={bareSlot.id} tournamentId={tournament.id} />
+                )}
+              </div>
             </li>
           )}
           {entries.map(({ division, reg, divisionId, status, team, partnerName }) => {
@@ -191,10 +192,10 @@ export function MyRegistrations({
               <li key={divisionId} className="border-border bg-surface rounded-xl border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-foreground text-sm font-semibold">{d.name}</span>
-                  <span className="text-foreground-muted inline-flex items-center gap-1.5 text-xs">
-                    <ToneIcon tone={s.tone} />
-                    {s.headlineLabel}
-                  </span>
+                  {/* The one three-state headline chip (master_plan §2AS B) - danger for unsecured,
+                      amber-neutral for verifying, success for confirmed - same vocabulary as the
+                      tournament card and the page header pill. */}
+                  <ViewerStatusPill headline={s.headline} />
                 </div>
                 {team && (
                   <p className="text-foreground-muted mt-1 text-xs">

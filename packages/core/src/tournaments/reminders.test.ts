@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   selectReminders,
+  selectUnpaidRecipients,
   DEFAULT_EARLY_BIRD_WINDOW_HOURS,
   DEFAULT_CLOSE_WINDOW_HOURS,
   DEFAULT_LOCK_WINDOW_HOURS,
@@ -541,5 +542,215 @@ describe('mixed cases + deterministic ordering', () => {
         }),
       ),
     ).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2AS C/F - selectUnpaidRecipients: the shared "who is unpaid" selector for the organizer blast,
+// the banner and (via selectReminders' refactor below) the reminders cron.
+// ---------------------------------------------------------------------------
+describe('selectUnpaidRecipients (§2AS C/F)', () => {
+  it('includes a CONFIRMED member with an unpaid seat on a payment_pending entry', () => {
+    const out = selectUnpaidRecipients({
+      entries: [entry()],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out).toEqual([
+      { recipientId: 'p1', entityType: 'registration', entityId: 'reg-1', kind: 'entry_unpaid' },
+      { recipientId: 'p2', entityType: 'registration', entityId: 'reg-1', kind: 'entry_unpaid' },
+    ]);
+  });
+
+  it('includes declined and topup seat states, not just unpaid', () => {
+    const out = selectUnpaidRecipients({
+      entries: [
+        entry({
+          seats: [
+            { playerId: 'p1', state: 'declined' },
+            { playerId: 'p2', state: 'topup' },
+          ],
+        }),
+      ],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out.map((r) => r.recipientId).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('excludes a paid or submitted seat', () => {
+    const out = selectUnpaidRecipients({
+      entries: [
+        entry({
+          seats: [
+            { playerId: 'p1', state: 'paid' },
+            { playerId: 'p2', state: 'submitted' },
+          ],
+        }),
+      ],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('skips an unconfirmed member even with an unpaid seat', () => {
+    const out = selectUnpaidRecipients({
+      entries: [
+        entry({
+          members: [
+            { playerId: 'p1', confirmed: true },
+            { playerId: 'p2', confirmed: false },
+          ],
+        }),
+      ],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out.map((r) => r.recipientId)).toEqual(['p1']);
+  });
+
+  it('includes a waitlisted entry (unlike the plain payable-entry set)', () => {
+    const out = selectUnpaidRecipients({
+      entries: [entry({ status: 'waitlisted' })],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out.map((r) => r.recipientId).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('excludes entries outside payment_pending/payment_submitted/waitlisted', () => {
+    for (const status of ['confirmed', 'team_formed', 'withdrawn']) {
+      const out = selectUnpaidRecipients({
+        entries: [entry({ status })],
+        bareSlots: [],
+        tournamentId: 'tourn-1',
+      });
+      expect(out, status).toEqual([]);
+    }
+  });
+
+  it('includes a bare slot with status "rejected", entity = tournament', () => {
+    const out = selectUnpaidRecipients({
+      entries: [],
+      bareSlots: [{ playerId: 'p9', status: 'rejected' }],
+      tournamentId: 'tourn-1',
+    });
+    expect(out).toEqual([
+      { recipientId: 'p9', entityType: 'tournament', entityId: 'tourn-1', kind: 'slot_declined' },
+    ]);
+  });
+
+  it('excludes bare slots that are merely submitted/verified/refunded, only "rejected" counts', () => {
+    const out = selectUnpaidRecipients({
+      entries: [],
+      bareSlots: [
+        { playerId: 'a', status: 'submitted' },
+        { playerId: 'b', status: 'verified' },
+        { playerId: 'c', status: 'refunded' },
+      ],
+      tournamentId: 'tourn-1',
+    });
+    expect(out).toEqual([]);
+  });
+
+  it('dedupes by recipient + entity when the same player appears via two seat rows', () => {
+    const out = selectUnpaidRecipients({
+      entries: [
+        entry({
+          members: [{ playerId: 'p1', confirmed: true }],
+          seats: [
+            { playerId: 'p1', state: 'unpaid' },
+            { playerId: 'p1', state: 'declined' },
+          ],
+        }),
+      ],
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    });
+    expect(out.length).toBe(1);
+  });
+
+  it('is deterministically ordered independent of input order', () => {
+    const forward = selectUnpaidRecipients({
+      entries: [
+        entry({ registrationId: 'reg-a', members: [{ playerId: 'a1', confirmed: true }] }),
+        entry({ registrationId: 'reg-b', members: [{ playerId: 'b1', confirmed: true }] }),
+      ],
+      bareSlots: [{ playerId: 'p9', status: 'rejected' }],
+      tournamentId: 'tourn-1',
+    });
+    const backward = selectUnpaidRecipients({
+      entries: [
+        entry({ registrationId: 'reg-b', members: [{ playerId: 'b1', confirmed: true }] }),
+        entry({ registrationId: 'reg-a', members: [{ playerId: 'a1', confirmed: true }] }),
+      ],
+      bareSlots: [{ playerId: 'p9', status: 'rejected' }],
+      tournamentId: 'tourn-1',
+    });
+    expect(forward).toEqual(backward);
+  });
+
+  it('combines entries and bare slots together', () => {
+    const out = selectUnpaidRecipients({
+      entries: [entry()],
+      bareSlots: [{ playerId: 'p9', status: 'rejected' }],
+      tournamentId: 'tourn-1',
+    });
+    expect(out.map((r) => r.kind).sort()).toEqual([
+      'entry_unpaid',
+      'entry_unpaid',
+      'slot_declined',
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2AS C - selectReminders' early-bird / closing windows now source their "unpaid confirmed member"
+// recipients from selectUnpaidRecipients, so a waitlisted entry or a topup seat (new in that shared
+// set) also becomes reminder-eligible - the whole point of decision C ("the two never disagree").
+// ---------------------------------------------------------------------------
+describe('selectReminders + selectUnpaidRecipients agreement (§2AS C)', () => {
+  it('early_bird_ending now also reminds a topup seat on a waitlisted entry', () => {
+    const out = selectReminders(
+      baseInput({
+        tournament: tournament({ earlyBirdEndsAt: hoursFromNow(10) }),
+        entries: [
+          entry({
+            status: 'waitlisted',
+            seats: [
+              { playerId: 'p1', state: 'topup' },
+              { playerId: 'p2', state: 'paid' },
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(out.map((r) => r.recipientId)).toEqual(['p1']);
+    expect(out[0]?.type).toBe('early_bird_ending');
+  });
+
+  it('registration_closing_unpaid agrees with selectUnpaidRecipients for the same input', () => {
+    const entries = [
+      entry({
+        status: 'waitlisted',
+        seats: [
+          { playerId: 'p1', state: 'topup' },
+          { playerId: 'p2', state: 'unpaid' },
+        ],
+      }),
+    ];
+    const expected = selectUnpaidRecipients({
+      entries,
+      bareSlots: [],
+      tournamentId: 'tourn-1',
+    }).filter((r) => r.kind === 'entry_unpaid');
+    const out = selectReminders(
+      baseInput({
+        tournament: tournament({ registrationCloseAt: hoursFromNow(10) }),
+        entries,
+      }),
+    );
+    expect(out.map((r) => r.recipientId).sort()).toEqual(expected.map((r) => r.recipientId).sort());
   });
 });

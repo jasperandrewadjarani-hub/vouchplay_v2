@@ -1,18 +1,20 @@
 import { Check } from 'lucide-react';
 import type { WizardStep } from './types';
 
-/** The rail's steps, in order. 'partner' is omitted entirely for singles by the caller. */
-const RAIL: { key: WizardStep; label: string }[] = [
+/** The rail's steps, in order. 'partner' is omitted entirely for singles by the caller. Pay and
+ *  Receipt are one decision - "how do I pay, and here is my receipt" - split across two screens for
+ *  room, so they share this one circle (master_plan §2AS A2/Decision A). */
+const RAIL: { key: 'division' | 'partner' | 'pay'; label: string }[] = [
   { key: 'division', label: 'Division' },
   { key: 'partner', label: 'Partner' },
   { key: 'pay', label: 'Pay' },
-  { key: 'receipt', label: 'Receipt' },
 ];
 
 /**
- * "Division · Partner · Pay · Receipt" (master_plan §2AO B) - one decision per screen, and always
- * visible so a player always knows how many taps are left. 'done' has no rail position of its own;
- * it renders the rail fully complete.
+ * "Division · Partner · Pay" (master_plan §2AS A2) - one decision per screen, and always visible so
+ * a player always knows how many taps are left. `pay` and `receipt` both render as the Pay circle
+ * (internally still two screens); `done` has no rail position of its own and renders the rail fully
+ * complete.
  */
 export function StepRail({
   step,
@@ -23,7 +25,9 @@ export function StepRail({
   includePartner: boolean;
 }) {
   const steps = includePartner ? RAIL : RAIL.filter((s) => s.key !== 'partner');
-  const activeIndex = step === 'done' ? steps.length : steps.findIndex((s) => s.key === step);
+  const effectiveStep = step === 'receipt' ? 'pay' : step;
+  const activeIndex =
+    effectiveStep === 'done' ? steps.length : steps.findIndex((s) => s.key === effectiveStep);
 
   return (
     <ol className="mb-4 flex items-center gap-1.5" aria-label="Registration steps">

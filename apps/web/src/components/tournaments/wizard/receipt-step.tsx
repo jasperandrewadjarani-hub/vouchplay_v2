@@ -18,6 +18,7 @@ export function ReceiptStep({
   state,
   registrationId,
   payFor,
+  onChangePayFor,
   onSuccess,
 }: {
   tournament: WizardTournament;
@@ -26,11 +27,19 @@ export function ReceiptStep({
   state: ViewerRegistrationState;
   registrationId: string | null;
   payFor: WizardPayFor;
+  /** "Paying for: My slot / Whole team" (master_plan §2AS A2/Decision A) - changes the amount and the
+   *  action bound in `PaymentModalBody` without a trip back through Pay. */
+  onChangePayFor: (payFor: WizardPayFor) => void;
   onSuccess: () => void;
 }) {
   const quote = division ? quoteFor(division, tournament.earlyBird) : null;
   const slotPrice = state.slotPrice;
   const reg = division ? state.registrationsByDivision[division.id] : undefined;
+  // The switch only makes sense once there is a choice to make: a doubles entry with a registration
+  // already created (never a bare-slot reservation, which has no "whole team" to speak of).
+  const showPayForSwitch = Boolean(
+    division && division.teamSize > 1 && registrationId && payFor !== 'reservation',
+  );
 
   const details: PaymentDetails =
     payFor === 'reservation'
@@ -80,5 +89,42 @@ export function ReceiptStep({
             paymentQrUrl: state.paymentQrUrl,
           };
 
-  return <PaymentModalBody details={details} onSuccess={onSuccess} />;
+  return (
+    <div className="space-y-3">
+      {showPayForSwitch && (
+        <div
+          role="group"
+          aria-label="Paying for"
+          className="border-border bg-surface-muted flex items-center gap-1 rounded-xl border p-1 text-xs font-semibold"
+        >
+          <span className="text-foreground-muted pl-1.5">Paying for</span>
+          <button
+            type="button"
+            aria-pressed={payFor === 'seat'}
+            onClick={() => onChangePayFor('seat')}
+            className={`min-h-9 flex-1 rounded-lg px-2.5 py-1.5 transition-colors ${
+              payFor === 'seat'
+                ? 'bg-surface text-foreground shadow-sm'
+                : 'text-foreground-muted hover:text-foreground'
+            }`}
+          >
+            My slot
+          </button>
+          <button
+            type="button"
+            aria-pressed={payFor === 'team'}
+            onClick={() => onChangePayFor('team')}
+            className={`min-h-9 flex-1 rounded-lg px-2.5 py-1.5 transition-colors ${
+              payFor === 'team'
+                ? 'bg-surface text-foreground shadow-sm'
+                : 'text-foreground-muted hover:text-foreground'
+            }`}
+          >
+            Whole team
+          </button>
+        </div>
+      )}
+      <PaymentModalBody details={details} onSuccess={onSuccess} />
+    </div>
+  );
 }

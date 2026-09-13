@@ -20,7 +20,7 @@ import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { TOURNAMENTS_LIST_TAG, tournamentTag, getTournamentRules } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 import { checkDivisionFit } from '@/lib/tournaments/division-fit-check';
-import { logRpcRefusal } from '@/lib/moderation/audit';
+import { logRpcRefusal, writeAudit } from '@/lib/moderation/audit';
 import { notify, notifyMany } from '@/lib/notifications/create';
 import {
   getActorMini,
@@ -35,6 +35,8 @@ import {
   settleRegistration,
   summarizeRegistration,
 } from '@/lib/payments/slots';
+import { sendConfirmationEmailForRegistration } from '@/lib/payments/confirmation-email';
+import { markRefunded } from './payment';
 
 export interface RegistrationActionState {
   /** Set when an action creates a registration, so the UI can go straight to its payment step. */
@@ -2063,6 +2065,176 @@ export async function requestRegistrationCancellation(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Cancel-my-reservation (master_plan §2AS F) - a LIVE bare (no-division-yet) slot only. A slot already
+// attached to an entry uses `requestRegistrationCancellation` above instead.
+// ---------------------------------------------------------------------------
+
+/**
+ * A player asks to cancel their own reserved (bare) slot. Sets `cancel_requested_at`/`cancel_reason`
+ * defensively (migration 0044, extended - still unapplied) and notifies the organizers; the organizer
+ * then decides via `decideSlotCancellation` below. No new table: the request lives on the slot row
+ * itself, the same pattern `requestRegistrationCancellation` uses for entries.
+ */
+export async function requestSlotCancellation(
+  slotId: string,
+  tournamentId: string,
+  reason: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const trimmed = reason.trim();
+  if (trimmed.length < 5) return { error: 'Please say briefly why you need to cancel.' };
+  if (trimmed.length > 500) return { error: 'Please keep the reason under 500 characters.' };
+
+  const svc = createServiceClient();
+  try {
+    const { data: slotRow } = await svc
+      .from('tournament_slots')
+      .select('id, tournament_id, player_id, registration_id, status')
+      .eq('id', slotId)
+      .maybeSingle();
+    const slot = slotRow as {
+      id: string;
+      tournament_id: string;
+      player_id: string;
+      registration_id: string | null;
+      status: string;
+    } | null;
+    if (!slot || slot.tournament_id !== tournamentId) return { error: 'Reserved slot not found.' };
+    if (slot.registration_id) {
+      return { error: 'This slot is attached to an entry - cancel the entry instead.' };
+    }
+    if (slot.player_id !== user.id) return { error: 'You do not own this reserved slot.' };
+    if (!['submitted', 'verified'].includes(slot.status)) {
+      return { error: 'This slot is not currently reserved.' };
+    }
+
+    try {
+      await svc
+        .from('tournament_slots')
+        .update({ cancel_requested_at: new Date().toISOString(), cancel_reason: trimmed })
+        .eq('id', slotId);
+    } catch {
+      // Column not present yet (migration 0044 extended pending) - nothing else to roll back.
+    }
+
+    const [me, tm, organizerIds] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(tournamentId),
+      getTournamentOrganizerIds(tournamentId),
+    ]);
+    if (organizerIds.length) {
+      await notifyMany(organizerIds, {
+        type: 'slot_cancel_requested',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name, reason: trimmed },
+        link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+        entityType: 'tournament_slot',
+        entityId: slotId,
+      });
+    }
+    await writeAudit({
+      actorId: user.id,
+      action: 'slot.cancel_requested',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+      after: { cancel_reason: trimmed },
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return {
+    ok: true,
+    message: 'Sent. The organizer will review your request and get back to you.',
+  };
+}
+
+/**
+ * Organizer decides a pending slot-cancellation request (master_plan §2AS F). `keep: true` clears the
+ * request and tells the player their slot stays (`slot_cancel_declined`, critical); `keep: false`
+ * refunds through the existing `markRefunded` path (same audit/notification/settle behaviour as any
+ * other slot refund) and then clears the request.
+ */
+export async function decideSlotCancellation(
+  slotId: string,
+  tournamentId: string,
+  keep: boolean,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { error: 'You do not have permission to review payments.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: slotRow } = await svc
+      .from('tournament_slots')
+      .select('id, tournament_id, player_id, registration_id')
+      .eq('id', slotId)
+      .maybeSingle();
+    const slot = slotRow as {
+      id: string;
+      tournament_id: string;
+      player_id: string;
+      registration_id: string | null;
+    } | null;
+    if (!slot || slot.tournament_id !== tournamentId) return { error: 'Reserved slot not found.' };
+
+    const clearRequest = async () => {
+      try {
+        await svc
+          .from('tournament_slots')
+          .update({ cancel_requested_at: null, cancel_reason: null })
+          .eq('id', slotId);
+      } catch {
+        // Column not present yet (migration 0044 extended pending).
+      }
+    };
+
+    if (keep) {
+      await clearRequest();
+      const tm = await getTournamentMini(tournamentId);
+      await notify({
+        recipientId: slot.player_id,
+        type: 'slot_cancel_declined',
+        actorId: user.id,
+        params: { tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}?register=1` : '/tournaments',
+        entityType: 'tournament_slot',
+        entityId: slotId,
+      });
+      await writeAudit({
+        actorId: user.id,
+        action: 'slot.cancel_kept',
+        entityType: 'tournament_slot',
+        entityId: slotId,
+      });
+      await revalTournament(tournamentId);
+      return { ok: true, message: 'Kept - the player was notified their slot stays.' };
+    }
+
+    const refunded = await markRefunded(
+      slotId,
+      tournamentId,
+      "Cancelled at the player's request",
+      'slot',
+    );
+    if (refunded.error) return refunded;
+    await clearRequest();
+    await writeAudit({
+      actorId: user.id,
+      action: 'slot.cancel_refunded',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+    });
+    return { ok: true, message: 'Refunded - the reservation is closed.' };
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+}
+
 /**
  * Retire the team behind a registration that has just closed, if that entry was its last one
  * (master_plan §2C).
@@ -2488,6 +2660,9 @@ export async function confirmRegistration(
       to_status: 'confirmed',
     });
     await notifyRegistrationTeam(registrationId, tournamentId, 'registration_confirmed');
+    // §2AS D: free-division confirmations send the same confirmation email as a settled paid entry.
+    // Best-effort - never throws.
+    await sendConfirmationEmailForRegistration(registrationId);
     await revalTournament(tournamentId);
   } catch {
     return { error: 'That action is temporarily unavailable.' };

@@ -72,9 +72,20 @@ export const DEFAULT_LOCK_WINDOW_HOURS = 72;
  *  apps/web. A closed entry's partner situation is no longer anyone's to fix. */
 const CLOSED_STATUSES = new Set(['withdrawn', 'cancelled', 'rejected', 'refunded']);
 
-const UNPAID_SEAT_STATES = new Set<SeatState>(['unpaid', 'declined']);
-const PAYABLE_ENTRY_STATUSES = new Set(['payment_pending', 'payment_submitted']);
 const LIVE_BARE_SLOT_STATUSES = new Set(['submitted', 'verified']);
+
+/** §2AS C/F - "who is unpaid" for the organizer blast, the cron and the banner: a seat that still
+ *  owes money (unpaid, declined, or mid top-up) on a live-ish entry, or a bare slot whose receipt
+ *  was declined outright. */
+const UNPAID_NUDGE_SEAT_STATES = new Set<SeatState>(['unpaid', 'declined', 'topup']);
+const UNPAID_NUDGE_ENTRY_STATUSES = new Set(['payment_pending', 'payment_submitted', 'waitlisted']);
+
+export interface UnpaidRecipient {
+  recipientId: string;
+  entityType: 'registration' | 'tournament';
+  entityId: string;
+  kind: 'entry_unpaid' | 'slot_declined';
+}
 
 /** A window is "open" when the deadline is strictly in the future but no further out than `hours`. */
 function windowOpen(nowMs: number, deadlineMs: number, hours: number): boolean {
@@ -85,6 +96,60 @@ function windowOpen(nowMs: number, deadlineMs: number, hours: number): boolean {
 function seatStateFor(entry: ReminderEntry, playerId: string): SeatState | null {
   const seat = entry.seats.find((s) => s.playerId === playerId);
   return seat ? seat.state : null;
+}
+
+/**
+ * §2AS C/F - the single "who is unpaid" selector shared by the reminders cron (early-bird / closing
+ * windows below), the organizer's "Remind unpaid players" blast, and the unpaid banner - so all three
+ * agree about who still owes money. Every CONFIRMED member whose own seat is unpaid/declined/topup on
+ * an entry that is still payable or waitlisted, plus every bare slot whose receipt was rejected
+ * outright (a distinct case from "not yet chosen a division", which is handled separately).
+ */
+export function selectUnpaidRecipients(input: {
+  entries: ReminderEntry[];
+  bareSlots: ReminderBareSlot[];
+  tournamentId: string;
+}): UnpaidRecipient[] {
+  const out: UnpaidRecipient[] = [];
+  const seen = new Set<string>();
+
+  const push = (recipient: UnpaidRecipient): void => {
+    const key = `${recipient.entityType}:${recipient.entityId}:${recipient.recipientId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(recipient);
+  };
+
+  for (const entry of input.entries) {
+    if (!UNPAID_NUDGE_ENTRY_STATUSES.has(entry.status)) continue;
+    for (const member of entry.members) {
+      if (!member.confirmed) continue;
+      const state = seatStateFor(entry, member.playerId);
+      if (!state || !UNPAID_NUDGE_SEAT_STATES.has(state)) continue;
+      push({
+        recipientId: member.playerId,
+        entityType: 'registration',
+        entityId: entry.registrationId,
+        kind: 'entry_unpaid',
+      });
+    }
+  }
+
+  for (const slot of input.bareSlots) {
+    if (slot.status !== 'rejected') continue;
+    push({
+      recipientId: slot.playerId,
+      entityType: 'tournament',
+      entityId: input.tournamentId,
+      kind: 'slot_declined',
+    });
+  }
+
+  return out.sort((a, b) =>
+    `${a.entityType}:${a.entityId}:${a.recipientId}`.localeCompare(
+      `${b.entityType}:${b.entityId}:${b.recipientId}`,
+    ),
+  );
 }
 
 export function selectReminders(input: ReminderInput): ReminderOut[] {
@@ -111,26 +176,32 @@ export function selectReminders(input: ReminderInput): ReminderOut[] {
     out.push({ type, recipientId, entityType, entityId, deadlineIso, key });
   };
 
-  // (a) Early bird ending: every CONFIRMED member of a payable entry whose own seat is unpaid/declined.
+  // §2AS C - both (a) and (b) below draw their "unpaid confirmed member" recipients from the same
+  // selectUnpaidRecipients helper the organizer blast and the banner use, so the cron never disagrees
+  // with them about who still owes money. Bare slots are excluded here (`bareSlots: []`): a rejected
+  // bare slot is not part of either window below - see (b)'s own bare-slot loop for the "no division
+  // chosen yet" case, which is a different condition entirely.
+  const unpaidEntryRecipients = selectUnpaidRecipients({
+    entries: input.entries,
+    bareSlots: [],
+    tournamentId: input.tournament.id,
+  }).filter((r) => r.kind === 'entry_unpaid');
+
+  // (a) Early bird ending: every CONFIRMED member of a payable/waitlisted entry whose own seat still
+  // owes money.
   const earlyBirdMs = input.tournament.earlyBirdEndsAt
     ? Date.parse(input.tournament.earlyBirdEndsAt)
     : NaN;
   if (!Number.isNaN(earlyBirdMs) && windowOpen(nowMs, earlyBirdMs, earlyBirdHours)) {
     const deadlineIso = new Date(earlyBirdMs).toISOString();
-    for (const entry of input.entries) {
-      if (!PAYABLE_ENTRY_STATUSES.has(entry.status)) continue;
-      for (const member of entry.members) {
-        if (!member.confirmed) continue;
-        const state = seatStateFor(entry, member.playerId);
-        if (!state || !UNPAID_SEAT_STATES.has(state)) continue;
-        push(
-          'early_bird_ending',
-          member.playerId,
-          'registration',
-          entry.registrationId,
-          deadlineIso,
-        );
-      }
+    for (const recipient of unpaidEntryRecipients) {
+      push(
+        'early_bird_ending',
+        recipient.recipientId,
+        recipient.entityType,
+        recipient.entityId,
+        deadlineIso,
+      );
     }
   }
 
@@ -141,20 +212,14 @@ export function selectReminders(input: ReminderInput): ReminderOut[] {
     : NaN;
   if (!Number.isNaN(closeMs) && windowOpen(nowMs, closeMs, closeHours)) {
     const deadlineIso = new Date(closeMs).toISOString();
-    for (const entry of input.entries) {
-      if (!PAYABLE_ENTRY_STATUSES.has(entry.status)) continue;
-      for (const member of entry.members) {
-        if (!member.confirmed) continue;
-        const state = seatStateFor(entry, member.playerId);
-        if (!state || !UNPAID_SEAT_STATES.has(state)) continue;
-        push(
-          'registration_closing_unpaid',
-          member.playerId,
-          'registration',
-          entry.registrationId,
-          deadlineIso,
-        );
-      }
+    for (const recipient of unpaidEntryRecipients) {
+      push(
+        'registration_closing_unpaid',
+        recipient.recipientId,
+        recipient.entityType,
+        recipient.entityId,
+        deadlineIso,
+      );
     }
     for (const slot of input.bareSlots) {
       if (!LIVE_BARE_SLOT_STATUSES.has(slot.status)) continue;
