@@ -3137,3 +3137,13 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   benefit (directory is the hottest). No next/image, no remote-pattern coupling.
 - getPartnerLookingStrip wrapped in unstable_cache (60s, tag partner_looking_strip) over the hot
   /players scan of open searches. No migration/settings. Gates green, build ok.
+
+## 2026-09-14 - REVERT avatar image transforms (Supabase Pro quota)
+- Cause of "Storage Image Transformations 116/100 / exceeded included quota": the 2026-09-13
+  avatarThumb render/image change. Pro includes only 100 origin-image transforms/month; egress (the
+  thing it was saving) was <1% of 250 GB - wrong resource optimised. Reverted PlayerAvatar to raw
+  object URLs, removed avatarThumb. Kept the directory-strip cache. This billing cycle stays at 116
+  (overage ~cents); reverting stops it recurring next cycle.
+- Immediate mitigation: disable/raise the Supabase spend cap so the project does not go read-only
+  while over quota (the overage is pennies). Future avatar-egress fix if ever needed =
+  resize-on-upload, not transform-on-read.

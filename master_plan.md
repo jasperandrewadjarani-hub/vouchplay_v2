@@ -5104,6 +5104,22 @@ before deploy:
    on every hit; a new search still appears within a minute.
 No migration, no new settings.
 
+### 2AV addendum 5: REVERT avatar transforms - wrong resource metered (2026-09-14)
+
+Addendum 4's avatar thumbnails (`avatarThumb` -> Supabase `render/image` transform) were reverted.
+The morning after deploy, the newly-upgraded Pro org hit "Storage Image Transformations 116/100" and
+an "exceeded included quota" restriction warning - a metric that did not exist on Free. Diagnosis: the
+thumbnails were the sole source of transformations; every unique player avatar transformed counts
+toward a tiny **100 origin-images/month** included quota on Pro (then metered/restricted), whereas the
+egress the thumbnails were meant to save was never a problem - it sat at 0.178 / 250 GB (<1%). So the
+optimisation traded a plentiful resource (egress) for a scarce one (transformations). Reverted
+`PlayerAvatar` to serve the raw `/object/public/` object (kept `loading="lazy"` + `decoding="async"`);
+removed the `avatarThumb` helper. The directory-strip `unstable_cache` from addendum 4 is unrelated and
+kept. Lesson: check WHICH Supabase resource a change consumes and its included quota before shipping -
+egress (250 GB) and image transformations (100 images) are wildly different budgets. If avatar egress
+ever does matter, the right fix is resize-on-UPLOAD (store one small avatar, serve it raw = zero
+transformations), not transform-on-read.
+
 ## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
 
 Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the
