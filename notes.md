@@ -3129,3 +3129,11 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   global AND tournament column. Details-form toggle "Allow partner matchmaking"; off greys/removes the
   entry points and the deck page explains. getPartnerDeck/getPartnerSummary read it defensively.
   Migration 0048 (+ apply copy). Safe during open window (one boolean column, default true).
+
+## 2026-09-13 - Egress reductions: avatar thumbnails + directory-strip cache
+- avatarThumb(url,px) in lib/storage.ts -> Supabase render/image transform (resize=cover, quality=70)
+  for our /object/public/ URLs; external URLs pass through. PlayerAvatar requests 96/128/176px +
+  decoding=async. Confirmed working on this project (sample 36KB->5KB). All 19 PlayerAvatar consumers
+  benefit (directory is the hottest). No next/image, no remote-pattern coupling.
+- getPartnerLookingStrip wrapped in unstable_cache (60s, tag partner_looking_strip) over the hot
+  /players scan of open searches. No migration/settings. Gates green, build ok.

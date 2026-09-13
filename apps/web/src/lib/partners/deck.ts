@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import {
   scorePartnerCandidate,
   comparePartnerScores,
@@ -1451,8 +1452,11 @@ export interface PartnerLookingTournament {
  * where they already have a search, then by how many others are looking. Capped small - this is a
  * nudge, not a list. Never throws: any failure degrades to an empty strip.
  */
-export const getPartnerLookingStrip = cache(
-  async (viewerId: string | null, limit = 4): Promise<PartnerLookingTournament[]> => {
+async function computePartnerLookingStrip(
+  viewerId: string | null,
+  limit: number,
+): Promise<PartnerLookingTournament[]> {
+  {
     try {
       const settings = await getPartnerSettings();
       if (!settings.enabled) return [];
@@ -1559,5 +1563,19 @@ export const getPartnerLookingStrip = cache(
     } catch {
       return [];
     }
-  },
+  }
+}
+
+/**
+ * Per-request de-duped (`cache`) and cross-request cached for 60s (`unstable_cache`), so the hot
+ * /players page never rescans open searches on every hit (master_plan §2AV egress follow-up). The
+ * 60s window is fine for a discovery strip - a new search shows up within a minute.
+ */
+export const getPartnerLookingStrip = cache(
+  (viewerId: string | null, limit = 4): Promise<PartnerLookingTournament[]> =>
+    unstable_cache(
+      () => computePartnerLookingStrip(viewerId, limit),
+      ['partner-looking-strip', viewerId ?? 'anon', String(limit)],
+      { revalidate: 60, tags: ['partner_looking_strip'] },
+    )(),
 );

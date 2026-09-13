@@ -5086,6 +5086,24 @@ Find-a-partner entry point for that tournament and the deck page says the organi
 while the global default stays on for everyone else. `getPartnerDeck`/`getPartnerSummary` read the
 column defensively (fail-open to true before 0048 is applied). No effect on any other tournament.
 
+### 2AV addendum 4: egress reductions - avatar thumbnails + directory-strip cache (2026-09-13)
+
+After the matchmaking + directory features shipped, the egress review found the dominant driver is
+AVATAR IMAGES served at full upload size (`avatarUrl` built raw `/object/public/` URLs) to render
+40-80px circles across the app (the directory being the hottest surface). Two reductions, both live
+before deploy:
+1. `avatarThumb(url, px)` (lib/storage.ts) rewrites our own `/object/public/` Storage URLs to the
+   `/render/image/public/` transform endpoint (`width=height=px, resize=cover, quality=70`); external
+   avatar URLs (Google) pass through unchanged. `PlayerAvatar` now requests 96/128/176px thumbnails
+   for its sm/md/lg sizes (~2x display for retina) with `decoding="async"` alongside the existing
+   `loading="lazy"`. Verified on production: a sample avatar dropped 36KB -> 5KB (~86%); phone-photo
+   uploads drop far more. Every avatar in the app (19 PlayerAvatar consumers, deck cards included)
+   benefits. NB: the render/image transform endpoint is confirmed working on this project's plan.
+2. `getPartnerLookingStrip` is now wrapped in `unstable_cache` (60s, tag `partner_looking_strip`) on
+   top of the per-request `cache`, so the hot /players page stops rescanning up to 500 open searches
+   on every hit; a new search still appears within a minute.
+No migration, no new settings.
+
 ## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
 
 Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the
