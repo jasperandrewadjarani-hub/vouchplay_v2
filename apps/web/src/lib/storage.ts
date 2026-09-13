@@ -30,26 +30,6 @@ export function avatarUrl(path: string | null | undefined): string | null {
 }
 
 /**
- * Rewrite a resolved avatar/public-object URL into a small, server-resized thumbnail (Supabase
- * Storage image transformation) to cut egress: a full-size phone-photo upload is downloaded once at
- * ~160px instead of at its original resolution to render a 40-80px circle (master_plan §2AV egress
- * follow-up - a sample avatar dropped from 36KB to 5KB). Only OUR public Storage object URLs are
- * rewritten (`/object/public/` -> `/render/image/public/`); an external absolute URL (e.g. a Google
- * profile photo) is returned unchanged, and a null stays null. `px` is the target square size in CSS
- * pixels; callers pass ~2x their display size so it stays crisp on high-density screens.
- */
-export function avatarThumb(url: string | null | undefined, px: number): string | null {
-  if (!url) return null;
-  const marker = '/storage/v1/object/public/';
-  const i = url.indexOf(marker);
-  if (i === -1) return url;
-  const base = url.slice(0, i);
-  const objectPath = url.slice(i + marker.length);
-  const size = Math.max(16, Math.round(px));
-  return `${base}/storage/v1/render/image/public/${objectPath}?width=${size}&height=${size}&resize=cover&quality=70`;
-}
-
-/**
  * Club logos live in the same PUBLIC `avatars` bucket under a `club-logos/` prefix (no new bucket
  * needed; writes go through the service client which bypasses storage RLS). Same public-URL rules.
  */

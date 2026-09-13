@@ -1,25 +1,16 @@
 import { Check } from 'lucide-react';
-import { avatarThumb } from '@/lib/storage';
 
 /**
- * Player avatar with initials fallback. Uses a plain <img> (next/image optimization isn't worth the
- * remote-pattern coupling), but requests a server-resized Supabase thumbnail sized to the display
- * (master_plan §2AV egress follow-up) so a full-size upload is never downloaded to render a small
- * circle. External avatar URLs (e.g. Google) pass through `avatarThumb` unchanged.
+ * Player avatar with initials fallback. Uses a plain <img> serving the raw public Storage object
+ * (avatars are lazy-loaded and already modest; see the egress note in master_plan §2AV addendum 5 -
+ * Supabase image transformations have only a 100-origin-image/month included quota on Pro, far too
+ * small for a per-avatar thumbnail, whereas egress is plentiful, so we serve the object directly).
  */
 
 const sizeMap = {
   sm: 'h-10 w-10 text-sm',
   md: 'h-14 w-14 text-base',
   lg: 'h-20 w-20 text-2xl',
-} as const;
-
-/** Requested thumbnail px per size - roughly 2x the rendered diameter (40/56/80) for high-density
- *  screens, so the circle stays crisp while the transferred image stays tiny. */
-const thumbPxMap = {
-  sm: 96,
-  md: 128,
-  lg: 176,
 } as const;
 
 /** Verified-check disc size per avatar size (master_plan §2AN decision 3): disc diameter / icon size,
@@ -71,7 +62,7 @@ export function PlayerAvatar({
       <span className="relative inline-block shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={avatarThumb(url, thumbPxMap[size]) ?? url}
+          src={url}
           alt={name}
           loading="lazy"
           decoding="async"
