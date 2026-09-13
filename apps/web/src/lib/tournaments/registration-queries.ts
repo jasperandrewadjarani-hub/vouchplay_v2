@@ -43,6 +43,13 @@ interface Mini {
   name: string;
   slug: string | null;
   avatarUrl: string | null;
+  /** master_plan §2AU F: an unverified guest account (`guest_created_at` set, `onboarded_at` still
+   *  null) - drives the "Unverified account" chip on `OrganizerRegistration.members` and is available
+   *  on every other `Mini` (team members, invitations) for free since they share this one resolver.
+   *  Read defensively - see `resolve()` - so a pre-migration deploy degrades everyone to `false`.
+   *  Optional (rather than always-boolean) only so existing test fixtures elsewhere that construct a
+   *  `Mini` by hand need no change - every `Mini` this module itself produces always sets it. */
+  unverified?: boolean;
 }
 async function resolve(ids: string[]): Promise<Map<string, Mini>> {
   const unique = Array.from(new Set(ids.filter(Boolean)));
@@ -53,6 +60,28 @@ async function resolve(ids: string[]): Promise<Map<string, Mini>> {
     .from('profiles')
     .select('id, first_name, last_name, nickname, slug, avatar_path')
     .in('id', unique);
+
+  // §2AU F: read defensively, in its own query - `guest_created_at` arrives with migration 0046, so a
+  // pre-migration deploy degrades every profile to `unverified: false` rather than failing this
+  // widely-shared resolver (team members, invitations, organizer rows all route through it).
+  const unverifiedIds = new Set<string>();
+  try {
+    const { data: guestRows, error } = await svc
+      .from('profiles')
+      .select('id, guest_created_at, onboarded_at')
+      .in('id', unique);
+    if (error) throw error;
+    for (const row of (guestRows ?? []) as {
+      id: string;
+      guest_created_at: string | null;
+      onboarded_at: string | null;
+    }[]) {
+      if (row.guest_created_at && !row.onboarded_at) unverifiedIds.add(row.id);
+    }
+  } catch {
+    // Column not present yet (migration 0046 pending) - nobody reads as unverified.
+  }
+
   for (const r of data ?? []) {
     const row = r as {
       id: string;
@@ -70,6 +99,7 @@ async function resolve(ids: string[]): Promise<Map<string, Mini>> {
         'VouchPlay player',
       slug: row.slug,
       avatarUrl: avatarUrl(row.avatar_path),
+      unverified: unverifiedIds.has(row.id),
     });
   }
   return map;
@@ -136,6 +166,12 @@ export interface ViewerRegistration {
    *  `cancellation_requested` (a later withdrawal/approval/decline clears this). Drives the
    *  "Cancellation requested" tag + Withdraw-request button in My registrations. */
   cancellationRequested: boolean;
+  /** A guest's partner named as free text at entry time (master_plan §2AU D, `registrations.
+   *  partner_note`), shown as "Partner: {name} (to be invited)" until the guest verifies and can send
+   *  a real invite. Null/absent when unset, or read defensively before migration 0046 is applied.
+   *  Optional only so existing fixtures elsewhere that construct a `ViewerRegistration` by hand need
+   *  no change - this module itself always sets it (to a value or explicit null). */
+  partnerNote?: string | null;
 }
 export interface ViewerInvitation {
   id: string;
@@ -541,6 +577,28 @@ export async function getViewerRegistrationState(
       }
     }
 
+    // §2AU D: a guest's free-text partner name, read defensively in its own query (not folded into
+    // the main `registrations` select above) - the column arrives with migration 0046, so a
+    // pre-migration deploy degrades to no partner notes rather than failing this whole read.
+    const partnerNoteByReg = new Map<string, string | null>();
+    if (regList.length > 0) {
+      try {
+        const { data: noteRows, error } = await svc
+          .from('registrations')
+          .select('id, partner_note')
+          .in(
+            'id',
+            regList.map((r) => r.id),
+          );
+        if (error) throw error;
+        for (const row of (noteRows ?? []) as { id: string; partner_note: string | null }[]) {
+          partnerNoteByReg.set(row.id, row.partner_note);
+        }
+      } catch {
+        // Column not present yet (migration 0046 pending) - no partner notes.
+      }
+    }
+
     for (const r of regList) {
       const pay = paymentByReg.get(r.id);
       registrationsByDivision[r.division_id] = {
@@ -552,6 +610,7 @@ export async function getViewerRegistrationState(
         paymentRejectionReason: pay?.rejection_reason ?? null,
         paymentSummary: null,
         mySeat: null,
+        partnerNote: partnerNoteByReg.get(r.id) ?? null,
         lastPartnerReminderAt: lastReminderByReg.get(r.id) ?? null,
         cancellationRequested: cancellationRequestedByReg.has(r.id),
       };
@@ -837,6 +896,9 @@ export interface OrganizerRegistration {
   eligibilitySnapshot: Record<string, unknown>;
   slotHoldExpiresAt: string | null;
   createdAt: string;
+  /** Each member carries its own `unverified` flag (master_plan §2AU F) - true for a guest who has
+   *  not yet finished onboarding, driving the "Unverified account" chip on the row and in the sheet.
+   *  The receipt is still reviewable either way; account state never withholds a confirmation. */
   members: Mini[];
   /** Player ids whose team membership is still unconfirmed (pay-first, §1U). */
   unconfirmedMemberIds: string[];
@@ -845,6 +907,11 @@ export interface OrganizerRegistration {
   teamSize: number;
   /** An open player request for the organizer to cancel this entry (§1Y), newest first. */
   cancellationRequest: { reason: string; requestedAt: string } | null;
+  /** A guest's partner named as free text at entry time (master_plan §2AU D/F), shown as "Partner:
+   *  {name} (to be invited)". Null/absent when unset, or read defensively before migration 0046.
+   *  Optional only so existing fixtures elsewhere that construct an `OrganizerRegistration` by hand
+   *  need no change - this module itself always sets it (to a value or explicit null). */
+  partnerNote?: string | null;
   paymentId: string | null;
   paymentStatus: string | null;
   amountDue: number | null;
@@ -866,6 +933,30 @@ export interface OrganizerRegistration {
     rejectionReason: string | null;
     submittedAt: string | null;
   }[];
+}
+
+/** §2AU D/F: a guest's free-text partner name per registration, read defensively - `partner_note`
+ *  arrives with migration 0046, so a pre-migration deploy degrades to no notes rather than failing
+ *  the organizer dashboard load it is batched into. */
+async function loadPartnerNotesByReg(
+  svc: ReturnType<typeof createServiceClient>,
+  regIds: string[],
+): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  if (regIds.length === 0) return map;
+  try {
+    const { data, error } = await svc
+      .from('registrations')
+      .select('id, partner_note')
+      .in('id', regIds);
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: string; partner_note: string | null }[]) {
+      map.set(row.id, row.partner_note);
+    }
+  } catch {
+    // Column not present yet (migration 0046 pending) - no partner notes.
+  }
+  return map;
 }
 
 export async function getOrganizerRegistrations(
@@ -921,7 +1012,7 @@ export async function getOrganizerRegistrations(
 
   // These four reads depend only on `teamIds`/`regIds` above, never on each other's results, so they
   // run as one round trip instead of four sequential ones.
-  const [{ data: memberRows }, { data: cancelRows }, { data: pays }, slotsByReg] =
+  const [{ data: memberRows }, { data: cancelRows }, { data: pays }, slotsByReg, partnerNoteByReg] =
     await Promise.all([
       svc
         .from('team_members')
@@ -943,6 +1034,7 @@ export async function getOrganizerRegistrations(
       // §2AO A2/A6: one shared money-state verdict + attached-slot list per registration, from a single
       // bounded `tournament_slots` read (defensive - degrades to "no slots" before migration 0042).
       getSlotsByRegistration(regIds),
+      loadPartnerNotesByReg(svc, regIds),
     ]);
   const members = (memberRows ?? []) as {
     team_id: string;
@@ -1044,6 +1136,7 @@ export async function getOrganizerRegistrations(
         .map((m) => m.player_id),
       teamSize,
       cancellationRequest: cancelByReg.get(r.id) ?? null,
+      partnerNote: partnerNoteByReg.get(r.id) ?? null,
       paymentId: pay?.id ?? null,
       paymentStatus: pay?.status ?? null,
       amountDue: pay ? Number(pay.amount_due) : null,

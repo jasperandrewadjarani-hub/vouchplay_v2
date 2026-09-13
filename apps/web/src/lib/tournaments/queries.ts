@@ -18,7 +18,7 @@ import {
   type TournamentDemandDTO,
 } from './dto';
 import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
-import { loadSettingNumber } from '@/lib/settings';
+import { loadSettingNumber, loadSettingFlag } from '@/lib/settings';
 
 export const TOURNAMENTS_LIST_TAG = 'tournaments:list';
 export const tournamentTag = (slug: string) => `tournament:${slug}`;
@@ -711,11 +711,14 @@ export async function getTournamentBySlug(
     const partnerLockAt = await getPartnerLockAt(row.id);
     const partnerLockEffAt = partnerLockEffectiveAt(row.start_at, partnerLockAt);
 
-    const [demand, rules, confirmationEmailEnabled] = await Promise.all([
-      getDemandSummary(row.id),
-      getTournamentRules(row.id),
-      getConfirmationEmailEnabled(row.id),
-    ]);
+    const [demand, rules, confirmationEmailEnabled, guestRegistrationSettingEnabled] =
+      await Promise.all([
+        getDemandSummary(row.id),
+        getTournamentRules(row.id),
+        getConfirmationEmailEnabled(row.id),
+        // master_plan §2AU: the Admin kill switch, defaulting to true (seeded by migration 0046).
+        loadSettingFlag('guest_registration_enabled', true),
+      ]);
 
     let myInterest = false;
     if (viewer.viewerId) {
@@ -856,6 +859,10 @@ export async function getTournamentBySlug(
       requireOrganizerApproval: rules.requireOrganizerApproval,
       allowPlayDownOneLevel: rules.allowPlayDownOneLevel,
       confirmationEmailEnabled,
+      // §2AU: the anonymous Register button/`?register=1` only opens the guest wizard while
+      // registration is actually open - a closed/full tournament falls back to ordinary signup.
+      guestRegistrationEnabled:
+        guestRegistrationSettingEnabled && row.status === 'registration_open',
     };
   } catch {
     return null;

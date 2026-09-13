@@ -37,6 +37,12 @@ import {
   getSlotCancelRequests,
 } from '@/lib/payments/slots';
 import { sendConfirmationEmailForRegistration } from '@/lib/payments/confirmation-email';
+import {
+  doRegisterSolo,
+  doEnterDoublesSolo,
+  doEnterWithPendingPartner,
+  type EntryOutcome,
+} from '@/lib/registrations/entry-core';
 import { markRefunded } from './payment';
 
 export interface RegistrationActionState {
@@ -55,17 +61,11 @@ export interface RegistrationActionState {
   refresh?: boolean;
 }
 
-/** The shared shape every entry-creating helper below returns, before its exported wrapper adapts it
- *  to `RegistrationActionState` (master_plan §2AO B: `startEntry` shares these with the three
- *  original exported actions, so behaviour is identical for any old client still calling them). */
-interface EntryOutcome {
-  error?: string;
-  refresh?: boolean;
-  registrationId?: string;
-  teamId?: string;
-  status?: string;
-  message?: string;
-}
+// `EntryOutcome` - the shared shape every entry-creating helper returns, before its exported wrapper
+// adapts it to `RegistrationActionState` (master_plan §2AO B) - now lives in
+// `@/lib/registrations/entry-core` alongside `doRegisterSolo` / `doEnterDoublesSolo` /
+// `doEnterWithPendingPartner` themselves (master_plan §2AU: pulled out so the guest wizard can call
+// them directly with a guest profile id, bypassing the session-only gate below).
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -357,119 +357,6 @@ export async function invitePartner(
  *
  * The caller must have acknowledged the warning: they are about to pay on someone else's behalf.
  */
-/** Core of `enterWithPendingPartner`, shared with `startEntry` (master_plan §2AO B). */
-async function doEnterWithPendingPartner(
-  tournamentId: string,
-  v: { divisionId: string; inviteeSlug: string; message?: string },
-  userId: string,
-): Promise<EntryOutcome> {
-  const svc = createServiceClient();
-  const [{ data: division }, { data: invitee, error: inviteeError }] = await Promise.all([
-    svc
-      .from('divisions')
-      .select('id, tournament_id, format, status')
-      .eq('id', v.divisionId)
-      .maybeSingle(),
-    svc
-      .from('profiles')
-      .select('id, account_status, onboarded_at')
-      .eq('slug', v.inviteeSlug)
-      .maybeSingle(),
-  ]);
-  // A failed QUERY is not a missing PLAYER. Reporting one as the other sent a real end-to-end test
-  // hunting for a bad handle when the column name was wrong - the lookup 400d and the null result
-  // read as 'no such player'. Never let a query failure wear that message.
-  if (inviteeError) return { error: 'Could not look up that player. Please try again.' };
-  const div = division as { tournament_id: string; format: string; status: string } | null;
-  const inv = invitee as {
-    id: string;
-    account_status: string;
-    onboarded_at: string | null;
-  } | null;
-  if (!div || div.tournament_id !== tournamentId) return { error: 'Division not found.' };
-  if (div.format !== 'doubles') return { error: 'Partner entry is only for doubles divisions.' };
-  if (!inv) return { error: 'No player found with that handle.' };
-  if (inv.id === userId) return { error: 'You cannot enter yourself as your own partner.' };
-  if (inv.account_status !== 'active' || !inv.onboarded_at)
-    return {
-      error: 'That player cannot be entered yet. Ask them to finish their profile first.',
-    };
-  if (await isBlockedBetween(userId, inv.id)) return { error: 'That partner is unavailable.' };
-
-  // Both players are checked against the division's skill floor before anyone pays.
-  // The division rules - who it is for, and the band it is for - checked for BOTH players before
-  // anyone pays (§2D). Same rule as player_fits_division() in SQL, but able to say why. Each
-  // candidate also carries the OTHER seat's sex, so a mixed-doubles composition mismatch is caught
-  // here too (§2AM decision 1), not only at the SQL backstop.
-  const [actorSex, inviteeSex] = await Promise.all([
-    getPlayerSex(svc, userId),
-    getPlayerSex(svc, inv.id),
-  ]);
-  const fitError = await checkDivisionFit(v.divisionId, [
-    { playerId: userId, subject: 'you', partnerSex: inviteeSex },
-    {
-      playerId: inv.id,
-      subject: 'partner',
-      name: (await getActorMini(inv.id)).name,
-      partnerSex: actorSex,
-    },
-  ]);
-  if (fitError) return { error: fitError };
-
-  const { data: created, error: teamError } = await svc.rpc('create_team_with_pending_partner', {
-    p_tournament_id: tournamentId,
-    p_division_id: v.divisionId,
-    p_inviter: userId,
-    p_invitee: inv.id,
-    p_message: v.message ? v.message.trim() : null,
-    p_expires_at: null,
-  });
-  if (teamError) {
-    // §2AT Decision A: `team_paid_not_mergeable` names whichever player it is about - here, the
-    // invitee being named.
-    return await friendlyLogged(
-      userId,
-      'create_team_with_pending_partner',
-      teamError.message,
-      undefined,
-      (await getActorMini(inv.id)).name,
-    );
-  }
-  const teamId = (created as { team_id?: string } | null)?.team_id;
-  if (!teamId) return { error: 'Could not start your entry. Please try again.' };
-
-  const { data: reg, error: regError } = await svc.rpc('register_team', {
-    p_team_id: teamId,
-    p_actor: userId,
-  });
-  if (regError) return await friendlyLogged(userId, 'register_team', regError.message);
-  const regId = (reg as { registration_id?: string } | null)?.registration_id;
-  const status = (reg as { status?: string } | null)?.status;
-  if (regId) await computeRegistrationEligibility(regId);
-
-  const [me, tm] = await Promise.all([getActorMini(userId), getTournamentMini(tournamentId)]);
-  await notify({
-    recipientId: inv.id,
-    type: 'partner_named_paid',
-    actorId: userId,
-    params: { actorName: me.name, tournamentName: tm.name },
-    // The named partner confirms on the Partner invitations card, not the registration wizard (§2AS).
-    link: tm.slug ? `/tournaments/${tm.slug}#partner-invitations` : '/tournaments',
-    entityType: 'tournament',
-    entityId: tournamentId,
-  });
-  await revalTournament(tournamentId);
-  return {
-    registrationId: regId,
-    teamId,
-    status,
-    message:
-      status === 'waitlisted'
-        ? 'This division is full, so your team joined the waitlist. Your partner has been notified.'
-        : 'Your slot is held. Pay now to reserve it - your partner has been notified and can confirm any time.',
-  };
-}
-
 export async function enterWithPendingPartner(
   tournamentId: string,
   _prev: RegistrationActionState,
@@ -1926,72 +1813,6 @@ export async function registerTeam(
   }
 }
 
-/** Core of `registerSolo`, shared with `startEntry` (master_plan §2AO B). */
-async function doRegisterSolo(
-  tournamentId: string,
-  divisionId: string,
-  userId: string,
-): Promise<EntryOutcome> {
-  const svc = createServiceClient();
-  const { data: division } = await svc
-    .from('divisions')
-    .select('format, status')
-    .eq('id', divisionId)
-    .maybeSingle();
-  const div = division as { format: string; status: string } | null;
-  if (!div) return { error: 'Division not found.' };
-  if (div.format !== 'singles') return { error: 'This is a doubles division - form a team first.' };
-
-  const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
-  if (fitError) return { error: fitError };
-
-  // Reuse an existing active team for this player in this division, else create a solo team.
-  const { data: myTeamRows } = await svc
-    .from('team_members')
-    .select('team_id')
-    .eq('player_id', userId);
-  const myTeamIds = ((myTeamRows ?? []) as { team_id: string }[]).map((r) => r.team_id);
-  let teamId: string | undefined;
-  if (myTeamIds.length > 0) {
-    const { data: activeTeam } = await svc
-      .from('teams')
-      .select('id')
-      .in('id', myTeamIds)
-      .eq('division_id', divisionId)
-      .in('status', ['forming', 'formed', 'locked'])
-      .maybeSingle();
-    teamId = (activeTeam as { id: string } | null)?.id;
-  }
-  if (!teamId) {
-    const { data: team, error: teamErr } = await svc
-      .from('teams')
-      .insert({ tournament_id: tournamentId, division_id: divisionId, status: 'formed' })
-      .select('id')
-      .single();
-    if (teamErr || !team) return { error: 'Could not create your entry.' };
-    teamId = (team as { id: string }).id;
-    await svc.from('team_members').insert({
-      team_id: teamId,
-      player_id: userId,
-      member_order: 1,
-      confirmed_at: new Date().toISOString(),
-    });
-  }
-  const { data, error } = await svc.rpc('register_team', { p_team_id: teamId, p_actor: userId });
-  if (error) return await friendlyLogged(userId, 'register_team', error.message);
-  const regId = (data as { registration_id?: string } | null)?.registration_id;
-  const status = (data as { status?: string } | null)?.status;
-  if (regId) await computeRegistrationEligibility(regId);
-  if (regId && teamId) await notifyAfterRegister(tournamentId, teamId, regId, status);
-  await revalTournament(tournamentId);
-  return {
-    registrationId: regId,
-    teamId,
-    status,
-    message: status === 'waitlisted' ? "Division is full - you're on the waitlist." : 'Slot held.',
-  };
-}
-
 /** Create a one-player team for a singles division, then register it (§21.2). */
 export async function registerSolo(
   tournamentId: string,
@@ -2022,56 +1843,6 @@ export async function registerSolo(
  * seat is a first-class state (`seatOpen`): ELIG_V1 evaluates the present member and does not demand
  * a partner that does not exist yet. A partner can be named any time before the lock-in.
  */
-/** Core of `enterDoublesSolo`, shared with `startEntry` (master_plan §2AO B). */
-async function doEnterDoublesSolo(
-  tournamentId: string,
-  divisionId: string,
-  userId: string,
-): Promise<EntryOutcome> {
-  const svc = createServiceClient();
-  const { data: division } = await svc
-    .from('divisions')
-    .select('format, status')
-    .eq('id', divisionId)
-    .maybeSingle();
-  const div = division as { format: string; status: string } | null;
-  if (!div) return { error: 'Division not found.' };
-  if (div.format !== 'doubles')
-    return { error: 'This is a singles division - use Register instead.' };
-
-  const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
-  if (fitError) return { error: fitError };
-
-  const { data: created, error: teamError } = await svc.rpc('create_solo_doubles_team', {
-    p_tournament_id: tournamentId,
-    p_division_id: divisionId,
-    p_actor: userId,
-  });
-  if (teamError) return await friendlyLogged(userId, 'create_solo_doubles_team', teamError.message);
-  const teamId = (created as { team_id?: string } | null)?.team_id;
-  if (!teamId) return { error: 'Could not start your entry. Please try again.' };
-
-  const { data: reg, error: regError } = await svc.rpc('register_team', {
-    p_team_id: teamId,
-    p_actor: userId,
-  });
-  if (regError) return await friendlyLogged(userId, 'register_team', regError.message);
-  const regId = (reg as { registration_id?: string } | null)?.registration_id;
-  const status = (reg as { status?: string } | null)?.status;
-  if (regId) await computeRegistrationEligibility(regId);
-  if (regId) await notifyAfterRegister(tournamentId, teamId, regId, status);
-  await revalTournament(tournamentId);
-  return {
-    registrationId: regId,
-    teamId,
-    status,
-    message:
-      status === 'waitlisted'
-        ? 'This division is full, so you joined the waitlist. Choose a partner any time before the lock-in.'
-        : 'Your slot is held. Pay now to reserve it - then choose your partner before the lock-in.',
-  };
-}
-
 export async function enterDoublesSolo(
   tournamentId: string,
   divisionId: string,

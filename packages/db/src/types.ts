@@ -45,6 +45,10 @@ export interface ProfileRow {
   status_updated_by: string | null;
   suspended_until: string | null;
   vouching_restricted_until: string | null;
+  /** master_plan §2AU (migration 0046, extended). Optional: absent until the migration is applied.
+   *  Set when the profile was created by the guest registration wizard - together with
+   *  `onboarded_at is null` this defines a guest (hidden from the directory, cannot vouch). */
+  guest_created_at?: string | null;
 }
 
 export interface UserRoleRow {
@@ -560,6 +564,9 @@ export interface RegistrationRow {
   /** §2AS D (migration 0044, extended). Optional: absent until the migration is applied - the
    *  idempotency marker for the confirmation email. */
   confirmation_email_sent_at?: string | null;
+  /** master_plan §2AU D (migration 0046, extended). Optional: absent until the migration is applied.
+   *  A guest's partner named as free text at entry time, to be invited after they verify. */
+  partner_note?: string | null;
   created_at: string;
   updated_at: string;
 }

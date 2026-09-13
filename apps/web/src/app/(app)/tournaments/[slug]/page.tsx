@@ -144,6 +144,9 @@ export default async function TournamentPage({ params, searchParams }: Params) {
   const shareUrl = `${publicEnv.siteUrl}/tournaments/${slug}${registerable ? '?register=1' : ''}`;
   const signupToRegister = `/signup?next=${encodeURIComponent(registerNext(slug))}`;
   const loginToRegister = `/login?next=${encodeURIComponent(registerNext(slug))}`;
+  // master_plan §2AU Decision H: the guest wizard's kill switch, tournament-scoped (Admin setting AND
+  // registration_open - see `TournamentDetailDTO.guestRegistrationEnabled` in queries.ts).
+  const guestRegistrationEnabled = t.guestRegistrationEnabled;
 
   // The one slice of tournament data the registration wizard needs, assembled once so every entry
   // point (top Register button, division-row Enter, Pay now, Choose your division) reads the same
@@ -163,6 +166,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
     slotHoldMinutes,
     registrationCloseAt: t.registrationCloseAt,
     maxClubsPerPlayer: t.maxClubsPerPlayer,
+    startAt: t.startAt,
   };
   // The header pill beside the tournament status pill (master_plan §2AS B) - nothing when the viewer
   // holds no entry and no reservation. Also carries the registration (if any) behind the worst
@@ -254,6 +258,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
               open={isOpen}
               tournament={wizardTournament}
               state={regState}
+              guestRegistrationEnabled={guestRegistrationEnabled}
             />
             {demandSettings.enabled && (
               <InterestButton
@@ -319,6 +324,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
           state={regState}
           authed={authed}
           signInHref={loginToRegister}
+          guestRegistrationEnabled={guestRegistrationEnabled}
         />
       </div>
 

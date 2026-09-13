@@ -71,11 +71,17 @@ export function DivisionBrowser({
   state,
   authed,
   signInHref,
+  guestRegistrationEnabled = false,
 }: {
   tournament: WizardTournament;
   state: ViewerRegistrationState | null;
   authed: boolean;
   signInHref: string;
+  /** master_plan §2AU Decision H, item 7: an anonymous visitor gets a guest-mode "Enter" on every
+   *  row instead of "Sign in to register", when the organizer/Admin have not disabled it. Fit is
+   *  unknown for an anonymous visitor (no facts yet), so every row is treated as enterable - the
+   *  About-you step classifies for real once it has something to classify with. */
+  guestRegistrationEnabled?: boolean;
 }) {
   const { divisions, earlyBird, requireSkillVerified, enforceSkillFloor, registrationOpen } =
     tournament;
@@ -288,12 +294,23 @@ export function DivisionBrowser({
                         {fitMessage}
                       </p>
                     ) : !authed ? (
-                      <Link
-                        href={signInHref}
-                        className="text-primary inline-block text-sm font-semibold"
-                      >
-                        Sign in to register
-                      </Link>
+                      guestRegistrationEnabled && registrationOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => setEnterDivisionId(d.id)}
+                          className="vp-gradient inline-flex min-h-[44px] items-center gap-2 rounded-xl px-4 text-sm font-semibold text-white"
+                        >
+                          <ClipboardCheck size={15} aria-hidden />
+                          Enter
+                        </button>
+                      ) : (
+                        <Link
+                          href={signInHref}
+                          className="text-primary inline-block text-sm font-semibold"
+                        >
+                          Sign in to register
+                        </Link>
+                      )
                     ) : !registrationOpen ? (
                       <p className="text-foreground-muted text-xs">Registration is closed.</p>
                     ) : (
@@ -354,6 +371,18 @@ export function DivisionBrowser({
           tournament={tournament}
           state={state}
           initial={{ step: 'division', divisionId: enterDivisionId }}
+          onClose={() => setEnterDivisionId(null)}
+        />
+      )}
+
+      {/* Anonymous "Enter" (master_plan §2AU item 7) - the guest wizard, pre-selected on this row's
+          division; About-you classifies eligibility for real once it has facts to classify with. */}
+      {enterDivisionId && !state && !authed && guestRegistrationEnabled && (
+        <RegistrationWizard
+          tournament={tournament}
+          state={null}
+          mode="guest"
+          initial={{ step: 'about-you', divisionId: enterDivisionId }}
           onClose={() => setEnterDivisionId(null)}
         />
       )}

@@ -24,17 +24,31 @@ export function RegisterButton({
   open,
   tournament,
   state,
+  guestRegistrationEnabled = false,
 }: {
   slug: string;
   authed: boolean;
   open: boolean;
-  /** Only needed once signed in - anonymous visitors never mount the wizard. */
+  /** Only needed once signed in, or when guest registration is enabled for an anonymous visitor. */
   tournament?: WizardTournament;
   state?: ViewerRegistrationState | null;
+  /** master_plan §2AU Decision H: an anonymous visitor gets the guest wizard directly instead of a
+   *  detour through signup, when the organizer/Admin have not disabled it. Ignored once `authed`. */
+  guestRegistrationEnabled?: boolean;
 }) {
   if (!open) return null;
 
   if (!authed || !tournament) {
+    if (!authed && guestRegistrationEnabled && tournament) {
+      return (
+        <RegistrationWizardLauncher tournament={tournament} state={null} mode="guest">
+          <button type="button" className={`${btn} vp-gradient vp-glow text-white`}>
+            <ClipboardCheck size={16} aria-hidden />
+            Register
+          </button>
+        </RegistrationWizardLauncher>
+      );
+    }
     return (
       <Link
         href={`/signup?next=${encodeURIComponent(registerNext(slug))}`}

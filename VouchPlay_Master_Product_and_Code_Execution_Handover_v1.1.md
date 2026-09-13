@@ -2193,6 +2193,12 @@ Organizers should not receive a notification for every Interest action by defaul
 
 ## 19.2 Frictionless Join (no account required to start)
 
+**v1.73 (master_plan §2AU):** "no account required to start" now means the whole entry - division,
+partner note, payment - happens before the visitor ever sees a password or a code. The account is
+created from the email at step one (unverified, `profiles.guest_created_at`), so every row has an
+owner; verification (OTP) is the last step, followed by club representation. Guests are hidden from
+the directory and cannot vouch until they finish onboarding (city). Recovery = sign in with the email.
+
 A visitor must be able to **start joining a tournament before they have an account**, then be led into
 account creation, and resume exactly where they left off. Signup is a step inside the join flow, not a
 wall in front of it.
@@ -6423,6 +6429,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.73 (2026-09-13)
+
+_Register before an account (master_plan §2AU). Migration `0046`._
+
+- **Guest entry (§19.2 amended):** an anonymous visitor registers through the same wizard. Step one
+  asks for name, email, sex, birthday, self-rated skill and the Terms tick; the server creates the
+  account silently from the email (unverified), so the team, registration, receipt or reserved slot
+  belong to a real profile from the first second. A signed browser cookie carries the guest through
+  the wizard; "Create your account" at the end is just verifying the email (OTP), then club
+  representation. An email that already has an account switches to sign-in and continues.
+- **Recovery:** sign in with the same email any time; onboarding is prefilled and returns to the
+  tournament. Guest reminders at 6 h and 48 h. Organizers see "Unverified account" on such entries.
+- Partner for guests is a note ("to be invited"); email invitations are phase 2. Kill switch
+  `guest_registration_enabled`.
 
 ## v1.72 (2026-09-13)
 

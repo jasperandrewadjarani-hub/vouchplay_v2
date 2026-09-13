@@ -446,6 +446,13 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: 'Off hides the community skill chip from other players on profiles and cards; they see the self-rated chip instead. The owner and staff still see it (master_plan §2AO E).',
   },
   {
+    key: 'guest_registration_enabled',
+    label: 'Register before an account (guest entry)',
+    group: 'timing',
+    kind: 'bool',
+    help: 'On: the anonymous Register button opens the wizard and the account is created from the email at step one. Off: visitors sign up first (master_plan §2AU).',
+  },
+  {
     key: 'tournament_slot_reservations_enabled',
     label: 'Tournament slots (pay per seat, reserve before choosing a division)',
     group: 'timing',

@@ -348,3 +348,35 @@ describe('merge + cancellation-request notifications (§2AT)', () => {
     expect(notificationDef('cancellation_withdrawn')!.critical).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2AU E - guest entry: "finish setting up your account" reminders
+// ---------------------------------------------------------------------------
+describe('guest verify reminders (§2AU E)', () => {
+  it('guest_verify_reminder is critical, registrations-category, and names the tournament', () => {
+    const def = notificationDef('guest_verify_reminder')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Finish setting up your VouchPlay account to keep your entry for Hermosa Open',
+    );
+    expect(def.body({})).toBe('Enter the code from your email or sign in with this address.');
+  });
+
+  it('guest_verify_reminder_2 is a distinct type with identical copy, for the 48h send', () => {
+    const first = notificationDef('guest_verify_reminder')!;
+    const second = notificationDef('guest_verify_reminder_2')!;
+    expect(second.category).toBe(first.category);
+    expect(second.critical).toBe(true);
+    expect(second.title({ tournamentName: 'Hermosa Open' })).toBe(
+      first.title({ tournamentName: 'Hermosa Open' }),
+    );
+    expect(second.body({})).toBe(first.body({}));
+  });
+
+  it('cannot be muted', () => {
+    expect(MUTABLE_CATEGORIES).toContain('registrations');
+    expect(notificationDef('guest_verify_reminder')!.critical).toBe(true);
+    expect(notificationDef('guest_verify_reminder_2')!.critical).toBe(true);
+  });
+});

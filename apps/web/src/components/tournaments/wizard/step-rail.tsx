@@ -1,33 +1,52 @@
 import { Check } from 'lucide-react';
-import type { WizardStep } from './types';
+import type { WizardMode, WizardStep } from './types';
+
+type RailKey = 'about-you' | 'division' | 'partner' | 'pay' | 'verify';
 
 /** The rail's steps, in order. 'partner' is omitted entirely for singles by the caller. Pay and
  *  Receipt are one decision - "how do I pay, and here is my receipt" - split across two screens for
  *  room, so they share this one circle (master_plan §2AS A2/Decision A). */
-const RAIL: { key: 'division' | 'partner' | 'pay'; label: string }[] = [
+const PLAYER_RAIL: { key: RailKey; label: string }[] = [
   { key: 'division', label: 'Division' },
   { key: 'partner', label: 'Partner' },
   { key: 'pay', label: 'Pay' },
 ];
 
+/** Guest rail (master_plan §2AU §1/Decision D): About you comes first (nothing is created yet), and
+ *  Verify closes it out - creating the account is just confirming the email already given. */
+const GUEST_RAIL: { key: RailKey; label: string }[] = [
+  { key: 'about-you', label: 'About you' },
+  { key: 'division', label: 'Division' },
+  { key: 'partner', label: 'Partner' },
+  { key: 'pay', label: 'Pay' },
+  { key: 'verify', label: 'Verify' },
+];
+
 /**
- * "Division · Partner · Pay" (master_plan §2AS A2) - one decision per screen, and always visible so
- * a player always knows how many taps are left. `pay` and `receipt` both render as the Pay circle
- * (internally still two screens); `done` has no rail position of its own and renders the rail fully
- * complete.
+ * "Division · Partner · Pay" (master_plan §2AS A2), or the guest's five-step "About you · Division ·
+ * Partner · Pay · Verify" (master_plan §2AU) - one decision per screen, and always visible so a
+ * player always knows how many taps are left. `pay` and `receipt` both render as the Pay circle
+ * (internally still two screens); `done`, `existing-account` and `verify-later` have no rail position
+ * of their own and render the rail fully complete.
  */
 export function StepRail({
   step,
   includePartner,
+  mode = 'player',
 }: {
   step: WizardStep;
   /** False for singles - the partner step never happens, so it never appears in the rail. */
   includePartner: boolean;
+  mode?: WizardMode;
 }) {
-  const steps = includePartner ? RAIL : RAIL.filter((s) => s.key !== 'partner');
+  const rail = mode === 'guest' ? GUEST_RAIL : PLAYER_RAIL;
+  const steps = includePartner ? rail : rail.filter((s) => s.key !== 'partner');
   const effectiveStep = step === 'receipt' ? 'pay' : step;
-  const activeIndex =
-    effectiveStep === 'done' ? steps.length : steps.findIndex((s) => s.key === effectiveStep);
+  const isTerminal =
+    effectiveStep === 'done' ||
+    effectiveStep === 'existing-account' ||
+    effectiveStep === 'verify-later';
+  const activeIndex = isTerminal ? steps.length : steps.findIndex((s) => s.key === effectiveStep);
 
   return (
     <ol className="mb-4 flex items-center gap-1.5" aria-label="Registration steps">

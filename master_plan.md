@@ -4780,6 +4780,133 @@ organizer sheet + slots panel (Approve / Decline row), `vouch-form.tsx`, profile
 Docs → 0045 (Opus) → three Sonnet lanes (server; player UI; organizer UI) → gates → commit → Jasper
 applies `scripts/apply-0045.sql` and pushes → verification.
 
+## 2AU. Register before an account ("guest entry"): email-first shadow account, signed guest cookie, verify-at-the-end, recovery (2026-09-13)
+
+Jasper: to maximise conversion, let a visitor register - divisions, partner, payment - BEFORE
+creating an account, with account creation at the end, then club representation; he is unsure how
+that can be captured in the database and still lead to an account, and what happens if they fail to
+create one (browser storage? ask for an email?). Requirement: payments and registrations must be
+linked to the person once they have an account, and be recoverable if they never finish.
+
+### The idea in one sentence
+
+**The account is created silently from the email at step one; "creating an account" at the end is
+only verifying that email.** Every row the guest produces (team, registration, receipt, reserved slot)
+already belongs to a real profile, so nothing is ever orphaned, the organizer sees a real entry, and
+recovery is simply "sign in with the email you used".
+
+### Why not the alternatives
+
+- *Store the draft in the browser and create rows after signup* - a receipt uploaded with no owner is
+  exactly the orphan Jasper fears; the organizer could not see or verify it; a cleared browser loses
+  everything; two devices cannot resume.
+- *Supabase anonymous sign-in* - a real session, but no email means no recovery from another device,
+  a dashboard toggle to enable, and a conversion step that still has to ask for the email; strictly
+  worse than asking for the email first.
+- *Ask only for an email, nothing else* - the division step cannot classify eligibility (sex, age,
+  skill) and every entry would land in the organizer's review queue.
+
+### Findings
+
+1. Sign-in is email OTP (`signInWithOtp` / `verifyOtp`, plus Google); `handle_new_user` creates the
+   `profiles` row for every auth user; onboarding requires first / last name, nickname, sex,
+   self-rated skill, city; the directory and vouching only show `onboarded_at not null` profiles.
+2. The registration helpers (`doRegisterSolo`, `doEnterDoublesSolo`, `doEnterWithPendingPartner`)
+   already take a user id; the payment actions resolve the actor from the session only.
+3. `terms_accepted_version / at` live on the profile; the legal gate blocks un-accepted users in-app.
+4. Slot holds (30 min) and the organizer's verify step bound what an unverified entry can cost.
+
+### Decisions
+
+**A. Step 0 "About you" (guests only).** First name, last name, email, sex, birthday, self-rated skill
+(the seven bands as big chips), and the Terms / Privacy tick. Five facts, one screen, big controls.
+These are the facts the division step needs to be honest about eligibility, and the same facts
+onboarding asks for anyway, front-loaded. A "Have an account? Sign in" link sits under the form.
+Nickname defaults to the first name (editable later); city is asked at the end (onboarding).
+
+**B. Shadow account, server-side.** `startGuestEntry` calls `auth.admin.createUser({ email,
+email_confirm: false })`:
+- new email → the trigger creates the profile; we fill it (names, nickname, sex, birthday, self-rated
+  skill, slug, terms version / time) and stamp `profiles.guest_created_at`; `onboarded_at` stays null
+  (hidden from the directory, cannot be vouched, prompted to finish onboarding after verifying);
+- email already registered → no account is touched; the wizard switches to **"You already have an
+  account - enter the code we just sent to x@y.com"** (OTP), and after verification the wizard
+  continues as a signed-in player with the same division pre-selected. This turns an abandoned or
+  forgotten account into a conversion instead of a duplicate.
+
+**C. Guest cookie.** A signed, httpOnly cookie `vp_guest` = `{profileId, tournamentId, exp}` + HMAC
+(keyed from the server-only service-role key; no new env var), 7 days. Every guest action (entry,
+receipt, reservation, resume) resolves its actor from this cookie and checks the profile is still a
+guest (`guest_created_at` set, `onboarded_at` null). One shared `resolveActor()` in the actions:
+session user first, guest cookie second - the existing authed paths are unchanged.
+
+**D. The flow.** Division (real eligibility from step 0's facts) → Partner (guests: **partner's name
+as a note** stored on the registration; "you'll invite them after you verify" - inviting by email,
+which would create accounts for third parties, is phase 2) → Pay → Receipt (guest variants of the
+same three submit actions; the Kathrina email fires as usual) → **Verify your email** (inline OTP,
+email prefilled, code input; on success the session exists, the cookie is cleared, and the wizard
+reloads state as signed-in) → Represent a club (existing card) → Done. If they close before verifying,
+the Done screen reads: *"Your entry is saved under x@y.com. Enter the code from your email any time,
+or sign in with that address."*
+
+**E. Recovery.** Sign in with the email (OTP or Google if same address) → the session lands on
+onboarding, prefilled with everything from step 0, asking only for city → `next` returns to the
+tournament page, where the entry is already in My registrations. Reminders: `guest_verify_reminder`
+(critical: email) 6 h and 48 h after `guest_created_at` while un-onboarded with a live entry, piggy-
+backing the reminders cron; the existing unpaid-slot reminders apply to guests too (they have email).
+
+**F. Organizer.** Entries whose member is a guest show an **Unverified account** chip on the row and
+in the sheet (the receipt is still reviewable - money is money); the partner note shows as "Partner:
+Maria (to be invited)". No confirmation is withheld on account state: the organizer decides.
+
+**G. Abuse bounds.** Admin kill switch `guest_registration_enabled` (seeded true); the tournament
+must be `registration_open`; per email at most 2 guest entries per 24 h and at most one live guest
+profile (a repeat with the same email is the "existing account" branch); a honeypot field; every
+start audited `guest.entry_started` (email hashed). A guest entry holds capacity exactly like any
+unpaid entry (30-minute hold, then only a receipt keeps it) - no new hoarding path.
+
+**H. Entry points.** The anonymous Register button and "Enter" on a division row open the wizard in
+guest mode (no more detour to signup); the signup and login pages are unchanged for people who
+prefer them; `?register=1` share links open the guest wizard too.
+
+### Loose ends resolved
+
+- Mistyped email → the Done screen shows the address back with "Wrong email? Start again"; the
+  abandoned shadow profile is inert (hidden, no vouching, no directory) and is swept with the
+  existing retention rules (deferred sweeper: guests with no live entry after 30 days).
+- Someone enters a stranger's email → the stranger's inbox gets a code they never asked for; the
+  entry sits unverified, expires like any unpaid entry, and the organizer sees "Unverified account".
+  No data of the stranger's is exposed. Acceptable, and identical to inviting the wrong partner.
+- Guest tries to vouch, join a club, or open a profile → blocked by the existing onboarded gate.
+- Two devices → the cookie is per browser; the email is the universal key (E).
+- Google sign-in with the same email later → Supabase links to the same user (email identity).
+
+### Deferred (phase 2)
+
+Partner invitation by email (creates the partner's shadow account + invitation); guest sweeper;
+organizer export "account" column; Google as a step-0 option.
+
+### Contracts
+
+**Migration 0046:** `profiles.guest_created_at timestamptz`, `registrations.partner_note text`, seed
+`guest_registration_enabled true`.
+**Config:** setting + catalog entry. **Core:** catalog `guest_verify_reminder` (critical).
+**Server:** `lib/guest/session.ts` (`setGuestCookie`, `readGuestCookie`, `clearGuestCookie`,
+`resolveActor(): Promise<{ id: string; guest: boolean } | null>`); `actions/guest-registration.ts`
+(`startGuestEntry(tournamentId, input) → { ok, registrationId?, teamId?, existingAccount?: true,
+error? }`, `requestGuestOtp(email)`, `verifyGuestOtpInline(email, token)`, `getGuestState(tournamentId)`
+→ ViewerRegistrationState-shaped for the wizard); `actions/payment.ts` submit actions accept the guest
+actor; `registration-queries.ts` → `OrganizerRegistration.members[].unverified`, `partnerNote`;
+`lib/tournaments/reminders.ts` → guest reminders; `queries.ts` → `TournamentDetailDTO.guestRegistrationEnabled`.
+**UI:** wizard guest mode (`about-you-step.tsx`, `verify-email-step.tsx`, partner note variant,
+existing-account branch), `register-cta.tsx` / `division-browser.tsx` anonymous entry points,
+onboarding prefill (sex / birthday / self-rated / nickname from the profile), organizer chip + note.
+
+### Execution
+
+Docs → 0046 (main session) → three Sonnet lanes (server; wizard UI; organizer + onboarding) → gates →
+commit on top of `61711b7` → Jasper pushes, then applies 0045 and 0046 once Ready.
+
 ## 1. Prompt Contract
 
 ### In scope

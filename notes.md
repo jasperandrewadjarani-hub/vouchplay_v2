@@ -3051,3 +3051,20 @@ screen (banner, pill, PayNowCell, notifications); ?entered= only opens the panel
 the wizard. Done screen: Represent a club (ClubRepSelector inline / Join a club). Vouch success =
 "Vouch submitted" + x, auto-close 1.5 s. Profile: community · STS · self; sex badge top-right; caption
 removed.
+
+## 2026-09-13 - Register before an account (§2AU, handover v1.73, migration 0046)
+Design: email-first shadow account. Step 0 "About you" (first, last, email, sex, birthday, self-rated
+skill, Terms) -> auth.admin.createUser(email, unconfirmed) -> handle_new_user makes the profile -> we
+fill it + guest_created_at (onboarded_at stays null: hidden, no vouching). Existing email -> "you
+already have an account" OTP branch, then continue signed in. Signed httpOnly cookie vp_guest
+(profileId, tournamentId, exp, HMAC keyed from the service-role key) carries the guest; resolveActor()
+= session user else guest cookie; the existing entry/payment helpers take the profile id, so nothing
+is orphaned and the organizer sees a real entry (chip "Unverified account"). Partner for guests =
+name note on the registration (email invites = phase 2). Verify-email step (inline OTP) at the end
+clears the cookie and continues as signed in -> club card -> done. Recovery = sign in with the email;
+onboarding prefilled, asks only city, returns to the tournament. Reminders guest_verify_reminder 6 h /
+48 h. Abuse: kill switch guest_registration_enabled, registration_open only, 2 entries/email/24 h,
+honeypot, audit guest.entry_started (hashed email); capacity bounded by the normal 30-min hold.
+Rejected alternatives: browser-only drafts (orphan receipts, no cross-device), anonymous auth (no
+recovery, dashboard toggle), email-only (no eligibility facts).
+Deferred: partner invite by email, guest sweeper (30 days, no live entry), export account column.

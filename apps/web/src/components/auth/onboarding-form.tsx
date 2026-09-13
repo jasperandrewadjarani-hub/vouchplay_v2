@@ -19,6 +19,10 @@ export function OnboardingForm({
     lastName?: string;
     nickname?: string;
     sex?: string;
+    /** master_plan §2AU Decision E: a recovering guest already gave this at Step 0 - shown as a
+     *  read-only confirmation (not part of `onboardingSchema`, so it is never submitted) rather than
+     *  an editable field, since there is nowhere for an edited value to be saved. */
+    dateOfBirth?: string | null;
     selfRatedSkill?: number | null;
     city?: string;
     facebookUrl?: string;
@@ -68,6 +72,21 @@ export function OnboardingForm({
           <CityCombobox id="city" name="city" defaultValue={initial.city ?? ''} required />
         </Field>
       </div>
+
+      {/* master_plan §2AU Decision E: recovered guests already gave their birthday at Step 0 - shown
+          so they can see what's on file, but disabled (and un-named) so it never rides along in the
+          submit, since `onboardingSchema` has nowhere to put an edited value. */}
+      {initial.dateOfBirth && (
+        <Field label="Birthday" htmlFor="dateOfBirthDisplay" hint="From your registration.">
+          <Input
+            id="dateOfBirthDisplay"
+            type="date"
+            defaultValue={initial.dateOfBirth}
+            disabled
+            readOnly
+          />
+        </Field>
+      )}
 
       <Field
         label="Self-rated skill"

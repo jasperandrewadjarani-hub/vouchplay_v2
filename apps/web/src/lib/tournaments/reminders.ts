@@ -39,6 +39,10 @@ const REMINDER_TYPES = [
   'registration_closing_unpaid',
   'registration_closing_choose_division',
   'partner_lock_soon',
+  // §2AU E: included here so `loadTournamentReminderContext`'s existence-check query (below) also
+  // covers these two - the same idempotency mechanism, no new table.
+  'guest_verify_reminder',
+  'guest_verify_reminder_2',
 ];
 
 interface TournamentReminderContext {
@@ -193,6 +197,77 @@ async function loadTournamentReminderContext(
   return { entries, bareSlots: liveBareSlots, sent };
 }
 
+interface GuestVerifyCandidate {
+  profileId: string;
+  registrationId: string;
+  guestCreatedAt: string;
+}
+
+/**
+ * §2AU E: guest profiles (`guest_created_at` set, `onboarded_at` still null) who are CONFIRMED
+ * members of a live (non-withdrawn/cancelled/rejected) registration in this tournament - the "finish
+ * setting up your account" reminder audience. Read defensively end to end: `guest_created_at` arrives
+ * with migration 0046, so a pre-migration deploy (or any read failure along the way) simply yields no
+ * candidates rather than failing the whole reminders run for this tournament.
+ */
+async function loadGuestVerifyCandidates(tournamentId: string): Promise<GuestVerifyCandidate[]> {
+  try {
+    const svc = createServiceClient();
+    const { data: regRows, error: regErr } = await svc
+      .from('registrations')
+      .select('id, team_id')
+      .eq('tournament_id', tournamentId)
+      .not('status', 'in', `(${CLOSED_REG_STATUSES.join(',')})`)
+      .limit(MAX_REGISTRATIONS_PER_TOURNAMENT);
+    if (regErr) throw regErr;
+    const regs = (regRows ?? []) as { id: string; team_id: string }[];
+    if (regs.length === 0) return [];
+    const teamIds = Array.from(new Set(regs.map((r) => r.team_id)));
+
+    const { data: memberRows, error: memErr } = await svc
+      .from('team_members')
+      .select('team_id, player_id, confirmed_at')
+      .in('team_id', teamIds);
+    if (memErr) throw memErr;
+    const confirmedMembers = (
+      (memberRows ?? []) as {
+        team_id: string;
+        player_id: string;
+        confirmed_at: string | null;
+      }[]
+    ).filter((m) => m.confirmed_at);
+    if (confirmedMembers.length === 0) return [];
+
+    const playerIds = Array.from(new Set(confirmedMembers.map((m) => m.player_id)));
+    const { data: guestRows, error: guestErr } = await svc
+      .from('profiles')
+      .select('id, guest_created_at, onboarded_at')
+      .in('id', playerIds)
+      .not('guest_created_at', 'is', null)
+      .is('onboarded_at', null);
+    if (guestErr) throw guestErr;
+    const guestCreatedAtById = new Map(
+      ((guestRows ?? []) as { id: string; guest_created_at: string | null }[])
+        .filter((g) => g.guest_created_at)
+        .map((g) => [g.id, g.guest_created_at as string]),
+    );
+    if (guestCreatedAtById.size === 0) return [];
+
+    const regIdByTeam = new Map(regs.map((r) => [r.team_id, r.id]));
+    const candidates: GuestVerifyCandidate[] = [];
+    for (const m of confirmedMembers) {
+      const guestCreatedAt = guestCreatedAtById.get(m.player_id);
+      const registrationId = regIdByTeam.get(m.team_id);
+      if (guestCreatedAt && registrationId) {
+        candidates.push({ profileId: m.player_id, registrationId, guestCreatedAt });
+      }
+    }
+    return candidates;
+  } catch {
+    return [];
+  }
+}
+
 /** Run one reminders pass. Returns counts per notification type actually sent, for the cron audit
  *  row. `now` is injectable for tests / a manual re-run against a fixed clock. */
 export async function runReminders(now: Date = new Date()): Promise<Record<string, number>> {
@@ -258,6 +333,32 @@ export async function runReminders(now: Date = new Date()): Promise<Record<strin
           entityId: r.entityId,
         });
         counts[r.type] = (counts[r.type] ?? 0) + 1;
+      }
+
+      // §2AU E: "finish setting up your account" - guest profiles who are confirmed members of a live
+      // registration here, once at >= 6h and once at >= 48h after `guest_created_at`. Two independent
+      // checks (not else-if) so a cron gap that skips past 6h still lets both eventually fire, each
+      // idempotent via the same `sent` existence-check the rest of this run already uses.
+      for (const c of await loadGuestVerifyCandidates(t.id)) {
+        const hoursSinceGuestCreated =
+          (now.getTime() - new Date(c.guestCreatedAt).getTime()) / (60 * 60 * 1000);
+        const link = `/login?next=${encodeURIComponent(`/tournaments/${t.slug}`)}`;
+        const sendGuestReminder = async (type: string) => {
+          const key = `${type}:${c.profileId}:${c.registrationId}`;
+          if (sent.has(key)) return;
+          await notify({
+            recipientId: c.profileId,
+            type,
+            params: { tournamentName: t.name },
+            link,
+            entityType: 'registration',
+            entityId: c.registrationId,
+          });
+          counts[type] = (counts[type] ?? 0) + 1;
+          sent.add(key);
+        };
+        if (hoursSinceGuestCreated >= 6) await sendGuestReminder('guest_verify_reminder');
+        if (hoursSinceGuestCreated >= 48) await sendGuestReminder('guest_verify_reminder_2');
       }
     } catch {
       // One tournament's failure must not abort the run for the other 49 (§ best-effort pattern).

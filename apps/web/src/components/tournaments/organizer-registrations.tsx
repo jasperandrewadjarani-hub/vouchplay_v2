@@ -670,6 +670,35 @@ function reasonLabel(code: string): string {
 }
 
 /**
+ * master_plan §2AU Decision F: guest entries (email verified at the very end, §2AU) show an
+ * "Unverified account" chip - money is still money, so nothing here withholds a confirmation, it
+ * only tells the organizer what they're looking at. `members[].unverified` and the entry's
+ * `partnerNote` (a named-but-not-yet-invited partner, §2AU Decision D) are lane B's additive fields
+ * on `OrganizerRegistration`; read defensively here so this file type-checks whether or not that
+ * lane has landed yet - both simply read as absent (no chip, no note) until the columns arrive.
+ */
+type GuestAwareMember = OrganizerRegistration['members'][number] & { unverified?: boolean };
+type GuestAwareEntry = OrganizerRegistration & { partnerNote?: string | null };
+
+function entryMembers(entry: OrganizerRegistration): GuestAwareMember[] {
+  return entry.members as GuestAwareMember[];
+}
+function hasUnverifiedMember(entry: OrganizerRegistration): boolean {
+  return entryMembers(entry).some((m) => m.unverified === true);
+}
+function partnerNoteFor(entry: OrganizerRegistration): string | null {
+  return (entry as GuestAwareEntry).partnerNote ?? null;
+}
+
+function UnverifiedAccountChip() {
+  return (
+    <span className="border-warning/30 bg-warning/10 text-foreground-muted inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold">
+      Unverified account
+    </span>
+  );
+}
+
+/**
  * One entry, scannable in a glance: who, which division, what it needs, how much. The whole row is
  * the control - a small "Manage" link beside a tall row is a smaller target than the row itself.
  *
@@ -696,6 +725,7 @@ function EntryRow({
   const openSeat = hasOpenSeat(entry);
   const unconfirmed = !openSeat && hasUnconfirmedPartner(entry);
   const selectable = hasSubmittedReceipt(entry);
+  const unverified = hasUnverifiedMember(entry);
   return (
     <li>
       <button
@@ -741,6 +771,7 @@ function EntryRow({
             >
               {money.label}
             </span>
+            {unverified && <UnverifiedAccountChip />}
             {openSeat && (
               <span className="border-border text-foreground-muted inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]">
                 <Clock size={10} aria-hidden />
@@ -853,6 +884,13 @@ function RegRow({
   const waitlisted = reg.status === 'waitlisted';
   const nameById = new Map(reg.members.map((m) => [m.id, m.name]));
   const slugById = new Map(reg.members.map((m) => [m.id, m.slug]));
+  // master_plan §2AU Decision F.
+  const unverifiedMemberIds = new Set(
+    entryMembers(reg)
+      .filter((m) => m.unverified === true)
+      .map((m) => m.id),
+  );
+  const partnerNote = partnerNoteFor(reg);
 
   // §2AQ Decision E: the primary row is decided by exactly one of these states.
   const teamSubmitted = reg.paymentStatus === 'submitted' && !!reg.paymentId;
@@ -932,12 +970,33 @@ function RegRow({
 
   return (
     <div>
+      {/* master_plan §2AU Decision F: a guest member's account is still unverified at this point in
+          the flow (email confirmed at the very end) - flagged next to their name so the organizer
+          knows what they're looking at, without withholding any confirmation over it. */}
+      {unverifiedMemberIds.size > 0 && (
+        <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {reg.members.map((m) => (
+            <span key={m.id} className="inline-flex items-center gap-1.5">
+              <span className="text-foreground text-sm font-medium">{m.name}</span>
+              {unverifiedMemberIds.has(m.id) && <UnverifiedAccountChip />}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* One status line replaces the old "{names} · {raw status}" line (§2AQ Decision E). The
           overflow (⋯) carries every action that is not the one or two the current state calls for. */}
       <div className="flex items-start justify-between gap-2">
         <p className="text-foreground-muted text-xs">{sheetStatusLine(reg)}</p>
         <OverflowMenu actions={overflowActions} />
       </div>
+
+      {/* master_plan §2AU Decision D: a guest's partner is captured as a name only at entry time -
+          invited for real once the guest verifies their own email - so the organizer sees who is
+          meant to join without a second account existing yet. */}
+      {partnerNote && (
+        <p className="text-foreground-muted mt-1 text-xs">Partner: {partnerNote} (to be invited)</p>
+      )}
 
       {/* §2AQ Decision C: a pending cancellation request replaces the state-driven primary row with
           exactly two buttons - Approve cancellation / Decline. Payment rows still render below. */}

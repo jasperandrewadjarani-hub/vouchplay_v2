@@ -4,6 +4,7 @@ import { revalidateTag } from 'next/cache';
 import { paymentSubmitSchema, type PaymentSubmitInput } from '@vouchplay/validation';
 import { quoteFee, quoteSlotPrice } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
+import { resolveActor } from '@/lib/guest/session';
 import { createServiceClient } from '@/lib/supabase/service';
 import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { loadSettingNumber, isSlotReservationsEnabled } from '@/lib/settings';
@@ -104,8 +105,8 @@ export async function submitPayment(
   _prev: PaymentActionState,
   formData: FormData,
 ): Promise<PaymentActionState> {
-  const user = await getOptionalUser();
-  if (!user) return { error: 'Please sign in.' };
+  const actor = await resolveActor();
+  if (!actor) return { error: 'Please sign in.' };
   const parsed = paymentSubmitSchema.safeParse({
     method: formData.get('method'),
     payerName: formData.get('payerName') ?? '',
@@ -129,9 +130,9 @@ export async function submitPayment(
       .from('team_members')
       .select('id')
       .eq('team_id', r.team_id)
-      .eq('player_id', user.id)
+      .eq('player_id', actor.id)
       .maybeSingle();
-    if (!member) return await staleTeamError(user.id, 'submitPayment', registrationId);
+    if (!member) return await staleTeamError(actor.id, 'submitPayment', registrationId);
     if (!['payment_pending', 'payment_submitted'].includes(r.status)) {
       return { error: 'This registration is not awaiting payment.' };
     }
@@ -215,14 +216,14 @@ export async function submitPayment(
       .eq('id', registrationId);
     await svc.from('registration_events').insert({
       registration_id: registrationId,
-      actor_id: user.id,
+      actor_id: actor.id,
       event_type: 'payment_submitted',
       from_status: r.status,
       to_status: 'payment_submitted',
     });
     // §2AO A3: keeps one path deciding the registration's money state. Harmless here - the update
     // above already set 'payment_submitted', so this settle is a same-state no-op.
-    await settleRegistration(registrationId, user.id);
+    await settleRegistration(registrationId, actor.id);
     const [organizers, tm] = await Promise.all([
       getTournamentOrganizerIds(tournamentId),
       getTournamentMini(tournamentId),
@@ -236,7 +237,7 @@ export async function submitPayment(
     });
     // Best-effort receipt notification to the organizer's designated bank handler (§2AK). Never
     // throws and never blocks/fails the player's submission.
-    await notifyPaymentReceiptUploaded(registrationId, user.id);
+    await notifyPaymentReceiptUploaded(registrationId, actor.id);
     await revalTournament(tournamentId);
   } catch {
     return { error: 'Payment submission is temporarily unavailable.' };
@@ -297,8 +298,8 @@ export async function submitSeatPayment(
   _prev: PaymentActionState,
   formData: FormData,
 ): Promise<PaymentActionState> {
-  const user = await getOptionalUser();
-  if (!user) return { error: 'Please sign in.' };
+  const actor = await resolveActor();
+  if (!actor) return { error: 'Please sign in.' };
   if (!(await isSlotReservationsEnabled())) {
     return { error: 'Seat payments are not available yet.' };
   }
@@ -319,14 +320,14 @@ export async function submitSeatPayment(
       .from('team_members')
       .select('id, confirmed_at')
       .eq('team_id', r.team_id)
-      .eq('player_id', user.id)
+      .eq('player_id', actor.id)
       .maybeSingle();
-    if (!member) return await staleTeamError(user.id, 'submitSeatPayment', registrationId);
+    if (!member) return await staleTeamError(actor.id, 'submitSeatPayment', registrationId);
     // master_plan §2AP C2/Finding 2a: an unconfirmed invitee could pay their own seat before
     // accepting - membership alone is not enough, the invitation must be answered first.
     if (!(member as { confirmed_at: string | null }).confirmed_at) {
       await logRpcRefusal({
-        actorId: user.id,
+        actorId: actor.id,
         fn: 'submitSeatPayment',
         code: 'membership_unconfirmed',
         entityType: 'registration',
@@ -372,7 +373,7 @@ export async function submitSeatPayment(
       .from('tournament_slots')
       .select('id, status')
       .eq('registration_id', registrationId)
-      .eq('player_id', user.id)
+      .eq('player_id', actor.id)
       .order('created_at', { ascending: false })
       .limit(1);
     const existing = ((existingRows ?? []) as { id: string; status: string }[])[0] ?? null;
@@ -382,7 +383,7 @@ export async function submitSeatPayment(
 
     const upload = await uploadPaymentProof(
       formData,
-      `${registrationId}/seat-${user.id}-${Date.now()}-${randomSuffix()}`,
+      `${registrationId}/seat-${actor.id}-${Date.now()}-${randomSuffix()}`,
     );
     if (!upload.ok) return { error: upload.error };
 
@@ -423,7 +424,7 @@ export async function submitSeatPayment(
           registration_id: registrationId,
           division_id: r.division_id,
           tournament_id: div.tournament_id,
-          player_id: user.id,
+          player_id: actor.id,
           status: 'submitted',
           amount_due: amountDue,
           amount_submitted: amountSubmitted,
@@ -446,7 +447,7 @@ export async function submitSeatPayment(
 
     await svc.from('registration_events').insert({
       registration_id: registrationId,
-      actor_id: user.id,
+      actor_id: actor.id,
       event_type: 'seat_payment_submitted',
       from_status: r.status,
       to_status: r.status,
@@ -464,8 +465,8 @@ export async function submitSeatPayment(
       entityType: 'tournament',
       entityId: tournamentId,
     });
-    await notifyPaymentReceiptUploaded(registrationId, user.id, { slotId: slotId ?? undefined });
-    await settleRegistration(registrationId, user.id);
+    await notifyPaymentReceiptUploaded(registrationId, actor.id, { slotId: slotId ?? undefined });
+    await settleRegistration(registrationId, actor.id);
     await revalTournament(tournamentId);
   } catch {
     return { error: 'Payment submission is temporarily unavailable.' };
@@ -483,12 +484,12 @@ export async function submitSlotReservation(
   _prev: PaymentActionState,
   formData: FormData,
 ): Promise<PaymentActionState> {
-  const user = await getOptionalUser();
-  if (!user) return { error: 'Please sign in.' };
+  const actor = await resolveActor();
+  if (!actor) return { error: 'Please sign in.' };
   if (!(await isSlotReservationsEnabled())) {
     return { error: 'Seat payments are not available yet.' };
   }
-  const statusErr = await checkActorCanInteract(user.id);
+  const statusErr = await checkActorCanInteract(actor.id);
   if (statusErr) return { error: statusErr };
   const parsed = parsePaymentFields(formData);
   if (!parsed.ok) return { error: parsed.error };
@@ -565,7 +566,7 @@ export async function submitSlotReservation(
       .from('tournament_slots')
       .select('id, status')
       .eq('tournament_id', tournamentId)
-      .eq('player_id', user.id)
+      .eq('player_id', actor.id)
       .is('registration_id', null)
       .order('created_at', { ascending: false })
       .limit(1);
@@ -576,7 +577,7 @@ export async function submitSlotReservation(
 
     const upload = await uploadPaymentProof(
       formData,
-      `slots/${tournamentId}/${user.id}-${Date.now()}-${randomSuffix()}`,
+      `slots/${tournamentId}/${actor.id}-${Date.now()}-${randomSuffix()}`,
     );
     if (!upload.ok) return { error: upload.error };
 
@@ -617,7 +618,7 @@ export async function submitSlotReservation(
           registration_id: null,
           division_id: null,
           tournament_id: tournamentId,
-          player_id: user.id,
+          player_id: actor.id,
           status: 'submitted',
           amount_due: amountDue,
           amount_submitted: amountSubmitted,
@@ -646,9 +647,9 @@ export async function submitSlotReservation(
       entityType: 'tournament',
       entityId: tournamentId,
     });
-    await notifyPaymentReceiptUploaded(null, user.id, { slotId: slotId ?? undefined });
+    await notifyPaymentReceiptUploaded(null, actor.id, { slotId: slotId ?? undefined });
     await writeAudit({
-      actorId: user.id,
+      actorId: actor.id,
       action: 'slot.reservation_submitted',
       entityType: 'tournament_slot',
       entityId: slotId ?? tournamentId,

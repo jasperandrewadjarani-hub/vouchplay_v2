@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { searchInvitablePlayers, type PlayerSearchResult } from '@/lib/actions/registration';
-import { Input } from '@/components/ui/field';
+import { Field, Input } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { formatMonthDay } from '@/lib/format-date';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
@@ -168,6 +168,46 @@ export function PartnerStep({
           {state.partnerLockAt ? ` - before ${formatMonthDay(state.partnerLockAt)}` : ''}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * Partner step, guest variant (master_plan §2AU Decision D, item 4): no search - a guest has no
+ * account yet to search from, and inviting a third party by email is phase 2 (Deferred). Just a name,
+ * kept as a plain note on the registration until the guest verifies and can send a real invitation.
+ */
+export function GuestPartnerStep({
+  onContinue,
+}: {
+  /** `partnerNote` is the trimmed name, or null when left blank / deferred entirely. */
+  onContinue: (partnerNote: string | null) => void;
+}) {
+  const [name, setName] = useState('');
+
+  return (
+    <div className="space-y-3">
+      <Field label="Your partner's name" htmlFor="guest-partner-note" hint="Optional">
+        <Input
+          id="guest-partner-note"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Maria Santos"
+        />
+      </Field>
+      <p className="text-foreground-muted text-xs">
+        You&rsquo;ll invite them after you verify your email.
+      </p>
+      <Button type="button" onClick={() => onContinue(name.trim() || null)} className="w-full">
+        Continue
+      </Button>
+      <button
+        type="button"
+        onClick={() => onContinue(null)}
+        className="text-foreground-muted hover:text-foreground min-h-11 w-full text-center text-sm font-medium underline underline-offset-2"
+      >
+        I&rsquo;ll choose a partner later
+      </button>
     </div>
   );
 }

@@ -87,6 +87,8 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // §2AO A: tournament slots (pay per seat / reserve before choosing a division). Code default is
   // OFF on purpose: migration 0042 seeds it to true, so the feature is inert until the table exists.
   tournament_slot_reservations_enabled: false,
+  // §2AU G: register before an account. Kill switch for the guest wizard (seeded true by 0046).
+  guest_registration_enabled: true,
   identity_doc_retention_days: 7,
 
   // Safety & moderation abuse limits (handover §14, §11.3, §30.7). Rolling 24h windows.

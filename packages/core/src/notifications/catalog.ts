@@ -518,6 +518,24 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) =>
       `Your reserved slot for ${tour(p)} is cancelled - any refund is settled with the organizer`,
   ),
+
+  // --- §2AU E - guest entry: "finish setting up your account" reminders (6h and 48h after
+  // `guest_created_at`, while still un-onboarded with a live entry). Two distinct types share
+  // identical copy - only their existence keys differ - so the reminders cron can send each once
+  // without a new table. Critical: an unverified guest entry is one missed email away from lapsing
+  // like any unpaid/unclaimed entry, and this is the player's only way back into it (§2AU C/E).
+  guest_verify_reminder: t(
+    'registrations',
+    true,
+    (p) => `Finish setting up your VouchPlay account to keep your entry for ${tour(p)}`,
+    () => 'Enter the code from your email or sign in with this address.',
+  ),
+  guest_verify_reminder_2: t(
+    'registrations',
+    true,
+    (p) => `Finish setting up your VouchPlay account to keep your entry for ${tour(p)}`,
+    () => 'Enter the code from your email or sign in with this address.',
+  ),
 };
 
 export function notificationDef(type: string): NotificationTypeDef | undefined {
