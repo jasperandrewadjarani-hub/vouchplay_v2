@@ -231,6 +231,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             count={partnerSearchers.count}
             players={partnerSearchers.players}
             slug={slug}
+            enabled={t.partnerMatchmakingEnabled}
           />
         </div>
       </ManageSection>
@@ -323,6 +324,7 @@ export default async function ManageTournamentPage({ params }: Params) {
             requireOrganizerApproval: t.requireOrganizerApproval,
             allowPlayDownOneLevel: t.allowPlayDownOneLevel,
             confirmationEmailEnabled: t.confirmationEmailEnabled,
+            partnerMatchmakingEnabled: t.partnerMatchmakingEnabled,
           }}
         />
       </ManageSection>

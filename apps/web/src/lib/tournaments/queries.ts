@@ -169,6 +169,30 @@ export async function getConfirmationEmailEnabled(tournamentId: string): Promise
 }
 
 /**
+ * Organizer's per-tournament partner-matchmaking switch (migration 0048; master_plan §2AV
+ * addendum 3). Read defensively, the same pattern as `getConfirmationEmailEnabled` above: before
+ * the migration is applied the column does not exist, and BOTH that case and an unset flag degrade
+ * to true - the feature defaults on. Effective enabled everywhere = the Admin global setting
+ * (`getPartnerSettings().enabled`) AND this column.
+ */
+export async function getPartnerMatchmakingEnabled(tournamentId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('partner_matchmaking_enabled')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (
+      (data as { partner_matchmaking_enabled: boolean | null } | null)
+        ?.partner_matchmaking_enabled ?? true
+    );
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Public co-organizer visibility (migration 0044; master_plan §2AQ A4), read via the SERVICE client
  * so it never depends on `tournament_organizers` RLS or the viewer's session - the public page reads
  * the same opted-in names regardless of who (or whether anyone) is signed in. Read defensively: the
@@ -711,14 +735,20 @@ export async function getTournamentBySlug(
     const partnerLockAt = await getPartnerLockAt(row.id);
     const partnerLockEffAt = partnerLockEffectiveAt(row.start_at, partnerLockAt);
 
-    const [demand, rules, confirmationEmailEnabled, guestRegistrationSettingEnabled] =
-      await Promise.all([
-        getDemandSummary(row.id),
-        getTournamentRules(row.id),
-        getConfirmationEmailEnabled(row.id),
-        // master_plan §2AU: the Admin kill switch, defaulting to true (seeded by migration 0046).
-        loadSettingFlag('guest_registration_enabled', true),
-      ]);
+    const [
+      demand,
+      rules,
+      confirmationEmailEnabled,
+      partnerMatchmakingEnabled,
+      guestRegistrationSettingEnabled,
+    ] = await Promise.all([
+      getDemandSummary(row.id),
+      getTournamentRules(row.id),
+      getConfirmationEmailEnabled(row.id),
+      getPartnerMatchmakingEnabled(row.id),
+      // master_plan §2AU: the Admin kill switch, defaulting to true (seeded by migration 0046).
+      loadSettingFlag('guest_registration_enabled', true),
+    ]);
 
     let myInterest = false;
     if (viewer.viewerId) {
@@ -859,6 +889,7 @@ export async function getTournamentBySlug(
       requireOrganizerApproval: rules.requireOrganizerApproval,
       allowPlayDownOneLevel: rules.allowPlayDownOneLevel,
       confirmationEmailEnabled,
+      partnerMatchmakingEnabled,
       // §2AU: the anonymous Register button/`?register=1` only opens the guest wizard while
       // registration is actually open - a closed/full tournament falls back to ordinary signup.
       guestRegistrationEnabled:

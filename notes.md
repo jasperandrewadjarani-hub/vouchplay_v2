@@ -3121,3 +3121,11 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
   tournament-specific. Verified prod supply for Hermosa: 2/51/1/91. No migration.
 - ViewerStatusPill "Slot not secured": symmetric px-2.5 when no Pay-now button (was pr-0.5, text
   jammed on the tournament card). Gates green, build ok.
+
+## 2026-09-13 - Partner deck swipe cue + per-tournament organizer switch (migration 0048)
+- Swipe cue: one-time coach-mark overlay (localStorage vp_partner_swipe_hint_seen) + during-drag
+  directional tint/labels (green right = Let's team up, red left = Not now). Buttons stay as fallback.
+- Organizer switch: tournaments.partner_matchmaking_enabled (default true). Effective enabled = Admin
+  global AND tournament column. Details-form toggle "Allow partner matchmaking"; off greys/removes the
+  entry points and the deck page explains. getPartnerDeck/getPartnerSummary read it defensively.
+  Migration 0048 (+ apply copy). Safe during open window (one boolean column, default true).

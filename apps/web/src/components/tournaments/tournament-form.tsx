@@ -46,6 +46,9 @@ export interface TournamentFormInitial {
   allowPlayDownOneLevel?: boolean;
   /** Confirmation email switch (migration 0044, master_plan §2AQ Decision D). Defaults to true. */
   confirmationEmailEnabled?: boolean;
+  /** Per-tournament partner-matchmaking switch (migration 0048, master_plan §2AV addendum 3).
+   *  Effective enabled = the Admin global setting AND this flag. Defaults to true. */
+  partnerMatchmakingEnabled?: boolean;
 }
 
 const textarea =
@@ -424,6 +427,23 @@ export function TournamentForm({
               <span className="text-foreground-muted block text-xs">
                 Includes the note that division placement and any cancellation or refund are subject
                 to your final decision.
+              </span>
+            </span>
+          </label>
+          {/* Per-tournament partner-matchmaking switch (master_plan §2AV addendum 3) - the Admin
+              global default stays on for every other tournament; this only turns it off here. */}
+          <label className="flex items-start gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              name="partnerMatchmakingEnabled"
+              defaultChecked={initial.partnerMatchmakingEnabled ?? true}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="text-foreground block font-medium">Allow partner matchmaking</span>
+              <span className="text-foreground-muted block text-xs">
+                Players can find a doubles partner through the swipe deck. Turn this off to remove
+                it from this tournament.
               </span>
             </span>
           </label>

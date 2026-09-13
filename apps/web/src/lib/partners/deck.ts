@@ -61,6 +61,9 @@ interface TournamentMiniRow {
   name: string;
   status: string;
   start_at: string | null;
+  /** Organizer per-tournament switch (migration 0048; master_plan §2AV addendum 3). Read
+   *  defensively in `loadTournament` - null (column missing pre-migration, or unset) defaults on. */
+  partner_matchmaking_enabled: boolean | null;
 }
 
 export interface PartnerEligibleDivisionRow {
@@ -229,14 +232,33 @@ function initialsOf(p: {
 // Bulk loaders
 // ---------------------------------------------------------------------------
 
+/** Defensive read: `tournaments.partner_matchmaking_enabled` (migration 0048; master_plan §2AV
+ *  addendum 3) may not exist yet - the same precedent as `confirmation_email_enabled` (migration
+ *  0044): try the full select, and on error (column missing pre-migration) re-select without it,
+ *  defaulting the flag to null (fail-open to true wherever it is read). */
 async function loadTournament(slug: string): Promise<TournamentMiniRow | null> {
   const svc = createServiceClient();
-  const { data } = await svc
-    .from('tournaments')
-    .select('id, slug, name, status, start_at')
-    .eq('slug', slug)
-    .maybeSingle();
-  return (data as TournamentMiniRow | null) ?? null;
+  try {
+    const { data, error } = await svc
+      .from('tournaments')
+      .select('id, slug, name, status, start_at, partner_matchmaking_enabled')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (error) throw error;
+    return (data as TournamentMiniRow | null) ?? null;
+  } catch {
+    // Column not present yet (migration 0048 pending) - re-select without it, still defaulting on.
+    const { data } = await svc
+      .from('tournaments')
+      .select('id, slug, name, status, start_at')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      ...(data as Omit<TournamentMiniRow, 'partner_matchmaking_enabled'>),
+      partner_matchmaking_enabled: null,
+    };
+  }
 }
 
 /** Open doubles divisions for a tournament (master_plan §2AV, the hard-filter universe). */
@@ -630,12 +652,15 @@ export async function computeCommonDivisions(
 // The deck
 // ---------------------------------------------------------------------------
 
-function emptyDeck(tournament: {
-  id: string;
-  slug: string;
-  name: string;
-  registrationOpen: boolean;
-}): PartnerDeckData {
+function emptyDeck(
+  tournament: {
+    id: string;
+    slug: string;
+    name: string;
+    registrationOpen: boolean;
+  },
+  offForTournament = false,
+): PartnerDeckData {
   return {
     enabled: false,
     tournament,
@@ -646,6 +671,7 @@ function emptyDeck(tournament: {
     matches: [],
     swipesLeftToday: 0,
     canUndo: false,
+    offForTournament,
   };
 }
 
@@ -851,6 +877,9 @@ export async function getPartnerDeck(
     name: tournament.name,
     registrationOpen: tournament.status === 'registration_open',
   };
+  // §2AV addendum 3: the organizer's per-tournament switch, read defensively above (fail-open true
+  // before migration 0048 is applied). Effective enabled = the Admin global setting AND this column.
+  const tournamentEnabled = tournament.partner_matchmaking_enabled ?? true;
 
   const settings = await getPartnerSettings();
   const viewerProfile = (await loadProfiles([viewerId])).get(viewerId) ?? null;
@@ -862,6 +891,9 @@ export async function getPartnerDeck(
     !!viewerProfile.onboarded_at &&
     !(viewerProfile.guest_created_at && !viewerProfile.onboarded_at);
   if (!settings.enabled || !viewerReady) return emptyDeck(tMini);
+  // Off specifically because the ORGANIZER turned it off for this tournament (global on, viewer
+  // ready) - carry that distinction so the deck page can explain why, instead of the generic message.
+  if (!tournamentEnabled) return emptyDeck(tMini, true);
 
   const divisions = await loadEligibleDivisions(tournament.id);
   const eligibleIds = new Set(divisions.map((d) => d.id));
@@ -1274,6 +1306,27 @@ export async function promoteEnteredMatchesForTournament(
 // Cheap summaries
 // ---------------------------------------------------------------------------
 
+/** Defensive read: `tournaments.partner_matchmaking_enabled` (migration 0048; master_plan §2AV
+ *  addendum 3) - the same precedent as `getConfirmationEmailEnabled` (queries.ts, migration 0044):
+ *  before the migration is applied the column does not exist, and BOTH that case and an unset flag
+ *  degrade to true, the feature's default. */
+async function loadTournamentMatchmakingEnabled(tournamentId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createServiceClient()
+      .from('tournaments')
+      .select('partner_matchmaking_enabled')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    if (error) throw error;
+    return (
+      (data as { partner_matchmaking_enabled: boolean | null } | null)
+        ?.partner_matchmaking_enabled ?? true
+    );
+  } catch {
+    return true;
+  }
+}
+
 export const getPartnerSummary = cache(async function getPartnerSummary(
   tournamentId: string,
   viewerId: string | null,
@@ -1285,6 +1338,7 @@ export const getPartnerSummary = cache(async function getPartnerSummary(
   hasOpenDoublesDivisions: boolean;
 }> {
   const settings = await getPartnerSettings();
+  const tournamentEnabled = await loadTournamentMatchmakingEnabled(tournamentId);
   const svc = createServiceClient();
   // The eligible (open doubles) divisions bound the supply scan; also answer hasOpenDoublesDivisions.
   const eligibleDivisions = await loadEligibleDivisions(tournamentId);
@@ -1316,7 +1370,7 @@ export const getPartnerSummary = cache(async function getPartnerSummary(
   }
   const viewerSearchOpen = (searchRow.data as { status: string } | null)?.status === 'open';
   return {
-    enabled: settings.enabled,
+    enabled: settings.enabled && tournamentEnabled,
     lookingCount,
     viewerSearchOpen,
     openMatches: openMatches ?? 0,

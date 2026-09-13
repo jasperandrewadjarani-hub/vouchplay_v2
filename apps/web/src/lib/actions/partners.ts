@@ -7,7 +7,7 @@ import { getOptionalUser } from '@/lib/auth';
 import { checkActorCanInteract, isBlockedBetween } from '@/lib/moderation/enforcement';
 import { writeAudit } from '@/lib/moderation/audit';
 import { checkDivisionFit } from '@/lib/tournaments/division-fit-check';
-import { tournamentTag } from '@/lib/tournaments/queries';
+import { tournamentTag, getPartnerMatchmakingEnabled } from '@/lib/tournaments/queries';
 import { getPartnerSettings } from '@/lib/settings';
 import {
   getPartnerDeck,
@@ -72,6 +72,12 @@ export async function openPartnerSearch(
 
   const settings = await getPartnerSettings();
   if (!settings.enabled) return { error: 'Partner matchmaking is not available right now.' };
+  // §2AV addendum 3: effective enabled = the Admin global setting AND the organizer's per-tournament
+  // switch - mirrors the same defensive read `getPartnerSummary`/`getPartnerDeck` use (deck.ts),
+  // fail-open true before migration 0048 is applied.
+  if (!(await getPartnerMatchmakingEnabled(tournamentId))) {
+    return { error: 'The organizer has turned off partner matchmaking for this tournament.' };
+  }
 
   const tournament = await loadTournamentMini(tournamentId);
   if (!tournament) return { error: 'Tournament not found.' };

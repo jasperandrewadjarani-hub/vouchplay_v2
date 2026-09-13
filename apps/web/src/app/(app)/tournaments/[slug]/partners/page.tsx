@@ -32,6 +32,23 @@ export default async function PartnersPage({ params }: Params) {
   );
 
   if (!deck.enabled) {
+    // §2AV addendum 3: distinguish "the organizer turned this off for this event" (offForTournament)
+    // from the generic not-ready-yet message - the global setting is still on for everyone else.
+    if (deck.offForTournament) {
+      return (
+        <div className="mx-auto max-w-lg space-y-5">
+          {backLink}
+          <div className="border-border bg-surface space-y-2 rounded-2xl border p-6 text-center">
+            <p className="text-foreground text-base font-semibold">
+              Partner matchmaking is off for this tournament
+            </p>
+            <p className="text-foreground-muted text-sm">
+              The organizer has turned this off for this event.
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mx-auto max-w-lg space-y-5">
         {backLink}

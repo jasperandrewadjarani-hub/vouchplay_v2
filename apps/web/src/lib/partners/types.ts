@@ -86,6 +86,9 @@ export interface PartnerDeckData {
   swipesLeftToday: number;
   /** A last "Not now" exists that Undo can bring back. */
   canUndo: boolean;
+  /** True only when `enabled` is false BECAUSE the organizer turned matchmaking off for this
+   *  tournament specifically (global setting on, viewer ready) - master_plan §2AV addendum 3. */
+  offForTournament?: boolean;
 }
 
 export type SwipeResult =

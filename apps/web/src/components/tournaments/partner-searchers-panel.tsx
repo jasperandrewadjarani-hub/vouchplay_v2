@@ -18,12 +18,26 @@ export function PartnerSearchersPanel({
   count,
   players,
   slug,
+  enabled = true,
 }: {
   count: number;
   players: PartnerSearcherRow[];
   /** Tournament slug, for the announcement shortcut into Manage → Announcements. */
   slug: string;
+  /** The tournament's `partnerMatchmakingEnabled` flag (master_plan §2AV addendum 3). False greys
+   *  the panel out instead of showing the list - matchmaking is off for this event. */
+  enabled?: boolean;
 }) {
+  if (!enabled) {
+    return (
+      <div className="border-border bg-surface rounded-xl border p-3.5 opacity-60">
+        <p className="text-foreground text-sm font-semibold">Looking for partners</p>
+        <p className="text-foreground-muted mt-1 text-xs">
+          Partner matchmaking is off for this tournament.
+        </p>
+      </div>
+    );
+  }
   if (count === 0) return null;
   return (
     <details className="group border-border bg-surface rounded-xl border p-3.5">

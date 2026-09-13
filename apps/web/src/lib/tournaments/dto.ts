@@ -162,6 +162,11 @@ export interface TournamentDetailDTO extends TournamentCardDTO {
    *  master_plan §2AS D). Read defensively - see `getConfirmationEmailEnabled` in queries.ts - so a
    *  pre-migration deploy (and an unset flag) both degrade to true, the feature's default. */
   confirmationEmailEnabled: boolean;
+  /** Organizer's per-tournament partner-matchmaking switch (migration 0048; master_plan §2AV
+   *  addendum 3). Read defensively - see `getPartnerMatchmakingEnabled` in queries.ts - so a
+   *  pre-migration deploy (and an unset flag) both degrade to true, the feature's default. Effective
+   *  enabled everywhere = the Admin global setting AND this column. */
+  partnerMatchmakingEnabled: boolean;
   /** Register before an account (master_plan §2AU): the Admin kill switch (`guest_registration_
    *  enabled`, default true) AND this tournament being `registration_open`. False sends the anonymous
    *  Register button/`?register=1` to signup first instead of opening the guest wizard. */

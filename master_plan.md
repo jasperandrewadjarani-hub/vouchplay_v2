@@ -5067,6 +5067,25 @@ button's tight right padding even when rendered without the Pay-now button (tour
 text was jammed to the edge - now symmetric `px-2.5` when there is no button. No migration.
 Production supply for Hermosa at fix time: 2 searches, 51 open-seat entries, 1 bare slot, 91 global.
 
+### 2AV addendum 3: first-swipe cue + per-tournament organizer switch (2026-09-13)
+
+Two follow-ups after the deck went live.
+
+**Swipe cue (UX).** People unfamiliar with a card deck do not know to swipe. Added (a) a one-time
+coach-mark overlay on the first deck visit - a dimmed top card with a ← Not now / Let's team up →
+hint and a short swipe animation, dismissed by any swipe/tap or "Got it", remembered per browser in
+`localStorage` (`vp_partner_swipe_hint_seen`, try/caught); and (b) a teach-by-doing affordance during
+the drag itself - a green "Let's team up" tint/label leans in as the card is dragged right, a red
+"Not now" as it is dragged left, so the direction is learned on the first attempt. The two big
+buttons remain the always-visible fallback. No new data.
+
+**Per-tournament organizer switch (migration 0048).** `tournaments.partner_matchmaking_enabled`
+(boolean, default true). Effective enabled = the Admin global setting AND this column. An organizer
+toggles it in the tournament Details form ("Allow partner matchmaking"); off greys out / removes every
+Find-a-partner entry point for that tournament and the deck page says the organizer turned it off,
+while the global default stays on for everyone else. `getPartnerDeck`/`getPartnerSummary` read the
+column defensively (fail-open to true before 0048 is applied). No effect on any other tournament.
+
 ## 2AW. Private ratings: a player may hide the community rating (and vouch meter) and/or the self-rating from the public (2026-09-13)
 
 Jasper's ask ("think of private / locked profiles on Facebook"): a user option to make the

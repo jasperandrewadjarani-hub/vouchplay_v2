@@ -27,6 +27,7 @@ import { PartnerCard } from './partner-card';
 import { PartnerSearchSheet } from './partner-search-sheet';
 import { MatchesList } from './matches-list';
 import { MatchModal } from './match-modal';
+import { SwipeCoachMark, SwipeDirectionOverlay, useSwipeHint } from './swipe-hint';
 
 /** The server bounds a fresh load to the top 30 (master_plan §2AV E) - once a batch comes back
  *  smaller than that, there is nothing more to fetch, so the "top up" refresh below stops asking. */
@@ -46,8 +47,12 @@ interface SwipeHandle {
  */
 const SwipeableCard = forwardRef<
   SwipeHandle,
-  { card: PartnerCardData; onSwipe: (direction: 'left' | 'right') => void }
->(function SwipeableCard({ card, onSwipe }, ref) {
+  {
+    card: PartnerCardData;
+    onSwipe: (direction: 'left' | 'right') => void;
+    onDragStart?: () => void;
+  }
+>(function SwipeableCard({ card, onSwipe, onDragStart }, ref) {
   const [dragX, setDragX] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [exiting, setExiting] = useState<'left' | 'right' | null>(null);
@@ -65,6 +70,7 @@ const SwipeableCard = forwardRef<
 
   function onPointerDown(e: ReactPointerEvent<HTMLDivElement>) {
     if (exiting) return;
+    onDragStart?.();
     e.currentTarget.setPointerCapture?.(e.pointerId);
     startX.current = e.clientX;
     setDragging(true);
@@ -102,9 +108,10 @@ const SwipeableCard = forwardRef<
         opacity: exiting ? 0 : 1,
         touchAction: 'pan-y',
       }}
-      className="cursor-grab select-none active:cursor-grabbing"
+      className="relative cursor-grab select-none active:cursor-grabbing"
     >
       <PartnerCard player={card} />
+      <SwipeDirectionOverlay dragX={dragX} threshold={SWIPE_THRESHOLD} />
     </div>
   );
 });
@@ -144,6 +151,8 @@ export function PartnerDeck({ data }: { data: PartnerDeckData }) {
   const [editingSearch, setEditingSearch] = useState(false);
   const [matchModal, setMatchModal] = useState<PartnerMatchView | null>(null);
   const cardRef = useRef<SwipeHandle>(null);
+  // First-time swipe coach-mark (only relevant once there is an actual card to demonstrate on).
+  const { visible: showSwipeHint, dismiss: dismissSwipeHint } = useSwipeHint(cards.length > 0);
 
   function applyFreshDeck(fresh: PartnerDeckData) {
     setSearch(fresh.search);
@@ -182,6 +191,7 @@ export function PartnerDeck({ data }: { data: PartnerDeckData }) {
 
   function requestSwipe(direction: 'left' | 'right') {
     if (busy || cards.length === 0) return;
+    dismissSwipeHint();
     cardRef.current?.trigger(direction);
   }
 
@@ -298,12 +308,16 @@ export function PartnerDeck({ data }: { data: PartnerDeckData }) {
       {topCard === null ? (
         <EmptyDeckCard />
       ) : (
-        <SwipeableCard
-          key={topCard.playerId}
-          ref={cardRef}
-          card={topCard}
-          onSwipe={(direction) => handleSwipe(topCard, direction)}
-        />
+        <div className="relative">
+          <SwipeableCard
+            key={topCard.playerId}
+            ref={cardRef}
+            card={topCard}
+            onSwipe={(direction) => handleSwipe(topCard, direction)}
+            onDragStart={dismissSwipeHint}
+          />
+          {showSwipeHint && <SwipeCoachMark onDismiss={dismissSwipeHint} />}
+        </div>
       )}
 
       {topCard !== null && (
