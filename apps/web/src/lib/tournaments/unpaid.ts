@@ -75,8 +75,35 @@ export const getViewerUnpaidSlots = cache(async (): Promise<ViewerUnpaidSlots> =
           ((tournRows ?? []) as { id: string; status: string }[]).map((t) => t.id),
         );
 
+        // An entry with a PENDING cancellation request is not something to nudge payment for - the
+        // player already asked to leave (master_plan §2AT / banner fix). The latest cancellation-family
+        // event per registration decides: `cancellation_requested` still open (not withdrawn / approved
+        // / declined) means "don't nudge".
+        const pendingCancelRegIds = new Set<string>();
+        const { data: cancelEvents } = await svc
+          .from('registration_events')
+          .select('registration_id, event_type, created_at')
+          .in(
+            'registration_id',
+            regs.map((r) => r.id),
+          )
+          .in('event_type', [
+            'cancellation_requested',
+            'cancellation_withdrawn',
+            'cancellation_approved',
+            'cancellation_declined',
+          ])
+          .order('created_at', { ascending: false });
+        const latestCancelSeen = new Set<string>();
+        for (const e of (cancelEvents ?? []) as { registration_id: string; event_type: string }[]) {
+          if (latestCancelSeen.has(e.registration_id)) continue;
+          latestCancelSeen.add(e.registration_id);
+          if (e.event_type === 'cancellation_requested') pendingCancelRegIds.add(e.registration_id);
+        }
+
         for (const r of regs) {
           if (!openTournamentIds.has(r.tournament_id)) continue;
+          if (pendingCancelRegIds.has(r.id)) continue;
           if (r.status === 'payment_pending') {
             entries.push({
               tournamentId: r.tournament_id,
@@ -108,24 +135,41 @@ export const getViewerUnpaidSlots = cache(async (): Promise<ViewerUnpaidSlots> =
     // tournament.
     const { data: bareRows } = await svc
       .from('tournament_slots')
-      .select('id, tournament_id, status, created_at')
+      .select('id, tournament_id, status, created_at, dismissed_at, cancel_requested_at')
       .eq('player_id', user.id)
       .is('registration_id', null)
       .order('created_at', { ascending: false })
       .limit(CANDIDATE_LIMIT);
-    const latestBareByTournament = new Map<string, { status: string; created_at: string }>();
+    const latestBareByTournament = new Map<
+      string,
+      {
+        status: string;
+        created_at: string;
+        dismissed_at: string | null;
+        cancelRequestedAt: string | null;
+      }
+    >();
     for (const b of (bareRows ?? []) as {
       id: string;
       tournament_id: string;
       status: string;
       created_at: string;
+      dismissed_at: string | null;
+      cancel_requested_at: string | null;
     }[]) {
       if (!latestBareByTournament.has(b.tournament_id)) {
-        latestBareByTournament.set(b.tournament_id, { status: b.status, created_at: b.created_at });
+        latestBareByTournament.set(b.tournament_id, {
+          status: b.status,
+          created_at: b.created_at,
+          dismissed_at: b.dismissed_at,
+          cancelRequestedAt: b.cancel_requested_at,
+        });
       }
     }
     for (const [tournamentId, latest] of latestBareByTournament) {
       if (latest.status !== 'rejected') continue;
+      // The player removed the declined reservation (§2AT D) or asked to cancel it - nothing to nudge.
+      if (latest.dismissed_at || latest.cancelRequestedAt) continue;
       entries.push({ tournamentId, registrationId: null, createdAt: latest.created_at });
     }
 

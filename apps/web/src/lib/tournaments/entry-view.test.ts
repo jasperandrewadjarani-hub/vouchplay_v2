@@ -836,19 +836,19 @@ describe('chip description + clearing', () => {
 });
 
 describe('sorting - default unchanged, every column key deterministic', () => {
-  it('with no sort argument, still needs-a-decision first then newest (unchanged default)', () => {
-    const needsWork = entry({
-      id: 'work',
+  it('with no sort argument, newest submission first (default, 2026-09-13)', () => {
+    const older = entry({
+      id: 'older',
       paymentStatus: 'submitted',
       createdAt: '2026-09-01T00:00:00Z',
     });
-    const routine = entry({
-      id: 'routine',
+    const newer = entry({
+      id: 'newer',
       status: 'confirmed',
       createdAt: '2026-09-08T00:00:00Z',
     });
-    expect(sortEntries([routine, needsWork]).map((r) => r.id)).toEqual(['work', 'routine']);
-    expect(DEFAULT_SORT).toEqual({ key: 'needs_me', dir: 'asc' });
+    expect(sortEntries([older, newer]).map((r) => r.id)).toEqual(['newer', 'older']);
+    expect(DEFAULT_SORT).toEqual({ key: 'registered_at', dir: 'desc' });
   });
 
   it('needs_me desc flips routine entries first', () => {

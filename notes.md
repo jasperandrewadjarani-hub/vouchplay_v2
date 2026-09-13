@@ -3068,3 +3068,13 @@ honeypot, audit guest.entry_started (hashed email); capacity bounded by the norm
 Rejected alternatives: browser-only drafts (orphan receipts, no cross-device), anonymous auth (no
 recovery, dashboard toggle), email-only (no eligibility facts).
 Deferred: partner invite by email, guest sweeper (30 days, no live entry), export account column.
+
+## 2026-09-13 - Fixes: unpaid banner ignored cancellations; organizer default sort -> newest submission
+- getViewerUnpaidSlots: an entry with a PENDING cancellation request (latest cancellation-family
+  registration_event = cancellation_requested) is no longer counted; a rejected bare slot that was
+  dismissed (dismissed_at) or has a cancel request (cancel_requested_at) is no longer counted. Fixes
+  the red "Your slot isn't secured - Pay now" banner persisting after the player cancelled/requested
+  cancellation of their slot and team slot.
+- entry-view DEFAULT_SORT: needs_me/asc -> registered_at/desc (newest submission first) per owner
+  request; the default "Has receipt" payment filter (DEFAULT_FILTERS.payment=['has_proof']) is
+  unchanged. Test updated. Gates green; folded into a small commit (no migration).

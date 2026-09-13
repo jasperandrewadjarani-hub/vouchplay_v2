@@ -460,9 +460,10 @@ export interface EntrySort {
   dir: 'asc' | 'desc';
 }
 
-/** Entries needing a decision first, then the rest, newest first - the screen an organizer opens
- *  should land on work, not on a chronological archive. Unchanged from before this batch. */
-export const DEFAULT_SORT: EntrySort = { key: 'needs_me', dir: 'asc' };
+/** Newest submission first by default (owner request, 2026-09-13): organizers process the queue as it
+ *  comes in, so the most recent entries lead. The "Needs me first" sort is still one tap away in the
+ *  sort control. The default "Has receipt" payment filter (DEFAULT_FILTERS) is unchanged. */
+export const DEFAULT_SORT: EntrySort = { key: 'registered_at', dir: 'desc' };
 
 function primaryCompare(
   a: OrganizerRegistration,
