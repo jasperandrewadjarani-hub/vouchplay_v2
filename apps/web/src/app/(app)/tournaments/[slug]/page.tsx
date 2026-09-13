@@ -78,16 +78,19 @@ function fmtDay(dt: string | null): string | null {
  * unsecured entry among several confirmed ones still reads as the loud "pay now" state. Reuses the
  * same `describeRegistrationStatus` headline every other chip reads, so this can never disagree with
  * the tournament card or the My-registrations card. `null` when the viewer holds nothing at all.
+ * Also carries the registrationId behind that worst state (null for a bare-slot reservation, which
+ * has no registration) so the pill's "Pay now" can jump straight to the receipt (master_plan §2AT E).
  */
-function viewerWorstHeadline(
+function viewerWorstStatus(
   regState: ViewerRegistrationState,
   divisions: DivisionDTO[],
-): RegistrationHeadline | null {
+): { headline: RegistrationHeadline; registrationId: string | null } | null {
   const rank: Record<RegistrationHeadline, number> = { confirmed: 0, verifying: 1, unsecured: 2 };
   const byId = new Map(divisions.map((d) => [d.id, d]));
-  let worst: RegistrationHeadline | null = null;
-  const consider = (headline: RegistrationHeadline) => {
-    if (worst === null || rank[headline] > rank[worst]) worst = headline;
+  let worst: { headline: RegistrationHeadline; registrationId: string | null } | null = null;
+  const consider = (headline: RegistrationHeadline, registrationId: string | null) => {
+    if (worst === null || rank[headline] > rank[worst.headline])
+      worst = { headline, registrationId };
   };
 
   for (const [divisionId, reg] of Object.entries(regState.registrationsByDivision)) {
@@ -101,6 +104,7 @@ function viewerWorstHeadline(
         paymentSummary: reg.paymentSummary,
         mySeat: reg.mySeat,
       }).headline,
+      reg.id,
     );
   }
 
@@ -111,6 +115,7 @@ function viewerWorstHeadline(
         : regState.bareSlot.status === 'rejected'
           ? 'unsecured'
           : 'verifying',
+      null,
     );
   }
 
@@ -157,10 +162,16 @@ export default async function TournamentPage({ params, searchParams }: Params) {
     registrationOpen: isOpen,
     slotHoldMinutes,
     registrationCloseAt: t.registrationCloseAt,
+    maxClubsPerPlayer: t.maxClubsPerPlayer,
   };
   // The header pill beside the tournament status pill (master_plan §2AS B) - nothing when the viewer
-  // holds no entry and no reservation.
-  const viewerHeadline = regState ? viewerWorstHeadline(regState, t.divisions) : null;
+  // holds no entry and no reservation. Also carries the registration (if any) behind the worst
+  // headline, so an unsecured pill's "Pay now" jumps straight to that entry's receipt (§2AT E).
+  const viewerWorst = regState ? viewerWorstStatus(regState, t.divisions) : null;
+  const viewerHeadline = viewerWorst?.headline ?? null;
+  const viewerPayHref = viewerWorst?.registrationId
+    ? `?pay=${viewerWorst.registrationId}#my-registrations`
+    : '#my-registrations';
   const interestOptions = demandOptions(t.divisions);
   // Interest recorded under the old planning taxonomy is folded into the matching division, so the
   // breakdown shows one row per division rather than an old and a new row for the same thing.
@@ -186,7 +197,7 @@ export default async function TournamentPage({ params, searchParams }: Params) {
             {viewerHeadline && (
               <ViewerStatusPill
                 headline={viewerHeadline}
-                href={viewerHeadline === 'unsecured' ? '#my-registrations' : undefined}
+                href={viewerHeadline === 'unsecured' ? viewerPayHref : undefined}
               />
             )}
             {t.visibility === 'unlisted' && <span className="vp-label">Unlisted</span>}

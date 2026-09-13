@@ -9,6 +9,12 @@ import { formatMonthDay } from '@/lib/format-date';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import type { WizardPartner } from './types';
 
+/** `mergeNote` (master_plan §2AT Decision A) - a one-liner explaining that choosing this player
+ *  merges their own solo entry into the new team. Declared here as a forward-compat extension of
+ *  `PlayerSearchResult` rather than a required field, so this file still typechecks the moment the
+ *  server contract lands it (see registration.ts `PlayerSearchResult`). */
+type SearchResult = PlayerSearchResult & { mergeNote?: string | null };
+
 /**
  * Step 2 (doubles only): name a partner now, or choose one later (master_plan §2AO B). Reuses the
  * debounced search from the old `PartnerInviteForm`, which this wizard replaces - that file is
@@ -25,8 +31,8 @@ export function PartnerStep({
   onContinue: (partner: WizardPartner | null, acknowledgedPartner: boolean) => void;
 }) {
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<PlayerSearchResult[]>([]);
-  const [chosen, setChosen] = useState<PlayerSearchResult | null>(null);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [chosen, setChosen] = useState<SearchResult | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [searching, setSearching] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,6 +127,9 @@ export function PartnerStep({
                 )}
                 {p.blockedReason && (
                   <span className="text-warning mt-0.5 block text-xs">{p.blockedReason}</span>
+                )}
+                {!p.blockedReason && p.mergeNote && (
+                  <span className="text-foreground-muted mt-0.5 block text-xs">{p.mergeNote}</span>
                 )}
               </span>
               {p.blockedReason ? (

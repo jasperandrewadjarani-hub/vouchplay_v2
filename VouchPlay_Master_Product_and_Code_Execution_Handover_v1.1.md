@@ -2373,6 +2373,12 @@ System warns for schedule conflict risk but does not automatically block unless 
 
 ## 21.4 Duplicate Prevention
 
+**v1.72 (master_plan §2AT A):** a player whose only live team in the division is a SOLO entry (one
+confirmed member, no invitation out, no team receipt submitted or verified) may be invited by, or
+invite, another such player; accepting MERGES the invitee's entry into the inviter's team (their
+registration is withdrawn with event `merged_into_team`, their slot moves with them). A whole-team
+receipt on the invitee's entry still refuses with an explanation.
+
 Block:
 - duplicate same player in same division,
 - duplicate same pair in same division,
@@ -2556,6 +2562,11 @@ Use database transaction / locking strategy.
 Do not rely on frontend counts.
 
 ## 23.3 Waitlist
+
+**v1.72 (master_plan §2AT B, C):** a rejected or refunded receipt never blocks a player's own
+cancellation. Cancellation requests on entries and reserved slots can be withdrawn by the player and are
+approved or declined explicitly by the organizer (events `cancellation_withdrawn` /
+`cancellation_approved` / `cancellation_declined`).
 
 Waitlist maintains ordered entries:
 - default order by eligible completed registration timestamp.
@@ -6412,6 +6423,26 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+
+## v1.72 (2026-09-13)
+
+_Solo-entry partner merge, two-sided cancellation requests, cancel after a declined receipt, Pay now
+straight to the receipt, pay-later closes, club call-to-action after paying, refunded slots hidden,
+vouch success screen, profile header (master_plan §2AT). Migration `0045`._
+
+- **Partner merge (§21.4, §21.5):** two players who each hold their own solo entry in a division may
+  team up; on acceptance the invitee's entry is folded into the inviter's team (their slot travels,
+  waitlist promoted). A whole-team receipt on the invitee's entry is the one case that still asks the
+  organizer.
+- **Cancellation requests:** players see "Cancellation requested" and can withdraw; organizers see
+  Approve cancellation / Decline as the only actions on such entries and slots.
+- **Declined receipts:** a rejected receipt no longer blocks self-cancellation.
+- **Reserved slots:** refunded or removed slots disappear; a declined reservation offers Send a new
+  receipt or Remove.
+- **Wizard:** Pay now opens the receipt screen directly; I'll pay later closes; after paying, a
+  "Represent a club" card.
+- **Vouch:** the success screen is "Vouch submitted" and closes itself. **Profile:** STS beside the
+  community chip, sex badge top-right, "Based on n players" removed.
 
 ## v1.71 (2026-09-13)
 

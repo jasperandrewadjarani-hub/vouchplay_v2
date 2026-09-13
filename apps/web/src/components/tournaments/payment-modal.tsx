@@ -12,7 +12,7 @@ import {
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { RegistrationWizard } from './registration-wizard';
+import { RegistrationWizard, resolvePayFor } from './registration-wizard';
 import type { WizardTournament } from './wizard/types';
 
 const empty: PaymentActionState = {};
@@ -191,10 +191,11 @@ export function PaymentModalBody({
 
 /**
  * "Pay now to secure your slot" - the single control an unpaid entry shows in My registrations. It
- * opens the registration wizard at the Pay step for this registration (master_plan §2AO B) instead of
- * its own modal, so seat-vs-team and the receipt form live in the one place every entry point shares.
- * `autoOpen` is set for the entry the player just created, so payment appears the instant the page
- * settles - no vanished form, no five-second gap (§2K).
+ * opens the registration wizard straight at the Receipt step for this registration (master_plan §2AT
+ * Decision E - no intermediate Pay step; the receipt's "Paying for" switch still lets a doubles
+ * player flip between their own seat and the whole team), so the receipt form lives in the one place
+ * every entry point shares. `autoOpen` is set for the entry the player just created, so payment
+ * appears the instant the page settles - no vanished form, no five-second gap (§2K).
  */
 export function PayNowCell({
   tournament,
@@ -208,6 +209,7 @@ export function PayNowCell({
   autoOpen?: boolean;
 }) {
   const [open, setOpen] = useState(autoOpen);
+  const payFor = resolvePayFor(tournament, state, registrationId);
   return (
     <div className="mt-2">
       {/* Danger, not the usual gradient CTA (master_plan §2AS B) - a call to action to pay and
@@ -224,7 +226,7 @@ export function PayNowCell({
         <RegistrationWizard
           tournament={tournament}
           state={state}
-          initial={{ step: 'pay', registrationId }}
+          initial={{ step: 'receipt', registrationId, payFor }}
           onClose={() => setOpen(false)}
         />
       )}

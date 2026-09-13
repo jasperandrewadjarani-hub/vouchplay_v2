@@ -22,6 +22,7 @@ export function PaidEntryActions({
   divisionId,
   partnerName,
   canChangePartner,
+  cancellationRequested = false,
 }: {
   registrationId: string;
   tournamentId: string;
@@ -30,6 +31,10 @@ export function PaidEntryActions({
   partnerName?: string | null;
   /** Doubles only, and only once migration 0027 is applied (§2A). */
   canChangePartner?: boolean;
+  /** A cancellation request is already pending for this entry (master_plan §2AT Decision C) - the
+   *  amber "Cancellation requested" tag and its own Withdraw request button live in My registrations,
+   *  above this component, so "Request to cancel" is hidden rather than offered twice. */
+  cancellationRequested?: boolean;
 }) {
   const router = useRouter();
   const [panel, setPanel] = useState<'none' | 'partner' | 'cancel'>('none');
@@ -59,6 +64,7 @@ export function PaidEntryActions({
   }
 
   const showChange = Boolean(canChangePartner && teamId && divisionId);
+  const showCancelRequest = !cancellationRequested;
   const actionBtn =
     'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors';
 
@@ -73,37 +79,44 @@ export function PaidEntryActions({
 
   return (
     <div className="mt-2 space-y-2">
-      {/* One matched pair - equal width, side by side from the narrowest phone up. */}
-      <div className={`grid gap-2 ${showChange ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        {showChange && (
-          <button
-            type="button"
-            aria-expanded={panel === 'partner'}
-            onClick={() => setPanel((p) => (p === 'partner' ? 'none' : 'partner'))}
-            className={`${actionBtn} ${
-              panel === 'partner'
-                ? 'border-primary bg-primary/10 text-foreground'
-                : 'border-border text-foreground hover:bg-surface-muted'
-            }`}
-          >
-            <Users size={16} aria-hidden />
-            Change partner
-          </button>
-        )}
-        <button
-          type="button"
-          aria-expanded={panel === 'cancel'}
-          onClick={() => setPanel((p) => (p === 'cancel' ? 'none' : 'cancel'))}
-          className={`${actionBtn} ${
-            panel === 'cancel'
-              ? 'border-warning bg-warning/10 text-foreground'
-              : 'border-border text-foreground hover:bg-surface-muted'
-          }`}
+      {/* One matched pair - equal width, side by side from the narrowest phone up. "Request to
+          cancel" drops out entirely while a request is already pending (§2AT C). */}
+      {(showChange || showCancelRequest) && (
+        <div
+          className={`grid gap-2 ${showChange && showCancelRequest ? 'grid-cols-2' : 'grid-cols-1'}`}
         >
-          <XCircle size={16} aria-hidden />
-          Request to cancel
-        </button>
-      </div>
+          {showChange && (
+            <button
+              type="button"
+              aria-expanded={panel === 'partner'}
+              onClick={() => setPanel((p) => (p === 'partner' ? 'none' : 'partner'))}
+              className={`${actionBtn} ${
+                panel === 'partner'
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : 'border-border text-foreground hover:bg-surface-muted'
+              }`}
+            >
+              <Users size={16} aria-hidden />
+              Change partner
+            </button>
+          )}
+          {showCancelRequest && (
+            <button
+              type="button"
+              aria-expanded={panel === 'cancel'}
+              onClick={() => setPanel((p) => (p === 'cancel' ? 'none' : 'cancel'))}
+              className={`${actionBtn} ${
+                panel === 'cancel'
+                  ? 'border-warning bg-warning/10 text-foreground'
+                  : 'border-border text-foreground hover:bg-surface-muted'
+              }`}
+            >
+              <XCircle size={16} aria-hidden />
+              Request to cancel
+            </button>
+          )}
+        </div>
+      )}
 
       {panel === 'partner' && showChange && (
         <ChangePartnerForm
@@ -115,7 +128,7 @@ export function PaidEntryActions({
         />
       )}
 
-      {panel === 'cancel' && (
+      {panel === 'cancel' && showCancelRequest && (
         <div className="border-border space-y-2 rounded-xl border p-3">
           <label className="text-foreground block text-sm font-medium" htmlFor="cancelReason">
             Why do you need to cancel?

@@ -259,6 +259,7 @@ function SlotRow({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [showReject, setShowReject] = useState(false);
+  const [showApproveCancel, setShowApproveCancel] = useState(false);
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -328,8 +329,9 @@ function SlotRow({
         <p className="text-danger text-[11px]">Declined: {slot.rejectionReason}</p>
       )}
 
-      {/* Cancel-my-reservation (master_plan §2AQ Decision F) - the player's own reason, plus the
-          organizer's two decisions: refund the payment, or decline the request and keep the slot. */}
+      {/* Cancel-my-reservation (master_plan §2AQ Decision C/F) - the player's own reason, plus the
+          organizer's two decisions: Approve cancellation (refund + close) or Decline (keep the
+          slot). */}
       {slot.cancelRequestedAt && (
         <div className="border-warning/40 bg-warning/10 rounded-lg border p-2">
           <p className="text-warning flex items-center gap-1.5 text-xs font-semibold">
@@ -344,21 +346,39 @@ function SlotRow({
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <button
               type="button"
-              disabled={pending}
-              onClick={() => run(() => markRefunded(slot.id, tournamentId, '', 'slot'))}
-              className={`${btn} border-border text-foreground border`}
+              onClick={() => setShowApproveCancel((v) => !v)}
+              className={`${btn} bg-danger/90 text-white`}
             >
-              Refund
+              Approve cancellation
             </button>
             <button
               type="button"
               disabled={pending}
               onClick={() => run(() => decideSlotCancellation(slot.id, tournamentId, true))}
-              className={`${btn} vp-gradient text-white`}
+              className={`${btn} border-border text-foreground border`}
             >
-              Keep
+              Decline
             </button>
           </div>
+          {showApproveCancel && (
+            <div className="border-border mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
+              <p className="text-foreground-muted text-xs">Refund and cancel this reservation?</p>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(async () => {
+                    const res = await decideSlotCancellation(slot.id, tournamentId, false);
+                    if (res.ok) setShowApproveCancel(false);
+                    return res;
+                  })
+                }
+                className={`${btn} bg-danger/90 text-white`}
+              >
+                Yes, refund &amp; cancel
+              </button>
+            </div>
+          )}
         </div>
       )}
 

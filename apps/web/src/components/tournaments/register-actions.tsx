@@ -44,13 +44,15 @@ export function RegisterActions({
   }
 
   if (registration) {
-    // A player may cancel their own entry only while no money is involved. The server enforces the
-    // same rule (player_cancel_registration raises payment_already_started once a payments row
-    // exists), so showing the button after that would guarantee a dead end. Once a receipt is in,
-    // the honest answer is the organizer - and we say so instead of hiding the option silently.
-    const paymentStarted = Boolean(registration.paymentStatus);
+    // A player may cancel their own entry while no money is genuinely in flight. The server enforces
+    // the same rule (player_cancel_registration v3, master_plan §2AT Decision B): a receipt that was
+    // rejected or already refunded no longer blocks self-cancellation - only a payment still
+    // submitted/verified does, and that case is the organizer's to untangle.
+    const paymentBlocksCancel = Boolean(
+      registration.paymentStatus && !['rejected', 'refunded'].includes(registration.paymentStatus),
+    );
     const cancellableStatus = ['payment_pending', 'waitlisted'].includes(registration.status);
-    const canWithdraw = registrationOpen && cancellableStatus && !paymentStarted;
+    const canWithdraw = registrationOpen && cancellableStatus && !paymentBlocksCancel;
     const needsOrganiserToCancel =
       registrationOpen &&
       !canWithdraw &&
@@ -72,9 +74,9 @@ export function RegisterActions({
             {pending ? 'Cancelling…' : 'Cancel registration'}
           </button>
         )}
-        {/* Once a receipt exists, PaidEntryActions owns this state and offers Request to cancel.
-           Two different explanations of the same situation is one too many (§1Y). */}
-        {needsOrganiserToCancel && !paymentStarted && (
+        {/* Once a receipt exists, PaidEntryActions owns this state and offers Request to cancel - the
+           organizer-only sentence still applies while a payment is submitted/verified (§1Y, §2AT B). */}
+        {needsOrganiserToCancel && (
           <p className="text-foreground-muted max-w-sm text-xs">
             This entry can no longer be cancelled here. Contact the organizer for help.
           </p>

@@ -23,6 +23,25 @@ import type {
 export type { WizardTournament, WizardInitial } from './wizard/types';
 
 /**
+ * `payFor` for an existing registration jumping straight to the receipt (master_plan §2AT Decision
+ * E) - `seat` for a doubles division (paying only your own slot), `team` for singles (paying the
+ * whole, one-person "team"). Falls back to `team` if the registration cannot be resolved to a
+ * division at all - conservative, since `team` is always a valid payer of last resort.
+ */
+export function resolvePayFor(
+  tournament: WizardTournament,
+  state: ViewerRegistrationState,
+  registrationId: string,
+): WizardPayFor {
+  const found = Object.entries(state.registrationsByDivision).find(
+    ([, reg]) => reg.id === registrationId,
+  );
+  if (!found) return 'team';
+  const division = tournament.divisions.find((d) => d.id === found[0]);
+  return division?.format === 'doubles' ? 'seat' : 'team';
+}
+
+/**
  * "Building a team in a game" (master_plan §2AO B): one step-at-a-time modal that replaces the three
  * old inline entry forms (partner search + acknowledge, "enter now choose a partner later", singles
  * register) and the top "Register" scroll. One decision per screen - Division, Partner (doubles
@@ -216,17 +235,24 @@ export function RegistrationWizard({
   }
 
   async function handlePayLater() {
+    // "I'll pay later" closes the wizard outright now (master_plan §2AT Decision F) - no Done screen
+    // for this path. A reservation creates nothing, so there is nothing to look at afterwards.
     if (isReservation) {
-      // Reservation "I'll pay later" creates nothing (master_plan §2AO B) - just finish.
-      setWizard((w) => ({ ...w, step: 'done' }));
+      onClose();
       return;
     }
     if (wizard.registrationId) {
-      setWizard((w) => ({ ...w, step: 'done' }));
+      onClose();
+      router.push(`?entered=${wizard.registrationId}#my-registrations`, { scroll: false });
+      router.refresh();
       return;
     }
     const res = await createEntry();
-    if (res.ok) setWizard((w) => ({ ...w, step: 'done' }));
+    if (res.ok && res.registrationId) {
+      onClose();
+      router.push(`?entered=${res.registrationId}#my-registrations`, { scroll: false });
+      router.refresh();
+    }
   }
 
   function handleReceiptSuccess() {
@@ -335,6 +361,8 @@ export function RegistrationWizard({
               isReservation,
               registrationCloseAt: tournament.registrationCloseAt ?? null,
             }}
+            tournament={tournament}
+            state={state}
             onViewRegistrations={handleViewRegistrations}
             onClose={onClose}
           />
@@ -346,10 +374,11 @@ export function RegistrationWizard({
 
 /**
  * Renders a trigger (`children`) that opens the wizard, and auto-opens it from a shared link:
- * `?register=1` opens at Division, `?entered=<id>` opens at Pay for that registration (replaces the
- * old `RegisterAnchorScroll`). Mounted once near the top of the tournament page; every other entry
- * point (Enter on a division row, Pay now, Choose your division) mounts its own `RegistrationWizard`
- * directly with a more specific `initial`.
+ * `?register=1` opens at Division, `?pay=<id>` opens straight at the Receipt for that registration
+ * (master_plan §2AT Decision E; replaces the old `?entered=`, which now only opens the My
+ * registrations panel - see `MyRegistrations`/`page.tsx` - and never the wizard). Mounted once near
+ * the top of the tournament page; every other entry point (Enter on a division row, Pay now, Choose
+ * your division) mounts its own `RegistrationWizard` directly with a more specific `initial`.
  */
 export function RegistrationWizardLauncher({
   tournament,
@@ -363,12 +392,14 @@ export function RegistrationWizardLauncher({
   const [open, setOpen] = useState(false);
   const [initial, setInitial] = useState<WizardInitial>({ step: 'division' });
 
-  // Runs ONCE per mount, on purpose. `state` is a fresh object after every router.refresh(), and
-  // re-running on it would re-open the wizard at Pay every time the page refreshed with `?entered=`
-  // still in the URL - including the refresh that follows a successful receipt. A registration that
-  // already has a receipt (or whose seat is paid) is never re-opened at Pay either.
+  // Runs ONCE per mount, on purpose. `state` and `tournament` are fresh objects after every
+  // router.refresh(), and re-running on them would re-open the wizard every time the page refreshed
+  // with `?pay=` still in the URL - including the refresh that follows a successful receipt. A
+  // registration that already has a receipt (or whose seat is paid) is never re-opened at Receipt.
   const stateRef = useRef(state);
   stateRef.current = state;
+  const tournamentRef = useRef(tournament);
+  tournamentRef.current = tournament;
   useEffect(() => {
     const current = stateRef.current;
     if (!current) return;
@@ -378,17 +409,20 @@ export function RegistrationWizardLauncher({
     } catch {
       return;
     }
-    const entered = params.get('entered');
-    if (entered) {
-      const reg = Object.values(current.registrationsByDivision).find((r) => r.id === entered);
+    const pay = params.get('pay');
+    if (pay) {
+      const found = Object.entries(current.registrationsByDivision).find(([, r]) => r.id === pay);
+      const reg = found?.[1];
       const alreadyPaying =
         !reg ||
         reg.paymentSummary?.anyReceipt ||
         reg.paymentStatus === 'submitted' ||
         reg.mySeat === 'paid' ||
         reg.mySeat === 'submitted';
-      if (!alreadyPaying) {
-        setInitial({ step: 'pay', registrationId: entered });
+      if (!alreadyPaying && found) {
+        const division = tournamentRef.current.divisions.find((d) => d.id === found[0]);
+        const payFor: WizardPayFor = division?.format === 'doubles' ? 'seat' : 'team';
+        setInitial({ step: 'receipt', registrationId: pay, payFor });
         setOpen(true);
       }
       return;

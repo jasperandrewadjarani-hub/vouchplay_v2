@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { ListChecks, ShieldAlert, TriangleAlert } from 'lucide-react';
 import { formatFee } from '@vouchplay/core';
 import type { SeatState } from '@vouchplay/core';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { describeRegistrationStatus } from '@/lib/tournaments/registration-status';
+import {
+  withdrawRegistrationCancellation,
+  withdrawSlotCancellation,
+  dismissSlot,
+} from '@/lib/actions/registration';
 import { RegisterActions } from './register-actions';
 import { PayNowCell } from './payment-modal';
 import { PaidEntryActions } from './paid-entry-actions';
@@ -16,6 +22,102 @@ import { CancelReservationForm } from './cancel-reservation-form';
 import { Button } from '@/components/ui/button';
 import { RegistrationWizard, type WizardTournament } from './registration-wizard';
 import type { WizardInitial } from './wizard/types';
+
+/** The amber "Cancellation requested" tag, matched to a "Withdraw request" button (master_plan §2AT
+ *  Decision C) - shared by the entry card and the reserved-slot card, since both cancellation
+ *  requests work the same way from the player's side: request, then either wait or take it back. */
+function CancellationRequestedTag({
+  onWithdraw,
+}: {
+  onWithdraw: () => Promise<{ ok?: boolean; error?: string; message?: string }>;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function run() {
+    setMsg(null);
+    start(async () => {
+      const res = await onWithdraw();
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setMsg(res.error ?? res.message ?? 'Could not withdraw that request.');
+      }
+    });
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <span className="bg-warning/15 text-warning inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold">
+        <ShieldAlert size={12} aria-hidden />
+        Cancellation requested
+      </span>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={run}
+        className="border-border text-foreground hover:bg-surface-muted inline-flex min-h-8 items-center rounded-full border px-3 text-xs font-semibold disabled:opacity-50"
+      >
+        {pending ? 'Withdrawing…' : 'Withdraw request'}
+      </button>
+      {msg && <span className="text-danger text-xs">{msg}</span>}
+    </div>
+  );
+}
+
+/** "Remove" on a REJECTED bare slot (master_plan §2AT Decision D) - there is nothing left to cancel
+ *  on a declined reservation, so this dismisses the card instead, with an inline "are you sure"
+ *  rather than a native `confirm()` dialog. */
+function RemoveSlotButton({ slotId, tournamentId }: { slotId: string; tournamentId: string }) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  if (confirming) {
+    return (
+      <span className="border-border bg-surface-muted inline-flex flex-wrap items-center gap-2 rounded-xl border p-2 text-xs">
+        <span className="text-foreground">Remove this declined reservation?</span>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const res = await dismissSlot(slotId, tournamentId);
+              if (res.ok) {
+                router.refresh();
+              } else {
+                setMsg(res.error ?? 'Could not remove that reservation.');
+                setConfirming(false);
+              }
+            })
+          }
+          className="text-danger font-semibold disabled:opacity-50"
+        >
+          {pending ? 'Removing…' : 'Yes, remove'}
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => setConfirming(false)}
+          className="text-foreground-muted"
+        >
+          Never mind
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <Button type="button" variant="secondary" onClick={() => setConfirming(true)}>
+        Remove
+      </Button>
+      {msg && <span className="text-danger text-xs">{msg}</span>}
+    </span>
+  );
+}
 
 /**
  * Default-collapsed "My registrations (N)" manager shown immediately after the tournament details
@@ -150,32 +252,41 @@ export function MyRegistrations({
                 {formatFee(bareSlot.currency, bareSlot.amountDue)} - holds a place in the
                 tournament, not in a division.
               </p>
+              {/* Cancellation-requested tag (master_plan §2AT Decision C/D) - Choose your division
+                  stays available even while a request is pending: the organizer may decline it. */}
+              {bareSlot.cancelRequestedAt && (
+                <CancellationRequestedTag
+                  onWithdraw={() => withdrawSlotCancellation(bareSlot.id, tournament.id)}
+                />
+              )}
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button type="button" onClick={() => setWizardInitial({ step: 'division' })}>
                   Choose your division
                 </Button>
                 {bareSlot.status === 'rejected' && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setWizardInitial({ step: 'receipt', payFor: 'reservation' })}
-                  >
-                    Send a new receipt
-                  </Button>
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => setWizardInitial({ step: 'receipt', payFor: 'reservation' })}
+                    >
+                      Send a new receipt
+                    </Button>
+                    {/* A rejected reservation has nothing left to cancel - Remove replaces "Cancel my
+                        reservation" here (master_plan §2AT Decision D). */}
+                    <RemoveSlotButton slotId={bareSlot.id} tournamentId={tournament.id} />
+                  </>
                 )}
               </div>
               {/* A live bare slot can ask the organizer to cancel it (master_plan §2AS Decision F) -
-                  a slot already attached to an entry uses PaidEntryActions' own request instead. */}
-              <div className="mt-2">
-                {bareSlot.cancelRequestedAt ? (
-                  <p className="text-foreground-muted flex items-start gap-2 text-sm" role="status">
-                    <ShieldAlert size={15} className="text-primary mt-0.5 shrink-0" aria-hidden />
-                    <span>Cancellation requested - the organizer will decide.</span>
-                  </p>
-                ) : (
+                  a slot already attached to an entry uses PaidEntryActions' own request instead. A
+                  rejected slot has nothing to cancel, and a pending request already offers Withdraw
+                  above instead of asking again. */}
+              {bareSlot.status !== 'rejected' && !bareSlot.cancelRequestedAt && (
+                <div className="mt-2">
                   <CancelReservationForm slotId={bareSlot.id} tournamentId={tournament.id} />
-                )}
-              </div>
+                </div>
+              )}
             </li>
           )}
           {entries.map(({ division, reg, divisionId, status, team, partnerName }) => {
@@ -192,6 +303,8 @@ export function MyRegistrations({
               (reg.paymentSummary ? seatNeedsPayment : legacyNeedsPayment);
             const hasReceiptInReview =
               reg.paymentStatus === 'submitted' || Boolean(reg.paymentSummary?.anyReceipt);
+            // master_plan §2AT Decision C - a pending cancellation request on this entry.
+            const cancellationRequested = Boolean(reg.cancellationRequested);
             return (
               <li key={divisionId} className="border-border bg-surface rounded-xl border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -201,6 +314,11 @@ export function MyRegistrations({
                       tournament card and the page header pill. */}
                   <ViewerStatusPill headline={s.headline} />
                 </div>
+                {cancellationRequested && (
+                  <CancellationRequestedTag
+                    onWithdraw={() => withdrawRegistrationCancellation(reg.id, tournament.id)}
+                  />
+                )}
                 {team && (
                   <p className="text-foreground-muted mt-1 text-xs">
                     Team: {team.members.map((m) => m.name).join(' & ')}
@@ -298,6 +416,7 @@ export function MyRegistrations({
                         divisionId={divisionId}
                         partnerName={partnerName}
                         canChangePartner={d.teamSize > 1 && Boolean(team?.teamId && divisionId)}
+                        cancellationRequested={cancellationRequested}
                       />
                     </div>
                   )

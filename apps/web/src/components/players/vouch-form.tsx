@@ -2,7 +2,6 @@
 
 import { useActionState, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { Check, X } from 'lucide-react';
 import { SKILL_BANDS } from '@vouchplay/config';
 import { submitVouch, type VouchActionState } from '@/lib/actions/vouch';
@@ -46,10 +45,14 @@ export function VouchForm({
   const [asCoach, setAsCoach] = useState(false);
   const [anonymousChoice, setAnonymousChoice] = useState(true);
 
-  // Refresh the profile behind the dialog, but do not auto-close: the confirmation is where the
-  // next useful action lives (§1S).
+  // Success is a dead-simple confirmation now (master_plan §2AT Decision H): refresh the profile
+  // behind the dialog and auto-close shortly after, instead of asking for another decision here.
   useEffect(() => {
-    if (state.ok) router.refresh();
+    if (!state.ok) return;
+    router.refresh();
+    const timer = setTimeout(onClose, 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.ok, router]);
 
   return (
@@ -94,55 +97,13 @@ export function VouchForm({
         </div>
 
         {state.ok ? (
-          /*
-           * Growth without manufacturing reciprocal pairs. A "request a vouch back" button here
-           * would produce exactly the repeat pairs CONTRIB_V1 discounts, and a vouch given while
-           * asking for one back is not independent evidence (§1S). Sending people to vouch for
-           * someone ELSE grows the graph in the direction that makes ratings more trustworthy, and
-           * is what the scoring actually rewards: distinct players supported.
-           */
-          <div className="space-y-4 text-center" role="status">
+          // Just the confirmation, nothing to decide (master_plan §2AT Decision H) - the header's ×
+          // still closes it immediately, and it also closes itself shortly after.
+          <div className="space-y-4 py-4 text-center" role="status">
             <span className="bg-success/15 text-success mx-auto flex h-14 w-14 items-center justify-center rounded-full">
               <Check size={28} aria-hidden />
             </span>
-            <div>
-              {state.held ? (
-                <>
-                  <p className="text-foreground text-lg font-bold">Thanks – your vouch is saved.</p>
-                  <p className="text-foreground-muted mt-1 text-sm">
-                    It will count after a quick review. You don&apos;t need to do anything.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-foreground text-lg font-bold">Thank you. Your vouch is in.</p>
-                  <p className="text-foreground-muted mt-1 text-sm">
-                    It strengthens {targetName}&apos;s skill level and how confident the community
-                    is about it.
-                  </p>
-                </>
-              )}
-            </div>
-            <p className="text-foreground-muted text-sm">
-              Who else have you played with? Vouching for more people you genuinely know is what
-              makes everyone&apos;s profile more trustworthy.
-            </p>
-            <div className="flex flex-col gap-2">
-              <Link
-                href="/players"
-                onClick={onClose}
-                className="vp-gradient flex min-h-[44px] w-full items-center justify-center rounded-xl px-4 text-sm font-semibold text-white"
-              >
-                Vouch for someone else
-              </Link>
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
-              >
-                Done for now
-              </button>
-            </div>
+            <h2 className="text-foreground text-lg font-bold">Vouch submitted</h2>
           </div>
         ) : (
           <form action={action} className="space-y-4">

@@ -3032,3 +3032,22 @@ open the wizard. Fixed the link per notification's true destination:
 Left on `?register=1` deliberately (recipient is off the team / free to re-enter): partner_removed,
 partner_invite_withdrawn, partner_team_left, and the waitlist registerLink. No schema/logic change;
 gates green; folded into the same unpushed deploy.
+
+## 2026-09-13 - Solo-entry merge, cancellation requests both sides, cancel after decline, Pay now -> receipt, pay-later closes, club CTA, refunded slots hidden, vouch success, profile header (§2AT, handover v1.72)
+Screenshots: Christine (solo entry in the same division) chosen as partner -> "One of you is already
+on a team in this division" (player_on_active_team_in_division counts a solo entry). Design = merge:
+mergeable_solo_team() (one confirmed member, no invite out, no submitted/verified team receipt);
+seating RPCs accept a mergeable invitee; accept_partner_invitation withdraws the invitee's solo
+registration (event merged_into_team, waitlist promoted), disbands the solo team, seats them, returns
+merged_registration_id; server moves their slot and settles both; entry_merged notification.
+player_cancel_registration v3: only submitted/verified team receipts (or another member's live slot)
+block - a rejected receipt no longer traps the player; UI shows Cancel when receipts are rejected.
+Cancellation requests: player tag + Withdraw request (event cancellation_withdrawn / clear
+cancel_requested_at); organizer Approve cancellation (release_slot 'cancelled' + event + notify) /
+Decline (event + notify) as the only row; organizer cancellationRequest derived from the LATEST event.
+Reserved slots: getLatestBareSlot never returns refunded/dismissed; rejected -> Send new receipt or
+Remove (dismissed_at, 0045); "not currently reserved" gone. ?pay={id} opens the wizard at the receipt
+screen (banner, pill, PayNowCell, notifications); ?entered= only opens the panel. Pay later closes
+the wizard. Done screen: Represent a club (ClubRepSelector inline / Join a club). Vouch success =
+"Vouch submitted" + x, auto-close 1.5 s. Profile: community · STS · self; sex badge top-right; caption
+removed.

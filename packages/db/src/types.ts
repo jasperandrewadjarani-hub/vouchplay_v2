@@ -641,6 +641,9 @@ export interface TournamentSlotRow {
   /** §2AS F (migration 0044, extended). Optional: absent until the migration is applied. */
   cancel_requested_at?: string | null;
   cancel_reason?: string | null;
+  /** §2AT Decision D (migration 0045). Optional: absent until the migration is applied - a rejected
+   *  bare slot the player has dismissed ("Remove"), so it stops resurfacing as their latest reservation. */
+  dismissed_at?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -17,9 +17,21 @@ import {
   getLatestBareSlot,
   getOrganizerSlots,
   getSlotCancelRequests,
+  getSlotDismissedAt,
 } from '@/lib/payments/slots';
 import { divisionName } from './dto';
 import { getPartnerLockAt } from './queries';
+
+/** §2AT Decision C: the cancellation-request lifecycle on a registration, oldest to newest. Both the
+ *  organizer list and the viewer state derive their "is there a pending request" verdict from the
+ *  LATEST of these per registration - a withdrawn/approved/declined request must stop tagging the
+ *  entry on either side, not just accumulate forever. */
+const CANCELLATION_EVENT_TYPES = [
+  'cancellation_requested',
+  'cancellation_withdrawn',
+  'cancellation_approved',
+  'cancellation_declined',
+];
 
 /**
  * Viewer-specific + organizer registration reads (handover §20–§23, §26.4). Not cached (per-viewer).
@@ -119,6 +131,11 @@ export interface ViewerRegistration {
    *  Drives the "Remind {name}" button's 24h throttle copy (master_plan §2AQ A2) without a second
    *  round trip when the button renders. */
   lastPartnerReminderAt: string | null;
+  /** True when this entry has a cancellation request pending the organizer's decision (master_plan
+   *  §2AT Decision C) - the LATEST cancellation-family event on the registration is
+   *  `cancellation_requested` (a later withdrawal/approval/decline clears this). Drives the
+   *  "Cancellation requested" tag + Withdraw-request button in My registrations. */
+  cancellationRequested: boolean;
 }
 export interface ViewerInvitation {
   id: string;
@@ -497,6 +514,33 @@ export async function getViewerRegistrationState(
       }
     }
 
+    // §2AT Decision C: same "latest cancellation-family event" rule the organizer list uses (see
+    // `getOrganizerRegistrations` below) - one bounded read ordered by created_at, newest first, so a
+    // withdrawn/approved/declined request stops tagging the entry for the viewer too.
+    const cancellationRequestedByReg = new Set<string>();
+    if (regList.length > 0) {
+      const { data: cancelEventRows } = await svc
+        .from('registration_events')
+        .select('registration_id, event_type, created_at')
+        .in(
+          'registration_id',
+          regList.map((r) => r.id),
+        )
+        .in('event_type', CANCELLATION_EVENT_TYPES)
+        .order('created_at', { ascending: false });
+      const latestCancelEventSeen = new Set<string>();
+      for (const e of (cancelEventRows ?? []) as {
+        registration_id: string;
+        event_type: string;
+      }[]) {
+        if (latestCancelEventSeen.has(e.registration_id)) continue;
+        latestCancelEventSeen.add(e.registration_id);
+        if (e.event_type === 'cancellation_requested') {
+          cancellationRequestedByReg.add(e.registration_id);
+        }
+      }
+    }
+
     for (const r of regList) {
       const pay = paymentByReg.get(r.id);
       registrationsByDivision[r.division_id] = {
@@ -509,6 +553,7 @@ export async function getViewerRegistrationState(
         paymentSummary: null,
         mySeat: null,
         lastPartnerReminderAt: lastReminderByReg.get(r.id) ?? null,
+        cancellationRequested: cancellationRequestedByReg.has(r.id),
       };
     }
 
@@ -882,12 +927,13 @@ export async function getOrganizerRegistrations(
         .from('team_members')
         .select('team_id, player_id, member_order, confirmed_at')
         .in('team_id', teamIds),
-      // Open cancellation requests, so the organizer can find and answer them (§1Z).
+      // Every cancellation-family event, newest first, so the LATEST one per registration decides
+      // whether a request is still pending (§2AT Decision C) - not just whether one was ever raised.
       svc
         .from('registration_events')
-        .select('registration_id, metadata, created_at')
+        .select('registration_id, event_type, metadata, created_at')
         .in('registration_id', regIds)
-        .eq('event_type', 'cancellation_requested')
+        .in('event_type', CANCELLATION_EVENT_TYPES)
         .order('created_at', { ascending: false }),
       // Payments for these registrations.
       svc
@@ -905,17 +951,26 @@ export async function getOrganizerRegistrations(
     confirmed_at: string | null;
   }[];
 
+  // §2AT Decision C: `cancelRows` is ordered newest-first across ALL four event types, so the first
+  // row seen per registration is its latest cancellation-family event - only surfaced as a pending
+  // request when that latest event is still `cancellation_requested` (a withdrawal/approval/decline
+  // that came after clears it, exactly like the viewer-side derivation below).
   const cancelByReg = new Map<string, { reason: string; requestedAt: string }>();
+  const latestCancelEventSeen = new Set<string>();
   for (const c of (cancelRows ?? []) as {
     registration_id: string;
+    event_type: string;
     metadata: Record<string, unknown> | null;
     created_at: string;
   }[]) {
-    if (cancelByReg.has(c.registration_id)) continue;
-    cancelByReg.set(c.registration_id, {
-      reason: String(c.metadata?.reason ?? ''),
-      requestedAt: c.created_at,
-    });
+    if (latestCancelEventSeen.has(c.registration_id)) continue;
+    latestCancelEventSeen.add(c.registration_id);
+    if (c.event_type === 'cancellation_requested') {
+      cancelByReg.set(c.registration_id, {
+        reason: String(c.metadata?.reason ?? ''),
+        requestedAt: c.created_at,
+      });
+    }
   }
   // Depends on `members`, so it cannot join the batch above - one more round trip.
   const profiles = await resolve(members.map((m) => m.player_id));
@@ -1040,7 +1095,12 @@ export interface OrganizerBareSlot {
 
 export async function getOrganizerBareSlots(tournamentId: string): Promise<OrganizerBareSlot[]> {
   const all = await getOrganizerSlots(tournamentId);
-  const bare = all.filter((s) => !s.registration_id);
+  // §2AT Decision D: a dismissed rejected reservation ("Remove") is gone from the organizer's panel
+  // too, same as it is from the player's own view (`getLatestBareSlot`).
+  const dismissedAt = await getSlotDismissedAt(
+    all.filter((s) => !s.registration_id).map((s) => s.id),
+  );
+  const bare = all.filter((s) => !s.registration_id && !dismissedAt.get(s.id));
   if (bare.length === 0) return [];
 
   const [profiles, divisionIdsSet, cancelRequests] = [

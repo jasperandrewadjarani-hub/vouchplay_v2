@@ -4655,6 +4655,131 @@ Keep, bulk), `tournament-form.tsx` (switch), Admin leaderboards page (Operations
 Docs → 0044 extended (main session) → four Sonnet lanes (core; server; organizer + admin UI; player UI)
 → gates → one commit on top of `464cee2` → Jasper applies `scripts/apply-0044.sql` once and pushes once.
 
+## 2AT. Solo-entry partner merge, cancellation requests (tag / withdraw / approve), cancel after a declined receipt, Pay now straight to the receipt, pay-later closes, club CTA after paying, refunded slots hidden, vouch success screen, profile header (2026-09-13)
+
+Jasper's batch after the §2AQ–§2AS deploy: (1) after paying, a call to action to choose the club(s)
+to represent (can be decided later); (2) reserved slots whose cancellation the organizer accepted
+must disappear from My registrations; (3) "can't add a partner after paying a slot - one of you is
+already on a team in this division" - and the rule he wants: two players who each hold a slot in
+the same division (paid or not) may partner up, division rules permitting; (4) "This slot is not
+currently reserved" error; (5) organizers get an explicit **Approve cancellation** button for
+entries and slots, not Refund or the ⋯ menu; (6) cancelling after a REJECTED payment errors -
+a player whose receipt was declined must be able to cancel easily; (7) the red banner's Pay now must
+open the receipt upload directly; (8) "I'll pay later" must close the modal; (9) the vouch success
+screen becomes just "Vouch submitted" with an ×, then closes itself; (10) profile header: drop
+"Based on n players", STS beside the community chip, the sex icon top-right. Addendum: a slot or
+entry with a pending cancellation request must be clearly tagged in My registrations, and the player
+must be able to WITHDRAW the request (missing today).
+
+### Findings (screenshots + code + production read)
+
+1. **Partner refusal** - every seating RPC refuses when the invitee is on ANY live team in the division
+   (`player_on_active_team_in_division`). Christine's own solo entry (open seat) counts. The
+   invitation search shows her as choosable, then the RPC refuses - the worst order.
+2. **Cancel after decline** - `player_cancel_registration` raises `payment_already_started` when a
+   `payments` row exists in ANY status, rejected included; the UI also hides Cancel whenever a payment
+   status exists. A declined receipt therefore traps the player: cannot pay (unless resubmit), cannot
+   cancel without the organizer.
+3. **"Not currently reserved"** - `requestSlotCancellation` refuses when the bare slot's status is not
+   submitted / verified; the My registrations card shows a REJECTED bare slot ("Declined: …") with the
+   cancel control still available. A rejected reservation has nothing to cancel - it needs "Remove".
+4. **Refunded slots still show** - `getLatestBareSlot` falls back to the newest bare row of ANY status
+   when no live one exists, so a slot the organizer refunded after a cancellation request keeps
+   rendering as a card.
+5. **Cancellation requests are one-way** - an entry's request is a `registration_events` row with no
+   withdraw or decline; a slot's is `cancel_requested_at` with Keep / Refund only on the organizer
+   side; neither shows the player a clear "requested" tag beyond one muted line.
+6. **Pay now** - the banner and `PayNowCell` open the wizard at the PAY CHOICE step (via `?entered=`),
+   one screen before the receipt; `?entered=` after "I'll pay later" also re-opens the wizard.
+7. **Pay later** - `handlePayLater` moves to Done instead of closing.
+8. **Vouch success** - two paragraphs + two buttons after a vouch; **profile header** - the "Based on
+   n players" caption duplicates the STS chip's count; STS sits after the self-rated pill; the sex
+   badge takes a chip slot in the credentials row.
+
+### Decisions
+
+**A. Solo-entry merge (§21 amendment, migration 0045).** A player's live team in a division is
+**mergeable** when it has exactly one member (them, confirmed), no invitation `sent` from it, and its
+live registration carries no team receipt in `submitted` / `verified` (a whole-team payment is the
+organizer's to untangle). New SQL helper `mergeable_solo_team(p_division, p_player) returns uuid`.
+The three seating RPCs (`create_team_with_pending_partner`, `replace_pending_partner`,
+`change_partner`) no longer refuse a mergeable invitee; `accept_partner_invitation` MERGES on the
+team branch: the invitee's solo registration is released (`release_slot … 'withdrawn'`, event
+`merged_into_team`, waitlist promoted as usual), their solo team disbanded, then they are seated as
+today; the RPC returns `merged_registration_id`. Server: after acceptance the invitee's slot is
+detached from the merged registration (money travels) and attached to the joined one, both settled;
+the invitee is told `entry_merged` ("Your own entry was folded into {inviter}'s team"). Refusals now
+say why: "Christine already paid for a whole team in this division - ask the organizer to combine
+your entries." The invitation search marks non-mergeable players before they are chosen.
+
+**B. Cancel after a declined receipt.** `player_cancel_registration` v3 blocks only on a team receipt
+in `submitted` / `verified` or another member's live slot; a `rejected` / `refunded` receipt no longer
+blocks. Server-side, cancelling detaches the player's own slots as today. UI: Cancel registration is
+offered when the entry's receipts are all rejected / absent (not only when none exist).
+
+**C. Cancellation requests, both sides.**
+- Player: an entry or reserved slot with a pending request shows an amber **Cancellation requested**
+  tag under its headline and a **Withdraw request** button. Entry withdraw = event
+  `cancellation_withdrawn`; slot withdraw clears `cancel_requested_at`. Organizers are notified of
+  withdrawals only in-app (`cancellation_withdrawn`, non-critical).
+- Organizer: an entry or slot with a pending request shows **Approve cancellation** (primary) and
+  **Decline** as the ONLY action row. Entry approve = `release_slot … 'cancelled'` + event
+  `cancellation_approved` + `registration_cancelled` notification (money: "any refund is settled with
+  the organizer"); entry decline = event `cancellation_declined` + notification. Slot approve = refund
+  (existing `markRefunded` slot path) + clear + `slot_cancel_approved`; slot decline = Keep (existing).
+  The "Use Reject entry to cancel" line is gone.
+- The organizer list derives `cancellationRequest` from the LATEST cancellation event (requested,
+  withdrawn, approved, declined), so a withdrawn request no longer shows.
+
+**D. Reserved slots lifecycle.** `getLatestBareSlot` returns a live slot, else the newest `rejected`
+one, never refunded / dismissed. A rejected bare slot's card offers **Send a new receipt** and
+**Remove** (`tournament_slots.dismissed_at`, migration 0045; audited); "Cancel my reservation" only
+on live slots (fixes "not currently reserved").
+
+**E. Pay now → receipt.** New `?pay={registrationId}` opens the wizard directly at the RECEIPT screen
+(payFor `seat` for doubles, `team` for singles; the "Paying for" switch stays). The banner, the header
+pill, the unpaid notifications and `PayNowCell` use it. `?entered=` no longer opens the wizard at all -
+it only opens the My registrations panel on that entry.
+
+**F. Pay later closes.** For a division entry: create the entry, close the wizard, open My
+registrations on it (`?entered=`). For a reservation: close. No Done screen.
+
+**G. Club CTA after paying.** The Done screen gains a **Represent a club** card: the existing
+`ClubRepSelector` inline when the player has eligible clubs (with "Decide later" = close), else one
+line "Join a club to represent it here" linking to `/clubs`. `WizardTournament.maxClubsPerPlayer`;
+the state already carries `eligibleClubs` / `clubReps`.
+
+**H. Vouch success.** "Vouch submitted" + the check, an × only, auto-closes after ~1.5 s (the
+request-a-vouch and comment paths are untouched).
+
+**I. Profile header.** Credentials row: community chip · STS chip · self-rated chip; the sex badge
+moves to the header's top-right corner (absolute, next to the share / edit controls); the "Based on
+{n} players" caption is removed (the STS chip already shows the count). Cards unchanged.
+
+### Contracts
+
+**Migration 0045:** `tournament_slots.dismissed_at timestamptz`; `mergeable_solo_team(uuid, uuid)`;
+`create_team_with_pending_partner`, `replace_pending_partner`, `change_partner` (invitee conflict →
+mergeable-aware), `accept_partner_invitation` (merge; returns `merged_registration_id`);
+`player_cancel_registration` v3. Every definer function followed by revoke/grant.
+**Core:** catalog `entry_merged` (critical), `cancellation_withdrawn` (non-critical),
+`cancellation_approved` (critical), `cancellation_declined` (critical), `slot_cancel_approved` (critical).
+**Web server:** `respondInvitation` merge hooks; `searchInvitablePlayers` blocked reason for
+non-mergeable; RPC_ERRORS `team_paid_not_mergeable`; `withdrawRegistrationCancellation(registrationId,
+tournamentId)`, `withdrawSlotCancellation(slotId, tournamentId)`, `approveRegistrationCancellation(
+registrationId, tournamentId)`, `declineRegistrationCancellation(registrationId, tournamentId)`,
+`dismissSlot(slotId, tournamentId)`; `decideSlotCancellation(keep=false)` notifies `slot_cancel_approved`;
+`getLatestBareSlot` excludes refunded / dismissed; viewer `ViewerRegistration.cancellationRequested:
+boolean`; organizer `cancellationRequest` from the latest event.
+**Web UI:** wizard (Done club card, pay-later close, `?pay=` launcher, receipt entry), banner + pill +
+`PayNowCell` links, My registrations (tags, Withdraw request, Remove, Cancel after decline),
+organizer sheet + slots panel (Approve / Decline row), `vouch-form.tsx`, profile header.
+
+### Execution
+
+Docs → 0045 (Opus) → three Sonnet lanes (server; player UI; organizer UI) → gates → commit → Jasper
+applies `scripts/apply-0045.sql` and pushes → verification.
+
 ## 1. Prompt Contract
 
 ### In scope

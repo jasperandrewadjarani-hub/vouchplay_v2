@@ -18,7 +18,7 @@ export interface UnpaidSlotsSummary {
 export function UnpaidSlotStrip({ summary }: { summary: UnpaidSlotsSummary }) {
   if (!summary.first) return null;
   const href = summary.first.registrationId
-    ? `/tournaments/${summary.first.slug}?entered=${summary.first.registrationId}#my-registrations`
+    ? `/tournaments/${summary.first.slug}?pay=${summary.first.registrationId}#my-registrations`
     : `/tournaments/${summary.first.slug}`;
   return (
     <div className="bg-danger border-b border-black/10">

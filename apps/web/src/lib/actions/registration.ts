@@ -34,6 +34,7 @@ import {
   detachSlots,
   settleRegistration,
   summarizeRegistration,
+  getSlotCancelRequests,
 } from '@/lib/payments/slots';
 import { sendConfirmationEmailForRegistration } from '@/lib/payments/confirmation-email';
 import { markRefunded } from './payment';
@@ -84,7 +85,17 @@ const RPC_ERRORS: Record<string, string> = {
   not_invitee: 'This invitation is not addressed to you.',
   not_pending: 'This invitation is no longer pending.',
   invitation_expired: 'This invitation has expired.',
-  partner_conflict: 'One of you is already on a team in this division.',
+  // §2AT Decision A (migration 0045): a solo entry in the division no longer conflicts by itself - it
+  // may be MERGEABLE - so this refusal now only ever means the other player is on a team WITH SOMEONE
+  // ELSE. The old "one of you is already on a team" wording stopped being true the day a lone solo
+  // entrant became a valid partner.
+  partner_conflict: 'That player is already on a team with someone else in this division.',
+  // §2AT Decision A: the specific non-mergeable case - the invitee's own solo team already carries a
+  // team receipt in `submitted`/`verified`, so folding it in would tangle two payments together. The
+  // `{name}` placeholder is filled in by `friendly()` below with whichever player's name the caller
+  // could resolve, else "That player".
+  team_paid_not_mergeable:
+    '{name} already paid for a whole team in this division - ask the organizer to combine your entries.',
   invalid_release_status: 'Invalid action.',
   registration_not_found: 'That registration could not be found.',
   player_changes_locked: 'Player registration changes are closed. Contact the organizer for help.',
@@ -116,9 +127,13 @@ const RPC_ERRORS: Record<string, string> = {
   player_does_not_fit: "That player does not meet this division's rules.",
   no_partner_to_release: 'There is no confirmed partner on this team yet.',
 };
-function friendly(msg: string | undefined): string {
+/** `name` fills the `{name}` placeholder on templated copy (currently only `team_paid_not_mergeable`,
+ *  §2AT Decision A) - resolved by the caller where possible, else "That player". Every other entry in
+ *  `RPC_ERRORS` ignores it. */
+function friendly(msg: string | undefined, name?: string | null): string {
   if (!msg) return 'That action failed. Please try again.';
-  for (const [key, text] of Object.entries(RPC_ERRORS)) if (msg.includes(key)) return text;
+  for (const [key, text] of Object.entries(RPC_ERRORS))
+    if (msg.includes(key)) return text.replace('{name}', name ?? 'That player');
   return 'That action failed. Please try again.';
 }
 
@@ -133,6 +148,9 @@ async function friendlyLogged(
   fn: string,
   message: string | undefined,
   entity?: { entityType?: string; entityId?: string | null },
+  /** §2AT Decision A: the name to fill `{name}` with on `team_paid_not_mergeable` (and any future
+   *  templated code) - the caller resolves whichever player the refusal is actually about. */
+  name?: string | null,
 ): Promise<{ error: string; refresh?: true }> {
   await logRpcRefusal({
     actorId,
@@ -141,7 +159,7 @@ async function friendlyLogged(
     entityType: entity?.entityType,
     entityId: entity?.entityId ?? null,
   });
-  const text = friendly(message);
+  const text = friendly(message, name);
   return message?.includes('not_team_member') ? { error: text, refresh: true } : { error: text };
 }
 
@@ -407,7 +425,15 @@ async function doEnterWithPendingPartner(
     p_expires_at: null,
   });
   if (teamError) {
-    return await friendlyLogged(userId, 'create_team_with_pending_partner', teamError.message);
+    // §2AT Decision A: `team_paid_not_mergeable` names whichever player it is about - here, the
+    // invitee being named.
+    return await friendlyLogged(
+      userId,
+      'create_team_with_pending_partner',
+      teamError.message,
+      undefined,
+      (await getActorMini(inv.id)).name,
+    );
   }
   const teamId = (created as { team_id?: string } | null)?.team_id;
   if (!teamId) return { error: 'Could not start your entry. Please try again.' };
@@ -547,7 +573,15 @@ export async function replacePendingPartner(
       p_message: v.message ? v.message.trim() : null,
       p_expires_at: null,
     });
-    if (error) return await friendlyLogged(user.id, 'replace_pending_partner', error.message);
+    if (error) {
+      return await friendlyLogged(
+        user.id,
+        'replace_pending_partner',
+        error.message,
+        undefined,
+        (await getActorMini(inv.id)).name,
+      );
+    }
 
     const [me, tm] = await Promise.all([getActorMini(user.id), getTournamentMini(tournamentId)]);
     await notify({
@@ -644,7 +678,15 @@ export async function changePartner(
       p_message: v.message ? v.message.trim() : null,
       p_expires_at: null,
     });
-    if (error) return await friendlyLogged(user.id, 'change_partner', error.message);
+    if (error) {
+      return await friendlyLogged(
+        user.id,
+        'change_partner',
+        error.message,
+        undefined,
+        (await getActorMini(inv.id)).name,
+      );
+    }
 
     const removedPlayer = (data as { removed_player?: string } | null)?.removed_player;
     const registrationId = (data as { registration_id?: string } | null)?.registration_id;
@@ -698,6 +740,13 @@ export interface PlayerSearchResult {
    * Present only when a divisionId was supplied (§2D).
    */
   blockedReason: string | null;
+  /**
+   * §2AT Decision A: set when this player already has their own solo entry in the division AND it is
+   * MERGEABLE (one member, no invite sent from it, no submitted/verified team receipt) - choosing them
+   * folds that entry into yours instead of starting fresh. Null otherwise (including when they are not
+   * on a team at all, or when `blockedReason` already rules them out).
+   */
+  mergeNote?: string | null;
 }
 
 /** The division columns the fit rule needs. Kept here so the shape is checked in one place. */
@@ -846,11 +895,122 @@ export async function searchInvitablePlayers(
     }
   }
 
+  // §2AT Decision A (migration 0045): a candidate already on a LIVE team in this division is not an
+  // automatic refusal any more - their team may be MERGEABLE (exactly one member - them, confirmed -
+  // no invite `sent` from it, and no team receipt in `submitted`/`verified`). This mirrors the SQL
+  // `mergeable_solo_team` rule in TS so the search can tell the two cases apart BEFORE a pick, instead
+  // of everyone reading the same refusal the RPC used to raise for both (master_plan Finding 1: "the
+  // invitation search shows her as choosable, then the RPC refuses - the worst order"). Only checked
+  // for candidates the fit pass above did not already rule out - a fit failure is about the candidate
+  // themselves and takes priority over a team-conflict verdict.
+  const mergeNotes = new Map<string, string>();
+  if (divisionId && named.length > 0) {
+    const candidateIds = named.filter((p) => !reasons.has(p.id)).map((p) => p.id);
+    if (candidateIds.length > 0) {
+      const { data: myTeamRows } = await svc
+        .from('team_members')
+        .select('team_id, player_id')
+        .in('player_id', candidateIds);
+      const teamIdsByPlayer = new Map<string, string[]>();
+      for (const r of (myTeamRows ?? []) as { team_id: string; player_id: string }[]) {
+        const list = teamIdsByPlayer.get(r.player_id) ?? [];
+        list.push(r.team_id);
+        teamIdsByPlayer.set(r.player_id, list);
+      }
+      const allTeamIds = Array.from(new Set(Array.from(teamIdsByPlayer.values()).flat()));
+      if (allTeamIds.length > 0) {
+        const { data: teamRows } = await svc
+          .from('teams')
+          .select('id')
+          .eq('division_id', divisionId)
+          .in('status', ['forming', 'formed', 'locked'])
+          .in('id', allTeamIds);
+        const liveTeamIds = new Set(((teamRows ?? []) as { id: string }[]).map((t) => t.id));
+        // A player has at most one active team per division (the same invariant every seating RPC
+        // relies on) - so at most one of their team ids can be live here.
+        const liveTeamByPlayer = new Map<string, string>();
+        for (const [playerId, teamIds] of teamIdsByPlayer) {
+          const live = teamIds.find((id) => liveTeamIds.has(id));
+          if (live) liveTeamByPlayer.set(playerId, live);
+        }
+        const teamIdsInPlay = Array.from(new Set(liveTeamByPlayer.values()));
+        if (teamIdsInPlay.length > 0) {
+          const [{ data: allMemberRows }, { data: sentInviteRows }, { data: regRows }] =
+            await Promise.all([
+              svc
+                .from('team_members')
+                .select('team_id, player_id, confirmed_at')
+                .in('team_id', teamIdsInPlay),
+              svc
+                .from('partner_invitations')
+                .select('team_id')
+                .in('team_id', teamIdsInPlay)
+                .eq('status', 'sent'),
+              svc
+                .from('registrations')
+                .select('id, team_id')
+                .in('team_id', teamIdsInPlay)
+                .not('status', 'in', '(withdrawn,cancelled,rejected)'),
+            ]);
+          const membersByTeam = new Map<
+            string,
+            { player_id: string; confirmed_at: string | null }[]
+          >();
+          for (const m of (allMemberRows ?? []) as {
+            team_id: string;
+            player_id: string;
+            confirmed_at: string | null;
+          }[]) {
+            const list = membersByTeam.get(m.team_id) ?? [];
+            list.push(m);
+            membersByTeam.set(m.team_id, list);
+          }
+          const teamsWithSentInvite = new Set(
+            ((sentInviteRows ?? []) as { team_id: string | null }[])
+              .map((r) => r.team_id)
+              .filter((id): id is string => !!id),
+          );
+          const regByTeam = new Map<string, string>();
+          for (const r of (regRows ?? []) as { id: string; team_id: string }[])
+            regByTeam.set(r.team_id, r.id);
+          const liveRegIds = Array.from(new Set(Array.from(regByTeam.values())));
+          const paidRegIds = new Set<string>();
+          if (liveRegIds.length > 0) {
+            const { data: payRows } = await svc
+              .from('payments')
+              .select('registration_id')
+              .in('registration_id', liveRegIds)
+              .in('status', ['submitted', 'verified']);
+            for (const p of (payRows ?? []) as { registration_id: string }[])
+              paidRegIds.add(p.registration_id);
+          }
+          for (const p of named) {
+            const teamId = liveTeamByPlayer.get(p.id);
+            if (!teamId || reasons.has(p.id)) continue;
+            const members = membersByTeam.get(teamId) ?? [];
+            const soleConfirmed = members.length === 1 && Boolean(members[0]?.confirmed_at);
+            const hasSentInvite = teamsWithSentInvite.has(teamId);
+            const regId = regByTeam.get(teamId);
+            const teamPaid = regId ? paidRegIds.has(regId) : false;
+            if (!soleConfirmed || hasSentInvite) {
+              reasons.set(p.id, 'Already on a team with someone else in this division');
+            } else if (teamPaid) {
+              reasons.set(p.id, 'Already paid for a whole team - ask the organizer');
+            } else {
+              mergeNotes.set(p.id, 'Has their own entry here - it will merge into yours');
+            }
+          }
+        }
+      }
+    }
+  }
+
   return named.map((p) => ({
     slug: p.slug as string,
     name: p.displayName,
     city: p.city,
     blockedReason: reasons.get(p.id) ?? null,
+    mergeNote: mergeNotes.get(p.id) ?? null,
   }));
 }
 
@@ -1205,11 +1365,35 @@ export async function respondInvitation(
     if (row.status !== 'sent') return { error: 'This invitation is no longer pending.' };
 
     if (accept) {
-      const { error } = await svc.rpc('accept_partner_invitation', {
+      const { data: acceptData, error } = await svc.rpc('accept_partner_invitation', {
         p_invitation_id: invitationId,
         p_actor: user.id,
       });
-      if (error) return await friendlyLogged(user.id, 'accept_partner_invitation', error.message);
+      if (error) {
+        // §2AT Decision A: `team_paid_not_mergeable` here is about the accepting player's OWN solo
+        // team (the one migration 0045 would otherwise fold into the inviter's) - resolve their own
+        // name, same "best-effort, else That player" rule as every other call site.
+        return await friendlyLogged(
+          user.id,
+          'accept_partner_invitation',
+          error.message,
+          undefined,
+          (await getActorMini(user.id)).name,
+        );
+      }
+      // §2AT Decision A (migration 0045): a mergeable solo entry folds into the team just joined - the
+      // RPC already withdrew that registration (event `merged_into_team`) and disbanded its solo team;
+      // the money and the notice are this server's job below, alongside the ordinary acceptance flow.
+      const mergedRegistrationId =
+        (acceptData as { merged_registration_id?: string } | null)?.merged_registration_id ?? null;
+      const mergedTeamId =
+        (acceptData as { merged_team_id?: string } | null)?.merged_team_id ?? null;
+      if (mergedRegistrationId) {
+        // The invitee's own money follows them: detach it from the now-withdrawn merged registration
+        // so it is a live bare slot again, in time for the ordinary bare-slot attach below to reuse it
+        // on the joined entry (§2AO A4's existing pattern, unchanged).
+        await detachSlots(mergedRegistrationId, user.id);
+      }
       // The snapshot now covers both members - re-check fit + composition at acceptance, not only
       // at invite (a community skill level can move between the two, §2AM decision 3).
       let liveRegId: string | null = null;
@@ -1304,11 +1488,38 @@ export async function respondInvitation(
           // best-effort
         }
       }
-      // Notify the inviter that their invite was accepted and the team is formed (§27.1).
       const [me, tm] = await Promise.all([
         getActorMini(user.id),
         getTournamentMini(row.tournament_id),
       ]);
+      // §2AT Decision A: settle the folded-away registration (best-effort - it is already `withdrawn`
+      // by the RPC, so this is only ever a no-op safety net) and tell the invitee their own entry is
+      // now this team's, before the ordinary "invite accepted" notice to the inviter below.
+      if (mergedRegistrationId) {
+        try {
+          await settleRegistration(mergedRegistrationId, user.id);
+          const inviterMini = await getActorMini(row.inviter_id);
+          await notify({
+            recipientId: user.id,
+            type: 'entry_merged',
+            actorId: row.inviter_id,
+            params: { actorName: inviterMini.name, tournamentName: tm.name },
+            link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
+            entityType: 'registration',
+            entityId: mergedRegistrationId,
+          });
+          await writeAudit({
+            actorId: user.id,
+            action: 'registration.merged',
+            entityType: 'registration',
+            entityId: mergedRegistrationId,
+            after: { merged_team_id: mergedTeamId, joined_registration_id: liveRegId },
+          });
+        } catch {
+          // best-effort
+        }
+      }
+      // Notify the inviter that their invite was accepted and the team is formed (§27.1).
       await notify({
         recipientId: row.inviter_id,
         type: 'partner_accepted',
@@ -2118,8 +2329,10 @@ export async function requestSlotCancellation(
       return { error: 'This slot is attached to an entry - cancel the entry instead.' };
     }
     if (slot.player_id !== user.id) return { error: 'You do not own this reserved slot.' };
+    // §2AT (2): the UI no longer offers this on a declined slot - a rejected reservation has nothing
+    // to cancel, only to remove (`dismissSlot`) or replace with a new receipt.
     if (!['submitted', 'verified'].includes(slot.status)) {
-      return { error: 'This slot is not currently reserved.' };
+      return { error: 'Only an active reservation can be cancelled.' };
     }
 
     try {
@@ -2236,6 +2449,19 @@ export async function decideSlotCancellation(
     );
     if (refunded.error) return refunded;
     await clearRequest();
+    // §2AT: the player is told the cancellation went through, distinct from the ordinary refund path
+    // (`markRefunded` itself sends nothing) - money-adjacent, so critical (same reasoning as
+    // `cancellation_approved` on the entry side).
+    const tm = await getTournamentMini(tournamentId);
+    await notify({
+      recipientId: slot.player_id,
+      type: 'slot_cancel_approved',
+      actorId: user.id,
+      params: { tournamentName: tm.name },
+      link: tm.slug ? `/tournaments/${tm.slug}#my-registrations` : '/tournaments',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+    });
     await writeAudit({
       actorId: user.id,
       action: 'slot.cancel_refunded',
@@ -2246,6 +2472,344 @@ export async function decideSlotCancellation(
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cancellation requests, both sides (master_plan §2AT Decision C) - withdraw (player), approve/decline
+// (organizer). Both an entry's request (`registration_events`) and a bare slot's (`cancel_requested_at`
+// on the slot row, migration 0044) get their own withdraw path here; the organizer's two decisions are
+// shared with the existing reject/refund machinery so behaviour never forks from it.
+// ---------------------------------------------------------------------------
+
+/** The cancellation-family event types, oldest to newest - the LATEST one per registration is the
+ *  whole truth of whether a request is still pending (master_plan §2AT Decision C). Mirrors the same
+ *  list `registration-queries.ts` uses to derive `cancellationRequest`/`cancellationRequested` - kept
+ *  here too since neither file imports from the other. */
+const CANCELLATION_EVENT_TYPES = [
+  'cancellation_requested',
+  'cancellation_withdrawn',
+  'cancellation_approved',
+  'cancellation_declined',
+];
+
+/** The latest cancellation-family event type on a registration, or null when none has ever been
+ *  raised. Used to gate withdraw/approve/decline on there actually being a pending request. */
+async function latestCancellationEvent(
+  svc: ReturnType<typeof createServiceClient>,
+  registrationId: string,
+): Promise<string | null> {
+  const { data } = await svc
+    .from('registration_events')
+    .select('event_type')
+    .eq('registration_id', registrationId)
+    .in('event_type', CANCELLATION_EVENT_TYPES)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  return ((data ?? [])[0] as { event_type: string } | undefined)?.event_type ?? null;
+}
+
+/** A player withdraws their own pending cancellation REQUEST on an entry (master_plan §2AT Decision C)
+ *  - the entry itself is untouched; only the request is retracted, so the organizer's queue stops
+ *  showing it. Refuses when the latest cancellation-family event is not `cancellation_requested` (it
+ *  was already withdrawn/decided, or none was ever raised). */
+export async function withdrawRegistrationCancellation(
+  registrationId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: reg } = await svc
+      .from('registrations')
+      .select('id, team_id, tournament_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const row = reg as {
+      id: string;
+      team_id: string;
+      tournament_id: string;
+      status: string;
+    } | null;
+    if (!row || row.tournament_id !== tournamentId) return { error: 'Entry not found.' };
+
+    const { data: member } = await svc
+      .from('team_members')
+      .select('player_id')
+      .eq('team_id', row.team_id)
+      .eq('player_id', user.id)
+      .maybeSingle();
+    if (!member)
+      return await staleTeamError(user.id, 'withdrawRegistrationCancellation', registrationId);
+
+    if ((await latestCancellationEvent(svc, registrationId)) !== 'cancellation_requested') {
+      return { error: 'There is no pending cancellation request to withdraw.' };
+    }
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'cancellation_withdrawn',
+      from_status: row.status,
+      to_status: row.status,
+    });
+
+    const [me, tm, organizerIds] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(tournamentId),
+      getTournamentOrganizerIds(tournamentId),
+    ]);
+    if (organizerIds.length) {
+      await notifyMany(organizerIds, {
+        type: 'cancellation_withdrawn',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+        entityType: 'tournament',
+        entityId: tournamentId,
+      });
+    }
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Cancellation request withdrawn.' };
+}
+
+/** A player withdraws their own pending cancellation request on a LIVE reserved (bare) slot
+ *  (master_plan §2AT Decision C) - clears `cancel_requested_at`/`cancel_reason` (migration 0044,
+ *  read/written defensively) without touching the reservation itself. */
+export async function withdrawSlotCancellation(
+  slotId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: slotRow } = await svc
+      .from('tournament_slots')
+      .select('id, tournament_id, player_id')
+      .eq('id', slotId)
+      .maybeSingle();
+    const slot = slotRow as { id: string; tournament_id: string; player_id: string } | null;
+    if (!slot || slot.tournament_id !== tournamentId) return { error: 'Reserved slot not found.' };
+    if (slot.player_id !== user.id) return { error: 'You do not own this reserved slot.' };
+
+    const cancelRequests = await getSlotCancelRequests([slotId]);
+    if (!cancelRequests.get(slotId)?.cancelRequestedAt) {
+      return { error: 'There is no pending cancellation request to withdraw.' };
+    }
+
+    try {
+      await svc
+        .from('tournament_slots')
+        .update({ cancel_requested_at: null, cancel_reason: null })
+        .eq('id', slotId);
+    } catch {
+      // Column not present yet (migration 0044 extended pending).
+    }
+
+    const [me, tm, organizerIds] = await Promise.all([
+      getActorMini(user.id),
+      getTournamentMini(tournamentId),
+      getTournamentOrganizerIds(tournamentId),
+    ]);
+    if (organizerIds.length) {
+      await notifyMany(organizerIds, {
+        type: 'cancellation_withdrawn',
+        actorId: user.id,
+        params: { actorName: me.name, tournamentName: tm.name },
+        link: tm.slug ? `/tournaments/${tm.slug}/manage` : '/tournaments',
+        entityType: 'tournament_slot',
+        entityId: slotId,
+      });
+    }
+    await writeAudit({
+      actorId: user.id,
+      action: 'slot.cancel_withdrawn',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Cancellation request withdrawn.' };
+}
+
+/** Organizer approves a pending entry-cancellation REQUEST (master_plan §2AT Decision C) - the explicit
+ *  **Approve cancellation** button, replacing "use Reject entry to cancel". Same release + detach +
+ *  disband + promotion machinery as `rejectRegistration`, but landing on `cancelled` and recording
+ *  `cancellation_approved` rather than a rejection. Refuses when the latest cancellation-family event
+ *  is not `cancellation_requested`. */
+export async function approveRegistrationCancellation(
+  registrationId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const authorized =
+    (await authorizeOrganizer(user.id, tournamentId, 'approve_registrations')) ||
+    (await authorizeOrganizer(user.id, tournamentId, 'manage_payments'));
+  if (!authorized) {
+    return { error: 'You do not have permission to approve this cancellation.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: reg } = await svc
+      .from('registrations')
+      .select('id, tournament_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const row = reg as { id: string; tournament_id: string; status: string } | null;
+    if (!row || row.tournament_id !== tournamentId) return { error: 'Entry not found.' };
+
+    if ((await latestCancellationEvent(svc, registrationId)) !== 'cancellation_requested') {
+      return { error: 'There is no pending cancellation request for this entry.' };
+    }
+
+    const { data, error } = await svc.rpc('release_slot', {
+      p_registration_id: registrationId,
+      p_actor: user.id,
+      p_new_status: 'cancelled',
+    });
+    if (error) return await friendlyLogged(user.id, 'release_slot', error.message);
+    // §2AO A4: a closed registration keeps no attached slot - the money travels back as a bare
+    // reservation, same as any other closed entry.
+    await detachSlots(registrationId);
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'cancellation_approved',
+      from_status: row.status,
+      to_status: 'cancelled',
+    });
+
+    // Notify BEFORE the team is taken apart, same reasoning as `rejectRegistration`.
+    await notifyRegistrationTeam(registrationId, tournamentId, 'cancellation_approved');
+    await disbandTeamIfEntryClosed(svc, registrationId, user.id, 'organizer');
+    const promoted = (data as { promoted?: string | null } | null)?.promoted;
+    if (promoted) await notifyRegistrationTeam(promoted, tournamentId, 'registration_promoted');
+    // §2AO A3: a promoted team may already hold seat receipts - settle so it does not sit on a bare
+    // 30-minute hold it has, in money terms, already met.
+    if (promoted) await settleRegistration(promoted, null);
+
+    await writeAudit({
+      actorId: user.id,
+      action: 'registration.cancellation_approved',
+      entityType: 'registration',
+      entityId: registrationId,
+      after: { status: 'cancelled' },
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Cancellation approved - the entry is closed.' };
+}
+
+/** Organizer declines a pending entry-cancellation REQUEST (master_plan §2AT Decision C) - the entry is
+ *  untouched; the player is told it stands. Refuses when the latest cancellation-family event is not
+ *  `cancellation_requested`. */
+export async function declineRegistrationCancellation(
+  registrationId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const authorized =
+    (await authorizeOrganizer(user.id, tournamentId, 'approve_registrations')) ||
+    (await authorizeOrganizer(user.id, tournamentId, 'manage_payments'));
+  if (!authorized) {
+    return { error: 'You do not have permission to decide this cancellation.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: reg } = await svc
+      .from('registrations')
+      .select('id, tournament_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const row = reg as { id: string; tournament_id: string; status: string } | null;
+    if (!row || row.tournament_id !== tournamentId) return { error: 'Entry not found.' };
+
+    if ((await latestCancellationEvent(svc, registrationId)) !== 'cancellation_requested') {
+      return { error: 'There is no pending cancellation request for this entry.' };
+    }
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'cancellation_declined',
+      from_status: row.status,
+      to_status: row.status,
+    });
+
+    await notifyRegistrationTeam(registrationId, tournamentId, 'cancellation_declined');
+    await writeAudit({
+      actorId: user.id,
+      action: 'registration.cancellation_declined',
+      entityType: 'registration',
+      entityId: registrationId,
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Cancellation declined - the entry stands.' };
+}
+
+/** A player removes ("Remove") a bare slot the organizer has DECLINED (master_plan §2AT Decision D,
+ *  migration 0045) - sets `dismissed_at` so `getLatestBareSlot`/`getOrganizerBareSlots` stop surfacing
+ *  it. Only ever a declined (`rejected`), unattached, own slot; a live or refunded one is untouched (a
+ *  refunded slot is already closed for good and needs no dismissal). Read/written defensively - the
+ *  column arrives with 0045, unapplied at authoring time. */
+export async function dismissSlot(
+  slotId: string,
+  tournamentId: string,
+): Promise<RegistrationActionState> {
+  const user = await getOptionalUser();
+  if (!user) return { error: 'Please sign in.' };
+  const svc = createServiceClient();
+  try {
+    const { data: slotRow } = await svc
+      .from('tournament_slots')
+      .select('id, tournament_id, player_id, registration_id, status')
+      .eq('id', slotId)
+      .maybeSingle();
+    const slot = slotRow as {
+      id: string;
+      tournament_id: string;
+      player_id: string;
+      registration_id: string | null;
+      status: string;
+    } | null;
+    if (!slot || slot.tournament_id !== tournamentId) return { error: 'Reserved slot not found.' };
+    if (slot.registration_id) return { error: 'This slot is attached to an entry.' };
+    if (slot.player_id !== user.id) return { error: 'You do not own this reserved slot.' };
+    if (slot.status !== 'rejected') return { error: 'Only a declined reservation can be removed.' };
+
+    try {
+      await svc
+        .from('tournament_slots')
+        .update({ dismissed_at: new Date().toISOString() })
+        .eq('id', slotId);
+    } catch {
+      // Column not present yet (migration 0045 pending) - nothing else to roll back.
+    }
+    await writeAudit({
+      actorId: user.id,
+      action: 'slot.dismissed',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+    });
+    await revalTournament(tournamentId);
+  } catch {
+    return { error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Reservation removed.' };
 }
 
 /**

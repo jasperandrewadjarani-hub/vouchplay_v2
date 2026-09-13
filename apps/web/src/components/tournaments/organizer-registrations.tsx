@@ -22,7 +22,12 @@ import {
   type SeatSummary,
   type SeatState,
 } from '@vouchplay/core';
-import { confirmRegistration, rejectRegistration } from '@/lib/actions/registration';
+import {
+  confirmRegistration,
+  rejectRegistration,
+  approveRegistrationCancellation,
+  declineRegistrationCancellation,
+} from '@/lib/actions/registration';
 import {
   approveEligibility,
   reclassifyRegistration,
@@ -829,6 +834,7 @@ function RegRow({
   const [reviewFor, setReviewFor] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState('');
   const [showAssignPartner, setShowAssignPartner] = useState(false);
+  const [showApproveCancel, setShowApproveCancel] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [award, setAward] = useState<string>(OFFICIAL_ACHIEVEMENTS[0].key);
   const [pending, start] = useTransition();
@@ -886,7 +892,10 @@ function RegRow({
     ...(canConfirmWithoutPayment
       ? [{ label: 'Confirm without payment', onSelect: () => setShowConfirmNoPayment((v) => !v) }]
       : []),
-    ...(!closed
+    // §2AQ Decision C: while a cancellation request is open, Approve cancellation / Decline is the
+    // whole decision - "Reject entry" and "Refund payment" would just be two more ways to do the
+    // same thing and read as noise.
+    ...(!closed && !reg.cancellationRequest
       ? [
           {
             label: 'Reject entry',
@@ -895,7 +904,7 @@ function RegRow({
           },
         ]
       : []),
-    ...(verifiedTarget
+    ...(verifiedTarget && !reg.cancellationRequest
       ? [
           {
             label: 'Refund payment',
@@ -930,44 +939,91 @@ function RegRow({
         <OverflowMenu actions={overflowActions} />
       </div>
 
-      {kind === 'verify' && singleTarget && (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() =>
-              run(() => verifyPayment(singleTarget.id, tournamentId, singleTarget.kind))
-            }
-            className={`${btn} vp-gradient text-white`}
-          >
-            Verify payment
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowDeclineReceipt((v) => !v)}
-            className={`${btn} text-danger border-border border`}
-          >
-            Decline receipt
-          </button>
-        </div>
-      )}
-      {kind === 'confirm_free' && (
-        <div className="mt-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run(() => confirmRegistration(reg.id, tournamentId))}
-            className={`${btn} vp-gradient text-white`}
-          >
-            Confirm entry
-          </button>
-        </div>
-      )}
-      {kind === 'waiting_paid' && (
-        <p className="text-foreground-muted mt-2 text-xs">Waiting for payment.</p>
-      )}
-      {kind === 'waitlisted' && (
-        <p className="text-foreground-muted mt-2 text-xs">On the waitlist.</p>
+      {/* §2AQ Decision C: a pending cancellation request replaces the state-driven primary row with
+          exactly two buttons - Approve cancellation / Decline. Payment rows still render below. */}
+      {reg.cancellationRequest ? (
+        <>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowApproveCancel((v) => !v)}
+              className={`${btn} bg-danger/90 text-white`}
+            >
+              Approve cancellation
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => declineRegistrationCancellation(reg.id, tournamentId))}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Decline
+            </button>
+          </div>
+          {showApproveCancel && (
+            <div className="border-border mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
+              <p className="text-foreground-muted text-xs">
+                Cancel this entry? Any refund is settled with the player.
+              </p>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(async () => {
+                    const res = await approveRegistrationCancellation(reg.id, tournamentId);
+                    if (res.ok) setShowApproveCancel(false);
+                    return res;
+                  })
+                }
+                className={`${btn} bg-danger/90 text-white`}
+              >
+                Yes, cancel entry
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {kind === 'verify' && singleTarget && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(() => verifyPayment(singleTarget.id, tournamentId, singleTarget.kind))
+                }
+                className={`${btn} vp-gradient text-white`}
+              >
+                Verify payment
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDeclineReceipt((v) => !v)}
+                className={`${btn} text-danger border-border border`}
+              >
+                Decline receipt
+              </button>
+            </div>
+          )}
+          {kind === 'confirm_free' && (
+            <div className="mt-2">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => confirmRegistration(reg.id, tournamentId))}
+                className={`${btn} vp-gradient text-white`}
+              >
+                Confirm entry
+              </button>
+            </div>
+          )}
+          {kind === 'waiting_paid' && (
+            <p className="text-foreground-muted mt-2 text-xs">Waiting for payment.</p>
+          )}
+          {kind === 'waitlisted' && (
+            <p className="text-foreground-muted mt-2 text-xs">On the waitlist.</p>
+          )}
+        </>
       )}
 
       {showDeclineReceipt && singleTarget && (
@@ -1120,7 +1176,7 @@ function RegRow({
             Cancellation requested
           </p>
           <p className="text-foreground mt-1 text-sm whitespace-pre-wrap">
-            &ldquo;{reg.cancellationRequest.reason}&rdquo; Use Reject entry to cancel.
+            &ldquo;{reg.cancellationRequest.reason}&rdquo;
           </p>
         </div>
       )}

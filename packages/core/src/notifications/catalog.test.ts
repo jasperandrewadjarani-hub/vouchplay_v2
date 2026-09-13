@@ -285,3 +285,66 @@ describe('organizer pay-nudge + cancel-my-reservation notifications (§2AS C/F)'
     expect(notificationDef('slot_cancel_requested')!.critical).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2AT - solo-entry partner merge, cancellation requests (tag/withdraw/approve).
+// ---------------------------------------------------------------------------
+describe('merge + cancellation-request notifications (§2AT)', () => {
+  it('entry_merged is critical, partners-category, and names who it merged into', () => {
+    const def = notificationDef('entry_merged')!;
+    expect(def.category).toBe('partners');
+    expect(def.critical).toBe(true);
+    expect(def.title({ actorName: 'Mandi', tournamentName: 'Hermosa Open' })).toBe(
+      "Your entry for Hermosa Open was folded into Mandi's team - you're partners now",
+    );
+  });
+
+  it('cancellation_withdrawn is non-critical, registrations-category, and names who withdrew', () => {
+    const def = notificationDef('cancellation_withdrawn')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(false);
+    expect(def.title({ actorName: 'Mark', tournamentName: 'Hermosa Open' })).toBe(
+      'Mark withdrew their cancellation request for Hermosa Open',
+    );
+    expect(MUTABLE_CATEGORIES).toContain('registrations');
+  });
+
+  it('cancellation_approved is critical, registrations-category, and mentions the refund is with the organizer', () => {
+    const def = notificationDef('cancellation_approved')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Your entry for Hermosa Open is cancelled - any refund is settled with the organizer',
+    );
+  });
+
+  it('cancellation_declined is critical, registrations-category, and says the entry stands', () => {
+    const def = notificationDef('cancellation_declined')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Your cancellation request for Hermosa Open was declined - your entry stands',
+    );
+  });
+
+  it('slot_cancel_approved is critical, payments-category, and mentions the refund is with the organizer', () => {
+    const def = notificationDef('slot_cancel_approved')!;
+    expect(def.category).toBe('payments');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      'Your reserved slot for Hermosa Open is cancelled - any refund is settled with the organizer',
+    );
+  });
+
+  it('none of the five new §2AT types can be muted', () => {
+    for (const type of [
+      'entry_merged',
+      'cancellation_approved',
+      'cancellation_declined',
+      'slot_cancel_approved',
+    ]) {
+      expect(notificationDef(type)!.critical, type).toBe(true);
+    }
+    expect(notificationDef('cancellation_withdrawn')!.critical).toBe(false);
+  });
+});

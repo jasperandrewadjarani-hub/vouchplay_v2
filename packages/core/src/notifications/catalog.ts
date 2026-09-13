@@ -481,6 +481,43 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `Your reserved slot for ${tour(p)} stays - the organizer kept it`,
     () => 'Your cancellation request was not accepted.',
   ),
+
+  // --- §2AT - solo-entry partner merge, cancellation requests (tag/withdraw/approve) ---
+  // Critical: the accepting player's own paid entry just disappeared into someone else's team - not
+  // something to miss, same reasoning as partner_named_paid/partner_removed.
+  entry_merged: t(
+    'partners',
+    true,
+    (p) => `Your entry for ${tour(p)} was folded into ${who(p)}'s team - you're partners now`,
+  ),
+  // Non-critical: nothing is blocked and nothing needs urgent action - it is just the organizer being
+  // told a request they had not yet acted on no longer stands.
+  cancellation_withdrawn: t(
+    'registrations',
+    false,
+    (p) => `${who(p)} withdrew their cancellation request for ${tour(p)}`,
+  ),
+  // Critical: this is the money-settling outcome of a cancellation request - must not be muted or
+  // missed, same reasoning as registration_rejected/payment_rejected.
+  cancellation_approved: t(
+    'registrations',
+    true,
+    (p) => `Your entry for ${tour(p)} is cancelled - any refund is settled with the organizer`,
+  ),
+  // Critical: tells the player their entry (and their money) stands despite asking to cancel it.
+  cancellation_declined: t(
+    'registrations',
+    true,
+    (p) => `Your cancellation request for ${tour(p)} was declined - your entry stands`,
+  ),
+  // Critical: the money-settling outcome of a reserved-slot cancellation request, same reasoning as
+  // cancellation_approved above.
+  slot_cancel_approved: t(
+    'payments',
+    true,
+    (p) =>
+      `Your reserved slot for ${tour(p)} is cancelled - any refund is settled with the organizer`,
+  ),
 };
 
 export function notificationDef(type: string): NotificationTypeDef | undefined {

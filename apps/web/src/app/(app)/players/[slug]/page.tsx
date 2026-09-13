@@ -157,6 +157,11 @@ export default async function PlayerProfilePage({ params }: Params) {
       {/* Header (§9.1) */}
       <header className="border-border bg-surface vp-hero relative overflow-hidden rounded-2xl border p-5">
         <div className="vp-gradient absolute inset-x-0 top-0 h-1" aria-hidden />
+        {/* Sex badge moved out of the credentials row into the header's own top-right corner
+            (master_plan §2AT Decision I) - it no longer takes a chip slot next to skill/STS. */}
+        <div className="absolute top-3 right-3 z-10">
+          <SexBadge sex={player.sex} />
+        </div>
         {/* Identity + primary action: avatar and name on the left, the Vouch/Share cluster pinned
             top-right on desktop and a prominent row under the name on mobile (§2Y). */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
@@ -213,29 +218,21 @@ export default async function PlayerProfilePage({ params }: Params) {
           </div>
         </div>
 
-        {/* Credentials: skill, confidence, sex, then verification / role / availability badges.
-            §2AO D4/E: the full profile shows the community chip AND the self-rated chip together
-            (community first) when Admin's `profile_show_community_skill` allows it for this viewer;
-            otherwise only the self-rated chip (the self-rating is never hidden from anyone). */}
+        {/* Credentials: community skill, confidence, self-rated skill, then verification / role /
+            availability badges (master_plan §2AT Decision I - STS sits right after the community
+            chip; with no community chip it leads, then the self-rated chip). §2AO D4/E: the full
+            profile shows the community chip AND the self-rated chip together (community first) when
+            Admin's `profile_show_community_skill` allows it for this viewer; otherwise only the
+            self-rated chip (the self-rating is never hidden from anyone). The sex badge lives in the
+            header's top-right corner now, not in this row. */}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {showCommunity && player.communitySkill && (
             <SkillPill band={player.communitySkill} source="community" />
           )}
-          {player.selfRatedSkill && <SkillPill band={player.selfRatedSkill} source="self" />}
           <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
-          <SexBadge sex={player.sex} />
+          {player.selfRatedSkill && <SkillPill band={player.selfRatedSkill} source="self" />}
         </div>
 
-        {/* Honest evidence caption (master_plan §2AF "Workflow and UX"): the version-aware count
-            behind the numbers above, so nothing visibly changes until Admin flips the algorithm
-            version, and a calm, blame-free note when a hold is active - never a count, never a name. */}
-        {player.evidenceCount != null && player.evidenceCount > 0 && (
-          <p className="text-foreground-muted mt-1.5 text-xs">
-            {player.skillVersion === 'STS_V2'
-              ? `Based on ${player.evidenceCount} independent players`
-              : `Based on ${player.uniqueVoucherCount} players`}
-          </p>
-        )}
         {heldVouchCount > 0 && (
           <p className="text-foreground-muted mt-1 flex items-center gap-1.5 text-xs">
             <Clock size={12} aria-hidden />

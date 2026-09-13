@@ -22,6 +22,9 @@ export interface WizardTournament {
   registrationOpen: boolean;
   /** How long an unpaid entry holds its slot, for the honest "pay later" warning (§2J). */
   slotHoldMinutes: number;
+  /** Cap on how many clubs a player may represent at once (handover §22.6) - the Done step's
+   *  "Represent a club" card (master_plan §2AT Decision G) needs it for `ClubRepSelector`. */
+  maxClubsPerPlayer: number;
   /** When registration closes, for the Done step's "choose your division before..." reservation
    *  note. Not part of the literal contract signature but needed for that copy - additive and
    *  optional, so a caller that omits it just gets the open-ended phrasing instead. */

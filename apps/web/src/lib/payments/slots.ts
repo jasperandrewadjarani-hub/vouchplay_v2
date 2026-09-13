@@ -116,8 +116,34 @@ export async function getBareSlot(tournamentId: string, playerId: string): Promi
   }
 }
 
-/** The bare slot that speaks for this player: a live one first, else the most recent bare row of any
- *  status (so a declined reservation can still say "Declined - pay again"). */
+/** §2AT Decision D (migration 0045): defensive read of `dismissed_at` for a bounded set of slot ids -
+ *  the column arrives with 0045 (unapplied at authoring time), so it lives in its OWN query, exactly
+ *  like `getSlotCancelRequests` below handles the 0044 cancel columns. A missing column degrades to
+ *  "not dismissed" rather than breaking the caller. */
+export async function getSlotDismissedAt(slotIds: string[]): Promise<Map<string, string | null>> {
+  const map = new Map<string, string | null>();
+  const ids = Array.from(new Set(slotIds.filter(Boolean)));
+  if (ids.length === 0) return map;
+  try {
+    const svc = createServiceClient();
+    const { data, error } = await svc
+      .from('tournament_slots')
+      .select('id, dismissed_at')
+      .in('id', ids);
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: string; dismissed_at: string | null }[]) {
+      map.set(row.id, row.dismissed_at);
+    }
+  } catch {
+    // Column not present yet (migration 0045 pending) - degrade to "not dismissed".
+  }
+  return map;
+}
+
+/** The bare slot that speaks for this player: a live one first, else the newest `rejected` row that
+ *  has not been dismissed (master_plan §2AT Decision D) - so a declined reservation can still say
+ *  "Declined - pay again" until the player removes it. NEVER a `refunded` row - once refunded the
+ *  reservation is closed for good, same as a dismissed one. */
 export async function getLatestBareSlot(
   tournamentId: string,
   playerId: string,
@@ -135,7 +161,12 @@ export async function getLatestBareSlot(
     if (error) throw error;
     const rows = (data ?? []) as SlotRow[];
     if (rows.length === 0) return null;
-    return rows.find((r) => LIVE_STATUSES.includes(r.status)) ?? rows[0] ?? null;
+    const live = rows.find((r) => LIVE_STATUSES.includes(r.status));
+    if (live) return live;
+    const rejected = rows.filter((r) => r.status === 'rejected');
+    if (rejected.length === 0) return null;
+    const dismissed = await getSlotDismissedAt(rejected.map((r) => r.id));
+    return rejected.find((r) => !dismissed.get(r.id)) ?? null;
   } catch {
     return null;
   }
