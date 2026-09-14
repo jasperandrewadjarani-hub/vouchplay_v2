@@ -3180,3 +3180,10 @@ Review fixes (main session, after the three builders): install row checks in-app
 vouch success dialog holds its auto-close while the push opt-in is showing; `enable()` swallows a
 missing `Notification` API; the once-per-session re-save flags itself before the request. Gates: full
 suite green (902 tests), production build green (`/sw.js` dynamic, `/offline` static, icons auto-linked).
+Deployed and verified live 2026-09-14 (commit dc72ee0, deployment dpl_21LnK6S4veTpRgAtcWbaS4qLvKyu on
+BOTH domains): /sw.js served with the deployment id and the public VAPID key baked in; manifest has
+id + 3 icons; /offline prerendered (sin1); all six icons 200 image/png; <head> carries manifest, icon
+(96) and apple-touch-icon (180); POST /api/push/subscribe unauthenticated -> 401; public pages clean.
+0049 verified read-only: anon select refused (42501), service-role select ok (0 rows). VAPID keys set in
+Vercel (public as Config, private as Secret, Production + Preview). Jasper to rotate the pair once
+(the private key appeared in a screenshot) while push_subscriptions is still empty.
