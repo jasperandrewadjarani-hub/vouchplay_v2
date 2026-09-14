@@ -9,6 +9,7 @@ import {
   resetPasswordRequestSchema,
 } from '@vouchplay/validation';
 import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/service';
 import { getMyProfile, postAuthPath } from '@/lib/auth';
 import { publicEnv } from '@/lib/env';
 import { loadSettingFlag } from '@/lib/settings';
@@ -118,6 +119,19 @@ export async function setPassword(_prev: FormState, formData: FormData): Promise
     const supabase = await createClient();
     const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
     if (error) return { error: error.message };
+    // Record that this account now has a password so the mandatory password gate (§2BB) stops
+    // showing. Best-effort: uses the service client to set the flag on the caller's own row; a
+    // failure here (e.g. before migration 0050) must not fail the successful password change.
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await createServiceClient().from('profiles').update({ password_set: true }).eq('id', user.id);
+      }
+    } catch {
+      // non-fatal - the gate reader fails open, and the next setPassword will retry the flag
+    }
     return { ok: true, message: 'Password set.' };
   } catch {
     return { error: 'Could not set password right now. Please try again shortly.' };

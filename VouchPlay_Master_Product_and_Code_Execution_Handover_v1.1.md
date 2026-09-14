@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.79
+# VouchPlay Master Product & Code Execution Handover v1.80
 
-_(File retains its `…v1.1.md` name; content is v1.79 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.80 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,30 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.80 (2026-09-14)
+
+_Mandatory password election after first email sign-in + persistent sessions (master_plan §2BB). Migration 0050._
+
+- **Password gate:** signup and login default to email OTP, so returning users request a fresh emailed code
+  each visit and burn the Gmail SMTP ~500/day cap as we scale past 350+ users. A blocking, benefit-framed
+  gate (`components/auth/password-setup-gate.tsx`, modeled on `LegalConsentGate`) now appears once to a
+  signed-in, onboarded **email** user with `password_set = false`, making them set a password (no skip,
+  reuses the `setPassword` action) so the next login is instant with no code. **Federated (Google) users are
+  exempt** - they never trigger it; email magic-link users still do.
+- **Kill switch:** new Admin setting `password_gate_enabled` (bool, default `true`, group `flags`, in
+  `packages/config`) turns the gate off instantly for everyone with no deploy; wired in `app-shell.tsx` after
+  the legal gate so only one blocking overlay shows at a time.
+- **Migration 0050** (`supabase/migrations/0050_password_set.sql`; copy at `scripts/apply-0050.sql`, **Jasper
+  applies**) adds `profiles.password_set` and backfills true for users with a password or a non-email
+  provider; no security-definer functions. The reader `getViewerPasswordStatus()` **fails open** (the gate is
+  inert until 0050 is applied), so code and DB can land in either order - Jasper applies it deliberately (not
+  mid Hermosa window, closes 2026-09-16).
+- **Persistent sessions:** new `lib/supabase/cookies.ts` (`withPersistentMaxAge()`, 400-day ceiling) makes the
+  auth cookies survive a browser restart (applied in both server + middleware writes, sign-out deletion still
+  wins). Action item: confirm Supabase Auth -> Sessions has no inactivity/time-box - the real "always signed
+  in" lever. Succeeding phase (not built): move transactional email off Gmail SMTP to Resend / Amazon SES /
+  SendGrid before scale - the gate cuts auth codes now but notification volume will still outgrow the cap.
+
 ## v1.79 (2026-09-14)
 
 _Installed-app login hides "Continue with Google" (master_plan §2BA). No migration._

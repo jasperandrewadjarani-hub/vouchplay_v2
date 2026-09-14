@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { withPersistentMaxAge } from '@/lib/supabase/cookies';
 
 /**
  * Refreshes the Supabase auth session cookie on navigation (handover §34A: middleware stays
@@ -27,7 +28,7 @@ export async function updateSession(request: NextRequest) {
         }
         response = NextResponse.next({ request });
         for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
+          response.cookies.set(name, value, withPersistentMaxAge(options));
         }
       },
     },

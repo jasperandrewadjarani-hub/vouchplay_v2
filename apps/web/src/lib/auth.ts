@@ -95,6 +95,35 @@ export const getViewerLegalStatus = cache(async (): Promise<{ needsAcceptance: b
   }
 });
 
+/**
+ * Whether the signed-in, onboarded viewer must still set a password (master_plan §2BB). Drives the
+ * one-time blocking password gate that converts email-OTP users to password sign-in, so returning
+ * users stop requesting a login code every visit (SMTP cost). Read on its own and fails OPEN
+ * (needsPassword=false) on any error - including before migration 0050 adds the `password_set`
+ * column - so it never disturbs the main profile read and never locks anyone out. Federated (Google)
+ * users and anyone who already has a password are stored as password_set=true and never gated. The
+ * gate is deliberately skipped until onboarding is complete, so a brand-new signup finishes their
+ * profile first and meets the password step once, on the way into the app.
+ */
+export const getViewerPasswordStatus = cache(async (): Promise<{ needsPassword: boolean }> => {
+  try {
+    const user = await getCachedUser();
+    if (!user) return { needsPassword: false };
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('onboarded_at, password_set')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (error) return { needsPassword: false };
+    const row = data as { onboarded_at: string | null; password_set: boolean | null } | null;
+    if (!row?.onboarded_at) return { needsPassword: false };
+    return { needsPassword: row.password_set === false };
+  } catch {
+    return { needsPassword: false };
+  }
+});
+
 /** Guards a page: redirects to /login (with a return path) when there is no session. */
 export async function requireUser(returnTo?: string): Promise<User> {
   const user = await getOptionalUser();

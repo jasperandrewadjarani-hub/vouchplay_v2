@@ -5539,6 +5539,108 @@ window - no browser hop, no strip - consistent with the low-friction, app-like g
 - Typecheck, lint pass. Manual: in a desktop/mobile browser the Google button shows as before; in the
   installed app the login screen shows only Email code + Password.
 
+## 2BB. Mandatory password election after first email sign-in + always-signed-in sessions (reduce SMTP/OTP load) (2026-09-14)
+
+### Problem
+
+Both signup and login default to email OTP (a 6-digit code): every new user is created via a code, and a
+password was only ever optional (buried in settings/reset). So a returning user requests a fresh login code
+on **every** visit, and each code is an email through the Gmail Custom SMTP relay - which caps at ~500
+messages/day. With ~350+ existing users and growth ahead, routine logins alone will burn the daily SMTP
+allowance well before real scale. Jasper asked for two things: after a user's first OTP sign-in, require
+them to set a password so future logins skip the emailed code entirely; and keep users signed in "always"
+so they are not forced back through the email loop by short session lifetimes.
+
+### Cause
+
+OTP is the path of least resistance in the current auth surface - it is the default on both forms and the
+only method a brand-new user ever touches. Nothing nudges a user to graduate to a password, so almost every
+session start is an email send. Separately, the Supabase auth cookies were session cookies, so a browser
+restart could drop the client session and send the user back to the code flow.
+
+### Decision
+
+Add a **blocking, benefit-framed password gate** that appears once, after a user's first email sign-in, and
+makes them elect a password before continuing - so their next visit is an instant password login with no
+emailed code. Federated (Google) users are never gated (they have no password to set and never trigger
+SMTP). Make the auth cookies **persistent** (long max-age) so the client session survives browser restarts.
+Both behaviors are governed so they can be turned off without a deploy, and the gate is inert until Jasper
+deliberately applies the backing migration to the live user base.
+
+### Implementation
+
+- **Migration `supabase/migrations/0050_password_set.sql`** (identical copy at `scripts/apply-0050.sql`,
+  which Jasper runs against Supabase): adds `profiles.password_set boolean not null default false`.
+  Semantics: `password_set = true` means "never show the gate" - the user either has a real password OR
+  authenticates via a federated/Google provider; `false` means an email-only user with no password who must
+  set one. The migration **backfills `true`** for users whose `auth.users.encrypted_password` is set OR who
+  have a non-email provider/identity. It contains **no security-definer functions** (so no grant-lock is
+  required per the §2AA rule) and ends with a verification `SELECT` counting true/false/total.
+- **Blocking gate overlay** - new `apps/web/src/components/auth/password-setup-gate.tsx`, modeled on the
+  existing `LegalConsentGate`. Shown to a signed-in, **onboarded** email user with `password_set = false`.
+  Copy is benefit-framed: "Set a password" / "Create a password so you can sign in instantly next time - no
+  emailed code to wait for." Two fields (new password + confirm), reuses the existing `setPassword` server
+  action, **no skip**, with a small "Signed in as {email}. Not you? Sign out" escape valve. On success it
+  calls `router.refresh()` so the shell re-reads the flag and the gate disappears.
+- **Fail-open reader `getViewerPasswordStatus()`** added to `apps/web/src/lib/auth.ts` (mirrors
+  `getViewerLegalStatus`): returns `{ needsPassword }` and **fails open to `false` on ANY error** -
+  including before migration 0050 is applied (the column does not yet exist) - and only ever flags onboarded
+  users. This is why the code deploy and the migration can land in **either order**, and why the gate stays
+  inert on deploy until Jasper applies 0050.
+- **Flag maintenance.** The `setPassword` action (`apps/web/src/lib/actions/auth.ts`) now sets
+  `password_set = true` (best-effort, via the service-role client) after a successful password change. The
+  OAuth callback (`apps/web/src/app/auth/callback/route.ts`) sets `password_set = true` for **federated
+  sign-ins only** (checks `user.app_metadata.provider`/`providers` != `'email'`), so Google users are never
+  gated but an email magic-link (which also arrives as a `code`) still is. Both writes are best-effort and
+  harmless before the migration exists.
+
+### Kill switch
+
+- New Admin setting `password_gate_enabled` (bool, default `true`) added to `packages/config/src/settings.ts`
+  and `packages/config/src/settings-catalog.ts` (group `flags`). Turning it off **instantly** disables the
+  gate for everyone, no deploy. Wired in `apps/web/src/components/app-shell.tsx`: the gate is computed only
+  when the app is not maintenance-gated, not already showing the legal gate, and the kill switch is on; it is
+  rendered as `<PasswordSetupGate email={...} />` immediately after `<LegalConsentGate />` so only one
+  blocking overlay shows at a time - legal first, then password.
+
+### Always-signed-in
+
+- New module `apps/web/src/lib/supabase/cookies.ts` exports `withPersistentMaxAge()` +
+  `PERSISTENT_COOKIE_MAX_AGE` (400 days - Chrome's cookie ceiling). Applied in both
+  `apps/web/src/lib/supabase/server.ts` and `apps/web/src/lib/supabase/middleware.ts` cookie writes, so the
+  Supabase auth cookies are **persistent** (survive a browser restart) instead of session cookies. It only
+  defaults a lifetime when the caller has not already set one, so sign-out's cookie deletion is never
+  overridden. The middleware already refreshes the session on every navigation, so the window rolls forward;
+  real session lifetime is ultimately governed by the Supabase refresh token. The module deliberately has no
+  `next/headers` import so it is safe to use in Edge middleware.
+
+### Verification
+
+- Typecheck, lint, and unit tests pass; the normal-browser login path is unaffected.
+
+### Assumptions and risks
+
+- The gate does nothing on deploy: the reader fails open to "no password needed" while the `password_set`
+  column is absent, so nothing changes for anyone until Jasper applies 0050. This is intentional - it lets
+  the code ship independently of the DB change and lets Jasper choose the timing.
+- Persistent cookies extend the client session window, but the authoritative session lifetime is the
+  Supabase refresh token plus the dashboard session settings; code cannot override a server-side inactivity
+  timeout or absolute time-box. If those are set restrictively in Supabase, users can still be signed out
+  regardless of the cookie max-age.
+- Email magic-links arrive as a `code` just like OTP, so a magic-link user is still (correctly) treated as
+  an email user and gated; only true federated providers are exempted.
+
+### Succeeding phases
+
+- Jasper applies migration 0050 (`scripts/apply-0050.sql`) **deliberately** - the gate turns on for the
+  existing ~350+ user base only once applied, so he chooses the timing (e.g. **not** mid Hermosa
+  registration window, which closes 2026-09-16).
+- Jasper confirms the Supabase dashboard (Authentication -> Sessions) has **no inactivity timeout and no
+  session time-box** - that dashboard setting, not code, is the primary lever for "always signed in."
+- Recommended (not built): move transactional email - auth confirmations plus payment/reminder
+  notifications - off Gmail SMTP to a dedicated provider (Resend / Amazon SES / SendGrid) before scale. The
+  password gate cuts auth-code email now, but notification volume will still grow past Gmail's ~500/day cap.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

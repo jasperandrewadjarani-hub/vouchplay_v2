@@ -117,6 +117,11 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // Feature flags (handover §61).
   maintenance_mode: false,
   signup_enabled: true,
+  // Mandatory password election gate (master_plan §2BB): a blocking prompt for a signed-in, onboarded
+  // email user with no password, so their next visits use a password instead of an emailed login code
+  // (SMTP cost). Off instantly disables the gate for everyone, no deploy. It is also naturally inert
+  // until migration 0050 is applied (the reader fails open on the missing column).
+  password_gate_enabled: true,
   role_applications_enabled: true,
   coach_applications_enabled: true,
   club_creation_enabled: true,

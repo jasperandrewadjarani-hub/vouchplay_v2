@@ -1172,6 +1172,13 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     sensitive: true,
   },
   {
+    key: 'password_gate_enabled',
+    label: 'Require password after email sign-in',
+    group: 'flags',
+    kind: 'bool',
+    help: 'When on, an email user with no password must set one on their next sign-in, so future logins skip the emailed code (cuts SMTP use). Off disables the prompt for everyone (master_plan §2BB).',
+  },
+  {
     key: 'role_applications_enabled',
     label: 'Role applications enabled',
     group: 'flags',

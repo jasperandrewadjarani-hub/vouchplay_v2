@@ -10,6 +10,7 @@ import { PwaProvider } from './pwa/pwa-provider';
 import { InstallBanner } from './pwa/install-banner';
 import { PushAutoEnable } from './pwa/push-auto-enable';
 import { LegalConsentGate } from './legal/legal-consent-gate';
+import { PasswordSetupGate } from './auth/password-setup-gate';
 import { SiteFooter } from './site-footer';
 import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
 import { UnpaidSlotStrip } from './tournaments/unpaid-slot-strip';
@@ -21,6 +22,7 @@ import {
   getViewerReputationNudge,
   getViewerLegalStatus,
   getViewerIdentityNudge,
+  getViewerPasswordStatus,
 } from '@/lib/auth';
 import { getVoucherPowerCached, type VoucherPower } from '@/lib/vouches/voucher-power';
 import { getViewerUnpaidSlots } from '@/lib/tournaments/unpaid';
@@ -40,6 +42,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
     swEnabled,
     installBannerEnabled,
     pushEnabled,
+    passwordGateEnabled,
     viewer,
   ] = await Promise.all([
     loadSettingFlag('announcement_banner_enabled', false),
@@ -53,6 +56,8 @@ export async function AppShell({ children }: { children: ReactNode }) {
     loadSettingFlag('pwa_install_banner_enabled', true),
     // Push kill switch - gates the on-install auto-enable (master_plan §2AZ addendum).
     loadSettingFlag('push_notifications_enabled', true),
+    // Mandatory password gate kill switch (master_plan §2BB).
+    loadSettingFlag('password_gate_enabled', true),
     getOptionalUser(),
   ]);
   const authed = !!viewer;
@@ -101,6 +106,15 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
   // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
   const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
+  // Mandatory password election (§2BB): a signed-in, onboarded email user with no password is shown a
+  // blocking gate so their next visits use a password instead of an emailed login code (SMTP cost).
+  // Sequenced AFTER the legal gate - one blocking overlay at a time; once Terms are accepted the shell
+  // refreshes and this shows next. Skipped under maintenance gating. Reader fails open (no gate) until
+  // migration 0050 is applied, so this is inert on deploy and turns on only when Jasper applies it.
+  const passwordStatus =
+    gated || legal.needsAcceptance || !passwordGateEnabled
+      ? { needsPassword: false }
+      : await getViewerPasswordStatus();
 
   // Launch/campaign pop-up: only loaded when an Admin has switched it on.
   const welcome = welcomeEnabled
@@ -208,6 +222,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
           permission + subscribes for a signed-in viewer running the standalone app. Renders nothing. */}
         {!gated && <PushAutoEnable adminEnabled={pushEnabled} authed={authed} />}
         {legal.needsAcceptance && <LegalConsentGate />}
+        {passwordStatus.needsPassword && <PasswordSetupGate email={viewer?.email ?? null} />}
       </div>
     </PwaProvider>
   );

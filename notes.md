@@ -3242,3 +3242,30 @@ never do this. Fix: `GoogleSection` (login + signup) now detects standalone via 
 and renders nothing when installed, so the installed app offers only Email code + Password; Google stays in
 the browser where a toolbar exists anyway. Auth routes have no PwaProvider, so the helper is called
 directly, not via `usePwa()`. No migration. Handover -> v1.79.
+
+## 2026-09-14 - Mandatory password after first email sign-in + persistent sessions (§2BB)
+
+Both signup and login default to email OTP, so every returning user requests a fresh emailed code each
+visit - burning the Gmail Custom SMTP ~500/day cap as we grow past 350+ users. Fix: a blocking, benefit-
+framed password gate (`components/auth/password-setup-gate.tsx`, modeled on `LegalConsentGate`) shown once
+to a signed-in, onboarded email user with `password_set = false` - "Create a password so you can sign in
+instantly next time - no emailed code to wait for", two fields, no skip, reuses the `setPassword` action,
+with a "Not you? Sign out" escape. A fail-open reader `getViewerPasswordStatus()` in `lib/auth.ts` returns
+`{needsPassword}` and fails open to false on any error (including before the migration, when the column is
+absent), so code and DB can land in either order and the gate is inert until applied. `setPassword` sets
+`password_set = true` after a successful change; the OAuth callback sets it for federated (Google) sign-ins
+only, so Google users are never gated but email magic-links still are. Admin kill switch
+`password_gate_enabled` (default true, group `flags`, in `packages/config`) turns the gate off instantly
+for everyone with no deploy; wired in `app-shell.tsx` after the legal gate so only one overlay shows at a
+time. Migration `0050_password_set.sql` (copy at `scripts/apply-0050.sql`, Jasper applies) adds
+`profiles.password_set bool not null default false`, backfills true for users with an encrypted password or
+a non-email provider, has no security-definer functions, ends with a verification SELECT. "Always signed
+in": new `lib/supabase/cookies.ts` (`withPersistentMaxAge()` + 400-day `PERSISTENT_COOKIE_MAX_AGE`, Chrome's
+ceiling) applied in both server + middleware cookie writes so auth cookies survive a browser restart; it
+only defaults a lifetime when none is set, so sign-out's deletion still wins, and it avoids `next/headers`
+so it is Edge-safe. Typecheck, lint, unit tests pass; normal-browser login unaffected. Action items: Jasper
+applies 0050 deliberately (gate turns on for the ~350+ base only then - not mid Hermosa window, closes
+2026-09-16) and confirms Supabase Auth -> Sessions has no inactivity/time-box (the real "always signed in"
+lever, not code). Succeeding phase (not built): move transactional email off Gmail SMTP to Resend / Amazon
+SES / SendGrid before scale - the gate cuts auth codes now but notification volume will still outgrow the
+cap. Handover -> v1.80.
