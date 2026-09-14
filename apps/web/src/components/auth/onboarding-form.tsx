@@ -73,19 +73,35 @@ export function OnboardingForm({
         </Field>
       </div>
 
-      {/* master_plan §2AU Decision E: recovered guests already gave their birthday at Step 0 - shown
-          so they can see what's on file, but disabled (and un-named) so it never rides along in the
-          submit, since `onboardingSchema` has nowhere to put an edited value. */}
-      {initial.dateOfBirth && (
-        <Field label="Birthday" htmlFor="dateOfBirthDisplay" hint="From your registration.">
+      {/* Birthday (master_plan §2BF). In edit mode it is a real, editable field (name `dateOfBirth`),
+          optional, so a player can add or correct the date age-limited divisions check at the door.
+          In onboarding, a recovered guest already gave it at Step 0 (§2AU E) - shown read-only, and
+          un-named so it never rides along in that submit. */}
+      {mode === 'edit' ? (
+        <Field
+          label="Birthday"
+          htmlFor="dateOfBirth"
+          hint="Optional. Needed only to enter age-limited divisions."
+        >
           <Input
-            id="dateOfBirthDisplay"
+            id="dateOfBirth"
+            name="dateOfBirth"
             type="date"
-            defaultValue={initial.dateOfBirth}
-            disabled
-            readOnly
+            defaultValue={initial.dateOfBirth ?? ''}
           />
         </Field>
+      ) : (
+        initial.dateOfBirth && (
+          <Field label="Birthday" htmlFor="dateOfBirthDisplay" hint="From your registration.">
+            <Input
+              id="dateOfBirthDisplay"
+              type="date"
+              defaultValue={initial.dateOfBirth}
+              disabled
+              readOnly
+            />
+          </Field>
+        )
       )}
 
       <Field

@@ -21,16 +21,19 @@ import type { ViewerContext } from '@/lib/players/dto';
 import { PlayerCard } from '@/components/players/player-card';
 import { PlayerListSkeleton } from '@/components/players/player-list-skeleton';
 import { SearchFilters } from '@/components/players/search-filters';
-import { AvailabilityCard } from '@/components/players/availability-toggles';
-import { PartnerLookingStrip } from '@/components/partners/partner-looking-strip';
+import { DirectoryDoors } from '@/components/players/directory-doors';
 import { getPartnerLookingStrip } from '@/lib/partners/deck';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
 import { Pagination } from '@/components/ui/pagination';
 import { SignupWall } from '@/components/ui/signup-wall';
-import { LeaderboardsEntryCard } from '@/components/leaderboards/leaderboards-entry-card';
-import { getLeaderboardSettings, getProfileVisibilityFlags } from '@/lib/settings';
+import {
+  getLeaderboardSettings,
+  getProfileVisibilityFlags,
+  getPartnerSettings,
+  loadSettingFlag,
+} from '@/lib/settings';
 import { getLeaderboard } from '@/lib/leaderboards/queries';
 
 export const metadata: Metadata = {
@@ -193,6 +196,16 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // Where people are looking for a partner right now (master_plan §2AV directory strip). Bounded,
   // cached and fail-open, so it can never take the directory down or slow it materially.
   const partnerLooking = await getPartnerLookingStrip(viewer.viewerId);
+  // §2BC: whether the "Find a partner" door exists at all (2-column row when off) - a separate read
+  // from the strip itself, since an empty strip and a disabled feature must not look the same.
+  const partnerSettings = await getPartnerSettings();
+  // §2BC decision A: which state the "Let people find you" / "Find a partner" doors react to - an
+  // anonymous or not-yet-onboarded viewer has no profile to toggle, so they get routed elsewhere.
+  const authDoorState = !authed ? 'anon' : myProfile?.onboarded_at ? 'onboarded' : 'not_onboarded';
+  // §2BC-D: staff see the "See vouch activity" door only while Admin's switch is on; the
+  // /staff/players/[slug] page itself stays reachable by URL regardless (role + step-up gated).
+  const staffLinks =
+    viewer.isStaff && (await loadSettingFlag('staff_activity_links_enabled', true));
 
   return (
     <div className="space-y-5">
@@ -205,18 +218,16 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         </p>
       </div>
 
-      <LeaderboardsEntryCard board={leaders} />
-
-      {myProfile?.onboarded_at && (
-        <AvailabilityCard
-          lookingForPartner={Boolean(myProfile.looking_for_partner)}
-          openForSponsorship={Boolean(myProfile.open_for_sponsorship)}
-        />
-      )}
-
-      {/* Directory strip: the tournaments where players are looking for a partner right now, each a
-          one-tap route to that tournament's deck (master_plan §2AV). Renders nothing when empty. */}
-      <PartnerLookingStrip tournaments={partnerLooking} />
+      {/* One row of three doors - Leaderboards, Let people find you, Find a partner - replacing the
+          three stacked blocks that used to sit above the list (master_plan §2BC decision A). */}
+      <DirectoryDoors
+        authState={authDoorState}
+        board={leaders}
+        lookingForPartner={Boolean(myProfile?.looking_for_partner)}
+        openForSponsorship={Boolean(myProfile?.open_for_sponsorship)}
+        partnerLooking={partnerLooking}
+        partnerMatchmakingEnabled={partnerSettings.enabled}
+      />
 
       {/* Search, filters, sort and the availability card are signed-in features (master_plan §2AH):
           a guest sees the header, the leaders card and a fixed 10-player preview, nothing to tune. */}
@@ -243,7 +254,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           viewer={viewer}
           compact={compact}
           authed={authed}
-          staffLinks={viewer.isStaff}
+          staffLinks={staffLinks}
           showCommunitySkill={showCommunitySkill}
           ownSlug={myProfile?.slug ?? null}
         />

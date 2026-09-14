@@ -35,6 +35,27 @@ export const onboardingSchema = z.object({
     .refine((city) => isValidPhCity(city), { message: 'Please choose your city from the list.' }),
   facebookUrl: z.string().trim().url('Enter a valid URL').max(300).optional().or(z.literal('')),
   bio: z.string().trim().max(300).optional().or(z.literal('')),
+  // Birthday (master_plan §2BF): optional, editable in Edit profile. Only needed to enter an
+  // age-limited division, where the door check refuses an unknown birthday. Empty string clears it.
+  // Validated for a real, past, plausible date (5..120) so the age-at-door gate stays honest; the
+  // key is absent from the onboarding submit today, so `.optional()` keeps that path unchanged.
+  dateOfBirth: z
+    .string()
+    .trim()
+    .refine((v) => v === '' || /^\d{4}-\d{2}-\d{2}$/.test(v), 'Enter a valid date of birth')
+    .refine((v) => {
+      if (v === '') return true;
+      const t = Date.parse(`${v}T00:00:00Z`);
+      if (Number.isNaN(t)) return false;
+      const born = new Date(t);
+      const now = new Date();
+      if (born.getTime() > now.getTime()) return false;
+      let age = now.getUTCFullYear() - born.getUTCFullYear();
+      const m = now.getUTCMonth() - born.getUTCMonth();
+      if (m < 0 || (m === 0 && now.getUTCDate() < born.getUTCDate())) age--;
+      return age >= 5 && age <= 120;
+    }, 'Enter a valid date of birth')
+    .optional(),
   // Player availability flags (§2L). Set by the player; read by the directory badge and filter.
   lookingForPartner: z.boolean().optional().default(false),
   openForSponsorship: z.boolean().optional().default(false),

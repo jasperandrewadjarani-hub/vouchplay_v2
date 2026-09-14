@@ -186,6 +186,9 @@ export interface EntryCounts {
    *  named separately because the two surfaces are asked different questions ("what needs a
    *  decision" vs. "how many match this filter"). */
   wantsToCancel: number;
+  /** §2BE Decision E: the count badge for the "Requests -> Unverified account" filter button - how
+   *  many OPEN entries carry at least one unverified (guest) member. */
+  unverifiedAccounts: number;
 }
 
 export function countEntries(entries: readonly OrganizerRegistration[]): EntryCounts {
@@ -196,6 +199,7 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
     cancellationRequested: 0,
     needsEligibilityReview: 0,
     wantsToCancel: 0,
+    unverifiedAccounts: 0,
   };
   for (const e of entries) {
     if (isClosed(e)) {
@@ -210,6 +214,7 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
       counts.wantsToCancel += 1;
     }
     if (queues.includes('needs_eligibility_review')) counts.needsEligibilityReview += 1;
+    if (e.members.some((m) => m.unverified === true)) counts.unverifiedAccounts += 1;
   }
   return counts;
 }
@@ -232,8 +237,10 @@ export function countEntries(entries: readonly OrganizerRegistration[]): EntryCo
  *  filter to directly. */
 export type PaymentFilterValue = 'has_proof' | 'no_proof' | 'partial' | 'paid';
 
-/** §2AQ D: a Status-adjacent group for the one player-initiated request an organizer must act on. */
-export type RequestFilterValue = 'wants_to_cancel';
+/** §2AQ D: a Status-adjacent group for the one player-initiated request an organizer must act on.
+ *  §2BE Decision E adds 'unverified_account' alongside it - not a player request, but the same
+ *  "needs the organizer's attention" shape, and the group already reads as Requests/Accounts. */
+export type RequestFilterValue = 'wants_to_cancel' | 'unverified_account';
 
 export interface EntryFilters {
   /** Division ids (not names - two divisions can share a display name). Empty = every division. */
@@ -312,7 +319,9 @@ export function filterEntries(
     }
 
     if (filters.requests.length > 0) {
-      const keys: RequestFilterValue[] = e.cancellationRequest != null ? ['wants_to_cancel'] : [];
+      const keys: RequestFilterValue[] = [];
+      if (e.cancellationRequest != null) keys.push('wants_to_cancel');
+      if (e.members.some((m) => m.unverified === true)) keys.push('unverified_account');
       if (!keys.some((k) => filters.requests.includes(k))) return false;
     }
 
@@ -356,6 +365,7 @@ const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed' | 'none', string> = {
 };
 const REQUEST_LABELS: Record<RequestFilterValue, string> = {
   wants_to_cancel: 'Wants to cancel',
+  unverified_account: 'Unverified account',
 };
 
 /**

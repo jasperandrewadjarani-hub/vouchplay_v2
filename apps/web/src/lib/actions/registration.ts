@@ -2,7 +2,7 @@
 
 import { revalidateTag } from 'next/cache';
 import { partnerInviteSchema } from '@vouchplay/validation';
-import { SKILL_BANDS, parseVisibility } from '@vouchplay/config';
+import { SKILL_BANDS, parseVisibility, skillByOrdinal } from '@vouchplay/config';
 import { redactRatings } from '@/lib/players/dto';
 import {
   ageAtDate,
@@ -13,7 +13,9 @@ import {
 } from '@vouchplay/core';
 import { divisionName } from '@/lib/tournaments/dto';
 import { formatDate } from '@/lib/format-date';
+import { avatarUrl } from '@/lib/storage';
 import { getOptionalUser } from '@/lib/auth';
+import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
 import { isBlockedBetween, checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { viewerIsStaff } from '@/lib/moderation/staff';
@@ -45,7 +47,11 @@ import {
   type EntryOutcome,
 } from '@/lib/registrations/entry-core';
 import { doInvitePartner } from '@/lib/registrations/invite-core';
-import { markRefunded } from './payment';
+import { markRefunded, markSeatPaid } from './payment';
+import type {
+  OrganizerActionResult,
+  OrganizerPlayerSearchResult,
+} from '@/lib/tournaments/organizer-types';
 
 export interface RegistrationActionState {
   /** Set when an action creates a registration, so the UI can go straight to its payment step. */
@@ -3089,4 +3095,748 @@ export async function rejectRegistration(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Registration rejected and slot released.' };
+}
+
+// ---------------------------------------------------------------------------
+// master_plan §2BE B/C: organizer powers - every decision retractable, and "add an entry" for an
+// existing account. Every action here authorizes `approve_registrations`, writes a
+// `registration_events` row + an `audit_logs` row with the reason, and `revalidateTag`s the manage
+// page the same way the actions above do.
+// ---------------------------------------------------------------------------
+
+const REASON_TOO_SHORT = 'Add a short reason (at least 3 characters).';
+
+/** master_plan §2BE B/D: registration statuses that count as "occupying" a division for the advisory
+ *  capacity note - mirrors the live set `register_team` (0008/0021) itself uses, plus `team_formed`
+ *  (a formed-but-not-yet-registered team already shows on the sheet). Never blocks anything - kept as
+ *  its own small copy here rather than importing `actions/eligibility.ts`'s private helper, the same
+ *  "two small copies, kept in sync by hand" approach this file already uses for `RPC_ERRORS`. */
+const CAPACITY_LIVE_STATUSES = [
+  'team_formed',
+  'payment_pending',
+  'payment_submitted',
+  'under_review',
+  'confirmed',
+];
+
+async function capacityNoteForDivision(
+  svc: ReturnType<typeof createServiceClient>,
+  divisionId: string,
+): Promise<string | undefined> {
+  const { data: divRow } = await svc
+    .from('divisions')
+    .select('capacity_teams')
+    .eq('id', divisionId)
+    .maybeSingle();
+  const capacity = (divRow as { capacity_teams: number } | null)?.capacity_teams ?? 0;
+  if (!capacity) return undefined;
+  const { count } = await svc
+    .from('registrations')
+    .select('id', { count: 'exact', head: true })
+    .eq('division_id', divisionId)
+    .in('status', CAPACITY_LIVE_STATUSES);
+  const active = count ?? 0;
+  return active >= capacity ? `This division is over capacity (${active}/${capacity}).` : undefined;
+}
+
+type DivisionNameRow = Parameters<typeof divisionName>[0];
+
+/**
+ * Move a `confirmed` entry back to review (master_plan §2BE B) - the organizer's own explicit
+ * reversal, not a rejection: `payment_submitted` when a live receipt is on file (team payment or any
+ * attached slot in `submitted`/`verified`), else `payment_pending` with NO re-armed hold
+ * (`slot_hold_expires_at: null` - the organizer put it back, so there is no auto-expiry trap waiting).
+ */
+export async function revertConfirmation(
+  registrationId: string,
+  tournamentId: string,
+  reason: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) {
+    return { ok: false, error: "Only this tournament's organizers can do that." };
+  }
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 3) return { ok: false, error: REASON_TOO_SHORT };
+
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('id, tournament_id, division_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as { tournament_id: string; division_id: string; status: string } | null;
+    if (!reg || reg.tournament_id !== tournamentId)
+      return { ok: false, error: 'Registration not found.' };
+    if (reg.status !== 'confirmed') {
+      return { ok: false, error: 'Only a confirmed entry can be moved back to review.' };
+    }
+
+    const summary = await summarizeRegistration(registrationId);
+    const nextStatus = summary?.anyReceipt ? 'payment_submitted' : 'payment_pending';
+
+    await svc
+      .from('registrations')
+      .update({
+        status: nextStatus,
+        confirmed_at: null,
+        slot_hold_expires_at: null,
+        reviewed_by: user.id,
+        review_reason: trimmedReason,
+      })
+      .eq('id', registrationId);
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'confirmation_reverted',
+      from_status: 'confirmed',
+      to_status: nextStatus,
+      metadata: { reason: trimmedReason },
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'registration.confirmation_reverted',
+      entityType: 'registration',
+      entityId: registrationId,
+      before: { status: 'confirmed' },
+      after: { status: nextStatus },
+      reason: trimmedReason,
+    });
+
+    // Deliberately NOT calling `settleRegistration` here. Right after the write above, a fully-paid
+    // entry (any live receipt) is at `payment_submitted`, which IS one of `settleRegistration`'s
+    // ACTIONABLE_REG_STATUSES - so settling now would see `summary.fullyPaid` still true and
+    // immediately flip the entry straight back to `confirmed`, undoing the organizer's explicit
+    // decision in the same request that made it. The organizer's call wins here (master_plan §2BE B):
+    // the entry stays in review - with its receipts and slots untouched - until they confirm it again
+    // by hand. This is the one case in this file that skips the usual "settle after every money/state
+    // change" rule, on purpose.
+    const [actorMini, divRow] = await Promise.all([
+      getActorMini(user.id),
+      svc
+        .from('divisions')
+        .select(
+          'name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+        )
+        .eq('id', reg.division_id)
+        .maybeSingle(),
+    ]);
+    const div = divRow.data as DivisionNameRow | null;
+    await notifyRegistrationTeam(
+      registrationId,
+      tournamentId,
+      'registration_reverted',
+      trimmedReason,
+      {
+        actorId: user.id,
+        actorName: actorMini.name,
+        divisionName: div ? divisionName(div) : undefined,
+      },
+    );
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Moved back to review.' };
+}
+
+const RESTORABLE_STATUSES = new Set(['rejected', 'cancelled', 'withdrawn']);
+
+/**
+ * Restore a closed entry (master_plan §2BE B): `rejected | cancelled | withdrawn` back to
+ * `payment_submitted`/`payment_pending` (same live-receipt rule as `revertConfirmation`), re-forms the
+ * team, and re-attaches the members' own live BARE slots in this tournament (detached when the entry
+ * closed) - the money comes back to the entry it was for. `refunded` stays terminal. Unlike
+ * `revertConfirmation`, `settleRegistration` runs afterwards on purpose: restoring is undoing a
+ * closure, so an entry that was already fully paid should come straight back to `confirmed` - that IS
+ * what "restored" means, as opposed to the organizer's deliberate "send it back for another look".
+ */
+export async function restoreRegistration(
+  registrationId: string,
+  tournamentId: string,
+  reason: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) {
+    return { ok: false, error: "Only this tournament's organizers can do that." };
+  }
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 3) return { ok: false, error: REASON_TOO_SHORT };
+
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('id, tournament_id, team_id, division_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as {
+      tournament_id: string;
+      team_id: string;
+      division_id: string;
+      status: string;
+    } | null;
+    if (!reg || reg.tournament_id !== tournamentId)
+      return { ok: false, error: 'Registration not found.' };
+    if (reg.status === 'refunded')
+      return { ok: false, error: "A refunded entry can't be restored." };
+    if (!RESTORABLE_STATUSES.has(reg.status)) {
+      return {
+        ok: false,
+        error: 'Only a rejected, cancelled, or withdrawn entry can be restored.',
+      };
+    }
+
+    const [{ data: memberRows }, { data: divRow }] = await Promise.all([
+      svc.from('team_members').select('player_id').eq('team_id', reg.team_id),
+      svc
+        .from('divisions')
+        .select(
+          'team_size, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+        )
+        .eq('id', reg.division_id)
+        .maybeSingle(),
+    ]);
+    const memberIds = ((memberRows ?? []) as { player_id: string }[]).map((m) => m.player_id);
+    const div = divRow as ({ team_size: number } & DivisionNameRow) | null;
+
+    // Re-attach the members' live bare slots in this tournament - each was detached (registration_id
+    // set to null) when this entry closed; the money is still theirs to reuse.
+    if (memberIds.length > 0) {
+      await svc
+        .from('tournament_slots')
+        .update({
+          registration_id: registrationId,
+          division_id: reg.division_id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('tournament_id', tournamentId)
+        .in('player_id', memberIds)
+        .is('registration_id', null)
+        .in('status', ['submitted', 'verified']);
+    }
+
+    const teamStatus =
+      div && memberIds.length < div.team_size ? 'forming' : ('formed' as 'forming' | 'formed');
+    await svc.from('teams').update({ status: teamStatus }).eq('id', reg.team_id);
+
+    const summary = await summarizeRegistration(registrationId);
+    const nextStatus = summary?.anyReceipt ? 'payment_submitted' : 'payment_pending';
+    await svc
+      .from('registrations')
+      .update({
+        status: nextStatus,
+        slot_hold_expires_at: null,
+        reviewed_by: user.id,
+        review_reason: trimmedReason,
+      })
+      .eq('id', registrationId);
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'registration_restored',
+      from_status: reg.status,
+      to_status: nextStatus,
+      metadata: { reason: trimmedReason },
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'registration.restored',
+      entityType: 'registration',
+      entityId: registrationId,
+      before: { status: reg.status },
+      after: { status: nextStatus },
+      reason: trimmedReason,
+    });
+
+    // No capacity lock - capacity is the organizer's call here too (master_plan §2BE B, the same
+    // stance `reclassifyRegistration` already takes); the note below is advisory only.
+    await settleRegistration(registrationId, user.id);
+    const note = await capacityNoteForDivision(svc, reg.division_id);
+
+    const actorMini = await getActorMini(user.id);
+    await notifyRegistrationTeam(
+      registrationId,
+      tournamentId,
+      'registration_restored',
+      trimmedReason,
+      {
+        actorId: user.id,
+        actorName: actorMini.name,
+        divisionName: div ? divisionName(div) : undefined,
+      },
+    );
+    await revalTournament(tournamentId);
+    return { ok: true, message: 'Entry restored.', ...(note ? { note } : {}) };
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/** The columns `searchPlayersForOrganizer`/`createEntryForPlayers` need to judge a candidate's fit. */
+interface OrganizerDivisionRules {
+  sex_classification: string;
+  skill_policy: string;
+  minimum_skill: number | null;
+  maximum_skill: number | null;
+  minimum_age: number | null;
+  maximum_age: number | null;
+}
+
+/**
+ * master_plan §2BE C: the organizer's own picker reads differently from the player-facing
+ * `evaluateDivisionFit` - organizer authority makes skill/unrated/unknown-birthday advisory-only here
+ * (a WARNING, never a block), where the player-facing engine can refuse on them. Sex and mixed-doubles
+ * composition remain the only HARD rules (unchanged - the organizer cannot override those without
+ * migration 0051's `p_override_fit`, master_plan §2BE D); "already on a live team in this division" is
+ * its own hard rule, checked by the caller via `player_on_active_team_in_division` and passed in.
+ */
+function organizerFitNote(
+  div: OrganizerDivisionRules,
+  player: {
+    sex: 'male' | 'female' | null;
+    effectiveSkill: number | null;
+    ageAtStart: number | null;
+  },
+  onLiveTeam: boolean,
+): { blocked: string | null; warning: string | null } {
+  const singleSex = div.sex_classification === 'men' || div.sex_classification === 'women';
+  if (singleSex && !player.sex) {
+    return { blocked: 'Sex not set on profile - required for this division.', warning: null };
+  }
+  if (div.sex_classification === 'men' && player.sex !== 'male') {
+    return { blocked: 'Sex does not match this division.', warning: null };
+  }
+  if (div.sex_classification === 'women' && player.sex !== 'female') {
+    return { blocked: 'Sex does not match this division.', warning: null };
+  }
+  if (onLiveTeam) return { blocked: 'Already on a team in this division.', warning: null };
+
+  let warning: string | null = null;
+  if (div.skill_policy !== 'open' && div.maximum_skill != null) {
+    if (player.effectiveSkill == null) {
+      warning = 'Unrated - skill unknown.';
+    } else if (player.effectiveSkill > div.maximum_skill) {
+      const label = skillByOrdinal(div.maximum_skill)?.label ?? 'this division';
+      warning = `Skill above this division (max ${label}).`;
+    }
+  }
+  const ageLimited = div.minimum_age != null || div.maximum_age != null;
+  if (!warning && ageLimited && player.ageAtStart == null) {
+    warning = 'Birthday unknown - required for this age-limited division.';
+  }
+  return { blocked: null, warning };
+}
+
+/**
+ * Player search for the organizer's "Add entry" wizard (master_plan §2BE C) - onboarded profiles by
+ * name/nickname, limit 10, each annotated with `blocked` (hard: sex/composition/already-on-a-team) and
+ * `warning` (advisory: skill above the max, unrated, unknown birthday on an age-limited division).
+ */
+export async function searchPlayersForOrganizer(
+  tournamentId: string,
+  divisionId: string,
+  query: string,
+): Promise<OrganizerPlayerSearchResult[]> {
+  const user = await getOptionalUser();
+  if (!user) return [];
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) return [];
+  const term = query.trim();
+  if (term.length < 2) return [];
+  const svc = createServiceClient();
+  const safe = term.replace(/[%,()]/g, ' ');
+  const { data } = await svc
+    .from('profiles')
+    .select(
+      'id, slug, first_name, last_name, nickname, sex, self_rated_skill, date_of_birth, avatar_path',
+    )
+    .eq('account_status', 'active')
+    .not('onboarded_at', 'is', null)
+    .or(`first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,nickname.ilike.%${safe}%`)
+    .limit(10);
+  const rows = (
+    (data ?? []) as {
+      id: string;
+      slug: string | null;
+      first_name: string | null;
+      last_name: string | null;
+      nickname: string | null;
+      sex: 'male' | 'female' | null;
+      self_rated_skill: number | null;
+      date_of_birth: string | null;
+      avatar_path: string | null;
+    }[]
+  ).filter((p) => p.slug);
+  if (rows.length === 0) return [];
+
+  const { data: divRow } = await svc
+    .from('divisions')
+    .select(
+      'id, tournament_id, sex_classification, skill_policy, minimum_skill, maximum_skill, minimum_age, maximum_age',
+    )
+    .eq('id', divisionId)
+    .maybeSingle();
+  const div = divRow as ({ id: string; tournament_id: string } & OrganizerDivisionRules) | null;
+  if (!div || div.tournament_id !== tournamentId) return [];
+
+  const [{ data: skillRows }, { data: tournRow }, liveTeamPairs] = await Promise.all([
+    svc
+      .from('player_skill_profiles')
+      .select('player_id, community_skill_level')
+      .in(
+        'player_id',
+        rows.map((r) => r.id),
+      ),
+    svc.from('tournaments').select('start_at').eq('id', tournamentId).maybeSingle(),
+    Promise.all(
+      rows.map(async (p) => {
+        const { data: onTeam } = await svc.rpc('player_on_active_team_in_division', {
+          p_division_id: divisionId,
+          p_player: p.id,
+          p_exclude_team: null,
+        });
+        return [p.id, Boolean(onTeam)] as const;
+      }),
+    ),
+  ]);
+  const community = new Map(
+    ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
+      (r) => [r.player_id, r.community_skill_level],
+    ),
+  );
+  const startAt = (tournRow as { start_at: string | null } | null)?.start_at ?? null;
+  const onLiveTeam = new Map(liveTeamPairs);
+
+  return rows.map((p) => {
+    const name =
+      [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
+      p.nickname ||
+      'VouchPlay player';
+    const communityLevel = community.get(p.id) ?? null;
+    const effectiveSkill = communityLevel ?? p.self_rated_skill ?? null;
+    const { blocked, warning } = organizerFitNote(
+      div,
+      { sex: p.sex, effectiveSkill, ageAtStart: ageAtDate(p.date_of_birth, startAt) },
+      onLiveTeam.get(p.id) ?? false,
+    );
+    return {
+      id: p.id,
+      name,
+      slug: p.slug as string,
+      avatarUrl: avatarUrl(p.avatar_path),
+      sex: p.sex,
+      communitySkill:
+        communityLevel != null ? (skillByOrdinal(communityLevel)?.label ?? null) : null,
+      blocked,
+      warning,
+    };
+  });
+}
+
+/**
+ * Organizer creates a live entry for an existing account (or two) - master_plan §2BE C: player 1
+ * through the same entry-core helper the guest path uses (`doRegisterSolo` / `doEnterDoublesSolo`),
+ * exactly as a self-entry (the tournament's `registration_open` window still applies - a refusal there
+ * is returned verbatim); player 2 (doubles only) through the same `organizer_assign_partner` RPC
+ * `assignPartner` uses. A partner-seating refusal does NOT undo player 1's already-live entry - it
+ * comes back as a warning on an otherwise successful result, so the organizer can retry the partner
+ * separately instead of losing the whole entry.
+ */
+export async function createEntryForPlayers(input: {
+  tournamentId: string;
+  divisionId: string;
+  playerIds: string[];
+  markPaid: boolean;
+  reason: string;
+}): Promise<
+  { ok: true; registrationId: string; warnings: string[] } | { ok: false; error: string }
+> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, input.tournamentId, 'approve_registrations'))) {
+    return { ok: false, error: "Only this tournament's organizers can do that." };
+  }
+  const trimmedReason = input.reason.trim();
+  if (trimmedReason.length < 3) return { ok: false, error: REASON_TOO_SHORT };
+  const playerIds = Array.from(new Set(input.playerIds.filter(Boolean)));
+  if (playerIds.length < 1 || playerIds.length > 2) {
+    return { ok: false, error: 'Choose 1 or 2 players.' };
+  }
+
+  const svc = createServiceClient();
+  try {
+    const { data: divRow } = await svc
+      .from('divisions')
+      .select(
+        'id, tournament_id, format, status, fee_amount, early_bird_fee_amount, name_override, skill_policy, minimum_skill, maximum_skill, sex_classification, minimum_age, maximum_age',
+      )
+      .eq('id', input.divisionId)
+      .maybeSingle();
+    const div = divRow as
+      | ({
+          id: string;
+          tournament_id: string;
+          format: string;
+          status: string;
+          fee_amount: number;
+          early_bird_fee_amount: number | null;
+        } & DivisionNameRow &
+          OrganizerDivisionRules)
+      | null;
+    if (!div || div.tournament_id !== input.tournamentId) {
+      return { ok: false, error: 'That division could not be found.' };
+    }
+    if (div.format === 'singles' && playerIds.length !== 1) {
+      return { ok: false, error: 'A singles division needs exactly one player.' };
+    }
+
+    const { data: profileRows } = await svc
+      .from('profiles')
+      .select('id, account_status, onboarded_at, sex, self_rated_skill, date_of_birth')
+      .in('id', playerIds);
+    const profiles = (profileRows ?? []) as {
+      id: string;
+      account_status: string;
+      onboarded_at: string | null;
+      sex: 'male' | 'female' | null;
+      self_rated_skill: number | null;
+      date_of_birth: string | null;
+    }[];
+    for (const id of playerIds) {
+      const p = profiles.find((r) => r.id === id);
+      if (!p || p.account_status !== 'active' || !p.onboarded_at) {
+        return { ok: false, error: 'One of the selected players cannot be entered yet.' };
+      }
+    }
+
+    const player1 = playerIds[0];
+    const player2 = playerIds[1];
+    if (!player1) return { ok: false, error: 'Choose 1 or 2 players.' };
+
+    const outcome =
+      div.format === 'singles'
+        ? await doRegisterSolo(input.tournamentId, input.divisionId, player1)
+        : await doEnterDoublesSolo(input.tournamentId, input.divisionId, player1);
+    if (outcome.error) return { ok: false, error: outcome.error };
+    const registrationId = outcome.registrationId;
+    const teamId = outcome.teamId;
+    if (!registrationId || !teamId) {
+      return { ok: false, error: 'Could not create the entry. Please try again.' };
+    }
+
+    const warnings: string[] = [];
+    const seatedPlayerIds = [player1];
+
+    if (player2) {
+      const { error } = await svc.rpc('organizer_assign_partner', {
+        p_team_id: teamId,
+        p_actor: user.id,
+        p_player: player2,
+        p_reason: trimmedReason,
+      });
+      if (error) {
+        await logRpcRefusal({
+          actorId: user.id,
+          fn: 'organizer_assign_partner',
+          code: error.message ?? 'unknown',
+          entityType: 'team',
+          entityId: teamId,
+        });
+        warnings.push(`Partner not seated: ${friendlyAssignPartner(error.message)}`);
+      } else {
+        seatedPlayerIds.push(player2);
+        try {
+          const { data: tournRow } = await svc
+            .from('tournaments')
+            .select('early_bird_starts_at, early_bird_ends_at, start_at')
+            .eq('id', input.tournamentId)
+            .maybeSingle();
+          const tr = tournRow as {
+            early_bird_starts_at: string | null;
+            early_bird_ends_at: string | null;
+          } | null;
+          if (Number(div.fee_amount) > 0) {
+            const quote = quoteFee({
+              feeAmount: Number(div.fee_amount),
+              earlyBirdFeeAmount:
+                div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
+              earlyBirdStartsAt: tr?.early_bird_starts_at ?? null,
+              earlyBirdEndsAt: tr?.early_bird_ends_at ?? null,
+              teamSize: 1,
+            });
+            await attachBareSlot(input.tournamentId, player2, registrationId, quote.perPlayer);
+          }
+          await settleRegistration(registrationId, user.id);
+        } catch {
+          // best-effort
+        }
+      }
+    }
+
+    // Advisory fit warnings (skill/unrated/unknown birthday) for every seated player, independent of
+    // whether the partner RPC above succeeded - the organizer sees the full picture either way.
+    try {
+      const { data: tournRow } = await svc
+        .from('tournaments')
+        .select('start_at')
+        .eq('id', input.tournamentId)
+        .maybeSingle();
+      const startAt = (tournRow as { start_at: string | null } | null)?.start_at ?? null;
+      const { data: skillRows } = await svc
+        .from('player_skill_profiles')
+        .select('player_id, community_skill_level')
+        .in('player_id', playerIds);
+      const community = new Map(
+        ((skillRows ?? []) as { player_id: string; community_skill_level: number | null }[]).map(
+          (r) => [r.player_id, r.community_skill_level],
+        ),
+      );
+      for (const p of profiles) {
+        const effectiveSkill = community.get(p.id) ?? p.self_rated_skill ?? null;
+        const { warning } = organizerFitNote(
+          div,
+          { sex: p.sex, effectiveSkill, ageAtStart: ageAtDate(p.date_of_birth, startAt) },
+          false,
+        );
+        if (warning) warnings.push(warning);
+      }
+    } catch {
+      // best-effort - advisory only
+    }
+
+    if (input.markPaid) {
+      for (const playerId of seatedPlayerIds) {
+        const res = await markSeatPaid(registrationId, playerId, input.tournamentId);
+        if (!res.ok)
+          warnings.push(
+            `Could not mark ${playerId === player1 ? 'player 1' : 'player 2'} paid: ${res.error}`,
+          );
+      }
+    }
+
+    // Notify every seated player (master_plan §2BE C) - critical, with a way to undo.
+    try {
+      const [actorMini, tm] = await Promise.all([
+        getActorMini(user.id),
+        getTournamentMini(input.tournamentId),
+      ]);
+      const divName = divisionName(div);
+      const link = tm.slug
+        ? `/tournaments/${tm.slug}?entered=${registrationId}#my-registrations`
+        : '/tournaments';
+      for (const playerId of seatedPlayerIds) {
+        const partnerId = seatedPlayerIds.find((id) => id !== playerId);
+        const partnerName = partnerId ? (await getActorMini(partnerId)).name : undefined;
+        await notify({
+          recipientId: playerId,
+          type: 'organizer_entered_you',
+          actorId: user.id,
+          params: {
+            actorName: actorMini.name,
+            tournamentName: tm.name,
+            divisionName: divName,
+            extra: partnerName,
+          },
+          link,
+          entityType: 'registration',
+          entityId: registrationId,
+        });
+      }
+    } catch {
+      // best-effort
+    }
+
+    await revalTournament(input.tournamentId);
+    return { ok: true, registrationId, warnings };
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+}
+
+/**
+ * Resend a guest's sign-in code (master_plan §2BE E) - the same OTP send `requestGuestOtp` uses,
+ * throttled to once per 24h per profile via an `audit_logs` lookup (`guest.code_resent`), mirroring
+ * the `guest.entry_started` rate-limit pattern in `actions/guest-registration.ts`.
+ */
+export async function resendGuestCode(
+  profileId: string,
+  tournamentId: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) {
+    return { ok: false, error: "Only this tournament's organizers can do that." };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: profileRow } = await svc
+      .from('profiles')
+      .select('id, guest_created_at, onboarded_at')
+      .eq('id', profileId)
+      .maybeSingle();
+    const profile = profileRow as {
+      id: string;
+      guest_created_at: string | null;
+      onboarded_at: string | null;
+    } | null;
+    if (!profile || !profile.guest_created_at || profile.onboarded_at) {
+      return { ok: false, error: 'That account is not an unverified guest.' };
+    }
+
+    const { data: memberRows } = await svc
+      .from('team_members')
+      .select('team_id')
+      .eq('player_id', profileId);
+    const teamIds = ((memberRows ?? []) as { team_id: string }[]).map((r) => r.team_id);
+    let hasRegistration = false;
+    if (teamIds.length > 0) {
+      const { data: regRows } = await svc
+        .from('registrations')
+        .select('id')
+        .eq('tournament_id', tournamentId)
+        .in('team_id', teamIds)
+        .limit(1);
+      hasRegistration = (regRows ?? []).length > 0;
+    }
+    if (!hasRegistration)
+      return { ok: false, error: 'That guest has no entry in this tournament.' };
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recent } = await svc
+      .from('audit_logs')
+      .select('id')
+      .eq('action', 'guest.code_resent')
+      .eq('entity_type', 'profile')
+      .eq('entity_id', profileId)
+      .gte('created_at', since)
+      .limit(1);
+    if (recent && recent.length > 0) return { ok: false, error: 'A code was already sent today.' };
+
+    const { data: userRow } = await svc.auth.admin.getUserById(profileId);
+    const email = userRow?.user?.email;
+    if (!email) return { ok: false, error: 'Could not find an email for that account.' };
+
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) return { ok: false, error: 'Could not send the code. Please try again.' };
+
+    await writeAudit({
+      actorId: user.id,
+      action: 'guest.code_resent',
+      entityType: 'profile',
+      entityId: profileId,
+      after: { tournament_id: tournamentId },
+    });
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Code sent.' };
 }

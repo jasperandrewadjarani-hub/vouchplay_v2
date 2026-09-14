@@ -3,7 +3,8 @@
 import { useActionState } from 'react';
 import Link from 'next/link';
 import { setPassword, type FormState } from '@/lib/actions/auth';
-import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
+import { FormError, FormMessage } from '@/components/ui/field';
+import { PasswordPair } from '@/components/ui/password-input';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: FormState = {};
@@ -19,12 +20,7 @@ export function SetPasswordForm() {
     <form action={action} className="space-y-4">
       <FormMessage>{state.ok ? state.message : undefined}</FormMessage>
       <FormError>{state.error}</FormError>
-      <Field label="New password" htmlFor="password" required hint="At least 8 characters.">
-        <Input id="password" name="password" type="password" autoComplete="new-password" required />
-      </Field>
-      <Field label="Confirm password" htmlFor="confirm" required>
-        <Input id="confirm" name="confirm" type="password" autoComplete="new-password" required />
-      </Field>
+      <PasswordPair passwordId="password" confirmId="confirm" />
       <SubmitButton pendingLabel="Saving…">Save password</SubmitButton>
       {state.ok && (
         <p className="text-foreground-muted text-center text-sm">

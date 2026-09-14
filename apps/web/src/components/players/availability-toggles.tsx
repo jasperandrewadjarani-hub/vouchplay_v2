@@ -30,7 +30,21 @@ const COPY: Record<Kind, { on: string; off: string; label: string; icon: typeof 
   },
 };
 
-function AvailabilityToggle({ kind, initial }: { kind: Kind; initial: boolean }) {
+/**
+ * `onChange` is an optional side-channel for a caller that keeps its own optimistic copy of the flag
+ * (e.g. a directory door's caption, master_plan §2BC) - fired the moment the switch moves, alongside
+ * the existing optimistic `on` state, and again on revert if the write fails. Existing callers that
+ * don't pass it are unaffected.
+ */
+export function AvailabilityToggle({
+  kind,
+  initial,
+  onChange,
+}: {
+  kind: Kind;
+  initial: boolean;
+  onChange?: (next: boolean) => void;
+}) {
   const router = useRouter();
   const [on, setOn] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +55,7 @@ function AvailabilityToggle({ kind, initial }: { kind: Kind; initial: boolean })
   function toggle() {
     const next = !on;
     setOn(next); // optimistic
+    onChange?.(next);
     setError(null);
     start(async () => {
       const res =
@@ -48,6 +63,7 @@ function AvailabilityToggle({ kind, initial }: { kind: Kind; initial: boolean })
       if (res.ok) router.refresh();
       else {
         setOn(!next); // revert
+        onChange?.(!next);
         setError(res.error ?? 'Could not update your status.');
       }
     });
@@ -88,29 +104,6 @@ function AvailabilityToggle({ kind, initial }: { kind: Kind; initial: boolean })
           {error}
         </p>
       )}
-    </div>
-  );
-}
-
-/**
- * Both availability toggles as one compact card - two thin rows, not two cards, so a directory screen
- * is not doubled in height (§2N). Grouped under one heading because it is one decision: how you want
- * to be found.
- */
-export function AvailabilityCard({
-  lookingForPartner,
-  openForSponsorship,
-}: {
-  lookingForPartner: boolean;
-  openForSponsorship: boolean;
-}) {
-  return (
-    <div className="border-border bg-surface space-y-2 rounded-2xl border px-3.5 py-3">
-      <p className="text-foreground-muted text-[11px] font-medium tracking-wide uppercase">
-        Let people find you
-      </p>
-      <AvailabilityToggle kind="partner" initial={lookingForPartner} />
-      <AvailabilityToggle kind="sponsor" initial={openForSponsorship} />
     </div>
   );
 }

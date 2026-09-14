@@ -67,6 +67,7 @@ export default async function EditProfilePage({ searchParams }: EditProfilePageP
             lastName: profile.last_name ?? '',
             nickname: profile.nickname ?? '',
             sex: profile.sex ?? '',
+            dateOfBirth: profile.date_of_birth ?? '',
             selfRatedSkill: profile.self_rated_skill,
             city: profile.city ?? '',
             facebookUrl: profile.facebook_url ?? '',

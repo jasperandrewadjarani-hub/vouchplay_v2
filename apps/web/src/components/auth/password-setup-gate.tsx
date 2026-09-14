@@ -4,7 +4,8 @@ import { useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { KeyRound } from 'lucide-react';
 import { setPassword, signOut, type FormState } from '@/lib/actions/auth';
-import { Field, Input, FormError } from '@/components/ui/field';
+import { FormError } from '@/components/ui/field';
+import { PasswordPair } from '@/components/ui/password-input';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: FormState = {};
@@ -51,24 +52,7 @@ export function PasswordSetupGate({ email }: { email: string | null }) {
 
           <form action={action} className="mt-4 space-y-4">
             <FormError>{state.error}</FormError>
-            <Field label="New password" htmlFor="gate-password" required hint="At least 8 characters.">
-              <Input
-                id="gate-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                required
-              />
-            </Field>
-            <Field label="Confirm password" htmlFor="gate-confirm" required>
-              <Input
-                id="gate-confirm"
-                name="confirm"
-                type="password"
-                autoComplete="new-password"
-                required
-              />
-            </Field>
+            <PasswordPair passwordId="gate-password" confirmId="gate-confirm" />
             <SubmitButton pendingLabel="Saving…">Save and continue</SubmitButton>
           </form>
 

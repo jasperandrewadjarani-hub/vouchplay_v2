@@ -380,3 +380,57 @@ describe('guest verify reminders (§2AU E)', () => {
     expect(notificationDef('guest_verify_reminder_2')!.critical).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2BE B/C - organizer powers: every decision retractable, add-entry.
+// ---------------------------------------------------------------------------
+describe('organizer powers notifications (§2BE B/C)', () => {
+  it('registration_reverted is critical, registrations-category, and carries the reason when given', () => {
+    const def = notificationDef('registration_reverted')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({})).toBe('Your entry was moved back to review');
+    expect(
+      def.body({ actorName: 'Mandi', divisionName: 'Mixed Doubles', reason: 'Receipt unclear' }),
+    ).toBe('Mandi moved your Mixed Doubles entry back to review: Receipt unclear');
+    expect(def.body({ actorName: 'Mandi', divisionName: 'Mixed Doubles' })).toBe(
+      'Mandi moved your Mixed Doubles entry back to review.',
+    );
+  });
+
+  it('registration_restored is critical, registrations-category, and names the division', () => {
+    const def = notificationDef('registration_restored')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ divisionName: 'Mixed Doubles' })).toBe(
+      'Your Mixed Doubles entry was restored by the organizer',
+    );
+  });
+
+  it('organizer_entered_you is critical, registrations-category, names the actor + division, and mentions the partner when given', () => {
+    const def = notificationDef('organizer_entered_you')!;
+    expect(def.category).toBe('registrations');
+    expect(def.critical).toBe(true);
+    expect(def.title({ tournamentName: 'Hermosa Open' })).toBe(
+      "You've been entered in Hermosa Open",
+    );
+    expect(def.body({ actorName: 'Mandi', divisionName: 'Mixed Doubles' })).toBe(
+      'Mandi entered you in Mixed Doubles. Not right? Ask the organizer or request a cancellation from My registrations.',
+    );
+    expect(
+      def.body({ actorName: 'Mandi', divisionName: 'Mixed Doubles', extra: 'Maria Santos' }),
+    ).toBe(
+      'Mandi entered you in Mixed Doubles with Maria Santos. Not right? Ask the organizer or request a cancellation from My registrations.',
+    );
+  });
+
+  it('none of the three new §2BE types can be muted', () => {
+    for (const type of [
+      'registration_reverted',
+      'registration_restored',
+      'organizer_entered_you',
+    ]) {
+      expect(notificationDef(type)!.critical, type).toBe(true);
+    }
+  });
+});

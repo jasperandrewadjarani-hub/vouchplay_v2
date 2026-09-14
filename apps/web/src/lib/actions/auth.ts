@@ -7,6 +7,7 @@ import {
   signInWithPasswordSchema,
   setPasswordSchema,
   resetPasswordRequestSchema,
+  resetPasswordWithCodeSchema,
 } from '@vouchplay/validation';
 import { createClient } from '@/lib/supabase/server';
 import { createServiceClient } from '@/lib/supabase/service';
@@ -30,6 +31,20 @@ function firstIssue(error: { issues: { message: string }[] }): string {
 function callbackUrl(next?: string): string {
   const base = `${publicEnv.siteUrl}/auth/callback`;
   return next ? `${base}?next=${encodeURIComponent(next)}` : base;
+}
+
+/**
+ * Best-effort: flips `profiles.password_set` so the mandatory password gate (§2BB) stops showing for
+ * this account. Uses the service client because RLS does not let a session write this column on
+ * itself. Shared by `setPassword` and `resetPasswordWithCode` (§2BD-A) - a failure here must never
+ * fail the password change itself; the gate reader fails open and the next password action retries.
+ */
+async function markPasswordSet(userId: string): Promise<void> {
+  try {
+    await createServiceClient().from('profiles').update({ password_set: true }).eq('id', userId);
+  } catch {
+    // non-fatal - see doc comment above
+  }
 }
 
 /** Step 1 of email signup/login: send a 6-digit code (also a magic link) to the address. */
@@ -120,18 +135,11 @@ export async function setPassword(_prev: FormState, formData: FormData): Promise
     const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
     if (error) return { error: error.message };
     // Record that this account now has a password so the mandatory password gate (§2BB) stops
-    // showing. Best-effort: uses the service client to set the flag on the caller's own row; a
-    // failure here (e.g. before migration 0050) must not fail the successful password change.
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        await createServiceClient().from('profiles').update({ password_set: true }).eq('id', user.id);
-      }
-    } catch {
-      // non-fatal - the gate reader fails open, and the next setPassword will retry the flag
-    }
+    // showing (best-effort - see markPasswordSet doc comment).
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await markPasswordSet(user.id);
     return { ok: true, message: 'Password set.' };
   } catch {
     return { error: 'Could not set password right now. Please try again shortly.' };
@@ -154,7 +162,11 @@ export async function signInWithGoogle(next?: string): Promise<FormState> {
   return {};
 }
 
-/** Send a password-reset email. */
+/**
+ * Step 1 of in-app password reset (master_plan §2BD-A): email a 6-digit recovery code. `redirectTo`
+ * is kept so the emailed link keeps working as a fallback via the callback's `token_hash` branch, but
+ * the app no longer depends on it - see `resetPasswordWithCode` for why the link alone was unreliable.
+ */
 export async function requestPasswordReset(
   _prev: FormState,
   formData: FormData,
@@ -168,10 +180,63 @@ export async function requestPasswordReset(
       redirectTo: callbackUrl('/me/settings/password'),
     });
     if (error) return { error: error.message };
-    return { ok: true, message: 'If that email exists, a reset link is on its way.' };
+    return {
+      ok: true,
+      email: parsed.data.email,
+      message: `We emailed a 6-digit code to ${parsed.data.email}.`,
+    };
   } catch {
     return { error: 'Password reset is not available yet. Please try again shortly.' };
   }
+}
+
+/**
+ * Step 2 of in-app password reset (master_plan §2BD-A). Root cause of the old emailed-link failure:
+ * `resetPasswordForEmail` uses `@supabase/ssr`'s PKCE flow, which writes the code *verifier* as a
+ * cookie on the browser that requested the reset (the installed app). The emailed link carries only
+ * the one-time `code`; opening it in Chrome, a mail app's in-app browser, or a second device is a
+ * different cookie jar with no verifier, so `exchangeCodeForSession` fails. `verifyOtp({ type:
+ * 'recovery' })` needs only the emailed 6-digit code - no verifier cookie - so typing it in works
+ * identically anywhere, including the installed PWA.
+ */
+export async function resetPasswordWithCode(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const parsed = resetPasswordWithCodeSchema.safeParse({
+    email: formData.get('email'),
+    token: formData.get('token'),
+    password: formData.get('password'),
+    confirm: formData.get('confirm'),
+  });
+  if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+  try {
+    const supabase = await createClient();
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: parsed.data.email,
+      token: parsed.data.token,
+      type: 'recovery',
+    });
+    if (verifyError) {
+      return { error: 'That code is incorrect or has expired. Request a new one.' };
+    }
+
+    const { error: updateError } = await supabase.auth.updateUser({
+      password: parsed.data.password,
+    });
+    if (updateError) return { error: updateError.message };
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) await markPasswordSet(user.id);
+  } catch {
+    return { error: 'Could not reset your password right now. Please try again shortly.' };
+  }
+
+  const profile = await getMyProfile();
+  redirect(postAuthPath(profile, undefined));
 }
 
 /** Form-action wrapper for the Google button (reads optional `next` hidden field). */

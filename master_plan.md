@@ -5665,6 +5665,393 @@ deliberately applies the backing migration to the live user base.
   / Amazon SES / SendGrid) before scale. Password-first login and the gate cut auth-code email now, but
   notification volume will still outgrow Gmail's ~500/day cap.
 
+## 2BC. Players tab declutter (one row of three doors), iPhone sex-glyph misalignment, Admin switch for the staff activity link (2026-09-14)
+
+Jasper: the top of the Players tab has grown three stacked blocks (the leaderboards card, the "Let
+people find you" toggles card, the "Looking for a partner" tournament strip) before the list even
+begins; make them ONE row of three cards with icons - Leaderboards (opens the boards), Let people find
+you (opens a modal with the two switches, minimal help text), Find a partner (opens the swipe deck) -
+so the tab is about the list again while every feature stays one tap away. Two more: on iPhones
+(Safari and the installed app) the gender icon sits misaligned in both the condensed and detailed
+rows; and Admin needs a switch to hide the staff "See vouch activity" link so staff can see the tab
+exactly as a normal player does.
+
+### Findings (code read 2026-09-14)
+
+1. `app/(app)/players/page.tsx` renders, in order: header → `LeaderboardsEntryCard` (one full-width
+   link card) → `AvailabilityCard` (two switch rows; onboarded users only) → `PartnerLookingStrip`
+   (a list of up to four tournaments, each linking to `/tournaments/{slug}/partners`; omitted when
+   empty) → `SearchFilters` → the list. Three blocks, up to ~7 rows of chrome on a phone.
+2. The swipe deck is **per tournament** (`getPartnerDeck(slug, viewer)`); there is no cross-tournament
+   deck, so a single "Find a partner" door needs a chooser when more than one tournament has open
+   searches. `computePartnerLookingStrip` already orders tournaments viewer-first.
+3. **Sex glyph.** `SexBadge` (`components/players/badges.tsx`) renders the raw text characters ♂ / ♀
+   in a bare `<span>` - no `shrink-0`, no `inline-flex items-center`, no fixed box - beside siblings
+   that are all 13 px lucide SVGs with `shrink-0`. WebKit on iOS falls back to Apple Color Emoji
+   metrics for U+2642 / U+2640 (taller ascent, different baseline) while Chrome/Android draw them from
+   the text font, so only iPhones show the offset. lucide 0.469 (pinned) has no Mars/Venus icons.
+4. **Staff link.** `StaffPlayerActivityLink` is rendered by `PlayerCard` when the page passes
+   `staffLinks` (from `viewer.isStaff`); the `/staff/players/[slug]` page is separately gated by
+   `requireStaffPage` (role + TOTP step-up) and audited. There is no setting controlling the link.
+
+### Decisions
+
+**A. One row of three doors** (`components/players/directory-doors.tsx`, replaces the three blocks).
+`grid grid-cols-3 gap-2`; each door is a bordered `bg-surface` card, icon tile on top (the gradient
+tile style of the leaderboards card, so the row reads as one family), a two-line label
+(`text-xs font-semibold leading-tight`), and one muted caption line when there is something live to
+say - never placeholder text:
+- **Leaderboards** (Trophy) → `/leaderboards`. Caption: "{leader first name} leads" when a board
+  exists, else nothing.
+- **Let people find you** (Radar) → opens `AvailabilityModal`. Caption reflects state: "Partner ·
+  Sponsor" / "Partner" / "Sponsor" when on, else "Off". Anonymous or un-onboarded viewers: the door
+  links to `/login?next=/players` (anonymous) or `/onboarding` (signed-in, not onboarded).
+- **Find a partner** (UserSearch) → exactly one tournament with open searches: link straight to its
+  deck; several: a small bottom sheet listing them (the strip's rows, viewer-first order, "Open my
+  deck" pill where the viewer already searches); none: a sheet with one line "No one is looking for a
+  partner right now" and a **Mark me as looking** button that opens the availability modal. Caption:
+  "{n} looking" (sum across tournaments) when > 0, else "Swipe to match". Hidden entirely when
+  `partner_matchmaking_enabled` is off (the row becomes two doors, `grid-cols-2`).
+
+**B. Availability modal** (`components/players/availability-modal.tsx`, on the existing `Modal`
+primitive): title "Let people find you", the two existing `AvailabilityToggle` rows unchanged
+(icon + label + switch; the label already flips to "You're marked as…" so no help text is needed),
+one **Done** button. The modal is the only place the switches live on this tab; Edit profile keeps
+its checkboxes.
+
+**C. Sex icon as SVG.** `SexBadge` draws two tiny inline SVGs (`MarsIcon` / `VenusIcon`, 13 px,
+`currentColor`, `shrink-0`) instead of text glyphs, in both the symbol-only and chip variants, and
+the wrapper becomes `inline-flex items-center`. The profile header's top-right badge uses the same
+component, so it is fixed in the same edit. Deterministic on every platform; no font fallback.
+
+**D. Admin switch** `staff_activity_links_enabled` (bool, default `true`, group `flags`, label "Staff
+'See vouch activity' links"): when off, the directory and the profile page stop passing
+`staffLinks`, so staff see the tab as players do. The `/staff/players/[slug]` page itself stays
+reachable by URL - it is role-gated, step-up-gated and audited, and hiding a door is not a reason to
+remove the room.
+
+### Loose ends resolved
+
+- The leaderboards guest gate and the deck's `requireUser` are untouched; the doors only choose
+  where to send the tap.
+- The strip's `getPartnerLookingStrip` reader (60 s cache) is reused for the door's caption and
+  chooser; no new query.
+- Three doors at 360 px: labels wrap to two lines, captions truncate; nothing overflows.
+
+### Contracts
+
+**Config:** `staff_activity_links_enabled` (settings + catalog). **Server:** `players/page.tsx`
+composes `DirectoryDoors` from the existing readers (`getLeaderboard`, `myProfile`,
+`getPartnerLookingStrip`, `loadSettingFlag`). **UI:** `directory-doors.tsx`, `availability-modal.tsx`,
+`partner-tournament-sheet.tsx`; `badges.tsx` (`SexBadge` SVG); `leaderboards-entry-card.tsx`,
+`partner-looking-strip.tsx` and `AvailabilityCard` become unused on this tab (`LookingForPartnerInline`
+stays for the wizard). `player-card.tsx` / profile page read the new flag for `staffLinks`.
+
+## 2BD. Forgot-password link fails from the installed app (PKCE across browsers) → in-app 6-digit code; standard password fields; PIN quick-unlock decision (2026-09-14)
+
+Jasper: (1) "Forgot password" does not work - from the app, the emailed link opens in Chrome with
+"That sign-in link was invalid or expired"; (2) after an email-code login the player should be made
+to set a password so codes are the exception (goal: fewer OTP emails), and the password screen must
+be the standard one (show / hide, retype, confirmation); (3) then prompt a 6-digit PIN they can
+change in settings - "or better yet, go for a PIN like GCash: easier to elect, more convenient".
+
+### Findings
+
+1. **Root cause of the reset failure - PKCE, not expiry.** `requestPasswordReset` calls
+   `resetPasswordForEmail` through the `@supabase/ssr` server client, whose flow type is PKCE: the
+   code **verifier** is written as a cookie on the browser that submitted the form (the installed
+   app). The emailed link carries only the one-time `code`; tapping it opens Chrome (or the mail
+   app's in-app browser) - a different cookie jar with no verifier - so `exchangeCodeForSession`
+   fails and `/auth/callback` redirects to `/login?error=auth`, whose copy is exactly the reported
+   string. The same happens from any second device. Link scanners that pre-open one-time URLs are a
+   second, independent cause of the same message.
+2. The callback already supports `token_hash` + `type` via `verifyOtp` (no verifier needed), and
+   Supabase's recovery email can carry a 6-digit `{{ .Token }}` exactly like the login code - which
+   the app already verifies in-app for sign-in.
+3. Password fields (`login-form.tsx`, `password-setup-gate.tsx`, `set-password-form.tsx`) are plain
+   `type="password"` inputs: no show / hide, no live "matches" check; `passwordSchema` is 8–72 chars.
+4. **The OTP → password election already exists** (§2BB, live since 0050): an onboarded email user
+   with `password_set = false` meets the blocking gate on their next visit; login is password-first
+   with the code demoted to a fallback link. Nothing forces a user who already has a password.
+5. Sessions never expire (dashboard: no time-box, no inactivity; 400-day cookies). A player who has
+   signed in once on a device is **never asked to sign in again there** - today's "login" cost on a
+   known device is zero taps. There is no PIN / passcode / passkey concept in the app; MFA is
+   staff-only TOTP.
+
+### Decisions
+
+**A. Reset by code, inside the app - no link needed.** `/forgot-password` becomes one screen in two
+steps: Email → "We emailed you a 6-digit code" + Code + New password + Confirm → signed in. New
+action `resetPasswordWithCode(email, token, password)` = `verifyOtp({ email, token, type:
+'recovery' })` then `updateUser({ password })`, sets `password_set = true`, redirects home. It never
+leaves the app, so it works identically in the installed PWA, Safari, Chrome, and on a second device.
+"Resend code" after 30 s. **Precondition (Jasper, Supabase dashboard → Authentication → Email
+Templates → Reset Password):** the template must print `{{ .Token }}`; its link should become the
+cross-browser-safe `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/me/settings/password`
+so anyone who taps the link instead of typing the code also succeeds. The exact template is in
+`docs/EMAIL_TEMPLATES.md` (new). Until the template is updated the emailed message has no code -
+update it before or with this deploy.
+
+**B. Standard password fields.** New `PasswordInput` (`components/ui/password-input.tsx`): eye
+toggle (show / hide, `aria-pressed`), correct `autoComplete`, and - for set/confirm pairs - a
+`PasswordPair` that shows two live check rows ("At least 8 characters", "Passwords match") that turn
+green as the user types, replacing hint sentences. Used in the login form (toggle only), the
+password gate, the set-password page and the reset step. No strength meter: length + match is the
+honest, non-nagging rule for this audience.
+
+**C. Code → password: keep §2BB as built.** The gate already makes every email-only user elect a
+password once; the code path is a demoted fallback. No new gate. (Jasper's ask is satisfied by 0050
+being applied; the two remaining email-only users meet it on next sign-in.)
+
+**D. PIN = quick unlock of the installed app, opt-in - NOT a replacement credential.** Reasoning:
+(i) because sessions never expire, a player already opens the app with zero taps; a *mandatory*
+PIN would add a screen where today there is none; (ii) a 6-digit numeric *password* is online-guessable
+(1M combinations) and these accounts hold government IDs; (iii) GCash's MPIN is precisely a device
+unlock - the real credential is the device registration plus OTP on a new device, which is what the
+persistent session plus password / code already are. So the PIN is an **App lock** the player turns
+on from ME → Security ("Quick unlock with a 6-digit PIN"): once set, a numeric PIN pad covers the app
+on a cold open and after `pin_lock_idle_minutes` (Admin, default 5) in the background; "Forgot PIN?"
+= sign out and sign in with password / code, then set a new PIN. Admin dial `pin_lock_mode`
+(`off` / `optional` / `prompt_once` - the last shows a one-time, skippable "Set a quick-unlock PIN"
+card after the password gate) so Jasper can push adoption without a deploy. Storage: new table
+`profile_pins (user_id pk, pin_hash, failed_attempts, locked_until, updated_at)` - service-role only
+(no client policy), scrypt via Node `crypto` (no new dependency); 5 wrong tries → 15-minute lockout,
+10 → password sign-in required. Unlock state = httpOnly signed cookie `vp_unlock` (HMAC keyed like
+`vp_guest`, sliding expiry) read in `app-shell.tsx`: while locked the shell renders only the PIN pad,
+so no page data reaches the client. **Phase 3 (migration 0052, after the Hermosa window)** - designed
+here, built next.
+
+### Loose ends resolved
+
+- Magic-link / signup templates: the app verifies codes for sign-in, so they already work; only the
+  Reset Password template lacked the code.
+- A user who resets by code but has `password_set` already true: harmless; the flag is re-set.
+- The stale `/me/settings/password` link path keeps working (the callback's `token_hash` branch).
+- Rate limits: Supabase's built-in OTP limits apply to recovery codes exactly as to login codes.
+
+### Contracts
+
+**Server:** `actions/auth.ts` → `requestPasswordReset` (keeps the email step; message updated),
+`resetPasswordWithCode(prev, formData)`; `packages/validation` → `resetPasswordWithCodeSchema`.
+**UI:** `app/(auth)/forgot-password/page.tsx` (two-step), `components/ui/password-input.tsx`
+(`PasswordInput`, `PasswordPair`), `login-form.tsx`, `password-setup-gate.tsx`, `set-password-form.tsx`.
+**Docs:** `docs/EMAIL_TEMPLATES.md` (Reset Password template with `{{ .Token }}` + token-hash link).
+**Phase 3 (not built):** migration 0052 `profile_pins`; settings `pin_lock_mode`, `pin_lock_idle_minutes`;
+`lib/pin/*`, `components/auth/pin-lock-screen.tsx`, ME → Security card.
+
+## 2BE. Organizer powers: every decision retractable, reclassify at will, the team sheet as a roster card, guest-account monitoring, add / replace / merge / import entries (2026-09-14)
+
+Jasper's organizer list: (1) an ongoing list of guest (unverified) accounts for monitoring; (2)
+reclassify any registered team's division AT WILL - paid or not, partner or not, eligibility problem
+or not - and have it sync into the tournament-system import; (3) create teams at will in any
+division, add partners to partnerless teams, switch players - subject only to the gender rules,
+with prompts / eligibility notes when skills do not fit - for existing accounts; (4) create teams
+for non-users by email + name (like the guest wizard) which the players confirm by email and turn
+into an account if they want ("tell me how this should ideally work"); (5) tag slots / partners /
+teams as paid or confirmed and pair up players manually (two separate entries, same receipt →
+one team, the duplicate removed); (6) bulk-import club teams; (7) a new team sheet: the division on
+top with a ⋯ of admin actions (Reclassify · Confirm · Reject), then each player as avatar + name +
+community skill with change / edit / delete, then Eligibility (actions), Payment (actions),
+Receipts (View · Slot 1 · Slot 2; a team receipt shows the same link on both); (8) every action
+retractable - verified back to under review or unpaid, and back again.
+
+### Findings (code read 2026-09-14; screenshot referenced in the ask was not attached)
+
+1. **Reclassify already exists and is organizer-only** - `reclassifyRegistration` (`actions/eligibility.ts`,
+   §25.5): writes `teams.division_id` + `registrations.division_id` directly (service role), recomputes
+   eligibility, writes `registration_events` `reclassified` + `audit_logs`, notifies the team. Guards: same
+   `format`, same `team_size`, no duplicate live entry in the target - **not** payment or status. It is
+   buried inside the collapsed Eligibility panel, so it reads as an eligibility remedy, not a power.
+2. **The export syncs by construction.** `Teams.DivisionID` and the `Divisions` sheet are read live
+   from `registrations.division_id` at export time, so a reclassified team lands in its new division
+   in the tournament-system file with no extra work.
+3. **Nothing is retractable today.** `confirmed` has no way back (only Reject / Refund); a `verified`
+   receipt has no un-verify; a `rejected` receipt cannot be restored (only resubmitted by the player);
+   an eligibility override cannot be undone; a rejected / cancelled entry cannot be restored. The DB
+   has no CHECK or trigger on `registrations.status` / `division_id` - every guard is procedural in a
+   server action or RPC, so reverse transitions are additions, not schema changes.
+4. **The consent precedent is already set.** `organizer_assign_partner` (0044, §2AQ) seats a player
+   CONFIRMED with no consent step, with a reason, an audit row and a `partner_assigned` notification;
+   §1D says that after proof / confirmation "only the organizer may resolve a change". §2P's
+   consent-first design for on-behalf entries is therefore superseded by: **organizer authority +
+   critical notification + the player's existing cancellation-request path.**
+5. **Guests** are `profiles` rows with `guest_created_at not null and onboarded_at null`; the only
+   surface is the "Unverified account" chip in the sheet. `startGuestEntry` is the reusable recipe for
+   creating an account from name + email (`auth.admin.createUser`, profile fill, `entry-core`).
+6. **Hard rules at the RPC door.** `organizer_assign_partner` calls `player_fits_division` (sex, age at
+   start, and the skill ceiling when `enforce_skill_floor` is on) and refuses; there is no override
+   argument, so "add a partner whose skill does not fit, with a note" needs a v2 of that function.
+7. The organizer DTO carries member avatars but **not** community skill; the sheet's payment state is
+   `summarizeEntryPayment()` over the team receipt + per-seat slots; proofs are 60-second signed URLs.
+
+### Decisions
+
+**A. The team sheet becomes a roster card** (`RegRow` in `organizer-registrations.tsx`, rebuilt):
+```
+[Division · Doubles]                                   [⋯]  Reclassify division · Confirm entry / Move back to review
+                                                             · Reject entry / Restore entry · Refund
+(avatar) Maria Santos            Community: Intermediate     [Change ▾] → Replace player (B) · Remove (B)
+(avatar) Mark Reyes              Community: Advanced         [Change ▾]   / open seat → [Add partner]
+Eligibility   ● Needs review · Skill above division max      [Approve] [Undo]
+Payment       ● 1 of 2 paid                                  (state line only; actions live on the rows below)
+Receipts      Team receipt · View · Verify / Decline / Undo verify / Restore
+              Slot · Maria · View · …        Slot · Mark · Mark paid (cash) / Undo
+```
+One state line per concern, the forward action and its **undo** in the same place, never more than two
+buttons per row; the ⋯ holds the rare whole-entry moves. A team receipt row appears once and the two seat
+rows say "covered by team receipt" with the same View link (Jasper's "same link on both"). Community skill
+per member is added to `OrganizerRegistration.members[]` (one batched read of `player_skill_profiles`).
+
+**B. Retractable, explicitly** (new server actions in `actions/registration.ts` / `actions/payment.ts`;
+every one: `authorizeOrganizer(..., 'approve_registrations' | 'manage_payments')`, `registration_events`
+row, `audit_logs` row, `settleRegistration()` afterwards so the derived state stays honest, notification to
+the team where the player would otherwise be surprised):
+- `revertConfirmation(registrationId, tournamentId, reason)`: `confirmed` → `payment_submitted` when any
+  live receipt exists, else `payment_pending` with `slot_hold_expires_at = null` (the organizer put it
+  back; no auto-expiry trap). Notifies `registration_reverted` (critical): "The organizer moved your entry
+  back to review - {reason}".
+- `unverifyPayment(paymentId, tournamentId, kind)`: `verified` → `submitted`, clears `verified_by / at`,
+  then settle (the entry drops out of `confirmed` if it is no longer fully paid). Team + slot kinds.
+- `restorePayment(paymentId, tournamentId, kind)`: `rejected` → `submitted`, clears the reason, settle.
+- `markSeatPaid(registrationId, playerId, tournamentId)`: for a seat with no live slot, inserts a
+  `tournament_slots` row `status = 'verified'`, `method = 'cash_manual'`, `amount_due` = the seat fee,
+  `verified_by` = organizer, no proof; settle. **Undo** = `undoSeatPaid(slotId)` → `rejected` with reason
+  `organizer_undo` (rejected slots are already hidden from live views). Same for a team-scope entry via
+  the existing "Confirm without payment" (`confirmRegistration`) whose undo is `revertConfirmation`.
+- `undoEligibilityApproval(registrationId, tournamentId)`: drops the `override` from the snapshot and
+  recomputes (`computeRegistrationEligibility`), so the honest flag returns.
+- `restoreRegistration(registrationId, tournamentId, reason)`: `rejected | cancelled | withdrawn` →
+  `payment_submitted` / `payment_pending` (as above), `teams.status = 'formed'`, re-attaches the
+  members' live bare slots in this tournament (they were detached on release), no capacity lock -
+  capacity is the organizer's call (the same stance `reclassifyRegistration` takes); a full division
+  shows an inline "This division is over capacity (n/m)" note, not a refusal. Notifies
+  `registration_restored`. `refunded` stays terminal (money moved).
+- Reclassify (`reclassifyRegistration`) moves to the ⋯ as **Reclassify division**, keeps its
+  format / team-size / duplicate guards (a doubles team cannot become a singles entry), gains a
+  **capacity note** (never a block) and applies to every status incl. `confirmed` and `rejected`.
+  The gender rule is enforced by the recompute: a team that breaks `sex_classification` in the target
+  shows `Rule not met` immediately; the organizer can still Approve with a reason (existing power),
+  which is the "prompt, not a wall" Jasper asked for.
+
+**C. Add an entry (existing accounts) - built now, no migration.** Manage → Registrations gains
+**Add entry** (a short wizard: Division → Players → Paid? → Review). Players are searched with the
+existing invitable-player search (results annotated with fit: "Skill above this division" / "Sex does
+not match" - the latter blocks, the former only warns). Server `createEntryForPlayers(tournamentId,
+divisionId, playerIds[1..2], { markPaid, reason })`: player 1 through `entry-core` (`doRegisterSolo` /
+`doEnterDoublesSolo`) exactly as a self-entry, player 2 through `organizer_assign_partner` (audited,
+CONFIRMED), optional `markSeatPaid` for each; notification `organizer_entered_you` (critical) to every
+player: "{Organizer} entered you in {tournament} · {division}{ with {partner}}. Not right? Ask the
+organizer or request cancellation." Because 0044's RPC refuses a skill-mismatch seat when
+`enforce_skill_floor` is on, that case returns the reason verbatim today and is lifted by **D**.
+
+**D. Phase B (migration 0051, apply after the Hermosa window closes 2026-09-16; functions only, additive):**
+- `organizer_assign_partner` v2 adds `p_override_fit boolean`: still refuses `WRONG_SEX`,
+  `MIXED_COMPOSITION` and an age rule when the DOB is known; skips the skill ceiling and unknown-DOB
+  refusals when set, recording `fit_overridden` in the event metadata (the sheet then shows the
+  eligibility note).
+- `organizer_replace_member(p_team_id, p_old_player, p_new_player, p_actor, p_reason, p_override_fit)`:
+  swaps the seat, keeps the seat's slot (money stays with the entry - a refund is the organizer's
+  manual call), same rules; events `member_replaced_by_organizer`; notifies both.
+- `organizer_remove_member(p_team_id, p_player, ...)`: doubles only → open seat, the removed player's
+  attached slot becomes a bare slot again (their money is preserved), `teams.status = 'forming'`.
+- `organizer_merge_entries(p_keep_registration, p_absorb_registration, p_actor, p_reason)`: the
+  "same receipt, two entries" case - the absorbed entry's member is seated into the kept entry's open
+  seat, its slot rows re-attach to the kept registration, the absorbed registration is released
+  `withdrawn` with event `merged_by_organizer` (the §2AT `merged_into_team` shape), waitlist promoted.
+  The sheet offers it from the open-seat "Add partner" as **Merge with another entry** listing the
+  division's partnerless entries.
+- **Non-user entries** (Jasper's "how should this ideally work"): in Add entry, a player who is not on
+  VouchPlay is entered as name + email (+ sex, self-rated skill, birthday only when the division is
+  age-limited) - the guest wizard's step-0 facts. Server: `auth.admin.createUser(email_confirm:false)`
+  + profile fill + `guest_created_at` (the §2AU recipe, `entered_by = organizer` in the audit); an
+  email that already has an account simply uses that account. The entry is **live immediately**
+  (organizer authority, as in C) and the person gets one email: "{Organizer} entered you in
+  {tournament} · {division} with {partner}. To see or manage your entry, activate your account" →
+  `/login?email=…&code=1` which sends the 6-digit code on open → onboarding pre-filled (only city
+  asked) → the entry is in My registrations. Until then the row carries the "Unverified account" chip
+  and the export already has their name + email. Declining = the normal cancellation request, or the
+  organizer removes them. No confirmation is withheld on account state (money is money, §2AU-F).
+- **Bulk import**: Manage → Registrations → **Import teams** (CSV / XLSX; the template is downloadable:
+  `division, p1_first, p1_last, p1_email, p1_sex, p1_skill, p2_first, p2_last, p2_email, p2_sex, p2_skill,
+  paid`). Parse → a preview table with a verdict per row (existing account · new account · needs a fix:
+  unknown division / bad email / sex rule) → **Import n teams** runs C per row, best-effort, and shows
+  the per-row result; one audit row per run with counts. Bounded at 200 rows per file.
+- **Admin → Guests**: a global list of unverified accounts (name, email, created, tournament, entry
+  status) with "Resend code" (max once per 24 h per email) and a 30-day sweeper button.
+
+**E. Guest monitoring (built now).** Manage → Registrations: a **Requests / Accounts** filter value
+**Unverified account (n)** and a compact **Unverified accounts** panel (name, email, entered, entry
+status) with **Resend code** per row (`resendGuestCode(profileId, tournamentId)` → the existing OTP
+send, once per 24 h per email, audited). Organizers get the per-tournament view; the global Admin list
+is D.
+
+### Why organizer authority instead of consent (supersedes §2P)
+
+The assign-partner precedent (§2AQ) already seats a player without a consent step, and §1D reserves
+post-proof changes to the organizer. Consent-first would leave an organizer with a tournament-day roster
+full of "awaiting confirmation" ghosts from players who never open the app. The honest safeguards are:
+a reason on every action, an audit row, a critical notification to every affected player, and the
+player's existing cancellation request - the same guarantees the assign-partner power already gives.
+
+### Loose ends resolved
+
+- **Money never moves silently.** Every reverse action leaves receipts and slots attached; refund stays
+  a deliberate, terminal, manual action. Un-verify does not touch amounts.
+- **Waitlists.** Restoring or reclassifying into a full division never bumps anyone; it shows the
+  capacity note. Rejecting still promotes the waitlist as today.
+- **Notifications.** New catalog entries: `registration_reverted`, `registration_restored`,
+  `organizer_entered_you` (all critical); D adds `member_replaced`, `entry_merged_by_organizer`.
+- **Reason discipline.** Reverse actions require a reason (min 3 chars, like assign-partner) because
+  they are the ones players will ask about.
+- **Deployment skew.** New actions are additive; the existing ones keep their signatures.
+- **The export** needs no change; a follow-up may add an `Account` column (verified / unverified).
+
+### Contracts
+
+**Server (A/B/C/E):** `actions/registration.ts` → `revertConfirmation`, `restoreRegistration`,
+`createEntryForPlayers`, `resendGuestCode`; `actions/payment.ts` → `unverifyPayment`, `restorePayment`,
+`markSeatPaid`, `undoSeatPaid`; `actions/eligibility.ts` → `undoEligibilityApproval`, `reclassifyRegistration`
+(capacity note, all statuses); `registration-queries.ts` → `members[].communitySkill`, `members[].email`
+(organizer-only DTO), `getUnverifiedAccounts(tournamentId)`; `packages/core` notifications catalog
+(`registration_reverted`, `registration_restored`, `organizer_entered_you`).
+**UI:** `organizer-registrations.tsx` (roster-card sheet, filter value), `add-entry-wizard.tsx`,
+`unverified-accounts-panel.tsx`.
+**Phase B:** migration 0051 (four definer functions, each followed by revoke / grant), non-user entry,
+import, Admin guests.
+
+### Execution
+
+Docs → four Sonnet lanes in parallel (Players tab §2BC · Auth §2BD · Organizer server §2BE-A/B/C/E ·
+Organizer UI §2BE-A/C/E, against the contracts above) → main-session review → gates → commit → Jasper
+updates the Reset Password email template, pushes. Phase B (0051 + non-user + import + Admin guests) and
+Phase 3 (PIN quick unlock) follow in the next session.
+
+## 2BF. Birthday is editable in Edit profile (2026-09-14)
+
+Jasper: "Can't edit bday in edit profile, allow edit." Birthday (`profiles.date_of_birth`) drives the
+age-at-door eligibility check (§2AM / 0043) but was only ever collected in the guest wizard step 0 and
+shown **read-only** in the onboarding form (§2AU E) - there was no way for a player to add or correct
+it after the fact, so anyone entered without a birthday could never satisfy an age-limited division.
+
+### Decision
+
+Make it a real, optional field in Edit profile. `onboardingSchema` (which backs both `completeOnboarding`
+and `updateProfile`) gains an optional `dateOfBirth`: format `YYYY-MM-DD`, validated for a real, past,
+plausible date (age 5-120); empty string clears it. `updateProfile` parses `dateOfBirth` and writes
+`date_of_birth` (`null` when blank). `ProfileRow` / `getMyProfile` now select `date_of_birth`, and the
+edit page passes it in as `initial.dateOfBirth`. The `OnboardingForm` birthday field is now editable in
+`mode="edit"` (a `type="date"` input named `dateOfBirth`, hint "Optional. Needed only to enter
+age-limited divisions."); in `mode="onboarding"` it stays the read-only guest-recovery display, un-named
+so it never rides along in that submit. Onboarding save behaviour is unchanged (the key is absent from
+its parse input, so `.optional()` leaves it untouched). No migration - the nullable column already exists.
+
+### Contracts
+
+**Validation:** `packages/validation/src/profile.ts` `onboardingSchema.dateOfBirth`. **Server:**
+`lib/actions/profile.ts` `updateProfile` (parse + write); `lib/auth.ts` `ProfileRow.date_of_birth` +
+`getMyProfile` select. **UI:** `components/auth/onboarding-form.tsx` (editable in edit mode);
+`app/(app)/me/edit/page.tsx` (passes `dateOfBirth`).
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

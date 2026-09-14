@@ -491,6 +491,7 @@ describe('counts', () => {
       cancellationRequested: 1,
       needsEligibilityReview: 1,
       wantsToCancel: 1,
+      unverifiedAccounts: 0,
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   type EntryPaymentSummary,
   type SeatState,
 } from '@vouchplay/core';
+import { skillByOrdinal } from '@vouchplay/config';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl, PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { isSlotReservationsEnabled } from '@/lib/settings';
@@ -19,6 +20,7 @@ import {
   getSlotCancelRequests,
   getSlotDismissedAt,
 } from '@/lib/payments/slots';
+import type { UnverifiedAccount } from './organizer-types';
 import { divisionName } from './dto';
 import { getPartnerLockAt } from './queries';
 
@@ -886,6 +888,20 @@ export async function getViewerRegistrationState(
 // ---------------------------------------------------------------------------
 // Organizer registrations dashboard (§26.4)
 // ---------------------------------------------------------------------------
+/** master_plan §2BE A: the organizer's roster-card sheet needs two fields beyond the shared `Mini` -
+ *  both organizer-only (never sent to a non-organizer caller, since this type is only ever produced
+ *  by `getOrganizerRegistrations` below). `communitySkill` is the player's community skill LABEL
+ *  (e.g. "Intermediate"), same band mapping the directory uses; `email` comes from `auth.users`
+ *  (profiles carry none), the same bounded `getUserById`-per-member approach `lib/exports/build.ts`
+ *  already uses for the export file. Optional (rather than always-boolean/string) only so existing
+ *  test fixtures elsewhere that construct an `OrganizerRegistration` by hand need no change - same
+ *  reasoning as `Mini.unverified?`/`OrganizerRegistration.partnerNote?` above; this module itself
+ *  always sets both (to a value or explicit null). */
+export interface OrganizerMember extends Mini {
+  communitySkill?: string | null;
+  email?: string | null;
+}
+
 export interface OrganizerRegistration {
   id: string;
   teamId: string;
@@ -899,7 +915,7 @@ export interface OrganizerRegistration {
   /** Each member carries its own `unverified` flag (master_plan §2AU F) - true for a guest who has
    *  not yet finished onboarding, driving the "Unverified account" chip on the row and in the sheet.
    *  The receipt is still reviewable either way; account state never withholds a confirmation. */
-  members: Mini[];
+  members: OrganizerMember[];
   /** Player ids whose team membership is still unconfirmed (pay-first, §1U). */
   unconfirmedMemberIds: string[];
   /** The division's team size, so `hasOpenSeat` can tell a genuinely empty seat from a full team
@@ -1067,6 +1083,40 @@ export async function getOrganizerRegistrations(
   // Depends on `members`, so it cannot join the batch above - one more round trip.
   const profiles = await resolve(members.map((m) => m.player_id));
 
+  // master_plan §2BE A: community skill label + email for the roster-card sheet, organizer-only.
+  const memberPlayerIds = Array.from(new Set(members.map((m) => m.player_id)));
+  const { data: skillRows } = memberPlayerIds.length
+    ? await svc
+        .from('player_skill_profiles')
+        .select('player_id, community_skill_level')
+        .in('player_id', memberPlayerIds)
+    : { data: [] };
+  const communitySkillByPlayer = new Map<string, string | null>();
+  for (const s of (skillRows ?? []) as {
+    player_id: string;
+    community_skill_level: number | null;
+  }[]) {
+    communitySkillByPlayer.set(
+      s.player_id,
+      s.community_skill_level != null
+        ? (skillByOrdinal(s.community_skill_level)?.label ?? null)
+        : null,
+    );
+  }
+  // Emails from auth (profiles carry none). getUserById per distinct member, bounded per tournament -
+  // same approach `lib/exports/build.ts` uses for the export file.
+  const emailByPlayer = new Map<string, string | null>();
+  await Promise.all(
+    memberPlayerIds.map(async (id) => {
+      try {
+        const { data } = await svc.auth.admin.getUserById(id);
+        emailByPlayer.set(id, data?.user?.email ?? null);
+      } catch {
+        emailByPlayer.set(id, null);
+      }
+    }),
+  );
+
   const payByReg = new Map<
     string,
     {
@@ -1129,8 +1179,17 @@ export async function getOrganizerRegistrations(
       members: members
         .filter((m) => m.team_id === r.team_id)
         .sort((a, b) => a.member_order - b.member_order)
-        .map((m) => profiles.get(m.player_id))
-        .filter((x): x is Mini => !!x),
+        .flatMap((m): OrganizerMember[] => {
+          const mini = profiles.get(m.player_id);
+          if (!mini) return [];
+          return [
+            {
+              ...mini,
+              communitySkill: communitySkillByPlayer.get(m.player_id) ?? null,
+              email: emailByPlayer.get(m.player_id) ?? null,
+            },
+          ];
+        }),
       unconfirmedMemberIds: members
         .filter((m) => m.team_id === r.team_id && !m.confirmed_at)
         .map((m) => m.player_id),
@@ -1154,6 +1213,145 @@ export async function getOrganizerRegistrations(
         rejectionReason: s.rejection_reason,
         submittedAt: s.submitted_at,
       })),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Unverified (guest) accounts panel (master_plan §2BE E) - guests with a live entry in this
+// tournament, for the organizer's "Resend code" list.
+// ---------------------------------------------------------------------------
+
+/** Registration statuses that count as "live" for the unverified-accounts panel - same set
+ *  `getTournamentParticipantIds` (`lib/notifications/recipients.ts`) already uses. */
+const LIVE_REG_STATUSES = [
+  'team_formed',
+  'payment_pending',
+  'payment_submitted',
+  'under_review',
+  'confirmed',
+  'waitlisted',
+];
+
+/**
+ * Every guest (`guest_created_at` set, `onboarded_at` still null) with a live entry in this
+ * tournament. Email is not on `profiles` - resolved via a bounded `auth.admin.getUserById` per guest
+ * (the same approach `getOrganizerRegistrations` above and `lib/exports/build.ts` already use), which
+ * is fine here because guests per tournament are few; a single SQL read against `auth.users` is not
+ * available to the app's Supabase client (only the `profiles` mirror is). `lastCodeSentAt` is the
+ * latest `guest.code_resent` audit row per profile (written by `resendGuestCode`,
+ * `actions/registration.ts`).
+ */
+export async function getUnverifiedAccounts(tournamentId: string): Promise<UnverifiedAccount[]> {
+  const svc = createServiceClient();
+  const { data: regRows } = await svc
+    .from('registrations')
+    .select('id, team_id, division_id, status')
+    .eq('tournament_id', tournamentId)
+    .in('status', LIVE_REG_STATUSES);
+  const regs = (regRows ?? []) as {
+    id: string;
+    team_id: string;
+    division_id: string;
+    status: string;
+  }[];
+  if (regs.length === 0) return [];
+
+  const teamIds = Array.from(new Set(regs.map((r) => r.team_id)));
+  const { data: memberRows } = await svc
+    .from('team_members')
+    .select('team_id, player_id')
+    .in('team_id', teamIds);
+  const members = (memberRows ?? []) as { team_id: string; player_id: string }[];
+  const playerIds = Array.from(new Set(members.map((m) => m.player_id)));
+  if (playerIds.length === 0) return [];
+
+  const { data: profileRows } = await svc
+    .from('profiles')
+    .select('id, first_name, last_name, nickname, guest_created_at, onboarded_at')
+    .in('id', playerIds);
+  const guestProfiles = (
+    (profileRows ?? []) as {
+      id: string;
+      first_name: string | null;
+      last_name: string | null;
+      nickname: string | null;
+      guest_created_at: string | null;
+      onboarded_at: string | null;
+    }[]
+  ).filter((p) => p.guest_created_at && !p.onboarded_at);
+  if (guestProfiles.length === 0) return [];
+  const guestIds = Array.from(new Set(guestProfiles.map((p) => p.id)));
+
+  const regByTeam = new Map(regs.map((r) => [r.team_id, r]));
+  const teamsByGuest = new Map<string, string[]>();
+  for (const m of members) {
+    if (!guestIds.includes(m.player_id)) continue;
+    const list = teamsByGuest.get(m.player_id) ?? [];
+    list.push(m.team_id);
+    teamsByGuest.set(m.player_id, list);
+  }
+
+  const divIds = Array.from(new Set(regs.map((r) => r.division_id)));
+  const { data: divRows } = divIds.length
+    ? await svc
+        .from('divisions')
+        .select(
+          'id, name_override, skill_policy, minimum_skill, maximum_skill, format, sex_classification, minimum_age, maximum_age',
+        )
+        .in('id', divIds)
+    : { data: [] };
+  const divNameById = new Map<string, string>();
+  for (const d of (divRows ?? []) as ({ id: string } & Parameters<typeof divisionName>[0])[]) {
+    divNameById.set(d.id, divisionName(d));
+  }
+
+  const [emailByPlayer, lastCodeSentByPlayer] = await Promise.all([
+    (async () => {
+      const map = new Map<string, string | null>();
+      await Promise.all(
+        guestIds.map(async (id) => {
+          try {
+            const { data } = await svc.auth.admin.getUserById(id);
+            map.set(id, data?.user?.email ?? null);
+          } catch {
+            map.set(id, null);
+          }
+        }),
+      );
+      return map;
+    })(),
+    (async () => {
+      const map = new Map<string, string>();
+      const { data: auditRows } = await svc
+        .from('audit_logs')
+        .select('entity_id, created_at')
+        .eq('action', 'guest.code_resent')
+        .eq('entity_type', 'profile')
+        .in('entity_id', guestIds)
+        .order('created_at', { ascending: false });
+      for (const a of (auditRows ?? []) as { entity_id: string; created_at: string }[]) {
+        if (!map.has(a.entity_id)) map.set(a.entity_id, a.created_at);
+      }
+      return map;
+    })(),
+  ]);
+
+  return guestProfiles.map((p) => {
+    const teamIdsForPlayer = teamsByGuest.get(p.id) ?? [];
+    const reg = teamIdsForPlayer.map((tid) => regByTeam.get(tid)).find((r) => r) ?? null;
+    return {
+      profileId: p.id,
+      name:
+        [p.first_name, p.last_name].filter(Boolean).join(' ').trim() ||
+        p.nickname ||
+        'VouchPlay player',
+      email: emailByPlayer.get(p.id) ?? null,
+      createdAt: p.guest_created_at as string,
+      registrationId: reg?.id ?? null,
+      divisionName: reg ? (divNameById.get(reg.division_id) ?? null) : null,
+      status: reg?.status ?? null,
+      lastCodeSentAt: lastCodeSentByPlayer.get(p.id) ?? null,
     };
   });
 }

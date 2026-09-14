@@ -9,6 +9,7 @@ import {
   getOrganizerRegistrations,
   getOrganizerBareSlots,
   getClubOverrideParticipants,
+  getUnverifiedAccounts,
 } from '@/lib/tournaments/registration-queries';
 import { isClosed, hasOpenSeat, hasUnconfirmedPartner } from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
@@ -33,6 +34,7 @@ import { OrganizerRegistrations } from '@/components/tournaments/organizer-regis
 import { PartnerSearchersPanel } from '@/components/tournaments/partner-searchers-panel';
 import { listPartnerSearchers } from '@/lib/partners/deck';
 import { ReservedSlotsPanel } from '@/components/tournaments/reserved-slots-panel';
+import { UnverifiedAccountsPanel } from '@/components/tournaments/unverified-accounts-panel';
 import { TournamentExport } from '@/components/tournaments/tournament-export';
 import { TournamentOverview } from '@/components/tournaments/tournament-overview';
 import { isoToPhInput, isoToPhDateInput } from '@vouchplay/core';
@@ -119,6 +121,7 @@ export default async function ManageTournamentPage({ params }: Params) {
     bareSlots,
     slotsEnabled,
     partnerSearchers,
+    unverifiedAccounts,
   ] = await Promise.all([
     getOrganizerRegistrations(t.id),
     getClubOverrideParticipants(t.id),
@@ -133,6 +136,10 @@ export default async function ManageTournamentPage({ params }: Params) {
     // master_plan §2AV H: "Looking for partners" - read defensively, `listPartnerSearchers` arrives
     // from a parallel lane.
     listPartnerSearchers(t.id).catch(() => ({ count: 0, players: [] })),
+    // master_plan §2BE Decision E: guest accounts still unclaimed for this tournament - read
+    // defensively so a pre-migration deploy degrades to "no unverified accounts" instead of
+    // breaking Manage.
+    getUnverifiedAccounts(t.id).catch(() => []),
   ]);
 
   // §2AQ Decision C/D: kept in a separate `Promise.all` from the block above - both reads depend on
@@ -216,6 +223,7 @@ export default async function ManageTournamentPage({ params }: Params) {
       <ManageSection title="Registrations">
         <div className="space-y-5">
           <ReservedSlotsPanel tournamentId={t.id} slots={bareSlots} enabled={slotsEnabled} />
+          <UnverifiedAccountsPanel accounts={unverifiedAccounts} tournamentId={t.id} />
           <OrganizerRegistrations
             tournamentId={t.id}
             registrations={registrations}

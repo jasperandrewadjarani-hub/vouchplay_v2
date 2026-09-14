@@ -7,7 +7,42 @@ import { writeAudit } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { computeRegistrationEligibility } from '@/lib/eligibility/compute';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
+import type { OrganizerActionResult } from '@/lib/tournaments/organizer-types';
 import { revalidateTag } from 'next/cache';
+
+/** master_plan §2BE B: registration statuses that count as "occupying" a division for the capacity
+ *  note on `reclassifyRegistration` - advisory only, mirrors the live-registration set the register_team
+ *  RPC itself uses (0008/0021), plus `team_formed` (a not-yet-registered-but-formed team already shows
+ *  on the sheet). Never blocks - the organizer's call, same stance the existing reclassify guard takes. */
+const CAPACITY_LIVE_STATUSES = [
+  'team_formed',
+  'payment_pending',
+  'payment_submitted',
+  'under_review',
+  'confirmed',
+];
+
+/** Advisory-only capacity note for a target division (master_plan §2BE B/D) - null when the division
+ *  has no cap (`capacity_teams` 0) or is not at/over it. Never used to block anything. */
+async function capacityNote(
+  svc: ReturnType<typeof createServiceClient>,
+  divisionId: string,
+): Promise<string | undefined> {
+  const { data: divRow } = await svc
+    .from('divisions')
+    .select('capacity_teams')
+    .eq('id', divisionId)
+    .maybeSingle();
+  const capacity = (divRow as { capacity_teams: number } | null)?.capacity_teams ?? 0;
+  if (!capacity) return undefined;
+  const { count } = await svc
+    .from('registrations')
+    .select('id', { count: 'exact', head: true })
+    .eq('division_id', divisionId)
+    .in('status', CAPACITY_LIVE_STATUSES);
+  const active = count ?? 0;
+  return active >= capacity ? `This division is over capacity (${active}/${capacity}).` : undefined;
+}
 
 /**
  * Organizer eligibility actions (handover §25.5). These are OVERRIDES of the decision-support engine:
@@ -19,6 +54,9 @@ export interface EligibilityActionState {
   ok?: boolean;
   error?: string;
   message?: string;
+  /** master_plan §2BE B: a non-blocking advisory alongside success (e.g. `reclassifyRegistration`'s
+   *  target-division capacity note) - never set alongside `error`. */
+  note?: string;
 }
 
 async function revalTournament(svc: ReturnType<typeof createServiceClient>, tournamentId: string) {
@@ -225,11 +263,88 @@ export async function reclassifyRegistration(
     // Recompute eligibility against the new division rules and refresh the dashboard.
     await computeRegistrationEligibility(registrationId);
     await notifyRegistrationTeam(registrationId, tournamentId, 'eligibility_reclassified');
+    // master_plan §2BE B: capacity is the organizer's call, same stance every guard above already
+    // takes - this never blocks, it only surfaces a note alongside the success message.
+    const note = await capacityNote(svc, newDivisionId);
     await revalTournament(svc, tournamentId);
+    return {
+      ok: true,
+      message: 'Team reclassified. Eligibility re-checked.',
+      ...(note ? { note } : {}),
+    };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }
-  return { ok: true, message: 'Team reclassified. Eligibility re-checked.' };
+}
+
+/**
+ * Undo an eligibility override (master_plan §2BE B): removes the `override` key from the stored
+ * snapshot (keeping everything else) and recomputes so the honest status returns. The manual
+ * `eligibility_status` reset covers a terminal registration (withdrawn/cancelled/rejected), for which
+ * `computeRegistrationEligibility` is a silent no-op - without it the status would stay pinned to
+ * `eligible` forever on a closed entry. No notification (§2BE: this is a quiet correction, not
+ * something a player needs to be told about).
+ */
+export async function undoEligibilityApproval(
+  registrationId: string,
+  tournamentId: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))) {
+    return { ok: false, error: 'You do not have permission to review registrations.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('id, tournament_id, eligibility_status, eligibility_snapshot')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as {
+      id: string;
+      tournament_id: string;
+      eligibility_status: string;
+      eligibility_snapshot: Record<string, unknown> | null;
+    } | null;
+    if (!reg || reg.tournament_id !== tournamentId)
+      return { ok: false, error: 'Registration not found.' };
+
+    const snapshot: Record<string, unknown> = { ...(reg.eligibility_snapshot ?? {}) };
+    const override = snapshot.override as { fromStatus?: string } | undefined;
+    if (!override) return { ok: true, message: 'No override to undo.' };
+    delete snapshot.override;
+    const fromStatus = override.fromStatus ?? 'review';
+
+    await svc
+      .from('registrations')
+      .update({ eligibility_status: fromStatus, eligibility_snapshot: snapshot })
+      .eq('id', registrationId);
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'eligibility_override_undone',
+      from_status: reg.eligibility_status,
+      to_status: fromStatus,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'eligibility_override_undone',
+      entityType: 'registration',
+      entityId: registrationId,
+      before: { eligibility_status: reg.eligibility_status },
+      after: { eligibility_status: fromStatus },
+    });
+
+    // Recompute wins when the registration is still active - the manual reset above is only the
+    // fallback for a terminal registration `computeRegistrationEligibility` silently skips.
+    await computeRegistrationEligibility(registrationId);
+    await revalTournament(svc, tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Eligibility override undone.' };
 }
 
 /**

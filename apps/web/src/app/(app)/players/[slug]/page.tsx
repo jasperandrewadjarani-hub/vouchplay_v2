@@ -48,7 +48,7 @@ import {
   getPlayerHistory,
 } from '@/lib/players/profile-extras';
 import { getContributionProgress } from '@/lib/leaderboards/queries';
-import { getVouchSettings, getProfileVisibilityFlags } from '@/lib/settings';
+import { getVouchSettings, getProfileVisibilityFlags, loadSettingFlag } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
 import { countHeldVouchesForTarget } from '@/lib/vouches/held';
 import { getVoucherTierCached } from '@/lib/vouches/newcomer';
@@ -156,6 +156,10 @@ export default async function PlayerProfilePage({ params }: Params) {
   const ownRatingsArePrivate =
     player.isOwnProfile && (player.communityRatingPrivate || player.selfRatingPrivate);
   const authed = viewer.viewerId !== null;
+  // §2BC-D: staff see the "See vouch activity" link only while Admin's switch is on; the
+  // /staff/players/[slug] page itself stays reachable by URL regardless (role + step-up gated).
+  const staffLinks =
+    viewer.isStaff && (await loadSettingFlag('staff_activity_links_enabled', true));
   const iBlocked =
     authed && !player.isOwnProfile
       ? await hasViewerBlocked(viewer.viewerId as string, player.id)
@@ -241,9 +245,9 @@ export default async function PlayerProfilePage({ params }: Params) {
               mode="profile"
             />
             <ShareButton url={shareUrl} title={`${player.displayName} on VouchPlay`} />
-            {/* Staff-only review entry point (master_plan §2AN decision 6) - the page decides
-                staff-ness from `viewer.isStaff`, never from the player DTO. */}
-            {viewer.isStaff && <StaffPlayerActivityLink slug={slug} size="sm" />}
+            {/* Staff-only review entry point (master_plan §2AN decision 6, §2BC-D) - the page decides
+                staff-ness from `viewer.isStaff` and the Admin switch, never from the player DTO. */}
+            {staffLinks && <StaffPlayerActivityLink slug={slug} size="sm" />}
           </div>
         </div>
 

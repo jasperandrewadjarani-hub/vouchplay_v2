@@ -124,9 +124,16 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
           }`}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand icon, no next/image needed */}
-          <img src="/icons/icon-192.png" alt="" aria-hidden className="h-11 w-11 shrink-0 rounded-xl" />
+          <img
+            src="/icons/icon-192.png"
+            alt=""
+            aria-hidden
+            className="h-11 w-11 shrink-0 rounded-xl"
+          />
           <div className="min-w-0 flex-1">
-            <p className="text-foreground text-sm leading-tight font-semibold">You&rsquo;re all set</p>
+            <p className="text-foreground text-sm leading-tight font-semibold">
+              You&rsquo;re all set
+            </p>
             <p className="text-foreground-muted mt-0.5 text-xs leading-snug">
               Open VouchPlay from this icon on your home screen.
             </p>

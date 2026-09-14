@@ -165,6 +165,56 @@ export function OpenForSponsorshipBadge() {
   );
 }
 
+/**
+ * Mars / Venus as inline SVGs, lucide-style (master_plan §2BC decision C): the pinned lucide 0.469
+ * has no Mars/Venus icon, and the raw ♂ / ♀ text glyphs they replace fall back to Apple Color Emoji
+ * metrics on iOS WebKit - a taller ascent and different baseline than every sibling 13px lucide SVG,
+ * which is what misaligned the sex icon on iPhones (Safari and the installed app) while Chrome/Android
+ * drew the same glyphs from the text font and looked fine. An SVG with the same viewBox and stroke
+ * conventions as the rest of the icon set renders identically on every platform - no font fallback.
+ */
+function MarsIcon({ size = 13, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="10" cy="14" r="5" />
+      <line x1="14" y1="10" x2="20" y2="4" />
+      <polyline points="15 4 20 4 20 9" />
+    </svg>
+  );
+}
+
+function VenusIcon({ size = 13, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <circle cx="12" cy="9" r="5" />
+      <line x1="12" y1="14" x2="12" y2="21" />
+      <line x1="9" y1="18" x2="15" y2="18" />
+    </svg>
+  );
+}
+
 export function SexBadge({
   sex,
   symbolOnly = false,
@@ -179,13 +229,14 @@ export function SexBadge({
 }) {
   if (!sex) return null;
   const male = sex === 'male';
+  const Icon = male ? MarsIcon : VenusIcon;
   if (symbolOnly) {
     return (
       <span
-        className={male ? 'text-sky-600 dark:text-sky-400' : 'text-pink-600 dark:text-pink-400'}
+        className={`inline-flex shrink-0 items-center ${male ? 'text-sky-600 dark:text-sky-400' : 'text-pink-600 dark:text-pink-400'}`}
         title={male ? 'Male' : 'Female'}
       >
-        <span aria-hidden>{male ? '♂' : '♀'}</span>
+        <Icon size={13} />
         <span className="sr-only">{male ? 'Male' : 'Female'}</span>
       </span>
     );
@@ -195,7 +246,7 @@ export function SexBadge({
       className={`${chip} ${male ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400' : 'bg-pink-500/15 text-pink-600 dark:text-pink-400'}`}
       title={male ? 'Male' : 'Female'}
     >
-      <span aria-hidden>{male ? '♂' : '♀'}</span>
+      <Icon size={11} />
       {male ? 'Male' : 'Female'}
     </span>
   );

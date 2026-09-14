@@ -122,6 +122,9 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // (SMTP cost). Off instantly disables the gate for everyone, no deploy. It is also naturally inert
   // until migration 0050 is applied (the reader fails open on the missing column).
   password_gate_enabled: true,
+  // Staff "See vouch activity" links on the Players tab / profiles (master_plan §2BC-D). Off hides
+  // the doors so staff browse exactly as a player does; /staff/players/[slug] stays role-gated by URL.
+  staff_activity_links_enabled: true,
   role_applications_enabled: true,
   coach_applications_enabled: true,
   club_creation_enabled: true,

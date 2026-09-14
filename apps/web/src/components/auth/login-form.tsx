@@ -9,6 +9,7 @@ import {
   type FormState,
 } from '@/lib/actions/auth';
 import { Field, Input, FormError, FormMessage } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 import { SubmitButton } from '@/components/ui/button';
 
 const empty: FormState = {};
@@ -51,13 +52,7 @@ function PasswordLogin({ next, onUseCode }: { next?: string; onUseCode: () => vo
         <Input id="email" name="email" type="email" autoComplete="email" required />
       </Field>
       <Field label="Password" htmlFor="password" required>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-        />
+        <PasswordInput id="password" name="password" autoComplete="current-password" required />
       </Field>
       <SubmitButton pendingLabel="Signing in…">Sign in</SubmitButton>
       <p className="text-foreground-muted text-center text-sm">

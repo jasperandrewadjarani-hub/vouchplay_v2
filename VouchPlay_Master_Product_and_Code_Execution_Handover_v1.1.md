@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.81 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.82 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,33 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.82 (2026-09-14)
+
+_Players tab doors + iPhone sex glyph + staff-link switch (master_plan §2BC); forgot-password by in-app code, standard password fields, PIN decision (§2BD); organizer powers phase A (§2BE); editable birthday in Edit profile (§2BF). No migration in this deploy._
+
+- **Players tab:** the three blocks above the list become one row of three doors - Leaderboards,
+  Let people find you (modal with the two switches), Find a partner (deck / chooser / "mark me as
+  looking"). `SexBadge` draws inline SVGs instead of ♂/♀ text glyphs (iOS emoji-metric fallback caused
+  the iPhone-only misalignment). New Admin flag `staff_activity_links_enabled` hides the staff "See
+  vouch activity" link so staff can see the tab as players do.
+- **Forgot password:** root cause was PKCE across browsers (verifier cookie in the app, link opened in
+  Chrome). Reset now happens **by 6-digit code inside the app** (`resetPasswordWithCode`). **Jasper
+  must update the Supabase Reset Password email template** to print `{{ .Token }}` (template in
+  `docs/EMAIL_TEMPLATES.md`). Password fields gain show/hide + live match checks (`PasswordInput`,
+  `PasswordPair`). OTP → password election is already live via §2BB.
+- **PIN:** decided as an opt-in quick-unlock app lock (Phase 3, migration 0052, not built) - not a
+  replacement credential; reasoning in §2BD-D.
+- **Organizer powers, phase A (no migration):** roster-card team sheet; every decision retractable
+  (`revertConfirmation`, `restoreRegistration`, `unverifyPayment`, `restorePayment`, `markSeatPaid` +
+  undo, `undoEligibilityApproval`); Reclassify division in the ⋯ for every status (capacity is a note);
+  Add entry wizard for existing accounts (`createEntryForPlayers`); community skill per member;
+  Unverified-accounts panel with Resend code. **Phase B (migration 0051, after 2026-09-16):** assign-
+  partner fit override, replace / remove member, merge entries, non-user entries by email, bulk import,
+  Admin → Guests. §2P consent-first design superseded (organizer authority + audit + notification).
+- **Editable birthday:** `date_of_birth` (age-at-door) is now an optional editable field in Edit
+  profile (`onboardingSchema.dateOfBirth`, `updateProfile` write, `getMyProfile` select). Was
+  read-only / collected only via the guest wizard before.
+
 ## v1.81 (2026-09-14)
 
 _Migration 0050 applied; login reframed password-first (master_plan §2BB addendum)._

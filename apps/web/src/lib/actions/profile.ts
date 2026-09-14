@@ -194,6 +194,7 @@ export async function updateProfile(
     city: formData.get('city'),
     facebookUrl: formData.get('facebookUrl') ?? '',
     bio: formData.get('bio') ?? '',
+    dateOfBirth: formData.get('dateOfBirth') ?? '',
     lookingForPartner: formData.get('lookingForPartner') === 'on',
     openForSponsorship: formData.get('openForSponsorship') === 'on',
   });
@@ -237,6 +238,7 @@ export async function updateProfile(
         city: v.city,
         facebook_url: v.facebookUrl || null,
         bio: v.bio || null,
+        date_of_birth: v.dateOfBirth ? v.dateOfBirth : null,
         looking_for_partner: v.lookingForPartner,
         open_for_sponsorship: v.openForSponsorship,
         ...(avatarPath ? { avatar_path: avatarPath } : {}),

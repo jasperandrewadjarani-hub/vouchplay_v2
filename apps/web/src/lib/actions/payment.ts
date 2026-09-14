@@ -13,8 +13,13 @@ import { checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { writeAudit, logRpcRefusal } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
 import { notify, notifyMany } from '@/lib/notifications/create';
-import { getTournamentMini, getTournamentOrganizerIds } from '@/lib/notifications/recipients';
+import {
+  getActorMini,
+  getTournamentMini,
+  getTournamentOrganizerIds,
+} from '@/lib/notifications/recipients';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
+import type { OrganizerActionResult } from '@/lib/tournaments/organizer-types';
 import { preparePaymentProof } from '@/lib/payments/proof-file';
 import { emailChannelEnabled, sendEmail } from '@/lib/notifications/email';
 import { settleRegistration } from '@/lib/payments/slots';
@@ -1033,6 +1038,416 @@ export async function markRefunded(
     return { error: 'That action is temporarily unavailable.' };
   }
   return { ok: true, message: 'Marked refunded.' };
+}
+
+// ---------------------------------------------------------------------------
+// master_plan §2BE B: organizer powers - every decision retractable. `unverifyPayment` /
+// `restorePayment` reverse a `verify`/`reject` on either a team payment or a seat/reservation slot;
+// `markSeatPaid` / `undoSeatPaid` record (and undo) an organizer's own cash-in-hand confirmation.
+// Every one authorizes `manage_payments`, writes a `registration_events` row + an `audit_logs` row,
+// and calls `settleRegistration` so the entry's derived status stays honest.
+// ---------------------------------------------------------------------------
+
+const REASON_TOO_SHORT = 'Add a short reason (at least 3 characters).';
+
+/**
+ * `verified` → `submitted` on a team payment OR a seat/reservation slot - the organizer takes back a
+ * verification (master_plan §2BE B). Clears `verified_by`/`verified_at`, then settles: a team entry
+ * that was `confirmed` on this receipt drops back out once it is no longer fully paid, exactly as
+ * intended. No notification - the player already sees the status change; un-verifying is not, by
+ * itself, alarming the way a rejection is.
+ */
+export async function unverifyPayment(
+  paymentId: string,
+  tournamentId: string,
+  kind: 'team' | 'slot',
+  reason: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, error: 'You do not have permission to review payments.' };
+  }
+  const trimmedReason = reason.trim();
+  if (trimmedReason.length < 3) return { ok: false, error: REASON_TOO_SHORT };
+
+  try {
+    if (kind === 'slot') {
+      const ctx = await loadSlotContext(paymentId, tournamentId);
+      if (!ctx) return { ok: false, error: 'Slot payment not found.' };
+      const { svc, slot } = ctx;
+      const { data: slotRow } = await svc
+        .from('tournament_slots')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+      if ((slotRow as { status: string } | null)?.status !== 'verified') {
+        return { ok: false, error: 'Only a verified payment can be un-verified.' };
+      }
+      await svc
+        .from('tournament_slots')
+        .update({
+          status: 'submitted',
+          verified_by: null,
+          verified_at: null,
+          rejection_reason: null,
+        })
+        .eq('id', paymentId);
+      await writeAudit({
+        actorId: user.id,
+        action: 'slot.unverified',
+        entityType: 'tournament_slot',
+        entityId: paymentId,
+        after: { status: 'submitted' },
+        reason: trimmedReason,
+      });
+      if (slot.registration_id) {
+        await svc.from('registration_events').insert({
+          registration_id: slot.registration_id,
+          actor_id: user.id,
+          event_type: 'payment_unverified',
+          metadata: { reason: trimmedReason, slot_id: paymentId },
+        });
+        await settleRegistration(slot.registration_id, user.id);
+      }
+      await revalTournament(tournamentId);
+      return { ok: true, message: 'Payment un-verified.' };
+    }
+
+    const ctx = await loadPaymentContext(paymentId);
+    if (!ctx) return { ok: false, error: 'Payment not found.' };
+    const { svc, payment, registration } = ctx;
+    if (payment.status !== 'verified') {
+      return { ok: false, error: 'Only a verified payment can be un-verified.' };
+    }
+    await svc
+      .from('payments')
+      .update({ status: 'submitted', verified_by: null, verified_at: null, rejection_reason: null })
+      .eq('id', paymentId);
+    await svc.from('registration_events').insert({
+      registration_id: payment.registration_id,
+      actor_id: user.id,
+      event_type: 'payment_unverified',
+      from_status: registration.status,
+      to_status: registration.status,
+      metadata: { reason: trimmedReason },
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.unverified',
+      entityType: 'payment',
+      entityId: paymentId,
+      after: { status: 'submitted' },
+      reason: trimmedReason,
+    });
+    await settleRegistration(payment.registration_id, user.id);
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Payment un-verified.' };
+}
+
+/**
+ * `rejected` → `submitted` on a team payment OR a seat/reservation slot (master_plan §2BE B): clears
+ * the rejection reason and settles. A `refunded` receipt is terminal - money already moved, so it is
+ * never restored this way.
+ */
+export async function restorePayment(
+  paymentId: string,
+  tournamentId: string,
+  kind: 'team' | 'slot',
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, error: 'You do not have permission to review payments.' };
+  }
+
+  try {
+    if (kind === 'slot') {
+      const ctx = await loadSlotContext(paymentId, tournamentId);
+      if (!ctx) return { ok: false, error: 'Slot payment not found.' };
+      const { svc, slot } = ctx;
+      const { data: slotRow } = await svc
+        .from('tournament_slots')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+      const status = (slotRow as { status: string } | null)?.status;
+      if (status === 'refunded')
+        return { ok: false, error: "A refunded payment can't be restored." };
+      if (status !== 'rejected')
+        return { ok: false, error: 'Only a declined payment can be restored.' };
+      await svc
+        .from('tournament_slots')
+        .update({ status: 'submitted', rejection_reason: null })
+        .eq('id', paymentId);
+      await writeAudit({
+        actorId: user.id,
+        action: 'slot.restored',
+        entityType: 'tournament_slot',
+        entityId: paymentId,
+        after: { status: 'submitted' },
+      });
+      if (slot.registration_id) {
+        await svc.from('registration_events').insert({
+          registration_id: slot.registration_id,
+          actor_id: user.id,
+          event_type: 'payment_restored',
+          metadata: { slot_id: paymentId },
+        });
+        await settleRegistration(slot.registration_id, user.id);
+      }
+      await revalTournament(tournamentId);
+      return { ok: true, message: 'Payment restored.' };
+    }
+
+    const ctx = await loadPaymentContext(paymentId);
+    if (!ctx) return { ok: false, error: 'Payment not found.' };
+    const { svc, payment, registration } = ctx;
+    if (payment.status === 'refunded')
+      return { ok: false, error: "A refunded payment can't be restored." };
+    if (payment.status !== 'rejected') {
+      return { ok: false, error: 'Only a declined payment can be restored.' };
+    }
+    await svc
+      .from('payments')
+      .update({ status: 'submitted', rejection_reason: null })
+      .eq('id', paymentId);
+    await svc.from('registration_events').insert({
+      registration_id: payment.registration_id,
+      actor_id: user.id,
+      event_type: 'payment_restored',
+      from_status: registration.status,
+      to_status: registration.status,
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.restored',
+      entityType: 'payment',
+      entityId: paymentId,
+      after: { status: 'submitted' },
+    });
+    await settleRegistration(payment.registration_id, user.id);
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Payment restored.' };
+}
+
+/**
+ * Organizer records a cash-in-hand payment for one seat (master_plan §2BE B/C - "tag slots / partners
+ * / teams as paid... manually"). When tournament slots are the unit of payment
+ * (`isSlotReservationsEnabled`, same gate `submitSeatPayment` uses) this inserts a `verified`
+ * `tournament_slots` row at the division's per-player quote, `method: 'cash_manual'`, no proof.
+ * Otherwise (team-scope pricing - no seat concept, e.g. a singles division) it upserts the
+ * registration's one `payments` row straight to `verified`, the same way `verifyPayment` does for a
+ * `kind: 'team'` receipt, at the division's per-team quote. Either way, `settleRegistration` decides
+ * whether the entry is now fully paid.
+ */
+export async function markSeatPaid(
+  registrationId: string,
+  playerId: string,
+  tournamentId: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, error: 'You do not have permission to review payments.' };
+  }
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('id, tournament_id, team_id, division_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as {
+      tournament_id: string;
+      team_id: string;
+      division_id: string;
+      status: string;
+    } | null;
+    if (!reg || reg.tournament_id !== tournamentId)
+      return { ok: false, error: 'Registration not found.' };
+
+    const { data: memberRow } = await svc
+      .from('team_members')
+      .select('id')
+      .eq('team_id', reg.team_id)
+      .eq('player_id', playerId)
+      .maybeSingle();
+    if (!memberRow) return { ok: false, error: 'That player is not on this team.' };
+
+    const { data: divRow } = await svc
+      .from('divisions')
+      .select('fee_amount, early_bird_fee_amount, currency, team_size')
+      .eq('id', reg.division_id)
+      .maybeSingle();
+    const div = divRow as {
+      fee_amount: number;
+      early_bird_fee_amount: number | null;
+      currency: string;
+      team_size: number;
+    } | null;
+    if (!div) return { ok: false, error: 'Division not found.' };
+    const { data: tournRow } = await svc
+      .from('tournaments')
+      .select('early_bird_starts_at, early_bird_ends_at')
+      .eq('id', tournamentId)
+      .maybeSingle();
+    const t = tournRow as {
+      early_bird_starts_at: string | null;
+      early_bird_ends_at: string | null;
+    } | null;
+    const playerName = (await getActorMini(playerId)).name;
+    const now = new Date().toISOString();
+
+    if (await isSlotReservationsEnabled()) {
+      const { data: existingRows } = await svc
+        .from('tournament_slots')
+        .select('id, status')
+        .eq('registration_id', registrationId)
+        .eq('player_id', playerId)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const existing = ((existingRows ?? []) as { id: string; status: string }[])[0] ?? null;
+      if (existing && (existing.status === 'submitted' || existing.status === 'verified')) {
+        return { ok: false, error: 'This seat already has a live payment.' };
+      }
+      const quote = quoteFee({
+        feeAmount: Number(div.fee_amount),
+        earlyBirdFeeAmount:
+          div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
+        earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
+        earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
+        teamSize: 1,
+      });
+      const { error: insErr } = await svc.from('tournament_slots').insert({
+        tournament_id: tournamentId,
+        player_id: playerId,
+        registration_id: registrationId,
+        division_id: reg.division_id,
+        status: 'verified',
+        method: 'cash_manual',
+        amount_due: quote.perPlayer,
+        amount_submitted: quote.perPlayer,
+        currency: div.currency,
+        payer_name: playerName,
+        verified_by: user.id,
+        verified_at: now,
+        submitted_at: now,
+      });
+      if (insErr) return { ok: false, error: 'Could not record the payment. Please try again.' };
+    } else {
+      const quote = quoteFee({
+        feeAmount: Number(div.fee_amount),
+        earlyBirdFeeAmount:
+          div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
+        earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
+        earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
+        teamSize: div.team_size,
+      });
+      const { error: upErr } = await svc.from('payments').upsert(
+        {
+          registration_id: registrationId,
+          amount_due: quote.teamTotal,
+          amount_submitted: quote.teamTotal,
+          currency: div.currency,
+          method: 'cash_manual',
+          payer_name: playerName,
+          status: 'verified',
+          verified_by: user.id,
+          verified_at: now,
+          submitted_at: now,
+          rejection_reason: null,
+        },
+        { onConflict: 'registration_id' },
+      );
+      if (upErr) return { ok: false, error: 'Could not record the payment. Please try again.' };
+    }
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'seat_marked_paid',
+      from_status: reg.status,
+      to_status: reg.status,
+      metadata: { player_id: playerId, method: 'cash_manual' },
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.seat_marked_paid',
+      entityType: 'registration',
+      entityId: registrationId,
+      after: { player_id: playerId, method: 'cash_manual' },
+    });
+    await settleRegistration(registrationId, user.id);
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Marked paid (cash).' };
+}
+
+/**
+ * Undo `markSeatPaid` (master_plan §2BE B): only ever a slot the organizer marked paid by hand
+ * (`verified` + `method: 'cash_manual'`) - a real receipt goes through `unverifyPayment` instead, so
+ * this refuses anything else rather than quietly un-verifying someone's proof. `rejected` slots are
+ * already hidden from live views, exactly like every other released seat.
+ */
+export async function undoSeatPaid(
+  slotId: string,
+  tournamentId: string,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, error: 'You do not have permission to review payments.' };
+  }
+  const ctx = await loadSlotContext(slotId, tournamentId);
+  if (!ctx) return { ok: false, error: 'Slot payment not found.' };
+  const { svc, slot } = ctx;
+  try {
+    const { data: slotRow } = await svc
+      .from('tournament_slots')
+      .select('status, method')
+      .eq('id', slotId)
+      .maybeSingle();
+    const row = slotRow as { status: string; method: string | null } | null;
+    if (!row || row.status !== 'verified' || row.method !== 'cash_manual') {
+      return {
+        ok: false,
+        error: 'Only a cash payment the organizer marked can be undone this way.',
+      };
+    }
+    await svc
+      .from('tournament_slots')
+      .update({ status: 'rejected', rejection_reason: 'organizer_undo' })
+      .eq('id', slotId);
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.seat_paid_undone',
+      entityType: 'tournament_slot',
+      entityId: slotId,
+      after: { status: 'rejected' },
+    });
+    if (slot.registration_id) {
+      await svc.from('registration_events').insert({
+        registration_id: slot.registration_id,
+        actor_id: user.id,
+        event_type: 'seat_paid_undone',
+        metadata: { slot_id: slotId },
+      });
+      await settleRegistration(slot.registration_id, user.id);
+    }
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Undone - the seat is unpaid again.' };
 }
 
 // ---------------------------------------------------------------------------

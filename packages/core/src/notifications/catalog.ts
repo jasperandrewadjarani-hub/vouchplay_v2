@@ -568,6 +568,34 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) => `Finish setting up your VouchPlay account to keep your entry for ${tour(p)}`,
     () => 'Enter the code from your email or sign in with this address.',
   ),
+
+  // --- §2BE B/C - organizer powers: every decision retractable, add-entry (2026-09-14) ---
+  // Critical: the organizer explicitly reversed a confirmation the player may already be relying on -
+  // same money-adjacent reasoning as registration_rejected/payment_rejected, must not be missed.
+  registration_reverted: t(
+    'registrations',
+    true,
+    () => 'Your entry was moved back to review',
+    (p) =>
+      `${who(p)} moved your ${p.divisionName ?? 'entry'} entry back to review${p.reason ? `: ${p.reason}` : '.'}`,
+  ),
+  // Critical: the entry (and any money on it) is live again after having been closed - the player
+  // must know, same reasoning as registration_restored's sibling notifications above.
+  registration_restored: t(
+    'registrations',
+    true,
+    (p) => `Your ${p.divisionName ?? 'tournament'} entry was restored by the organizer`,
+  ),
+  // Critical: the player is now entered (and possibly paying) in a tournament without having taken
+  // any action themselves - they must be told plainly, with a way to undo it, same reasoning as
+  // partner_named_paid/organizer_assign_partner's partner_assigned.
+  organizer_entered_you: t(
+    'registrations',
+    true,
+    (p) => `You've been entered in ${tour(p)}`,
+    (p) =>
+      `${who(p)} entered you in ${p.divisionName ?? 'a division'}${p.extra ? ` with ${p.extra}` : ''}. Not right? Ask the organizer or request a cancellation from My registrations.`,
+  ),
 };
 
 export function notificationDef(type: string): NotificationTypeDef | undefined {

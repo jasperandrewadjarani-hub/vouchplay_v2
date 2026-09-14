@@ -41,5 +41,20 @@ export const setPasswordSchema = z
 
 export const resetPasswordRequestSchema = z.object({ email: emailSchema });
 
+// In-app password reset by 6-digit recovery code (master_plan §2BD-A) - reuses the OTP token rule
+// (otpSchema) and the same "Passwords do not match" confirm-field refine as setPasswordSchema.
+export const resetPasswordWithCodeSchema = z
+  .object({
+    email: emailSchema,
+    token: otpSchema,
+    password: passwordSchema,
+    confirm: z.string(),
+  })
+  .refine((v) => v.password === v.confirm, {
+    message: 'Passwords do not match',
+    path: ['confirm'],
+  });
+
 export type SignInWithPasswordInput = z.infer<typeof signInWithPasswordSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
+export type ResetPasswordWithCodeInput = z.infer<typeof resetPasswordWithCodeSchema>;

@@ -11,6 +11,7 @@ import {
   Search,
   SlidersHorizontal,
   TriangleAlert,
+  UserPlus,
   X,
 } from 'lucide-react';
 import { OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
@@ -27,11 +28,14 @@ import {
   rejectRegistration,
   approveRegistrationCancellation,
   declineRegistrationCancellation,
+  revertConfirmation,
+  restoreRegistration,
 } from '@/lib/actions/registration';
 import {
   approveEligibility,
   reclassifyRegistration,
   requestSkillReviewForRegistration,
+  undoEligibilityApproval,
 } from '@/lib/actions/eligibility';
 import { issueOfficialAchievement } from '@/lib/actions/achievements';
 import {
@@ -40,8 +44,13 @@ import {
   markRefunded,
   getProofSignedUrl,
   verifyPaymentsBulk,
+  unverifyPayment,
+  restorePayment,
+  markSeatPaid,
+  undoSeatPaid,
 } from '@/lib/actions/payment';
 import type { OrganizerRegistration } from '@/lib/tournaments/registration-queries';
+import { AddEntryWizard, type AddEntryDivisionOption } from './add-entry-wizard';
 import {
   amountLabel,
   clearAllEntryFilters,
@@ -68,8 +77,10 @@ import {
   type StatusChip,
 } from '@/lib/tournaments/entry-view';
 import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
 import { OverflowMenu, type OverflowMenuAction } from '@/components/ui/overflow-menu';
 import { AssignPartnerForm } from './assign-partner-form';
+import { PlayerAvatar } from '@/components/players/player-avatar';
 
 export interface EligibilityDivisionOption {
   id: string;
@@ -88,7 +99,10 @@ export interface DivisionCapacityRow {
   pending: number;
 }
 
-type ActionResult = { ok?: boolean; error?: string; message?: string };
+/** Broad enough to structurally accept both the pre-§2BE actions' `{ok?, error?, message?}` shape and
+ *  the new `OrganizerActionResult` union (`@/lib/tournaments/organizer-types`, lane 3) - `note` is the
+ *  capacity/skill-fit note some actions (reclassify, restore) now return on success. */
+type ActionResult = { ok?: boolean; error?: string; message?: string; note?: string };
 
 const SORT_OPTIONS: { key: EntrySortKey; label: string }[] = [
   { key: 'needs_me', label: 'Needs me first' },
@@ -301,16 +315,52 @@ export function OrganizerRegistrations({
   const [bulkResult, setBulkResult] = useState<{ tone: 'success' | 'danger'; text: string } | null>(
     null,
   );
+  // master_plan §2BE Decision C: "Add entry" - built from data this screen already loaded (capacity
+  // strip + the reclassify picker's format/team-size), no extra query.
+  const [showAddEntry, setShowAddEntry] = useState(false);
+  const addEntryDivisions: AddEntryDivisionOption[] = divisions.map((d) => {
+    const detail = eligibilityDivisions.find((e) => e.id === d.id);
+    return {
+      id: d.id,
+      name: d.name,
+      format: detail?.format ?? '',
+      teamSize: detail?.teamSize ?? 1,
+      registered: d.registered,
+      capacity: d.capacity,
+    };
+  });
 
   if (registrations.length === 0) {
-    return <p className="text-foreground-muted text-sm">No registrations yet.</p>;
+    return (
+      <div className="space-y-3">
+        <p className="text-foreground-muted text-sm">No registrations yet.</p>
+        <Button
+          type="button"
+          onClick={() => setShowAddEntry(true)}
+          className="inline-flex items-center gap-1.5"
+        >
+          <UserPlus size={15} aria-hidden />
+          Add entry
+        </Button>
+        {showAddEntry && (
+          <AddEntryWizard
+            tournamentId={tournamentId}
+            divisions={addEntryDivisions}
+            onClose={() => setShowAddEntry(false)}
+          />
+        )}
+      </div>
+    );
   }
 
   const visible = sortEntries(filterEntries(registrations, filters), sort);
   const selected = registrations.find((r) => r.id === openId) ?? null;
   const chips = describeEntryChips(filters, divisions);
   // §2AQ Decision D: how many open entries have asked to cancel, for the amber pill next to Filters.
-  const wantsToCancelCount = countEntries(registrations).wantsToCancel;
+  const entryCounts = countEntries(registrations);
+  const wantsToCancelCount = entryCounts.wantsToCancel;
+  // §2BE Decision E: how many open entries carry an unverified (guest) member, for the matching pill.
+  const unverifiedAccountCount = entryCounts.unverifiedAccounts;
   // True only while the default "Has receipt" filter is the sole thing narrowing the list, so the
   // count line can say what it's showing instead of the generic "shown" (master_plan §2AP Decision I).
   const isDefaultReceiptFilterOnly =
@@ -451,6 +501,28 @@ export function OrganizerRegistrations({
               {wantsToCancelCount} want{wantsToCancelCount === 1 ? 's' : ''} to cancel
             </button>
           )}
+          {/* §2BE Decision E: same pattern as "wants to cancel" - a count pill that applies the
+              matching Requests filter in one tap. */}
+          {unverifiedAccountCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilters((f) => ({ ...f, requests: ['unverified_account'] }))}
+              className="border-warning/40 bg-warning/10 text-warning inline-flex min-h-11 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold"
+            >
+              <TriangleAlert size={12} aria-hidden />
+              {unverifiedAccountCount} unverified
+            </button>
+          )}
+          {/* master_plan §2BE Decision C: build a team for an existing account without waiting for
+              them to self-register. */}
+          <Button
+            type="button"
+            onClick={() => setShowAddEntry(true)}
+            className="inline-flex min-h-11 items-center gap-1.5 px-3 py-0 text-sm"
+          >
+            <UserPlus size={15} aria-hidden />
+            Add entry
+          </Button>
           {/* Bulk verify (master_plan §2AQ Decision E) - toggles select mode; Cancel in the sticky
               bar below exits it too. */}
           <button
@@ -556,10 +628,14 @@ export function OrganizerRegistrations({
             onToggle={(p) => setFilters((f) => ({ ...f, partner: toggleIn(f.partner, p) }))}
           />
           {/* §2AQ Decision D: entries whose player asked to cancel - `queuesFor` already surfaces
-              `cancellation_requested`, this just gives it its own combinable chip. */}
+              `cancellation_requested`, this just gives it its own combinable chip. §2BE Decision E
+              adds "Unverified account" alongside it - same "needs the organizer's eye" shape. */}
           <ChipGroup
-            label="Requests"
-            options={[{ value: 'wants_to_cancel' as const, label: 'Wants to cancel' }]}
+            label="Requests / Accounts"
+            options={[
+              { value: 'wants_to_cancel' as const, label: 'Wants to cancel' },
+              { value: 'unverified_account' as const, label: 'Unverified account' },
+            ]}
             selected={filters.requests}
             onToggle={(v) => setFilters((f) => ({ ...f, requests: toggleIn(f.requests, v) }))}
           />
@@ -616,6 +692,14 @@ export function OrganizerRegistrations({
         >
           <RegRow tournamentId={tournamentId} reg={selected} divisions={eligibilityDivisions} />
         </Modal>
+      )}
+
+      {showAddEntry && (
+        <AddEntryWizard
+          tournamentId={tournamentId}
+          divisions={addEntryDivisions}
+          onClose={() => setShowAddEntry(false)}
+        />
       )}
 
       {/* Sticky bulk-verify bar (master_plan §2AQ Decision E) - fixed above the tab bar so it never
@@ -677,7 +761,14 @@ function reasonLabel(code: string): string {
  * on `OrganizerRegistration`; read defensively here so this file type-checks whether or not that
  * lane has landed yet - both simply read as absent (no chip, no note) until the columns arrive.
  */
-type GuestAwareMember = OrganizerRegistration['members'][number] & { unverified?: boolean };
+/** master_plan §2BE Decision A: `members[].communitySkill`/`members[].email` are lane 3's additive
+ *  fields on `OrganizerRegistration` - read defensively (same posture as `unverified` above) so this
+ *  file type-checks whether or not that lane has landed yet; `communitySkill` simply reads as
+ *  "Unrated" until it arrives. */
+type GuestAwareMember = OrganizerRegistration['members'][number] & {
+  unverified?: boolean;
+  communitySkill?: string | null;
+};
 type GuestAwareEntry = OrganizerRegistration & { partnerNote?: string | null };
 
 function entryMembers(entry: OrganizerRegistration): GuestAwareMember[] {
@@ -827,24 +918,6 @@ interface Snapshot {
   override?: { by: string; at: string; reason: string | null } | null;
 }
 
-/** One status line for the sheet header (master_plan §2AQ Decision E): the money tag, plus - only
- *  when it is not already saying so - how many of a multi-seat entry's slots are paid. Replaces the
- *  old "{names} · {raw status}" line. */
-function sheetStatusLine(reg: OrganizerRegistration): string {
-  const money = moneyTag(reg);
-  const summary = reg.paymentSummary;
-  const alreadyHasSeatDetail = money.label.toLowerCase().includes('slots paid');
-  if (
-    summary &&
-    summary.totalSeats > 1 &&
-    !alreadyHasSeatDetail &&
-    (summary.paidSeats > 0 || summary.submittedSeats > 0)
-  ) {
-    return `${money.label} · ${summary.paidSeats} of ${summary.totalSeats} slots paid`;
-  }
-  return money.label;
-}
-
 const CLOSED_REG_STATUSES = new Set(['withdrawn', 'cancelled', 'rejected', 'refunded']);
 
 function RegRow({
@@ -857,24 +930,35 @@ function RegRow({
   divisions: EligibilityDivisionOption[];
 }) {
   const router = useRouter();
-  const [reason, setReason] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  // ⋯ overflow inline panels (master_plan §2BE Decision A/B) - one open at a time in spirit, each
+  // toggled by its own overflow item.
+  const [showReclassify, setShowReclassify] = useState(false);
+  const [reclassDiv, setReclassDiv] = useState('');
+  const [reclassReason, setReclassReason] = useState('');
+  const [showConfirmEntry, setShowConfirmEntry] = useState(false);
+  const [showRevert, setShowRevert] = useState(false);
+  const [revertReason, setRevertReason] = useState('');
   const [showReject, setShowReject] = useState(false);
-  const [declineReceiptReason, setDeclineReceiptReason] = useState('');
-  const [showDeclineReceipt, setShowDeclineReceipt] = useState(false);
-  const [showConfirmNoPayment, setShowConfirmNoPayment] = useState(false);
+  const [reason, setReason] = useState('');
+  const [showRestore, setShowRestore] = useState(false);
+  const [restoreReason, setRestoreReason] = useState('');
   const [reviewFor, setReviewFor] = useState<string | null>(null);
   const [reviewReason, setReviewReason] = useState('');
-  const [showAssignPartner, setShowAssignPartner] = useState(false);
   const [showApproveCancel, setShowApproveCancel] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
+  const [showAssignPartner, setShowAssignPartner] = useState(false);
   const [award, setAward] = useState<string>(OFFICIAL_ACHIEVEMENTS[0].key);
-  const [pending, start] = useTransition();
 
   function run(fn: () => Promise<ActionResult>) {
     setMsg(null);
+    setNote(null);
     start(async () => {
       const res = await fn();
       setMsg(res.error ?? res.message ?? null);
+      setNote(res.note ?? null);
       if (res.ok) router.refresh();
     });
   }
@@ -882,42 +966,12 @@ function RegRow({
   const closed = CLOSED_REG_STATUSES.has(reg.status);
   const confirmed = reg.status === 'confirmed';
   const waitlisted = reg.status === 'waitlisted';
+  const restorable = ['rejected', 'cancelled', 'withdrawn'].includes(reg.status);
   const nameById = new Map(reg.members.map((m) => [m.id, m.name]));
-  const slugById = new Map(reg.members.map((m) => [m.id, m.slug]));
-  // master_plan §2AU Decision F.
-  const unverifiedMemberIds = new Set(
-    entryMembers(reg)
-      .filter((m) => m.unverified === true)
-      .map((m) => m.id),
-  );
+  const isFree = reg.amountDue == null || reg.amountDue <= 0;
+  const openSeat = hasOpenSeat(reg);
   const partnerNote = partnerNoteFor(reg);
 
-  // §2AQ Decision E: the primary row is decided by exactly one of these states.
-  const teamSubmitted = reg.paymentStatus === 'submitted' && !!reg.paymentId;
-  const submittedSlots = (reg.slots ?? []).filter((s) => s.status === 'submitted');
-  const bothSubmitted = teamSubmitted && submittedSlots.length > 0;
-  const singleTarget: { kind: 'team' | 'slot'; id: string } | null =
-    teamSubmitted && !bothSubmitted
-      ? { kind: 'team', id: reg.paymentId as string }
-      : !teamSubmitted && submittedSlots.length > 0 && !bothSubmitted
-        ? { kind: 'slot', id: submittedSlots[0]!.id }
-        : null;
-  const isFree = reg.amountDue == null || reg.amountDue <= 0;
-
-  type PrimaryKind = 'verify' | 'confirm_free' | 'waiting_paid' | 'waitlisted' | 'none';
-  const kind: PrimaryKind =
-    closed || confirmed || bothSubmitted
-      ? 'none'
-      : singleTarget
-        ? 'verify'
-        : waitlisted
-          ? 'waitlisted'
-          : isFree
-            ? 'confirm_free'
-            : 'waiting_paid';
-
-  const canConfirmWithoutPayment = !confirmed && !closed && !waitlisted;
-  const openSeat = hasOpenSeat(reg);
   const verifiedSlot = (reg.slots ?? []).find((s) => s.status === 'verified');
   const verifiedTarget: { kind: 'team' | 'slot'; id: string } | null =
     reg.paymentStatus === 'verified' && reg.paymentId
@@ -926,9 +980,26 @@ function RegRow({
         ? { kind: 'slot', id: verifiedSlot.id }
         : null;
 
+  const sameDivisionTargets = divisions.filter((d) => d.id !== reg.divisionId);
+  const canConfirmWithoutPayment = !confirmed && !closed && !waitlisted;
+
   const overflowActions: OverflowMenuAction[] = [
+    // master_plan §2BE Decision B: reclassify moves here, applies to every status, and now carries a
+    // capacity note instead of a block.
+    ...(sameDivisionTargets.length > 0
+      ? [{ label: 'Reclassify division', onSelect: () => setShowReclassify((v) => !v) }]
+      : []),
     ...(canConfirmWithoutPayment
-      ? [{ label: 'Confirm without payment', onSelect: () => setShowConfirmNoPayment((v) => !v) }]
+      ? [
+          {
+            label: isFree ? 'Confirm entry' : 'Confirm without payment',
+            onSelect: () => setShowConfirmEntry((v) => !v),
+          },
+        ]
+      : []),
+    // master_plan §2BE Decision B: every forward decision gets a way back.
+    ...(confirmed
+      ? [{ label: 'Move back to review', onSelect: () => setShowRevert((v) => !v) }]
       : []),
     // §2AQ Decision C: while a cancellation request is open, Approve cancellation / Decline is the
     // whole decision - "Reject entry" and "Refund payment" would just be two more ways to do the
@@ -942,6 +1013,7 @@ function RegRow({
           },
         ]
       : []),
+    ...(restorable ? [{ label: 'Restore entry', onSelect: () => setShowRestore((v) => !v) }] : []),
     ...(verifiedTarget && !reg.cancellationRequest
       ? [
           {
@@ -961,48 +1033,155 @@ function RegRow({
         setReviewReason('');
       },
     })),
-    ...(openSeat
-      ? [{ label: 'Assign partner', onSelect: () => setShowAssignPartner((v) => !v) }]
-      : []),
   ];
 
   const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
+  const divisionChip =
+    'border-border text-foreground-muted inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold';
 
   return (
     <div>
-      {/* master_plan §2AU Decision F: a guest member's account is still unverified at this point in
-          the flow (email confirmed at the very end) - flagged next to their name so the organizer
-          knows what they're looking at, without withholding any confirmation over it. */}
-      {unverifiedMemberIds.size > 0 && (
-        <div className="mb-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
-          {reg.members.map((m) => (
-            <span key={m.id} className="inline-flex items-center gap-1.5">
-              <span className="text-foreground text-sm font-medium">{m.name}</span>
-              {unverifiedMemberIds.has(m.id) && <UnverifiedAccountChip />}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* One status line replaces the old "{names} · {raw status}" line (§2AQ Decision E). The
-          overflow (⋯) carries every action that is not the one or two the current state calls for. */}
+      {/* Header row (master_plan §2BE Decision A): division · format on the left, the ⋯ overflow of
+          rare whole-entry moves on the right. */}
       <div className="flex items-start justify-between gap-2">
-        <p className="text-foreground-muted text-xs">{sheetStatusLine(reg)}</p>
+        <span className="flex flex-wrap items-center gap-1.5">
+          <span className={divisionChip}>
+            {reg.divisionName} · {reg.teamSize > 1 ? 'Doubles' : 'Singles'}
+          </span>
+          <span className="text-foreground-muted text-xs font-medium">{headerStatusWord(reg)}</span>
+        </span>
         <OverflowMenu actions={overflowActions} />
       </div>
+
+      {showReclassify && (
+        <div className="border-border mt-2 space-y-2 rounded-lg border border-dashed p-2.5">
+          <p className="text-foreground text-xs font-semibold">Reclassify division</p>
+          <div className="flex flex-wrap gap-2">
+            <select
+              value={reclassDiv}
+              onChange={(e) => setReclassDiv(e.target.value)}
+              className="border-border bg-background rounded-lg border px-2.5 py-1.5 text-xs"
+            >
+              <option value="">Move to division…</option>
+              {sameDivisionTargets.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <input
+              value={reclassReason}
+              onChange={(e) => setReclassReason(e.target.value)}
+              placeholder="Reason (optional)"
+              className="border-border bg-background min-w-[10rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+            />
+            <button
+              type="button"
+              disabled={pending || !reclassDiv}
+              onClick={() =>
+                run(async () => {
+                  const res = await reclassifyRegistration(
+                    reg.id,
+                    tournamentId,
+                    reclassDiv,
+                    reclassReason,
+                  );
+                  if (res.ok) setShowReclassify(false);
+                  return res;
+                })
+              }
+              className={`${btn} vp-gradient text-white`}
+            >
+              Move
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* master_plan §2AU Decision D: a guest's partner is captured as a name only at entry time -
           invited for real once the guest verifies their own email - so the organizer sees who is
           meant to join without a second account existing yet. */}
-      {partnerNote && (
+      {partnerNote && !openSeat && (
         <p className="text-foreground-muted mt-1 text-xs">Partner: {partnerNote} (to be invited)</p>
       )}
 
-      {/* §2AQ Decision C: a pending cancellation request replaces the state-driven primary row with
-          exactly two buttons - Approve cancellation / Decline. Payment rows still render below. */}
-      {reg.cancellationRequest ? (
-        <>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      {/* Members (master_plan §2BE Decision A): one row per seat, avatar + name + community skill,
+          Change ▾ for a filled seat or Add partner for an open one. */}
+      <ul className="mt-2.5 space-y-2">
+        {reg.members.map((m) => (
+          <MemberRow key={m.id} member={m} />
+        ))}
+        {openSeat &&
+          (partnerNote ? (
+            <li className="text-foreground-muted text-xs">
+              Partner: {partnerNote} (to be invited)
+            </li>
+          ) : (
+            <li>
+              {showAssignPartner ? (
+                <AssignPartnerForm
+                  teamId={reg.teamId}
+                  tournamentId={tournamentId}
+                  divisionId={reg.divisionId}
+                  onClose={() => setShowAssignPartner(false)}
+                />
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-foreground-muted text-xs">Open seat</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignPartner(true)}
+                    className={`${btn} border-border text-foreground border`}
+                  >
+                    Add partner
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+      </ul>
+
+      {/* Eligibility (master_plan §2BE Decision A) - one chip, reasons always visible when not
+          Eligible, Approve/Undo on the right. */}
+      <EligibilityRow
+        reg={reg}
+        tournamentId={tournamentId}
+        nameById={nameById}
+        pending={pending}
+        run={run}
+      />
+
+      {/* Payment (master_plan §2BE Decision A) - state line only; every action lives in Receipts
+          below. */}
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span className="text-foreground text-xs font-semibold">Payment</span>
+        <span className="text-foreground-muted text-xs">{paymentStateLine(reg)}</span>
+      </div>
+
+      {/* Receipts (master_plan §2AO A6, §2BE Decision A/B) - the team receipt, if any, plus one row
+          per seat, each with its own Verify/Decline and now Undo/Restore. */}
+      <ReceiptsBlock
+        reg={reg}
+        tournamentId={tournamentId}
+        pending={pending}
+        start={start}
+        run={run}
+        nameById={nameById}
+        setMsg={setMsg}
+      />
+
+      {/* Cancellation request (§1Y, §2L, §2AP I, §2AQ Decision E) - the player's own reason, cut to
+          one line: what they said, then what to do about it. */}
+      {reg.cancellationRequest && (
+        <div className="border-warning/40 bg-warning/10 mt-2 rounded-lg border p-2.5">
+          <p className="text-warning flex items-center gap-1.5 text-xs font-semibold">
+            <TriangleAlert size={13} aria-hidden />
+            Cancellation requested
+          </p>
+          <p className="text-foreground mt-1 text-sm whitespace-pre-wrap">
+            &ldquo;{reg.cancellationRequest.reason}&rdquo;
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => setShowApproveCancel((v) => !v)}
@@ -1020,7 +1199,7 @@ function RegRow({
             </button>
           </div>
           {showApproveCancel && (
-            <div className="border-border mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
+            <div className="border-border mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
               <p className="text-foreground-muted text-xs">
                 Cancel this entry? Any refund is settled with the player.
               </p>
@@ -1040,85 +1219,15 @@ function RegRow({
               </button>
             </div>
           )}
-        </>
-      ) : (
-        <>
-          {kind === 'verify' && singleTarget && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  run(() => verifyPayment(singleTarget.id, tournamentId, singleTarget.kind))
-                }
-                className={`${btn} vp-gradient text-white`}
-              >
-                Verify payment
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowDeclineReceipt((v) => !v)}
-                className={`${btn} text-danger border-border border`}
-              >
-                Decline receipt
-              </button>
-            </div>
-          )}
-          {kind === 'confirm_free' && (
-            <div className="mt-2">
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => run(() => confirmRegistration(reg.id, tournamentId))}
-                className={`${btn} vp-gradient text-white`}
-              >
-                Confirm entry
-              </button>
-            </div>
-          )}
-          {kind === 'waiting_paid' && (
-            <p className="text-foreground-muted mt-2 text-xs">Waiting for payment.</p>
-          )}
-          {kind === 'waitlisted' && (
-            <p className="text-foreground-muted mt-2 text-xs">On the waitlist.</p>
-          )}
-        </>
-      )}
-
-      {showDeclineReceipt && singleTarget && (
-        <div className="mt-2 flex gap-2">
-          <input
-            value={declineReceiptReason}
-            onChange={(e) => setDeclineReceiptReason(e.target.value)}
-            placeholder="Reason (required)"
-            className="border-border bg-background flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
-          />
-          <button
-            type="button"
-            disabled={pending || !declineReceiptReason.trim()}
-            onClick={() =>
-              run(async () => {
-                const res = await rejectPayment(
-                  singleTarget.id,
-                  tournamentId,
-                  declineReceiptReason.trim(),
-                  singleTarget.kind,
-                );
-                if (res.ok) setShowDeclineReceipt(false);
-                return res;
-              })
-            }
-            className={`${btn} bg-danger/90 text-white`}
-          >
-            Confirm decline
-          </button>
         </div>
       )}
 
-      {showConfirmNoPayment && (
+      {/* Overflow-triggered inline panels below - one at a time in practice, each closes itself on
+          success. */}
+      {showConfirmEntry && (
         <div className="border-border mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
           <p className="text-foreground-muted text-xs">
-            Confirm this entry without a payment record?
+            {isFree ? 'Confirm this entry?' : 'Confirm this entry without a payment record?'}
           </p>
           <button
             type="button"
@@ -1126,13 +1235,38 @@ function RegRow({
             onClick={() =>
               run(async () => {
                 const res = await confirmRegistration(reg.id, tournamentId);
-                if (res.ok) setShowConfirmNoPayment(false);
+                if (res.ok) setShowConfirmEntry(false);
                 return res;
               })
             }
             className={`${btn} vp-gradient text-white`}
           >
             Yes, confirm
+          </button>
+        </div>
+      )}
+
+      {showRevert && (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={revertReason}
+            onChange={(e) => setRevertReason(e.target.value)}
+            placeholder="Reason (required)"
+            className="border-border bg-background flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+          />
+          <button
+            type="button"
+            disabled={pending || revertReason.trim().length < 3}
+            onClick={() =>
+              run(async () => {
+                const res = await revertConfirmation(reg.id, tournamentId, revertReason.trim());
+                if (res.ok) setShowRevert(false);
+                return res;
+              })
+            }
+            className={`${btn} bg-danger/90 text-white`}
+          >
+            Move back to review
           </button>
         </div>
       )}
@@ -1158,6 +1292,31 @@ function RegRow({
             className={`${btn} bg-danger/90 text-white`}
           >
             Confirm reject
+          </button>
+        </div>
+      )}
+
+      {showRestore && (
+        <div className="mt-2 flex gap-2">
+          <input
+            value={restoreReason}
+            onChange={(e) => setRestoreReason(e.target.value)}
+            placeholder="Reason (required)"
+            className="border-border bg-background flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+          />
+          <button
+            type="button"
+            disabled={pending || restoreReason.trim().length < 3}
+            onClick={() =>
+              run(async () => {
+                const res = await restoreRegistration(reg.id, tournamentId, restoreReason.trim());
+                if (res.ok) setShowRestore(false);
+                return res;
+              })
+            }
+            className={`${btn} vp-gradient text-white`}
+          >
+            Restore entry
           </button>
         </div>
       )}
@@ -1193,53 +1352,6 @@ function RegRow({
         </div>
       )}
 
-      {showAssignPartner && (
-        <AssignPartnerForm
-          teamId={reg.teamId}
-          tournamentId={tournamentId}
-          divisionId={reg.divisionId}
-          onClose={() => setShowAssignPartner(false)}
-        />
-      )}
-
-      {/* Eligibility decision-support (§25.5, §2AQ Decision E) - neutral, closed by default for
-          every status. */}
-      <EligibilityPanel
-        reg={reg}
-        tournamentId={tournamentId}
-        divisions={divisions}
-        nameById={nameById}
-        slugById={slugById}
-        pending={pending}
-        run={run}
-      />
-
-      {/* Payments (master_plan §2AO A6, §2AQ Decision E) - the team receipt, if any, plus one line
-          per seat with its own Verify / Decline. Refund lives only in the overflow now. */}
-      <PaymentsBlock
-        reg={reg}
-        tournamentId={tournamentId}
-        pending={pending}
-        start={start}
-        run={run}
-        setMsg={setMsg}
-        nameById={nameById}
-      />
-
-      {/* Cancellation request (§1Y, §2L, §2AP I, §2AQ Decision E) - the player's own reason, cut to
-          one line: what they said, then what to do about it. */}
-      {reg.cancellationRequest && (
-        <div className="border-warning/40 bg-warning/10 mt-2 rounded-lg border p-2.5">
-          <p className="text-warning flex items-center gap-1.5 text-xs font-semibold">
-            <TriangleAlert size={13} aria-hidden />
-            Cancellation requested
-          </p>
-          <p className="text-foreground mt-1 text-sm whitespace-pre-wrap">
-            &ldquo;{reg.cancellationRequest.reason}&rdquo;
-          </p>
-        </div>
-      )}
-
       {/* Awards (§9.4) - issue an official achievement to a confirmed team. */}
       {confirmed && (
         <div className="border-border mt-2 flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed p-2">
@@ -1266,7 +1378,130 @@ function RegRow({
         </div>
       )}
 
+      {note && <p className="text-warning mt-1 text-xs">{note}</p>}
       {msg && <p className="text-foreground-muted mt-1 text-xs">{msg}</p>}
+    </div>
+  );
+}
+
+/** Header status word (master_plan §2BE Decision A): Confirmed / Under review / Unpaid / Rejected /
+ *  Cancelled / Withdrawn / Waitlisted / Refunded, derived from status + `paymentSummary`. */
+function headerStatusWord(reg: OrganizerRegistration): string {
+  const map: Record<string, string> = {
+    confirmed: 'Confirmed',
+    waitlisted: 'Waitlisted',
+    rejected: 'Rejected',
+    cancelled: 'Cancelled',
+    withdrawn: 'Withdrawn',
+    refunded: 'Refunded',
+  };
+  if (map[reg.status]) return map[reg.status] as string;
+  const summary = reg.paymentSummary;
+  if (summary && (summary.submittedSeats > 0 || summary.teamReceipt === 'submitted')) {
+    return 'Under review';
+  }
+  return 'Unpaid';
+}
+
+/** Payment row's one-line state (master_plan §2BE Decision A) - "1 of 2 paid" / "Paid" / "Waiting for
+ *  payment" / "Free division"; no buttons here, every action lives in the Receipts block below. */
+function paymentStateLine(reg: OrganizerRegistration): string {
+  if (reg.amountDue == null || reg.amountDue <= 0) return 'Free division';
+  const summary = reg.paymentSummary;
+  if (!summary) return moneyTag(reg).label;
+  if (summary.state === 'refunded') return 'Refunded';
+  if (summary.state === 'declined') return 'Payment declined';
+  if (summary.state === 'paid') {
+    return summary.totalSeats > 1 ? `${summary.paidSeats} of ${summary.totalSeats} paid` : 'Paid';
+  }
+  if (summary.state === 'partial') return `${summary.paidSeats} of ${summary.totalSeats} paid`;
+  if (summary.submittedSeats > 0 || summary.state === 'submitted') {
+    return 'Receipt submitted - review below';
+  }
+  return 'Waiting for payment';
+}
+
+/** One member's row in the roster card (master_plan §2BE Decision A): avatar, name, community skill,
+ *  and a muted "Change ▾" menu. Replace/Remove are disabled until migration 0051 (Phase B) ships the
+ *  `organizer_replace_member`/`organizer_remove_member` RPCs - shown, not hidden, so the organizer
+ *  knows the power is coming rather than wondering if it was missed. */
+function MemberRow({ member }: { member: OrganizerRegistration['members'][number] }) {
+  const m = member as GuestAwareMember;
+  const initials =
+    m.name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || '?';
+  return (
+    <li className="flex items-center justify-between gap-2">
+      <span className="flex min-w-0 items-center gap-2">
+        <PlayerAvatar url={m.avatarUrl} initials={initials} name={m.name} size="sm" />
+        <span className="min-w-0">
+          <span className="flex flex-wrap items-center gap-1.5">
+            {m.slug ? (
+              <Link
+                href={`/players/${m.slug}`}
+                className="text-foreground hover:text-primary truncate text-sm font-medium"
+              >
+                {m.name}
+              </Link>
+            ) : (
+              <span className="text-foreground truncate text-sm font-medium">{m.name}</span>
+            )}
+            {m.unverified === true && <UnverifiedAccountChip />}
+          </span>
+          <span className="text-foreground-muted block text-xs">
+            Community: {m.communitySkill ?? 'Unrated'}
+          </span>
+        </span>
+      </span>
+      <SeatChangeMenu name={m.name} />
+    </li>
+  );
+}
+
+/** A tiny local "Change ▾" dropdown - not the shared `OverflowMenu` (that one is icon-only, `⋯`),
+ *  since the sketch calls for a labelled muted control here. Both items are disabled until Phase B
+ *  (migration 0051) - honest about what is not built yet rather than hiding the power entirely. */
+function SeatChangeMenu({ name }: { name: string }) {
+  const [open, setOpen] = useState(false);
+  const first = name.split(/\s+/)[0] ?? name;
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-label={`Change ${first}'s seat`}
+        onClick={() => setOpen((v) => !v)}
+        className="text-foreground-muted hover:text-foreground inline-flex min-h-9 items-center gap-0.5 rounded-lg px-1.5 text-xs font-medium"
+      >
+        Change
+        <ChevronDown size={12} aria-hidden />
+      </button>
+      {open && (
+        <div className="border-border bg-surface absolute right-0 z-10 mt-1 min-w-[13rem] rounded-xl border p-1 shadow-lg">
+          <button
+            type="button"
+            disabled
+            className="text-foreground-muted flex w-full flex-col items-start rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-60"
+          >
+            <span className="font-medium">Replace player</span>
+            <span>Coming with the next update</span>
+          </button>
+          <button
+            type="button"
+            disabled
+            className="text-foreground-muted flex w-full flex-col items-start rounded-lg px-2.5 py-1.5 text-left text-xs disabled:opacity-60"
+          >
+            <span className="font-medium">Remove</span>
+            <span>Coming with the next update</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1302,10 +1537,44 @@ const TEAM_RECEIPT_LABELS: Record<string, { label: string; tone: string }> = {
 };
 const TEAM_RECEIPT_FALLBACK = { label: 'Not paid', tone: 'text-foreground-muted' };
 
+/** A small inline reason prompt shared by every Decline/Undo/Restore in the Receipts block (master_plan
+ *  §2BE: "confirm dialogs use the existing inline-confirm pattern in the file, not window.confirm"). */
+function InlineReasonPrompt({
+  placeholder,
+  pending,
+  confirmLabel,
+  onConfirm,
+}: {
+  placeholder: string;
+  pending: boolean;
+  confirmLabel: string;
+  onConfirm: (reason: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1.5">
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={placeholder}
+        className="border-border bg-background min-w-[10rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+      />
+      <button
+        type="button"
+        disabled={pending || value.trim().length < 3}
+        onClick={() => onConfirm(value.trim())}
+        className="bg-danger/90 rounded-lg px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+      >
+        {confirmLabel}
+      </button>
+    </div>
+  );
+}
+
 /**
- * The team-scope receipt row (master_plan §2AQ Decision E): labelled "Team receipt", a state word,
- * and View proof + Verify/Decline only when a receipt actually exists. Refund moved to the sheet's
- * overflow menu - this row no longer carries it.
+ * The team-scope receipt row (master_plan §2BE Decision A/B): "Team receipt", a state word, View
+ * proof, and by status: submitted → Verify/Decline; verified → "Verified ✓" + Undo (`unverifyPayment`);
+ * rejected → the reason + Restore (`restorePayment`); refunded → "Refunded" only.
  */
 function TeamReceiptRow({
   reg,
@@ -1322,8 +1591,17 @@ function TeamReceiptRow({
   run: (fn: () => Promise<ActionResult>) => void;
   setMsg: (m: string | null) => void;
 }) {
+  const [showDecline, setShowDecline] = useState(false);
+  const [showUndo, setShowUndo] = useState(false);
   const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
   const state = TEAM_RECEIPT_LABELS[reg.paymentStatus ?? 'none'] ?? TEAM_RECEIPT_FALLBACK;
+  const status = reg.paymentStatus ?? 'none';
+  // `paymentRejectionReason` is not on `OrganizerRegistration` today (only on the viewer-facing DTO) -
+  // read defensively so this renders nothing rather than failing to type-check if/when it arrives.
+  const rejectionReason = (
+    reg as OrganizerRegistration & { paymentRejectionReason?: string | null }
+  ).paymentRejectionReason;
+
   return (
     <div className="border-border rounded-lg border p-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1336,64 +1614,108 @@ function TeamReceiptRow({
             </span>
           )}
         </span>
-        <span className={`text-xs font-semibold ${state.tone}`}>{state.label}</span>
+        <span className={`text-xs font-semibold ${state.tone}`}>
+          {status === 'verified' ? 'Verified ✓' : state.label}
+        </span>
       </div>
-      {(reg.hasProof || reg.paymentStatus === 'submitted') && (
-        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-          {reg.hasProof && (
+      {rejectionReason && status === 'rejected' && (
+        <p className="text-danger mt-1 text-[11px]">{rejectionReason}</p>
+      )}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {reg.hasProof && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const res = await getProofSignedUrl(reg.paymentId as string, 'team');
+                if (res.url) window.open(res.url, '_blank', 'noopener');
+                else setMsg(res.error ?? 'Could not open proof.');
+              })
+            }
+            className={`${btn} border-border text-foreground border`}
+          >
+            View proof
+          </button>
+        )}
+        {status === 'submitted' && (
+          <>
             <button
               type="button"
               disabled={pending}
               onClick={() =>
-                start(async () => {
-                  const res = await getProofSignedUrl(reg.paymentId as string, 'team');
-                  if (res.url) window.open(res.url, '_blank', 'noopener');
-                  else setMsg(res.error ?? 'Could not open proof.');
-                })
+                run(() => verifyPayment(reg.paymentId as string, tournamentId, 'team'))
               }
-              className={`${btn} border-border text-foreground border`}
+              className={`${btn} vp-gradient text-white`}
             >
-              View proof
+              Verify
             </button>
-          )}
-          {reg.paymentStatus === 'submitted' && (
-            <>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  run(() => verifyPayment(reg.paymentId as string, tournamentId, 'team'))
-                }
-                className={`${btn} vp-gradient text-white`}
-              >
-                Verify
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  const why = prompt('Reason for declining this payment?');
-                  if (why && why.trim())
-                    run(() =>
-                      rejectPayment(reg.paymentId as string, tournamentId, why.trim(), 'team'),
-                    );
-                }}
-                className={`${btn} text-danger border-border border`}
-              >
-                Decline
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              type="button"
+              onClick={() => setShowDecline((v) => !v)}
+              className={`${btn} text-danger border-border border`}
+            >
+              Decline
+            </button>
+          </>
+        )}
+        {status === 'verified' && (
+          <button
+            type="button"
+            onClick={() => setShowUndo((v) => !v)}
+            className={`${btn} border-border text-foreground border`}
+          >
+            Undo
+          </button>
+        )}
+        {status === 'rejected' && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => restorePayment(reg.paymentId as string, tournamentId, 'team'))}
+            className={`${btn} border-border text-foreground border`}
+          >
+            Restore
+          </button>
+        )}
+      </div>
+      {showDecline && (
+        <InlineReasonPrompt
+          placeholder="Reason for declining (required)"
+          pending={pending}
+          confirmLabel="Confirm decline"
+          onConfirm={(r) =>
+            run(async () => {
+              const res = await rejectPayment(reg.paymentId as string, tournamentId, r, 'team');
+              if (res.ok) setShowDecline(false);
+              return res;
+            })
+          }
+        />
+      )}
+      {showUndo && (
+        <InlineReasonPrompt
+          placeholder="Reason for undoing this verification (required)"
+          pending={pending}
+          confirmLabel="Confirm undo"
+          onConfirm={(r) =>
+            run(async () => {
+              const res = await unverifyPayment(reg.paymentId as string, tournamentId, 'team', r);
+              if (res.ok) setShowUndo(false);
+              return res;
+            })
+          }
+        />
       )}
     </div>
   );
 }
 
 /**
- * One seat's line in the Payments block: "Slot · {first name}", its state word, and - only when a
- * slot receipt actually exists for that player - View proof / Verify / Decline (master_plan §2AO A6,
- * §2AQ Decision E - no separate bold name column, refund moved to the overflow).
+ * One seat's line in the Receipts block (master_plan §2BE Decision A/B): "Slot · {first name}", its
+ * state, and: covered by the team receipt → muted note + the same View link; a slot exists → View +
+ * Verify/Decline (submitted) or "Paid ✓" + Undo (verified) or reason + Restore (rejected); no slot →
+ * muted "Unpaid" + "Mark paid (cash)".
  */
 function SeatRow({
   seat,
@@ -1401,6 +1723,9 @@ function SeatRow({
   nameById,
   currency,
   extra,
+  coveredByTeamReceipt,
+  teamPaymentId,
+  registrationId,
   tournamentId,
   pending,
   start,
@@ -1414,16 +1739,51 @@ function SeatRow({
   /** True when this seat's own receipt is redundant - the team receipt already covers every slot
    *  (master_plan §2AP Decision C6, "overpayment"). */
   extra: boolean;
+  /** True when the team receipt already covers every seat and this seat has no slot of its own -
+   *  master_plan §2BE Decision A: "if team receipt, both should have the same link". */
+  coveredByTeamReceipt: boolean;
+  teamPaymentId: string | null;
+  registrationId: string;
   tournamentId: string;
   pending: boolean;
   start: StartTransition;
   run: (fn: () => Promise<ActionResult>) => void;
   setMsg: (m: string | null) => void;
 }) {
+  const [showDecline, setShowDecline] = useState(false);
+  const [showUndo, setShowUndo] = useState(false);
+  const [showMarkPaid, setShowMarkPaid] = useState(false);
   const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
   const name = seat.playerId ? (nameById.get(seat.playerId) ?? 'Player') : null;
   const firstName = name ? (name.split(/\s+/)[0] ?? name) : 'Open';
   const topupAmount = Math.max(0, seat.amountDue - seat.amountSubmitted);
+
+  if (coveredByTeamReceipt) {
+    return (
+      <li className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
+        <span className="text-foreground-muted text-xs">Slot · {firstName}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-foreground-muted text-xs">Covered by team receipt</span>
+          {teamPaymentId && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const res = await getProofSignedUrl(teamPaymentId, 'team');
+                  if (res.url) window.open(res.url, '_blank', 'noopener');
+                  else setMsg(res.error ?? 'Could not open proof.');
+                })
+              }
+              className={`${btn} border-border text-foreground border`}
+            >
+              View
+            </button>
+          )}
+        </span>
+      </li>
+    );
+  }
 
   return (
     <li className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
@@ -1436,11 +1796,28 @@ function SeatRow({
             </span>
           )}
           <span className={`text-xs font-semibold ${SEAT_STATE_TONE[seat.state]}`}>
-            {SEAT_STATE_LABELS[seat.state]}
+            {slot?.status === 'verified' ? 'Paid ✓' : SEAT_STATE_LABELS[seat.state]}
             {seat.state === 'topup' && ` (${currency ?? 'PHP'} ${topupAmount.toLocaleString()})`}
           </span>
         </span>
       </div>
+      {slot?.rejectionReason && slot.status === 'rejected' && (
+        <p className="text-danger text-[11px]">{slot.rejectionReason}</p>
+      )}
+      {!slot && (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-foreground-muted text-xs">Unpaid</span>
+          {seat.playerId && (
+            <button
+              type="button"
+              onClick={() => setShowMarkPaid((v) => !v)}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Mark paid (cash)
+            </button>
+          )}
+        </div>
+      )}
       {slot && (
         <div className="flex flex-wrap items-center gap-1.5">
           {slot.hasProof && (
@@ -1471,18 +1848,92 @@ function SeatRow({
               </button>
               <button
                 type="button"
-                disabled={pending}
-                onClick={() => {
-                  const why = prompt('Reason for declining this seat payment?');
-                  if (why && why.trim())
-                    run(() => rejectPayment(slot.id, tournamentId, why.trim(), 'slot'));
-                }}
+                onClick={() => setShowDecline((v) => !v)}
                 className={`${btn} text-danger border-border border`}
               >
                 Decline
               </button>
             </>
           )}
+          {slot.status === 'verified' && (
+            <button
+              type="button"
+              onClick={() => setShowUndo((v) => !v)}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Undo
+            </button>
+          )}
+          {slot.status === 'rejected' && (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => restorePayment(slot.id, tournamentId, 'slot'))}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Restore
+            </button>
+          )}
+        </div>
+      )}
+      {showDecline && slot && (
+        <InlineReasonPrompt
+          placeholder="Reason for declining (required)"
+          pending={pending}
+          confirmLabel="Confirm decline"
+          onConfirm={(r) =>
+            run(async () => {
+              const res = await rejectPayment(slot.id, tournamentId, r, 'slot');
+              if (res.ok) setShowDecline(false);
+              return res;
+            })
+          }
+        />
+      )}
+      {showUndo && slot && (
+        <InlineReasonPrompt
+          placeholder="Reason for undoing this verification (required)"
+          pending={pending}
+          confirmLabel="Confirm undo"
+          onConfirm={(r) =>
+            run(async () => {
+              // master_plan §2BE Decision B: a cash-marked seat (`markSeatPaid` inserts it `verified`
+              // with no proof) undoes through `undoSeatPaid`; a real, player-submitted-then-verified
+              // receipt undoes through `unverifyPayment` instead. The DTO does not carry the slot's
+              // `method` column, so `hasProof` is the reliable stand-in: a verified slot with no proof
+              // on file was never a receipt the organizer reviewed - it was marked paid by hand.
+              const res = !slot.hasProof
+                ? await undoSeatPaid(slot.id, tournamentId)
+                : await unverifyPayment(slot.id, tournamentId, 'slot', r);
+              if (res.ok) setShowUndo(false);
+              return res;
+            })
+          }
+        />
+      )}
+      {showMarkPaid && seat.playerId && (
+        <div className="border-border mt-1 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-2">
+          <p className="text-foreground-muted text-xs">
+            Mark {firstName}&rsquo;s seat as paid in cash?
+          </p>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              run(async () => {
+                const res = await markSeatPaid(
+                  registrationId,
+                  seat.playerId as string,
+                  tournamentId,
+                );
+                if (res.ok) setShowMarkPaid(false);
+                return res;
+              })
+            }
+            className={`${btn} vp-gradient text-white`}
+          >
+            Yes, mark paid
+          </button>
         </div>
       )}
     </li>
@@ -1490,12 +1941,13 @@ function SeatRow({
 }
 
 /**
- * The organizer's whole money picture for one entry (master_plan §2AO A2/A6): a one-line summary,
- * the team receipt if one exists, then every seat with its own review controls. Reads
- * `paymentSummary`/`slots` defensively - both are additive fields on `OrganizerRegistration` landing
- * from a parallel lane, so this renders nothing rather than crashing until they arrive.
+ * The organizer's whole money picture for one entry (master_plan §2AO A2/A6, §2BE Decision A/B): the
+ * team receipt if one exists, then every seat with its own review controls (now including Undo and
+ * Restore). Reads `paymentSummary`/`slots` defensively - both are additive fields on
+ * `OrganizerRegistration` landing from a parallel lane, so this renders nothing rather than crashing
+ * until they arrive.
  */
-function PaymentsBlock({
+function ReceiptsBlock({
   reg,
   tournamentId,
   pending,
@@ -1517,14 +1969,14 @@ function PaymentsBlock({
   const slotByPlayer = new Map((reg.slots ?? []).map((s) => [s.playerId, s]));
   // Overpayment (master_plan §2AP Decision C6): the team receipt already covers every slot, but a
   // seat also carries its own receipt - visible to the organizer instead of silently absorbed.
-  const hasOverpayment =
-    (summary.teamReceipt === 'verified' || summary.teamReceipt === 'submitted') &&
-    (reg.slots ?? []).length > 0;
+  const teamReceiptCoversAll =
+    summary.teamReceipt === 'verified' || summary.teamReceipt === 'submitted';
+  const hasOverpayment = teamReceiptCoversAll && (reg.slots ?? []).length > 0;
 
   return (
     <div className="border-border mt-2 space-y-2.5 rounded-lg border border-dashed p-2.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-foreground text-xs font-semibold">Payments</span>
+        <span className="text-foreground text-xs font-semibold">Receipts</span>
         <span className="text-foreground-muted text-xs">{moneyTag(reg).label}</span>
       </div>
 
@@ -1556,6 +2008,9 @@ function PaymentsBlock({
               nameById={nameById}
               currency={reg.currency}
               extra={hasOverpayment && !!slot}
+              coveredByTeamReceipt={teamReceiptCoversAll && !slot}
+              teamPaymentId={reg.paymentId}
+              registrationId={reg.id}
               tournamentId={tournamentId}
               pending={pending}
               start={start}
@@ -1569,20 +2024,60 @@ function PaymentsBlock({
   );
 }
 
-function EligibilityPanel({
+/** Up to two short reason lines across every member (master_plan §2BE Decision A: "labels only,
+ *  ≤ 2 lines, always visible when not Eligible"). Prefixed by first name only when there is more than
+ *  one member, so a singles entry's lines read exactly as before. The full evidence (community skill,
+ *  STS, active vouches) still lives on the player's own profile - unchanged from the prior collapsed
+ *  panel, just no longer gated behind a toggle. */
+function eligibilityReasonLines(
+  snap: Snapshot,
+  nameById: Map<string, string>,
+): { text: string; tone: 'danger' | 'warning' | 'muted' }[] {
+  const players = snap.players ?? [];
+  const multi = players.length > 1;
+  const lines: { text: string; tone: 'danger' | 'warning' | 'muted' }[] = [];
+  for (const p of players) {
+    const prefix = multi ? `${(nameById.get(p.playerId) ?? 'Player').split(/\s+/)[0]}: ` : '';
+    for (const c of p.hardRuleCodes) {
+      lines.push({
+        text: prefix + (HARD_RULE_LABELS[c as keyof typeof HARD_RULE_LABELS] ?? c),
+        tone: 'danger',
+      });
+    }
+    for (const c of p.reasonCodes) {
+      lines.push({ text: prefix + reasonLabel(c), tone: 'warning' });
+    }
+    for (const c of p.flags) {
+      lines.push({
+        text: prefix + (FLAG_LABELS[c as keyof typeof FLAG_LABELS] ?? c),
+        tone: 'muted',
+      });
+    }
+  }
+  return lines.slice(0, 2);
+}
+
+const REASON_LINE_TONE: Record<'danger' | 'warning' | 'muted', string> = {
+  danger: 'text-danger',
+  warning: 'text-warning',
+  muted: 'text-foreground-muted',
+};
+
+/**
+ * Eligibility row (master_plan §2BE Decision A): one chip, up to two reason lines always visible when
+ * not Eligible, and Approve / Undo on the right. Reclassify moved to the sheet's ⋯ overflow - this row
+ * no longer carries it.
+ */
+function EligibilityRow({
   reg,
   tournamentId,
-  divisions,
   nameById,
-  slugById,
   pending,
   run,
 }: {
   reg: OrganizerRegistration;
   tournamentId: string;
-  divisions: EligibilityDivisionOption[];
   nameById: Map<string, string>;
-  slugById: Map<string, string | null>;
   pending: boolean;
   run: (fn: () => Promise<ActionResult>) => void;
 }) {
@@ -1590,15 +2085,8 @@ function EligibilityPanel({
   const status = reg.eligibilityStatus;
   const isEligible = status === 'eligible';
   const isHardRule = status === 'ineligible_hard_rule';
-
-  // §2AQ Decision E: closed by default for EVERY status, "Needs review" included - a chip that opens
-  // itself reads as an alarm even when there is nothing here worth interrupting the organizer for.
-  const [open, setOpen] = useState(false);
   const [approveReason, setApproveReason] = useState('');
   const [showApprove, setShowApprove] = useState(false);
-  const [showReclass, setShowReclass] = useState(false);
-  const [reclassDiv, setReclassDiv] = useState('');
-  const [reclassReason, setReclassReason] = useState('');
 
   const resultKey = snap.result as keyof typeof ELIGIBILITY_RESULT_LABELS | undefined;
   const label =
@@ -1606,156 +2094,81 @@ function EligibilityPanel({
       ? ELIGIBILITY_RESULT_LABELS[resultKey]
       : statusToLabel(status);
   const btn = 'rounded-lg px-2.5 py-1 text-xs font-semibold disabled:opacity-50';
-  const sameDivisionTargets = divisions.filter((d) => d.id !== reg.divisionId);
+  const lines = isEligible ? [] : eligibilityReasonLines(snap, nameById);
 
   return (
     <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-          ELIG_STYLES[status] ?? 'border-border text-foreground-muted'
-        }`}
-      >
-        {label}
-        <span aria-hidden>{open ? '▾' : '▸'}</span>
-      </button>
-
-      {open && (
-        <div className="border-border mt-2 rounded-lg border border-dashed p-2.5">
-          {/* Reason lines only, per player (§2AQ Decision E) - the evidence itself (community skill,
-              STS, active vouches, Skill-Verified) lives on the player's own profile, linked here by
-              name, rather than repeated on this screen. */}
-          <div className="space-y-2">
-            {(snap.players ?? []).length === 0 && (
-              <p className="text-foreground-muted text-xs">No rule concerns on file.</p>
-            )}
-            {(snap.players ?? []).map((p) => {
-              const slug = slugById.get(p.playerId);
-              const name = nameById.get(p.playerId) ?? 'Player';
-              const hasReasons =
-                p.hardRuleCodes.length > 0 || p.reasonCodes.length > 0 || p.flags.length > 0;
-              return (
-                <div key={p.playerId} className="text-xs">
-                  {slug ? (
-                    <Link
-                      href={`/players/${slug}`}
-                      className="text-foreground hover:text-primary font-medium"
-                    >
-                      {name}
-                    </Link>
-                  ) : (
-                    <span className="text-foreground font-medium">{name}</span>
-                  )}
-                  {hasReasons ? (
-                    <div className="mt-0.5 space-y-0.5">
-                      {p.hardRuleCodes.map((c) => (
-                        <p key={c} className="text-danger">
-                          {HARD_RULE_LABELS[c as keyof typeof HARD_RULE_LABELS] ?? c}
-                        </p>
-                      ))}
-                      {p.reasonCodes.map((c) => (
-                        <p key={c} className="text-warning">
-                          {reasonLabel(c)}
-                        </p>
-                      ))}
-                      {p.flags.map((c) => (
-                        <p key={c} className="text-foreground-muted">
-                          {FLAG_LABELS[c as keyof typeof FLAG_LABELS] ?? c}
-                        </p>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-foreground-muted mt-0.5">No concerns.</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
+      <div className="flex items-start justify-between gap-2">
+        <span className="min-w-0">
+          <span className="text-foreground-muted mr-1.5 text-xs font-semibold">Eligibility</span>
+          <span
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+              ELIG_STYLES[status] ?? 'border-border text-foreground-muted'
+            }`}
+          >
+            {label}
+          </span>
+          {lines.length > 0 && (
+            <span className="mt-1 block space-y-0.5">
+              {lines.map((l, i) => (
+                <span key={i} className={`block text-xs ${REASON_LINE_TONE[l.tone]}`}>
+                  {l.text}
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {!isEligible && (
+            <button
+              type="button"
+              onClick={() => setShowApprove((v) => !v)}
+              className={`${btn} vp-gradient text-white`}
+            >
+              Approve
+            </button>
+          )}
           {snap.override && (
-            <p className="text-foreground-muted mt-2 text-[11px]">
-              Overridden by an organizer{snap.override.reason ? ` - "${snap.override.reason}"` : ''}
-              .
-            </p>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => undoEligibilityApproval(reg.id, tournamentId))}
+              className={`${btn} border-border text-foreground border`}
+            >
+              Undo
+            </button>
           )}
+        </span>
+      </div>
 
-          {/* Actions (§25.5) */}
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
-            {!isEligible && (
-              <button
-                type="button"
-                onClick={() => setShowApprove((v) => !v)}
-                className={`${btn} vp-gradient text-white`}
-              >
-                Approve
-              </button>
-            )}
-            {sameDivisionTargets.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowReclass((v) => !v)}
-                className={`${btn} border-border text-foreground border`}
-              >
-                Reclassify
-              </button>
-            )}
-          </div>
+      {snap.override && (
+        <p className="text-foreground-muted mt-1 text-[11px]">
+          Overridden by an organizer{snap.override.reason ? ` - "${snap.override.reason}"` : ''}.
+        </p>
+      )}
 
-          {showApprove && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <input
-                value={approveReason}
-                onChange={(e) => setApproveReason(e.target.value)}
-                placeholder={
-                  isHardRule ? 'Reason (required to override a rule)' : 'Reason (optional)'
-                }
-                className="border-border bg-background min-w-[12rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
-              />
-              <button
-                type="button"
-                disabled={pending || (isHardRule && !approveReason.trim())}
-                onClick={() => run(() => approveEligibility(reg.id, tournamentId, approveReason))}
-                className={`${btn} vp-gradient text-white`}
-              >
-                Confirm approve
-              </button>
-            </div>
-          )}
-
-          {showReclass && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <select
-                value={reclassDiv}
-                onChange={(e) => setReclassDiv(e.target.value)}
-                className="border-border bg-background rounded-lg border px-2.5 py-1.5 text-xs"
-              >
-                <option value="">Move to division…</option>
-                {sameDivisionTargets.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={reclassReason}
-                onChange={(e) => setReclassReason(e.target.value)}
-                placeholder="Reason (optional)"
-                className="border-border bg-background min-w-[10rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
-              />
-              <button
-                type="button"
-                disabled={pending || !reclassDiv}
-                onClick={() =>
-                  run(() => reclassifyRegistration(reg.id, tournamentId, reclassDiv, reclassReason))
-                }
-                className={`${btn} border-border text-foreground border`}
-              >
-                Move
-              </button>
-            </div>
-          )}
+      {showApprove && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <input
+            value={approveReason}
+            onChange={(e) => setApproveReason(e.target.value)}
+            placeholder={isHardRule ? 'Reason (required to override a rule)' : 'Reason (optional)'}
+            className="border-border bg-background min-w-[12rem] flex-1 rounded-lg border px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2"
+          />
+          <button
+            type="button"
+            disabled={pending || (isHardRule && !approveReason.trim())}
+            onClick={() =>
+              run(async () => {
+                const res = await approveEligibility(reg.id, tournamentId, approveReason);
+                if (res.ok) setShowApprove(false);
+                return res;
+              })
+            }
+            className={`${btn} vp-gradient text-white`}
+          >
+            Confirm approve
+          </button>
         </div>
       )}
     </div>

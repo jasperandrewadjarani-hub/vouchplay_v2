@@ -3281,3 +3281,69 @@ email-code path is demoted to a muted fallback link (one tap away, not removed) 
 requests against the Gmail SMTP cap; signup unchanged (still OTP, gate converts new users to a password
 after). Succeeding phase: move transactional email off Gmail SMTP to Resend / SES / SendGrid before scale.
 Handover -> v1.81.
+
+## 2026-09-14 - Players tab doors, iPhone sex glyph, staff-link switch (§2BC); forgot-password by code + standard password fields + PIN decision (§2BD); organizer powers phase A (§2BE)
+
+Jasper's batch: declutter the Players tab into one row of three cards; iPhone gender icon misaligned;
+Admin switch to hide "See vouch activity"; forgot-password link fails from the app; OTP users must elect
+a password with a standard password UI; a GCash-style PIN; and a long organizer list (guest monitoring,
+reclassify at will, create / add / switch / merge players, non-user teams by email, bulk import, roster-
+style team sheet, everything retractable).
+
+**§2BC.** The three stacked blocks above the list (`LeaderboardsEntryCard`, `AvailabilityCard`,
+`PartnerLookingStrip`) become one `grid-cols-3` row of doors (`components/players/directory-doors.tsx`):
+Leaderboards → `/leaderboards`; Let people find you → `AvailabilityModal` (the two existing switch rows,
+Done); Find a partner → the tournament's deck when exactly one has open searches, a chooser sheet when
+several, and an empty sheet with "Mark me as looking" when none (the deck is per-tournament; no global
+deck exists). Sex glyph: `SexBadge` rendered the text characters ♂/♀ in a bare span next to 13 px SVG
+siblings - iOS WebKit substitutes Apple Color Emoji metrics for U+2642/U+2640, hence the iPhone-only
+offset; fixed by drawing two tiny inline SVGs (lucide 0.469 has no Mars/Venus) with `shrink-0`. New
+Admin flag `staff_activity_links_enabled` (default true) hides the staff "See vouch activity" link in
+the directory and profile; the `/staff/players/[slug]` page stays role + MFA gated by URL.
+
+**§2BD.** Forgot-password root cause = PKCE: `resetPasswordForEmail` runs on the SSR client, which
+stores the code verifier as a cookie on the browser that asked (the installed app); the emailed link
+opens in Chrome (another cookie jar) so `exchangeCodeForSession` fails → `/login?error=auth` → "That
+sign-in link was invalid or expired". Fix: reset **by 6-digit code inside the app** - `/forgot-password`
+is one screen in two steps (email → code + new password + confirm), new action `resetPasswordWithCode`
+(`verifyOtp type 'recovery'` + `updateUser`), never leaves the app. **Jasper precondition:** the Supabase
+Reset Password email template must print `{{ .Token }}` and its link should be
+`{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/me/settings/password`
+(exact template in `docs/EMAIL_TEMPLATES.md`). New `PasswordInput` / `PasswordPair` (show/hide eye,
+live "8+ characters" / "Passwords match" checks) used in login, the gate, set-password and the reset
+step. OTP → forced password: already live via §2BB/0050, nothing added. PIN: decided as an **opt-in
+quick-unlock app lock** (ME → Security), not a replacement credential - sessions never expire so a
+mandatory PIN would add a screen where there is none today, a 6-digit numeric password is
+online-guessable and accounts hold government IDs, and GCash's MPIN is itself a device unlock. Admin
+dial `pin_lock_mode` (off / optional / prompt_once) + `pin_lock_idle_minutes`; table `profile_pins`
+(service-role only, scrypt), signed `vp_unlock` cookie, lock screen in the shell. **Phase 3 (migration
+0052), designed, not built.**
+
+**§2BE.** Findings: `reclassifyRegistration` already exists (organizer-only, audited, format / team-size /
+duplicate guards, not status) and the export reads live `division_id`, so reclassification syncs into
+the tournament-system file by construction; nothing was retractable (confirmed had no way back, verified
+had no un-verify); `organizer_assign_partner` (0044) already seats a player with no consent step, so §2P's
+consent-first design is superseded by organizer authority + reason + audit + critical notification + the
+player's cancellation request. Built now (phase A, no migration): the team sheet rebuilt as a roster card
+(division + ⋯ on top; avatar · name · community skill per player; Eligibility / Payment / Receipts rows
+with forward action and undo side by side; a team receipt shows one View link shared by both seats);
+`revertConfirmation`, `restoreRegistration`, `unverifyPayment`, `restorePayment`, `markSeatPaid` (cash) +
+`undoSeatPaid`, `undoEligibilityApproval`; Reclassify moved to the ⋯, all statuses, capacity as a note
+not a block; **Add entry** wizard for existing accounts (`createEntryForPlayers`: player 1 via
+`entry-core`, player 2 via `organizer_assign_partner`, optional mark-paid, `organizer_entered_you`
+notification); `members[].communitySkill` on the organizer DTO; Unverified-accounts panel + filter +
+Resend code (24 h throttle). **Phase B (migration 0051, apply after 2026-09-16):** `organizer_assign_partner`
+v2 with `p_override_fit` (skill advisory; sex / composition / known-age still hard), `organizer_replace_member`,
+`organizer_remove_member`, `organizer_merge_entries` (same receipt, two entries → one team), non-user
+entries by name + email (shadow account, live entry, one activation email to `/login?email=&code=1`),
+bulk import (CSV/XLSX template, preview with per-row verdicts, ≤200 rows), Admin → Guests. Handover -> v1.82.
+
+## 2026-09-14 - Birthday editable in Edit profile (§2BF)
+
+"Can't edit bday in edit profile, allow edit." `date_of_birth` (age-at-door, §2AM/0043) was collected
+only in the guest wizard and shown read-only in onboarding recovery - no post-hoc edit path. Made it an
+optional editable field in Edit profile: `onboardingSchema` gains `dateOfBirth` (YYYY-MM-DD, real / past /
+age 5-120, blank clears); `updateProfile` writes `date_of_birth`; `ProfileRow` + `getMyProfile` select it;
+`OnboardingForm` renders an editable `type="date"` named `dateOfBirth` in edit mode (read-only guest display
+kept for onboarding, still un-named); edit page passes `initial.dateOfBirth`. Onboarding save unchanged
+(key absent → `.optional()`). No migration (nullable column exists). Handover -> v1.82 (same deploy batch).

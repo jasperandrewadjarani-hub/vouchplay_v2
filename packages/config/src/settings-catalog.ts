@@ -1179,6 +1179,13 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: 'When on, an email user with no password must set one on their next sign-in, so future logins skip the emailed code (cuts SMTP use). Off disables the prompt for everyone (master_plan §2BB).',
   },
   {
+    key: 'staff_activity_links_enabled',
+    label: "Staff 'See vouch activity' links",
+    group: 'flags',
+    kind: 'bool',
+    help: 'When off, staff see the Players tab and profiles exactly as players do; the /staff/players page itself stays role-gated by URL (master_plan §2BC).',
+  },
+  {
     key: 'role_applications_enabled',
     label: 'Role applications enabled',
     group: 'flags',
