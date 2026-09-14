@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Smartphone } from 'lucide-react';
 import { usePwa } from '@/components/pwa/pwa-provider';
+import { openInChrome } from '@/lib/pwa/detect';
 import { Button } from '@/components/ui/button';
 import { IosInstallSheet } from './ios-install-sheet';
 
@@ -48,10 +49,25 @@ export function InstallRow() {
   }
 
   // The in-app-browser case comes BEFORE iOS: an iPhone inside Facebook / Messenger has no Share ->
-  // Add to Home Screen at all, so the Safari steps would be a dead end there.
+  // Add to Home Screen at all, so the Safari steps would be a dead end there. On Android we can hand
+  // straight off to Chrome (§2AZ); iOS has no intent scheme, so it falls back to copy-link + Safari.
   if (pwa.inAppBrowser) {
+    if (!pwa.ios) {
+      return (
+        <Row description="Open in Chrome to install">
+          <Button
+            type="button"
+            variant="secondary"
+            className={smallBtn}
+            onClick={() => openInChrome()}
+          >
+            Open in Chrome
+          </Button>
+        </Row>
+      );
+    }
     return (
-      <Row description="Open in Chrome or Safari to install">
+      <Row description="Open in Safari to install">
         <Button
           type="button"
           variant="secondary"

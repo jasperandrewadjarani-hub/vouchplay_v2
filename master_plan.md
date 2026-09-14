@@ -5340,6 +5340,69 @@ push: `dpl_` flip on both domains, `/manifest.webmanifest` + `/sw.js` + `/offlin
 real sizes, install on an Android phone, push test from Admin.
 
 
+## 2AZ. Global install banner + Chrome hand-off (low-friction install) (2026-09-14)
+
+Builds directly on the PWA foundation (§2AY): the ME-page install card is passive - it only helps a
+player who already scrolled to it. A large share of PH traffic arrives through the Facebook/Messenger
+in-app browser, which cannot install a PWA at all, and every extra tap before "you're in Chrome" loses
+people. Decision: add a global, auto-surfacing nudge and make the escape from the in-app webview
+one tap instead of a copy-paste.
+
+### Decisions
+
+**A. A slim mini-infobar, mounted once, bottom of the screen.** `components/pwa/install-banner.tsx`,
+mounted once in `AppShell`, slides up ~2.5 s after arrival on any page: icon, one-line headline, one
+primary button, a dismiss (X). Floats just above the mobile bottom nav; bottom-right on desktop.
+
+**B. Bottom, not top.** The top of the app already carries a mutually-exclusive nudge chain (unpaid-
+slot / minimal-power / unvouched / identity, §2AS/§2AN) - a second top strip is clutter. The bottom
+mini-infobar is the native install-prompt pattern and is thumb-reachable. The wrapper is
+`pointer-events-none` so bottom-nav taps pass through underneath it; only the card itself is
+interactive.
+
+**C. Device-adaptive primary button, one pure decision function.** `deriveInstallBranch()`
+(`components/pwa/install-banner-state.ts`, unit-tested) mirrors the priority order already used by
+`install-row.tsx` (§2AY E):
+1. Android Chrome with a real `beforeinstallprompt` available -> **Install**.
+2. Android inside an in-app browser (Facebook/Messenger/etc.) -> **Open in Chrome** - a new
+   `openInChrome()` helper (`lib/pwa/detect.ts`) hands off via an Android `intent://` URL
+   (`package=com.android.chrome`, `S.browser_fallback_url` set so a missing Chrome leaves the user
+   where they were). This is the single highest-leverage friction cut for PH traffic - it escapes the
+   webview that cannot install a PWA at all.
+3. iPhone inside an in-app browser -> **Copy link** (then a hint to open in Safari) - iOS has no intent
+   scheme and Chrome-on-iOS cannot install PWAs either, so Safari is the only path.
+4. iPhone Safari -> **Show me how** - opens the existing `IosInstallSheet`.
+5. Desktop / unsupported -> renders nothing.
+
+**D. Anti-nag rules.** Shows at most once per device; the ~2.5 s delay keeps it off the first
+impression; dismiss (X) persists forever (`localStorage` key `vp:install-banner:dismissed`);
+disappears instantly on install or when already running standalone; the slide-up respects
+`prefers-reduced-motion`.
+
+**E. New Admin kill switch, separate from the existing one.** `pwa_install_banner_enabled` (bool,
+default true, `pwa` settings group) lets Admin silence the auto-banner while keeping the passive
+ME-page card - `pwa_install_prompt_enabled` (§2AY D) continues to gate the ME card alone.
+
+**F. The ME-page card gets the same hand-off.** `AppInstallCard` is otherwise unchanged and stays -
+it is the always-available, non-nagging way back in for anyone who dismissed the banner. Its in-app-
+browser row is upgraded from copy-link-only to the same one-tap "Open in Chrome" hand-off on Android.
+
+### Deferred
+
+Silent auto-redirect to Chrome on page load - in-app webviews block gesture-less navigation and it
+reads like a hijack; tap-triggered only. Forcing Safari on iPhone - impossible, no OS scheme.
+Install-conversion analytics and A/B timing tuning - worth doing once volume justifies it.
+
+### Contracts
+
+No database migration - purely additive client UI plus one new settings row default. **Config:**
+`settings.ts` + `settings-catalog.ts` (`pwa` group, new key). **Web client:**
+`components/pwa/install-banner.tsx`, `components/pwa/install-banner-state.ts` ->
+`deriveInstallBranch()`, `lib/pwa/detect.ts` -> `openInChrome()`, `app-shell.tsx` (mount), existing
+`components/me/app-install-card.tsx` (in-app-browser row upgrade). Safe to ship during the open
+Hermosa registration window.
+
+
 ## 1. Prompt Contract
 
 ### In scope

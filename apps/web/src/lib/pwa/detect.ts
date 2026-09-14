@@ -36,6 +36,28 @@ export function pushSupported(): boolean {
   );
 }
 
+/**
+ * Hand the current URL off to Chrome on Android via an `intent://` link, escaping an in-app webview
+ * (Facebook / Messenger / Instagram) that cannot install a PWA (master_plan §2AZ). Callers gate this
+ * behind `isInAppBrowserUserAgent && !isIosUserAgent` - iOS has no intent scheme, and Chrome-on-iOS
+ * cannot install PWAs anyway, so there Safari is the only path. If Chrome is not installed the
+ * `S.browser_fallback_url` keeps the user on the same page in the browser they are already in.
+ */
+export function openInChrome(): void {
+  if (typeof window === 'undefined') return;
+  const { host, pathname, search, hash, protocol, href } = window.location;
+  const scheme = protocol.replace(':', '') || 'https';
+  const fallback = encodeURIComponent(href);
+  const intent =
+    `intent://${host}${pathname}${search}${hash}` +
+    `#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
+  try {
+    window.location.href = intent;
+  } catch {
+    // Some webviews reject the intent scheme outright - nothing else we can safely do here.
+  }
+}
+
 /** Decode a URL-safe base64 VAPID public key into the raw bytes `PushManager.subscribe` needs. */
 export function urlBase64ToUint8Array(base64: string): Uint8Array {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);

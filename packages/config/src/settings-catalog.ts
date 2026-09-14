@@ -733,6 +733,13 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     help: "Off hides the install row on the ME page; the browser's own install banner is unaffected (master_plan §2AY E).",
   },
   {
+    key: 'pwa_install_banner_enabled',
+    label: 'Auto install banner',
+    group: 'pwa',
+    kind: 'bool',
+    help: 'Off silences the auto-surfacing bottom install banner; the ME-page "Add to Home Screen" card is unaffected (master_plan §2AZ).',
+  },
+  {
     key: 'push_notifications_enabled',
     label: 'Push notifications enabled',
     group: 'pwa',

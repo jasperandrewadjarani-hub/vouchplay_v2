@@ -7,6 +7,7 @@ import { BottomNav } from './bottom-nav';
 import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
 import { PwaProvider } from './pwa/pwa-provider';
+import { InstallBanner } from './pwa/install-banner';
 import { LegalConsentGate } from './legal/legal-consent-gate';
 import { SiteFooter } from './site-footer';
 import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
@@ -30,15 +31,18 @@ import { getViewerUnpaidSlots } from '@/lib/tournaments/unpaid';
  * access so they can turn it back off from /admin.
  */
 export async function AppShell({ children }: { children: ReactNode }) {
-  const [bannerEnabled, bannerText, maintenance, welcomeEnabled, swEnabled] = await Promise.all([
-    loadSettingFlag('announcement_banner_enabled', false),
-    loadSettingText('announcement_banner', ''),
-    loadSettingFlag('maintenance_mode', false),
-    loadSettingFlag('welcome_modal_enabled', false),
-    // PWA service worker kill switch (master_plan §2AY decision B) - read here so PwaProvider knows
-    // whether to register (or actively unregister) `/sw.js` without a second request.
-    loadSettingFlag('pwa_service_worker_enabled', true),
-  ]);
+  const [bannerEnabled, bannerText, maintenance, welcomeEnabled, swEnabled, installBannerEnabled] =
+    await Promise.all([
+      loadSettingFlag('announcement_banner_enabled', false),
+      loadSettingText('announcement_banner', ''),
+      loadSettingFlag('maintenance_mode', false),
+      loadSettingFlag('welcome_modal_enabled', false),
+      // PWA service worker kill switch (master_plan §2AY decision B) - read here so PwaProvider knows
+      // whether to register (or actively unregister) `/sw.js` without a second request.
+      loadSettingFlag('pwa_service_worker_enabled', true),
+      // Auto-surfacing install banner kill switch (master_plan §2AZ).
+      loadSettingFlag('pwa_install_banner_enabled', true),
+    ]);
   const showBanner = bannerEnabled && bannerText.trim().length > 0;
   const staff = maintenance ? await viewerIsStaff() : false;
   const gated = maintenance && !staff;
@@ -183,6 +187,10 @@ export async function AppShell({ children }: { children: ReactNode }) {
           </main>
         </div>
         <BottomNav />
+        {/* Global install banner (master_plan §2AZ): a bottom mini-infobar mounted once, above the
+          bottom nav. Suppressed under maintenance gating; it manages its own once-per-device
+          appearance, delay and dismissal internally. */}
+        <InstallBanner enabled={installBannerEnabled && !gated} />
         {legal.needsAcceptance && <LegalConsentGate />}
       </div>
     </PwaProvider>

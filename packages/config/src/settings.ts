@@ -225,6 +225,9 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   // (in-app + email unaffected); install prompt off -> the "Add to Home Screen" row is hidden.
   pwa_service_worker_enabled: true,
   pwa_install_prompt_enabled: true,
+  // Auto-surfacing bottom install banner (master_plan §2AZ). Off silences the banner while leaving
+  // the passive ME-page "Add to Home Screen" card (pwa_install_prompt_enabled) untouched.
+  pwa_install_banner_enabled: true,
   push_notifications_enabled: true,
   push_max_devices_per_user: 5,
 

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.67
+# VouchPlay Master Product & Code Execution Handover v1.76
 
-_(File retains its `…v1.1.md` name; content is v1.75 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.76 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -5163,9 +5163,17 @@ Offline writes:
 - **Kill switch:** Admin `pwa_service_worker_enabled` off -> `/sw.js` serves a worker that unregisters
   itself and clears caches on the next visit; no deploy needed.
 - **Install surfaces:** "VouchPlay on your phone" card on the ME page - Install (Android/Chrome native
-  prompt), "Show me how" (iPhone/iPad Safari, 3-step sheet), "Open in Chrome or Safari to install"
-  (Facebook / Messenger / Instagram in-app browsers); the row disappears once installed. Admin
-  `pwa_install_prompt_enabled` hides the install row. No automatic install banner beyond the browser's own.
+  prompt), "Show me how" (iPhone/iPad Safari, 3-step sheet), "Open in Chrome" (Facebook / Messenger /
+  Instagram in-app browsers on Android, a one-tap `intent://` hand-off), Copy link (iPhone in-app
+  browsers); the row disappears once installed. Admin `pwa_install_prompt_enabled` hides the install
+  row.
+- **Global install banner (v1.76, master_plan §2AZ):** a slim mini-infobar, mounted once in
+  `AppShell`, auto-surfaces ~2.5s after arrival on any page (bottom of the screen, above the mobile
+  bottom nav; bottom-right on desktop) with the same device-adaptive primary action as the ME card,
+  driven by the pure `deriveInstallBranch()`. Shows at most once per device; dismiss persists
+  forever; gone instantly on install or standalone. Admin `pwa_install_banner_enabled` is a separate
+  kill switch from `pwa_install_prompt_enabled`, so the auto-banner can be silenced while the passive
+  ME-page card stays on.
 - **Push:** see §42.7.
 
 ---
@@ -6484,6 +6492,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.76 (2026-09-14)
+
+_Global auto-surfacing install banner + Android Chrome hand-off (master_plan §2AZ). No migration._
+
+- **§44.1 amended:** a slim mini-infobar slides up from the bottom of every page ~2.5s after arrival
+  (above the mobile bottom nav; bottom-right on desktop), offering a device-adaptive primary action -
+  Install (Android Chrome native prompt), **Open in Chrome** (Android in-app browser, a one-tap
+  `intent://` hand-off out of Facebook/Messenger/Instagram - the highest-leverage friction cut for PH
+  traffic), Copy link (iPhone in-app browser), or Show me how (iPhone Safari). Shows once per device;
+  dismiss persists forever; gone instantly on install. New Admin kill switch
+  `pwa_install_banner_enabled` (default true), separate from `pwa_install_prompt_enabled` so the
+  passive ME-page card can stay on even if the banner is silenced. The ME-page card's in-app-browser
+  row also gained the same Chrome hand-off (was copy-link-only).
+- Deferred: silent auto-redirect on page load, forcing Safari on iPhone, install-conversion analytics.
+
 ## v1.75 (2026-09-14)
 
 _PWA delivered (master_plan §2AY). Migration `0049`._

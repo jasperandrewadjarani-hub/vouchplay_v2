@@ -3187,3 +3187,23 @@ id + 3 icons; /offline prerendered (sin1); all six icons 200 image/png; <head> c
 0049 verified read-only: anon select refused (42501), service-role select ok (0 rows). VAPID keys set in
 Vercel (public as Config, private as Secret, Production + Preview). Jasper to rotate the pair once
 (the private key appeared in a screenshot) while push_subscriptions is still empty.
+
+## 2026-09-14 - Global auto-surfacing install banner + Android Chrome hand-off (§2AZ, builds on §2AY)
+Ask: make installing the PWA as low-friction as possible, especially for PH users arriving through the
+Facebook/Messenger in-app browser (which cannot install a PWA at all). Built: a slim mini-infobar
+(`components/pwa/install-banner.tsx`) mounted once in `AppShell`, sliding up from the bottom ~2.5s
+after arrival on any page, floating above the mobile bottom nav (bottom-right on desktop, wrapper
+`pointer-events-none` so nav taps pass through). Device-adaptive primary button via a pure, unit-tested
+`deriveInstallBranch()` (`components/pwa/install-banner-state.ts`), same priority order as
+`install-row.tsx`: Android Chrome with a real prompt -> Install; Android in-app browser -> **Open in
+Chrome** via a new `openInChrome()` (`lib/pwa/detect.ts`) `intent://` hand-off with a
+`browser_fallback_url` safety net - the single highest-leverage friction cut for PH traffic; iPhone
+in-app browser -> Copy link; iPhone Safari -> Show me how (existing `IosInstallSheet`); desktop ->
+nothing. Anti-nag: once per device, dismiss persists forever (`localStorage`
+`vp:install-banner:dismissed`), gone instantly on install/standalone, respects reduced-motion. New
+Admin kill switch `pwa_install_banner_enabled` (default true, `pwa` group) is separate from the
+existing `pwa_install_prompt_enabled` so Admin can silence the auto-banner while keeping the passive
+ME-page card. `AppInstallCard`'s in-app-browser row got the same Chrome hand-off upgrade (was
+copy-link-only). No database migration - additive client UI + one new settings row default. Deployed
+live during the open Hermosa registration window. Deferred: silent auto-redirect on page load (webviews
+block gesture-less navigation), forcing Safari on iPhone (no OS scheme), install-conversion analytics.

@@ -1,0 +1,152 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
+import { usePwa } from '@/components/pwa/pwa-provider';
+import { openInChrome } from '@/lib/pwa/detect';
+import { deriveInstallBranch, installBranchCopy } from './install-banner-state';
+import { IosInstallSheet } from './ios-install-sheet';
+
+const DISMISS_KEY = 'vp:install-banner:dismissed';
+const APPEAR_DELAY_MS = 2500;
+
+/**
+ * Global auto-surfacing install banner (master_plan §2AZ). A bottom "mini-infobar" that slides up a
+ * couple of seconds after arrival on any page and offers the one install action that fits the device -
+ * install prompt, Chrome hand-off, or iOS steps. Mounted once in `AppShell`, floating just above the
+ * mobile bottom nav / bottom-right on desktop, so it never collides with the top nudge chain. Shown at
+ * most once per device: dismissing it, or installing, hides it for good (localStorage). Gated by the
+ * `pwa_install_banner_enabled` Admin kill switch; the passive ME-page card (`AppInstallCard`) stays as
+ * the always-there way back in for anyone who dismissed this.
+ */
+export function InstallBanner({ enabled }: { enabled: boolean }) {
+  const pwa = usePwa();
+  // Assume dismissed until localStorage says otherwise, so nothing can flash before the check runs.
+  const [dismissed, setDismissed] = useState(true);
+  const [shown, setShown] = useState(false);
+  const [visible, setVisible] = useState(false); // drives the slide-up/fade transition
+  const [copied, setCopied] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const branch = deriveInstallBranch({
+    ready: pwa.ready,
+    standalone: pwa.standalone,
+    canInstall: pwa.canInstall,
+    inAppBrowser: pwa.inAppBrowser,
+    ios: pwa.ios,
+  });
+
+  // Read the once-per-device dismissal after mount (never during SSR).
+  useEffect(() => {
+    try {
+      setDismissed(window.localStorage.getItem(DISMISS_KEY) === '1');
+    } catch {
+      setDismissed(false);
+    }
+  }, []);
+
+  // Arm the appear timer once a valid branch exists and the banner is allowed. Cleared if the branch
+  // disappears (e.g. the user installs) before it fires.
+  useEffect(() => {
+    if (!enabled || dismissed || !branch || shown) return;
+    timerRef.current = setTimeout(() => setShown(true), APPEAR_DELAY_MS);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [enabled, dismissed, branch, shown]);
+
+  // Kick the slide-up on the frame after the node mounts.
+  useEffect(() => {
+    if (!shown) return;
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, [shown]);
+
+  function dismiss() {
+    setVisible(false);
+    setShown(false);
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(DISMISS_KEY, '1');
+    } catch {
+      // Non-fatal: the banner may simply appear again on a later visit.
+    }
+  }
+
+  if (!enabled || dismissed || !branch || !shown) return null;
+
+  const copy = installBranchCopy(branch);
+
+  async function onAction() {
+    switch (branch) {
+      case 'android': {
+        // Any resolved outcome (installed or the user declined the OS prompt) retires the banner -
+        // re-nagging after a decision would be exactly the behaviour we are avoiding.
+        const outcome = await pwa.promptInstall();
+        if (outcome !== 'unavailable') dismiss();
+        break;
+      }
+      case 'android-inapp':
+        openInChrome();
+        break;
+      case 'ios-inapp':
+        try {
+          await navigator.clipboard.writeText(location.href);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // Clipboard API unavailable - nothing more we can safely do here.
+        }
+        break;
+      case 'ios':
+        setSheetOpen(true);
+        break;
+    }
+  }
+
+  return (
+    <>
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)] md:justify-end md:px-4 md:pb-4"
+        aria-live="polite"
+      >
+        <div
+          role="region"
+          aria-label="Install VouchPlay"
+          className={`border-border bg-surface pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border p-3 shadow-lg transition-all duration-300 motion-reduce:transition-none md:max-w-sm ${
+            visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+          }`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand icon, no next/image needed */}
+          <img
+            src="/icons/icon-192.png"
+            alt=""
+            aria-hidden
+            className="h-11 w-11 shrink-0 rounded-xl"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-foreground text-sm leading-tight font-semibold">{copy.title}</p>
+            <p className="text-foreground-muted mt-0.5 text-xs leading-snug">{copy.subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onAction}
+            className="vp-gradient vp-glow shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold text-white"
+          >
+            {branch === 'ios-inapp' && copied ? 'Copied' : copy.action}
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss"
+            className="text-foreground-muted hover:text-foreground -mr-1 shrink-0 rounded-lg p-1.5"
+          >
+            <X size={16} aria-hidden />
+          </button>
+        </div>
+      </div>
+      {branch === 'ios' && <IosInstallSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />}
+    </>
+  );
+}
