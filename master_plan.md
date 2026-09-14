@@ -5497,6 +5497,48 @@ insistent and an installed user gets notifications without hunting for a toggle.
   readability. Existing original objects stay untouched; a future retention/backfill decision needs
   its own approved data-migration plan.
 
+## 2BA. Installed-app login: hide "Continue with Google" in standalone to avoid the OAuth browser strip (2026-09-14)
+
+### Problem
+
+A player who had installed the PWA reported that after signing in the app was showing inside a Chrome
+toolbar strip (`× | vouchplayph.vercel.app | ⋮`) - "making it look like a webpage." The strip is a
+**Chrome Custom Tab**: the browser's own chrome, drawn by Android, not anything in our markup. No web
+or manifest setting can hide a browser toolbar while the app is being viewed in a browser; only the
+installed PWA (manifest `display: 'standalone'`) has no toolbar.
+
+### Cause
+
+The trigger is **"Continue with Google."** `signInWithOAuth` navigates the browser off our origin to
+`accounts.google.com`, which is outside the PWA scope (`scope: '/'`). Android services an out-of-scope
+navigation from a standalone PWA by opening a Chrome Custom Tab on top of it. When Google redirects
+back to our in-scope `/auth/callback`, Chrome keeps rendering the (now in-scope) app inside that Custom
+Tab instead of handing control back to the installed app - stranding the user in the browser strip,
+logged in but "outside" the app. This is a known, unfixable-in-pure-web Android behavior. The
+email-code (OTP) and password flows never leave our origin, so they never open a Custom Tab.
+
+### Decision
+
+In the installed app (standalone), offer only the two in-origin login methods (Email code + Password)
+and **hide "Continue with Google."** Google stays available in a normal browser, where a toolbar is
+present anyway and the redirect is harmless. This keeps installed-app login fully inside the standalone
+window - no browser hop, no strip - consistent with the low-friction, app-like goal of §2AZ.
+
+### Implementation
+
+- `apps/web/src/components/auth/google-button.tsx` - `GoogleSection` (rendered by both the login and
+  signup pages) now detects standalone via the existing `isStandaloneDisplay()` helper in a mount
+  effect and returns `null` when standalone. Detection state starts `null` and also renders nothing
+  until the effect runs, so the button never flashes in before we know the display mode (no hydration
+  mismatch: the SSR/first-paint output is "no button" and matches the first client render).
+- The auth route group (`(auth)/layout.tsx`) has no `PwaProvider`, so `usePwa()` is unavailable there;
+  the self-contained `isStandaloneDisplay()` call is used directly instead of the context.
+
+### Verification
+
+- Typecheck, lint pass. Manual: in a desktop/mobile browser the Google button shows as before; in the
+  installed app the login screen shows only Email code + Password.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

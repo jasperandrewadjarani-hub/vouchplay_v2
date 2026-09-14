@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { isStandaloneDisplay } from '@/lib/pwa/detect';
 
 /**
  * Google sign-in. Renders only when Google auth is enabled for this environment.
@@ -59,9 +60,23 @@ export function GoogleButton({ next }: { next?: string }) {
   );
 }
 
-/** Google button plus an "or" divider - the whole block disappears when Google is disabled. */
+/**
+ * Google button plus an "or" divider. The whole block disappears when Google is disabled, AND when the
+ * app is running as the installed PWA (standalone). Google's OAuth start navigates off our origin, which
+ * Android opens in a Chrome Custom Tab and never hands back to the standalone app - stranding the user
+ * in a browser strip after login (master_plan §2BA). Email-code and password stay in-origin, so the
+ * installed app offers only those. `null` = detection not yet run: render nothing so the button never
+ * flashes in before we know we're standalone.
+ */
 export function GoogleSection({ next }: { next?: string }) {
+  const [standalone, setStandalone] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setStandalone(isStandaloneDisplay());
+  }, []);
+
   if (process.env.NEXT_PUBLIC_GOOGLE_AUTH_ENABLED !== 'true') return null;
+  if (standalone === null || standalone) return null;
 
   return (
     <>

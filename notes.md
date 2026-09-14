@@ -3229,3 +3229,16 @@ from this icon on your home screen" card (auto-retires ~8s) the moment the app i
 button or the browser's own menu. It cannot launch the standalone app or close the browser tab - no web
 API allows either - so the icon hand-off is the most possible. Android-only in practice (iOS fires no
 `appinstalled`). No migration. Handover -> v1.78.
+
+## 2026-09-14 - Installed-app login hides "Continue with Google" (§2BA)
+
+A player who installed the PWA saw the app inside a Chrome toolbar strip (`x | vouchplayph.vercel.app |
+...`) after signing in. That strip is a Chrome Custom Tab - the browser's own chrome, not our markup - and
+no web/manifest setting removes a browser toolbar; only the installed standalone app has none. The trigger
+is "Continue with Google": `signInWithOAuth` navigates off our origin to accounts.google.com (out of
+scope), which Android opens in a Custom Tab, and the in-scope redirect back never hands control to the
+standalone app - stranding the user in the browser strip. Email-code and password stay in-origin, so they
+never do this. Fix: `GoogleSection` (login + signup) now detects standalone via `isStandaloneDisplay()`
+and renders nothing when installed, so the installed app offers only Email code + Password; Google stays in
+the browser where a toolbar exists anyway. Auth routes have no PwaProvider, so the helper is called
+directly, not via `usePwa()`. No migration. Handover -> v1.79.

@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.78
+# VouchPlay Master Product & Code Execution Handover v1.79
 
-_(File retains its `…v1.1.md` name; content is v1.78 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.79 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.79 (2026-09-14)
+
+_Installed-app login hides "Continue with Google" (master_plan §2BA). No migration._
+
+- An installed-app player was landing inside a Chrome toolbar strip (a Custom Tab) after signing in. The
+  cause is "Continue with Google": its OAuth start navigates off our origin (out of PWA scope), which
+  Android opens in a Custom Tab, and the in-scope redirect back never returns control to the standalone
+  app. Email-code and password stay in-origin and never do this. `GoogleSection` (login + signup) now
+  detects standalone via `isStandaloneDisplay()` and renders nothing when installed, so the installed app
+  offers only Email code + Password; Google is unchanged in a normal browser (which has a toolbar anyway).
+  The browser's own toolbar cannot be removed by web code - only the installed standalone app has none.
+
 ## v1.78 (2026-09-14)
 
 _Post-install confirmation nudge (master_plan §2AZ addendum). No migration._
