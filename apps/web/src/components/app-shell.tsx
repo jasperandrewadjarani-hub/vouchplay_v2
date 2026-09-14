@@ -6,6 +6,7 @@ import { Sidebar } from './sidebar';
 import { BottomNav } from './bottom-nav';
 import { PageResumeRefresh } from './ui/page-resume-refresh';
 import { WelcomeModal } from './welcome-modal';
+import { PwaProvider } from './pwa/pwa-provider';
 import { LegalConsentGate } from './legal/legal-consent-gate';
 import { SiteFooter } from './site-footer';
 import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
@@ -29,11 +30,14 @@ import { getViewerUnpaidSlots } from '@/lib/tournaments/unpaid';
  * access so they can turn it back off from /admin.
  */
 export async function AppShell({ children }: { children: ReactNode }) {
-  const [bannerEnabled, bannerText, maintenance, welcomeEnabled] = await Promise.all([
+  const [bannerEnabled, bannerText, maintenance, welcomeEnabled, swEnabled] = await Promise.all([
     loadSettingFlag('announcement_banner_enabled', false),
     loadSettingText('announcement_banner', ''),
     loadSettingFlag('maintenance_mode', false),
     loadSettingFlag('welcome_modal_enabled', false),
+    // PWA service worker kill switch (master_plan §2AY decision B) - read here so PwaProvider knows
+    // whether to register (or actively unregister) `/sw.js` without a second request.
+    loadSettingFlag('pwa_service_worker_enabled', true),
   ]);
   const showBanner = bannerEnabled && bannerText.trim().length > 0;
   const staff = maintenance ? await viewerIsStaff() : false;
@@ -126,60 +130,62 @@ export async function AppShell({ children }: { children: ReactNode }) {
     : null;
 
   return (
-    <div className="min-h-dvh">
-      <PageResumeRefresh />
-      {welcome && !gated && <WelcomeModal copy={welcome.copy} authed={welcome.authed} />}
-      {showBanner && (
-        <div className="vp-gradient text-white">
-          <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-sm font-medium">
-            <Megaphone size={16} className="shrink-0" aria-hidden />
-            <span className="min-w-0">{bannerText.trim()}</span>
-          </div>
-        </div>
-      )}
-      <Header />
-      {/* Mutually-exclusive self-nudge chain: the unpaid-slot banner wins over minimal power, which
-          wins over the generic unvouched nudge, which wins over the identity self-nudge (master_plan
-          §2AP F, §2AN decision 5, §2AG Phase C D2). */}
-      {showUnpaid && unpaidSlots && !gated ? (
-        <UnpaidSlotStrip summary={unpaidSlots} />
-      ) : minimalPower && !gated ? (
-        <MinimalPowerStrip multiplier={minimalPower.multiplier} />
-      ) : (
-        nudge.unvouched &&
-        !gated && (
-          // A quiet amber strip just below the logo for a player with no vouches yet - a nudge, not
-          // an interruption. It links to their profile so they can share it and ask for vouches (§2O).
-          <div className="border-warning/40 bg-warning/10 border-b">
-            <div className="text-foreground mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
-              <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
-              <span className="min-w-0 flex-1">
-                Your profile has no vouches yet. Ask players you&rsquo;ve played with to vouch for
-                you so your skill is trusted.
-              </span>
-              {nudge.slug && (
-                <Link
-                  href={`/players/${nudge.slug}`}
-                  className="text-warning shrink-0 font-semibold underline underline-offset-2"
-                >
-                  My profile
-                </Link>
-              )}
+    <PwaProvider serviceWorkerEnabled={swEnabled}>
+      <div className="min-h-dvh">
+        <PageResumeRefresh />
+        {welcome && !gated && <WelcomeModal copy={welcome.copy} authed={welcome.authed} />}
+        {showBanner && (
+          <div className="vp-gradient text-white">
+            <div className="mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-sm font-medium">
+              <Megaphone size={16} className="shrink-0" aria-hidden />
+              <span className="min-w-0">{bannerText.trim()}</span>
             </div>
           </div>
-        )
-      )}
-      {identityNudge.show && !gated && <IdentityNudgeBanner />}
-      <div className="mx-auto flex w-full max-w-6xl">
-        <Sidebar />
-        <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">
-          {gated ? <MaintenanceScreen /> : children}
-          {!gated && <SiteFooter />}
-        </main>
+        )}
+        <Header />
+        {/* Mutually-exclusive self-nudge chain: the unpaid-slot banner wins over minimal power, which
+          wins over the generic unvouched nudge, which wins over the identity self-nudge (master_plan
+          §2AP F, §2AN decision 5, §2AG Phase C D2). */}
+        {showUnpaid && unpaidSlots && !gated ? (
+          <UnpaidSlotStrip summary={unpaidSlots} />
+        ) : minimalPower && !gated ? (
+          <MinimalPowerStrip multiplier={minimalPower.multiplier} />
+        ) : (
+          nudge.unvouched &&
+          !gated && (
+            // A quiet amber strip just below the logo for a player with no vouches yet - a nudge, not
+            // an interruption. It links to their profile so they can share it and ask for vouches (§2O).
+            <div className="border-warning/40 bg-warning/10 border-b">
+              <div className="text-foreground mx-auto flex w-full max-w-6xl items-center gap-2 px-4 py-2 text-xs sm:text-sm">
+                <ShieldAlert size={16} className="text-warning shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  Your profile has no vouches yet. Ask players you&rsquo;ve played with to vouch for
+                  you so your skill is trusted.
+                </span>
+                {nudge.slug && (
+                  <Link
+                    href={`/players/${nudge.slug}`}
+                    className="text-warning shrink-0 font-semibold underline underline-offset-2"
+                  >
+                    My profile
+                  </Link>
+                )}
+              </div>
+            </div>
+          )
+        )}
+        {identityNudge.show && !gated && <IdentityNudgeBanner />}
+        <div className="mx-auto flex w-full max-w-6xl">
+          <Sidebar />
+          <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:pb-8">
+            {gated ? <MaintenanceScreen /> : children}
+            {!gated && <SiteFooter />}
+          </main>
+        </div>
+        <BottomNav />
+        {legal.needsAcceptance && <LegalConsentGate />}
       </div>
-      <BottomNav />
-      {legal.needsAcceptance && <LegalConsentGate />}
-    </div>
+    </PwaProvider>
   );
 }
 

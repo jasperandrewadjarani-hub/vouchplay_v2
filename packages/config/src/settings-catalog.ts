@@ -28,7 +28,8 @@ export type SettingGroupKey =
   | 'partners'
   | 'announcement'
   | 'vouch_integrity'
-  | 'directory';
+  | 'directory'
+  | 'pwa';
 
 export interface SettingGroup {
   key: SettingGroupKey;
@@ -125,6 +126,11 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     key: 'directory',
     label: 'Player directory',
     help: 'Sort, filter and badge windows for the public player directory (master_plan §2AG).',
+  },
+  {
+    key: 'pwa',
+    label: 'App & push',
+    help: 'The installable app (service worker, home-screen prompt) and Web Push kill switches (master_plan §2AY).',
   },
 ] as const;
 
@@ -711,6 +717,36 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     group: 'partners',
     kind: 'bool',
     help: 'Off hides every "Find a partner" entry point and the deck page (master_plan §2AV I).',
+  },
+  {
+    key: 'pwa_service_worker_enabled',
+    label: 'Service worker enabled',
+    group: 'pwa',
+    kind: 'bool',
+    help: 'Off makes /sw.js serve a worker that unregisters itself and clears its caches on the next visit - a no-deploy rollback (master_plan §2AY B).',
+  },
+  {
+    key: 'pwa_install_prompt_enabled',
+    label: 'Show "Add to Home Screen"',
+    group: 'pwa',
+    kind: 'bool',
+    help: "Off hides the install row on the ME page; the browser's own install banner is unaffected (master_plan §2AY E).",
+  },
+  {
+    key: 'push_notifications_enabled',
+    label: 'Push notifications enabled',
+    group: 'pwa',
+    kind: 'bool',
+    help: 'Off stops every Web Push send; in-app and email notifications are unaffected (master_plan §2AY D).',
+  },
+  {
+    key: 'push_max_devices_per_user',
+    label: 'Max push devices per player',
+    group: 'pwa',
+    kind: 'int',
+    min: 1,
+    max: 20,
+    help: 'Past the cap the oldest device subscription is dropped when a new one is saved (master_plan §2AY D).',
   },
   {
     key: 'partner_weight_slot',

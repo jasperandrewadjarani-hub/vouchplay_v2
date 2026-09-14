@@ -3147,3 +3147,36 @@ Deferred: partner invite by email, guest sweeper (30 days, no live entry), expor
 - Immediate mitigation: disable/raise the Supabase spend cap so the project does not go read-only
   while over quota (the overage is pennies). Future avatar-egress fix if ever needed =
   resize-on-upload, not transform-on-read.
+
+## 2026-09-14 - Confirmed: avatars are already resized on upload (context for the transform revert)
+Verified this session while answering "are we already converting uploaded profile pictures?": yes.
+apps/web/src/lib/images/normalize-upload-image.ts re-decodes and re-encodes every avatar to WebP,
+AVATAR_IMAGE_PROFILE = max 512px (fit inside, no enlarge), <=250KB, quality ladder 82->52; called from
+uploadAvatar in lib/actions/profile.ts (both onboarding and profile edit). So the stored /object/public/
+object is ALREADY a small WebP - the reverted avatarThumb render/image transform was resizing an
+already-small object, which is why raw serving is correct and the "future fix = resize-on-upload" note in
+master_plan 2AV addendum 5 was effectively already satisfied. Club logos + payment proofs + ID docs use
+the same normalizer with their own profiles. No code change; nothing to do.
+
+## 2026-09-14 - PWA: installable app + service worker + offline screen + Web Push (§2AY, migration 0049)
+Ask: "we want this PWA thing functioning" today. Ground truth: the manifest existed (handover §44,
+VP-007) but its three icon files were byte-identical 1.1 MB copies of the raw logo, there was no
+favicon / apple icon, no service worker, no push; 0012's header had parked push as "a later adapter".
+Built: real icons generated from the emblem (`scripts/generate-pwa-icons.mjs`, sharp); a hand-written
+service worker served from `app/sw.js/route.ts` with the deployment id as cache version (navigations
+network-only with `/offline` fallback, `_next/static` cache-first, icons SWR, nothing else touched;
+Admin kill switch `pwa_service_worker_enabled` serves a self-unregistering worker); `/offline`; Web Push
+via `web-push` + VAPID mirrored from `notify()`/`notifyMany()` through `after()` (no latency on the
+user's action; per-category mutes already apply); `push_subscriptions` (0049, service-role only);
+"VouchPlay on your phone" card on ME (Install / iOS "Show me how" sheet / in-app-browser hint +
+"Notifications on this device" switch with self-explaining states and a confirmation push); the same
+switch on Notification preferences; `PushOptInCta` on the wizard Done step and the vouch success
+screen; Admin Operations "Push: n devices" + "Send me a test push". Settings group `pwa`.
+Jasper's steps: `npx web-push generate-vapid-keys` -> Vercel env `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY` (Production + Preview) BEFORE pushing -> apply `scripts/apply-0049.sql` -> push.
+Push is inert (fail-open) until the keys exist. Deferred: app badge counts, per-category push
+preferences, manifest screenshots, Capacitor store wrappers, push digest/quiet hours.
+Review fixes (main session, after the three builders): install row checks in-app browser before iOS;
+vouch success dialog holds its auto-close while the push opt-in is showing; `enable()` swallows a
+missing `Notification` API; the once-per-session re-save flags itself before the request. Gates: full
+suite green (902 tests), production build green (`/sw.js` dynamic, `/offline` static, icons auto-linked).

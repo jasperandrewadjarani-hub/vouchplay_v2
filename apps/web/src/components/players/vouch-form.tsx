@@ -8,6 +8,7 @@ import { submitVouch, type VouchActionState } from '@/lib/actions/vouch';
 import { VOUCH_INTERACTION_OPTIONS } from '@/lib/vouches/interaction';
 import { Field, Select, FormError, FormMessage } from '@/components/ui/field';
 import { SubmitButton } from '@/components/ui/button';
+import { PushOptInCta } from '@/components/pwa/push-opt-in-cta';
 
 const empty: VouchActionState = {};
 
@@ -47,13 +48,17 @@ export function VouchForm({
 
   // Success is a dead-simple confirmation now (master_plan §2AT Decision H): refresh the profile
   // behind the dialog and auto-close shortly after, instead of asking for another decision here.
+  // While the contextual push opt-in (master_plan §2AY Decision F) is showing, the auto-close is
+  // held - a nudge that vanishes mid-tap is worse than none; "Not now" or "all set" releases it.
+  const [holdOpen, setHoldOpen] = useState(false);
   useEffect(() => {
     if (!state.ok) return;
     router.refresh();
+    if (holdOpen) return;
     const timer = setTimeout(onClose, 1500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.ok, router]);
+  }, [state.ok, router, holdOpen]);
 
   return (
     <div
@@ -104,6 +109,12 @@ export function VouchForm({
               <Check size={28} aria-hidden />
             </span>
             <h2 className="text-foreground text-lg font-bold">Vouch submitted</h2>
+            {/* master_plan §2AY Decision F: contextual push nudge at a moment of real value. */}
+            <PushOptInCta
+              context="vouch"
+              onVisible={() => setHoldOpen(true)}
+              onHidden={() => setHoldOpen(false)}
+            />
           </div>
         ) : (
           <form action={action} className="space-y-4">

@@ -3,20 +3,24 @@
 import { useState, useTransition } from 'react';
 import { MUTABLE_CATEGORIES, CATEGORY_LABELS } from '@vouchplay/core';
 import { updateNotificationPreferences } from '@/lib/actions/notifications';
+import { PushToggle } from '@/components/pwa/push-toggle';
 
 /**
  * Notification preferences (handover §27.5). Non-critical categories can be turned off; critical
  * account/security + moderation always stay on and are not shown here. Email is a master opt-in that
- * only sends once the app email transport is configured.
+ * only sends once the app email transport is configured. "On this device" (master_plan §2AY Decision
+ * E) is the same push switch as the ME card, placed above the email opt-in.
  */
 export function NotificationPreferencesForm({
   mutedCategories,
   emailEnabled,
   emailChannelReady,
+  pushEnabled,
 }: {
   mutedCategories: string[];
   emailEnabled: boolean;
   emailChannelReady: boolean;
+  pushEnabled: boolean;
 }) {
   const [muted, setMuted] = useState<Set<string>>(new Set(mutedCategories));
   const [email, setEmail] = useState(emailEnabled);
@@ -42,6 +46,11 @@ export function NotificationPreferencesForm({
 
   return (
     <div className="space-y-4">
+      <div className="border-border rounded-xl border p-1">
+        <p className="text-foreground px-2 pt-2 text-sm font-medium">On this device</p>
+        <PushToggle adminEnabled={pushEnabled} id="notification-prefs-push" />
+      </div>
+
       <div className="space-y-2">
         <p className="text-foreground text-sm font-medium">In-app notifications</p>
         <p className="text-foreground-muted text-xs">

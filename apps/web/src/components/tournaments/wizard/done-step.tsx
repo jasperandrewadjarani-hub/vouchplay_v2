@@ -3,6 +3,7 @@ import { CircleCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { formatMonthDay } from '@/lib/format-date';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
+import { PushOptInCta } from '@/components/pwa/push-opt-in-cta';
 import { ClubRepSelector } from '../club-rep-selector';
 import type { WizardPayFor, WizardTournament } from './types';
 
@@ -117,6 +118,10 @@ export function DoneStep({
           </p>
         )}
       </div>
+
+      {/* master_plan §2AY Decision F: a compact, dismissible nudge at a moment of real value - never
+          blocks the primary action below it. */}
+      <PushOptInCta context="registration" />
 
       <Button type="button" onClick={onViewRegistrations} className="w-full">
         {hasClubSelected ? 'View my registrations' : 'Decide later · View my registrations'}

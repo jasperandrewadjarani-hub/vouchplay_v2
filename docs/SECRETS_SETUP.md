@@ -74,6 +74,44 @@ Gmail SMTP requires an **App Password**, which requires **2-Step Verification** 
 
 ---
 
+## 4) Web Push (VAPID keys)
+
+Push notifications (master_plan §2AY D) are **inert until these exist** - exactly like the SMTP
+channel above. No code change switches them on; the env vars do.
+
+1. Generate the pair once (they are permanent - changing them invalidates every existing device
+   subscription, and every installed phone would have to re-subscribe):
+
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+
+   It prints a **Public Key** and a **Private Key** (URL-safe base64).
+
+2. In Vercel → **Project** → **Settings** → **Environment Variables**, add them for **both
+   Production AND Preview**:
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` = the public key (this one is public by design - it ships in the
+     browser bundle so the service worker can subscribe).
+   - `VAPID_PRIVATE_KEY` = the private key. **Server-only** - never prefix it with `NEXT_PUBLIC_`.
+   - `VAPID_SUBJECT` (optional) = a `mailto:` or `https://` contact the push services can reach.
+     Defaults to `mailto:vouchplay@gmail.com` when unset.
+
+   **Do this BEFORE the next push-to-deploy.** Vercel bakes `NEXT_PUBLIC_*` values into the build, and
+   env changes only take effect on a **new deployment** - adding them after a deploy leaves push inert
+   until something else triggers a rebuild.
+
+3. Mirror the same three lines in `apps/web/.env.local` for local development.
+
+4. Apply `scripts/apply-0049.sql` (the `push_subscriptions` table) in the Supabase SQL editor.
+
+5. Verify after the deploy: sign in, turn on **Notifications on this device** on the ME page, and use
+   **Send me a test push** in Admin → Operations. Admin also shows the live device count.
+
+> The Admin kill switch `push_notifications_enabled` (Settings → App & push) turns delivery off with
+> no deploy. Keys present + switch on = push sends; either missing = silently inert.
+
+---
+
 ## Final: `apps/web/.env.local`
 
 ```dotenv
@@ -86,6 +124,9 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_USER=vouchplay@gmail.com
 SMTP_PASS=xxxxxxxxxxxxxxxx
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=BB_xxx                     # npx web-push generate-vapid-keys
+VAPID_PRIVATE_KEY=xxx                                   # server only - never NEXT_PUBLIC_
+VAPID_SUBJECT=mailto:vouchplay@gmail.com                # optional; this is the default
 ```
 
 Never commit `.env.local` (it's gitignored). Tell me when these are in place - I'll then

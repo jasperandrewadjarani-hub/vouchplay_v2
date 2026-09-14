@@ -7,8 +7,10 @@ import { parseVisibility } from '@vouchplay/config';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { OrganizerApply } from '@/components/roles/organizer-apply';
 import { RatingsPrivacyCard } from '@/components/me/ratings-privacy-card';
+import { AppInstallCard } from '@/components/me/app-install-card';
 import { ButtonLink } from '@/components/ui/button';
 import { LinkSpinner } from '@/components/ui/link-spinner';
+import { loadSettingFlag } from '@/lib/settings';
 
 export const metadata: Metadata = { title: 'Me' };
 
@@ -38,7 +40,12 @@ export default async function MePage({
   }
 
   const profile = await getMyProfile();
-  const [isStaff, isAdmin] = await Promise.all([viewerIsStaff(), viewerIsAdmin()]);
+  const [isStaff, isAdmin, installPromptEnabled, pushEnabled] = await Promise.all([
+    viewerIsStaff(),
+    viewerIsAdmin(),
+    loadSettingFlag('pwa_install_prompt_enabled', true),
+    loadSettingFlag('push_notifications_enabled', true),
+  ]);
   const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '-';
 
   // Organizer role state (§17.1) for the apply-as-organizer card.
@@ -101,6 +108,10 @@ export default async function MePage({
           </div>
         )}
       </div>
+
+      {profile?.onboarded_at && (
+        <AppInstallCard installPromptEnabled={installPromptEnabled} pushEnabled={pushEnabled} />
+      )}
 
       {profile?.onboarded_at && (
         <RatingsPrivacyCard

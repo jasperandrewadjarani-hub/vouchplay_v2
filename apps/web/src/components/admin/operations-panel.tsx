@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, Bell } from 'lucide-react';
 import { runRemindersNow } from '@/lib/actions/admin-ops';
+import { sendTestPush } from '@/lib/actions/push';
 import { formatDateTime } from '@/lib/format-date';
 
 /** Mirrors `getLastReminderRun()`'s return shape (master_plan §2AQ Decision G, `@/lib/tournaments/
@@ -25,10 +26,21 @@ function summarizeCounts(counts: Record<string, number> | null | undefined): str
  * Admin "Run reminders now" (master_plan §2AQ Decision G) - a manual trigger for the same
  * `runReminders()` the nightly cron calls, next to a plain-language line about the last run.
  */
-export function OperationsPanel({ lastRun }: { lastRun: LastReminderRun | null }) {
+export function OperationsPanel({
+  lastRun,
+  pushDeviceCount,
+}: {
+  lastRun: LastReminderRun | null;
+  /** Active `push_subscriptions` rows (master_plan §2AY Decision G) - null when not yet known. */
+  pushDeviceCount?: number | null;
+}) {
   const router = useRouter();
   const [result, setResult] = useState<{ kind: 'success' | 'danger'; text: string } | null>(null);
   const [pending, start] = useTransition();
+  const [pushResult, setPushResult] = useState<{ kind: 'success' | 'danger'; text: string } | null>(
+    null,
+  );
+  const [pushPending, startPush] = useTransition();
 
   const submit = () => {
     setResult(null);
@@ -43,6 +55,21 @@ export function OperationsPanel({ lastRun }: { lastRun: LastReminderRun | null }
         text: summarizeCounts(response.counts) ?? 'Reminders run complete.',
       });
       router.refresh();
+    });
+  };
+
+  const submitTestPush = () => {
+    setPushResult(null);
+    startPush(async () => {
+      const response = await sendTestPush();
+      if (!response.ok) {
+        setPushResult({ kind: 'danger', text: response.error ?? 'Could not send a test push.' });
+        return;
+      }
+      setPushResult({
+        kind: 'success',
+        text: `Sent to ${response.sent ?? 0} device${response.sent === 1 ? '' : 's'}.`,
+      });
     });
   };
 
@@ -77,6 +104,28 @@ export function OperationsPanel({ lastRun }: { lastRun: LastReminderRun | null }
           className={`mt-2 text-xs ${result.kind === 'danger' ? 'text-danger' : 'text-success'}`}
         >
           {result.text}
+        </p>
+      )}
+
+      {/* master_plan §2AY Decision G: push device count + a self-test, same pattern as reminders. */}
+      <p className="text-foreground-muted mt-4 flex items-start gap-2 text-sm">
+        <Bell className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <span>Push · {pushDeviceCount ?? 0} devices on</span>
+      </p>
+      <button
+        type="button"
+        onClick={submitTestPush}
+        disabled={pushPending}
+        className="border-border text-foreground hover:bg-surface-muted mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border px-4 text-sm font-semibold transition-colors disabled:opacity-60"
+      >
+        {pushPending ? 'Sending…' : 'Send me a test push'}
+      </button>
+      {pushResult && (
+        <p
+          role={pushResult.kind === 'danger' ? 'alert' : undefined}
+          className={`mt-2 text-xs ${pushResult.kind === 'danger' ? 'text-danger' : 'text-success'}`}
+        >
+          {pushResult.text}
         </p>
       )}
     </section>

@@ -220,6 +220,14 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   welcome_modal_image_url: '',
   welcome_modal_link_url: '',
 
+  // PWA + Web Push (master_plan §2AY). Each switch takes effect on the next visit, no deploy:
+  // service worker off -> /sw.js serves a self-unregistering worker; push off -> no push is sent
+  // (in-app + email unaffected); install prompt off -> the "Add to Home Screen" row is hidden.
+  pwa_service_worker_enabled: true,
+  pwa_install_prompt_enabled: true,
+  push_notifications_enabled: true,
+  push_max_devices_per_user: 5,
+
   // Rig-resistant Community Skill (STS_V2, master_plan §2AF). Operational values only - the STS_V2
   // structural constants are version-locked in STS_V2_CONSTANTS below, not here.
   // The public switch: which algorithm feeds CSL/STS/Skill-Verified/eligibility. Flipping this is a

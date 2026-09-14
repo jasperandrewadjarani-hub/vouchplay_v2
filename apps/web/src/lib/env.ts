@@ -44,4 +44,12 @@ export const serverEnv = {
   get supabaseServiceRoleKey(): string {
     return required('SUPABASE_SERVICE_ROLE_KEY');
   },
+  // Web Push / VAPID (master_plan §2AY D). OPTIONAL by design: like the SMTP channel, push is inert
+  // until the keys exist, so these getters return '' (never throw) and `pushChannelReady()` decides.
+  get vapidPrivateKey(): string {
+    return process.env.VAPID_PRIVATE_KEY ?? '';
+  },
+  get vapidSubject(): string {
+    return process.env.VAPID_SUBJECT || 'mailto:vouchplay@gmail.com';
+  },
 };

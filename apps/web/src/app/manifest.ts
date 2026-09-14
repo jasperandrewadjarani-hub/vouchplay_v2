@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next';
 import { BRAND, THEME_COLORS } from '@vouchplay/config';
 
-/** PWA manifest (handover §44). Served at /manifest.webmanifest. */
+/** PWA manifest (handover §44.1, master_plan §2AY decision A). Served at /manifest.webmanifest. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: '/',
     name: BRAND.name,
     short_name: BRAND.name,
     description: BRAND.tagline,

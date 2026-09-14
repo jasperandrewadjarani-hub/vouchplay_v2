@@ -5199,6 +5199,147 @@ three columns per row - well inside the function's memory. The Operations card's
 run never" is not a fault: the cron's first 01:47 UTC run comes after the §2AS deploy.
 
 
+## 2AY. PWA: installable app, service worker, offline screen and Web Push notifications (2026-09-14)
+
+Jasper's ask: "we want this PWA thing functioning" today - an installable VouchPlay with a home-screen
+icon, a service worker, and push notifications, built to the app's theme, uncluttered and obvious to
+non-technical users of all ages. Context: the monetization brainstorm of the same day identified
+retention (home-screen presence + push) as the highest-leverage engagement lever, and the reminders +
+matchmaking emails now share the ~500/day Gmail cap.
+
+### Findings
+
+1. Handover §44 already requires all of this ("manifest, app icons, standalone display, theme colors,
+   splash-compatible assets, service worker, cached app shell, graceful offline screen"); only the
+   manifest half was ever built (VP-007). Migration 0012's header says "push is a later adapter".
+2. `apps/web/src/app/manifest.ts` exists and is correct (standalone, portrait, brand dark background,
+   `/icons/icon-192|512|maskable-512.png`) - but the three icon files are BYTE-IDENTICAL copies of the
+   1254x1254 raw logo (1.1 MB each): no resizing, no maskable safe zone. There is no favicon and no
+   apple-touch-icon file, so iOS "Add to Home Screen" would show a screenshot tile.
+3. No service worker, no registration code, no `next-pwa` / `@serwist/next` / `web-push` anywhere.
+   Next is pinned to 15.5.25 (CLAUDE.md gotcha #1), so a build-plugin service worker (Serwist injects a
+   webpack step) is an avoidable risk to the one fragile stage of our pipeline - the Vercel deploy.
+4. Notifications are mature: `notify()` / `notifyMany()` (`lib/notifications/create.ts`) build rows from
+   the 69-type catalog, honour per-category mutes, insert, and route critical types to
+   `sendCriticalEmail` (inert until SMTP env exists). That is exactly the shape a push channel needs -
+   a second adapter beside email, honouring the same mutes for free.
+5. The session middleware only refreshes cookies (never redirects); `next.config.ts` Permissions-Policy
+   does not restrict notifications; Next 15.5 exports `after()` (run work after the response is sent).
+6. UI patterns to reuse: `RatingsPrivacyCard` (rounded-2xl card + `Switch` rows + `useTransition`,
+   §2AW), `Modal` (sheet on mobile), `WelcomeModal` (post-mount localStorage decision, no hydration
+   mismatch), Admin `OperationsPanel` ("Run reminders now"). No toast library - inline status text.
+7. A large share of PH traffic arrives through Facebook / Messenger in-app browsers, which cannot
+   install a PWA or receive push at all; the UI has to say so instead of showing dead controls.
+
+### Decisions
+
+**A. Real icons, generated from the emblem.** A committed script (`scripts/generate-pwa-icons.mjs`,
+sharp) crops the ring + V + ball emblem from `public/brand/vouchplay-logo.png` (the wordmark is
+unreadable below 96 px), places it on the brand dark background (`THEME_COLORS.darkBackground`) and
+writes `icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (emblem inside the 80% safe
+zone), `icons/badge-96.png` (white silhouette for the Android status bar), `app/icon.png` (favicon)
+and `app/apple-icon.png` (180 px, Next auto-links it). Manifest gains a stable `id: '/'`; everything
+else stays.
+
+**B. Hand-written service worker served by a route, not a build plugin.** `app/sw.js/route.ts` returns
+the worker source (`lib/pwa/sw-source.ts`) with `Cache-Control: no-cache` and the current
+`VERCEL_DEPLOYMENT_ID` baked in as the cache version, so every deploy ships a byte-different worker
+and old caches are dropped on activate. Strategy is deliberately conservative for a hot, personalised,
+skew-protected site: navigations are NETWORK-ONLY (HTML is never cached) with `/offline` as the
+fallback; `/_next/static/*` is cache-first (content-hashed, immutable); icons, brand and manifest are
+stale-while-revalidate; non-GET, `/api/*`, Supabase and server-action requests are never touched.
+Precache = `/offline` + the icons. Kill switch: `pwa_service_worker_enabled` (Admin) makes the route
+serve a worker that unregisters itself and clears caches - a one-click rollback with no deploy.
+
+**C. Offline screen** `/offline`: logo, "You're offline", one line ("Reconnect to see your vouches and
+tournaments."), a Retry button. Static, no auth, branded. Offline writes are never queued (§44).
+
+**D. Web Push with VAPID, mirrored from in-app notifications.** New table `push_subscriptions`
+(0049): `user_id -> profiles`, `endpoint` unique, `p256dh`, `auth`, `user_agent`, `created_at`,
+`last_seen_at`, `disabled_at`. RLS on, NO client policies - only the service role touches it, after the
+server action has verified the caller (the `notification_preferences` write pattern). The device
+subscription IS the opt-in: no extra preference column, and the existing per-category mutes already
+apply because push mirrors the rows `notify()` decided to insert. `lib/notifications/push.ts` sends
+with `web-push` 3.6.7; a 404/410 marks the row `disabled_at`; it is inert until
+`NEXT_PUBLIC_VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` exist (like email). `notify()` / `notifyMany()`
+hand the inserted rows to `after()` so the push fan-out runs AFTER the response (bounded concurrency,
+capped per call) and never adds latency to the domain action; outside a request scope it awaits.
+Settings (`pwa` group, "App & push"): `push_notifications_enabled` (kill switch, default true),
+`pwa_service_worker_enabled` (true), `pwa_install_prompt_enabled` (true),
+`push_max_devices_per_user` (5; the oldest device is dropped past the cap).
+
+**E. Where the user meets it - one card, two rows, states that explain themselves.** A **VouchPlay on
+your phone** card on the ME page directly under the profile header (before "Who can see my ratings"):
+row 1 *Add to Home Screen* - on Android/Chrome an **Install** button fires the native prompt; on
+iPhone/iPad Safari a **Show me how** button opens a 3-step sheet (Share -> Add to Home Screen -> Add,
+with the icons); inside Facebook/Messenger/Instagram browsers the row says "Open in Chrome or Safari
+to install" with a copy-link button; once installed the row disappears. Row 2 *Notifications on this
+device* - a `Switch` whose description is the state: "Vouches, partner matches and tournament
+updates" (off) / "On for this device" (on) / "Blocked - allow notifications in your browser settings"
+(denied, disabled) / "Install the app first to turn this on" (iPhone, not installed, disabled). Turning
+it on = permission -> subscribe -> save -> one confirmation notification ("Notifications are on") so
+the user sees it work; turning it off unsubscribes the device. The same switch sits on Notification
+preferences above the email opt-in. No auto-permission prompt anywhere (browser best practice).
+
+**F. Contextual opt-in at the moments of value.** A compact `PushOptInCta` ("Get updates on your
+phone" + one button) on the registration wizard's Done step and the vouch success screen, rendered
+only when push is supported, not yet enabled and not blocked - otherwise nothing. No new banner in the
+shell's nudge chain (already four strips deep).
+
+**G. Ops.** Admin Operations card gains "Push: n devices" and a **Send me a test push** button
+(staff), so Jasper can verify delivery end-to-end without a second account. `docs/SECRETS_SETUP.md`
+§4 documents the VAPID keys; `.env.example` lists them.
+
+### Better suggestions folded in
+
+- Serving the worker from a route (B) instead of `public/sw.js`: per-deploy cache versioning and the
+  Admin kill switch come for free; no build-step change touches the fragile Vercel deploy.
+- `after()` fan-out (D): push costs the user's action nothing; an organizer blast to 200 players does
+  not slow the organizer's click.
+- In-app-browser detection (E): the single most common PH failure mode gets a helpful sentence, not a
+  dead button.
+- The confirmation notification (E): the one moment a non-technical user learns what "on" means.
+
+### Deferred
+
+App icon unread badge (`navigator.setAppBadge`); per-category push preferences separate from in-app
+mutes; manifest screenshots for the richer Chrome install dialog; a "new version available" toast
+(unneeded while HTML is never cached); native store wrappers (Capacitor) - the PWA is the foundation
+for that; push digest / quiet hours; auditing subscribe/unsubscribe (device-level, not moderation).
+
+### Contracts
+
+**Config:** `settings.ts` + `settings-catalog.ts` (`pwa` group, four keys). **DB:** 0049
+`push_subscriptions` + `scripts/apply-0049.sql`. **Web server:** `lib/pwa/sw-source.ts` ->
+`buildServiceWorker({ version, vapidPublicKey, enabled })`; `app/sw.js/route.ts`;
+`lib/notifications/push.ts` -> `sendPushForRows(rows)`, `pushChannelReady()`,
+`countActivePushSubscriptions()`; `lib/actions/push.ts` -> `savePushSubscription(input)`,
+`removePushSubscription(endpoint)`, `sendTestPush()`; `create.ts` hook. **Web client:**
+`lib/pwa/detect.ts` (pure UA / display-mode helpers), `components/pwa/pwa-provider.tsx` ->
+`PwaProvider` + `usePwa()`, `components/pwa/push-toggle.tsx`, `components/pwa/install-row.tsx` +
+`ios-install-sheet.tsx`, `components/me/app-install-card.tsx`, `components/pwa/push-opt-in-cta.tsx`,
+`app/offline/page.tsx`, `middleware.ts` matcher (+ `sw.js`, `offline`). **Assets:**
+`scripts/generate-pwa-icons.mjs` + generated PNGs. **Docs:** SECRETS_SETUP §4, `.env.example`.
+
+### Execution
+
+Three subagents in parallel with exact file ownership: Opus (migration + apply script + settings +
+push server module + actions + `create.ts` hook + env docs + tests), Sonnet A (icons, manifest, worker
+source + route, offline page, middleware, provider + detect helpers + tests), Sonnet B (ME card, toggle,
+install row + iOS sheet, CTA on Done/vouch-success, preferences page, Admin ops). Main session reviews
+the worker, the `create.ts` hook, the RLS and the ME card; full gate suite; one commit. Review fixes
+applied by the main session: (1) the install row checks the in-app browser BEFORE iOS, so an iPhone
+inside Facebook / Messenger gets "Open in Chrome or Safari", not Safari steps it cannot follow; (2) the
+vouch success dialog holds its 1.5 s auto-close while the push opt-in is visible and releases it on
+"Not now" / "all set" (a nudge that vanishes mid-tap is worse than none); (3) `enable()` never surfaces
+a rejection to a click handler, and the once-per-session subscription re-save marks itself synced
+BEFORE the request so two hook instances on one page cannot double-send. Jasper's steps,
+in this order: generate VAPID keys (`npx web-push generate-vapid-keys`), set the two Vercel env vars
+(Production + Preview) BEFORE pushing, apply `scripts/apply-0049.sql`, push. Verification after his
+push: `dpl_` flip on both domains, `/manifest.webmanifest` + `/sw.js` + `/offline` respond, icons are
+real sizes, install on an Android phone, push test from Admin.
+
+
 ## 1. Prompt Contract
 
 ### In scope

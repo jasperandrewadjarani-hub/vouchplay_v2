@@ -2,6 +2,7 @@ import 'server-only';
 import { notificationDef, type NotificationParams } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { sendCriticalEmail } from './email';
+import { schedulePush, type PushRow } from './push';
 
 /**
  * Notification creation (handover §27). In-app is the primary channel: one row per recipient via the
@@ -76,6 +77,25 @@ async function mutedSet(
   return map;
 }
 
+/**
+ * Web Push mirrors this file, it never decides anything of its own (master_plan §2AY D). Push is
+ * handed EXACTLY the rows that were just inserted - after the self-notification skip and the
+ * per-category mute check have already run - so the existing mutes apply to push for free and there
+ * is no second preference to keep in sync; the device subscription is the whole opt-in.
+ * `schedulePush` defers the fan-out to Next's `after()`, so an organizer blast to 200 players costs
+ * the organizer's click nothing, and like the email channel it is inert until the VAPID keys exist
+ * and never throws.
+ */
+function toPushRows(rows: Prepared[]): PushRow[] {
+  return rows.map((row) => ({
+    recipient_id: row.recipient_id,
+    title: row.title,
+    body: row.body,
+    link: row.link,
+    type: row.type,
+  }));
+}
+
 /** Create one notification. */
 export async function notify(input: NotifyInput): Promise<void> {
   if (input.actorId && input.actorId === input.recipientId) return;
@@ -90,6 +110,8 @@ export async function notify(input: NotifyInput): Promise<void> {
     }
 
     await svc.from('notifications').insert(prepared.row);
+
+    await schedulePush(toPushRows([prepared.row]));
 
     if (prepared.critical) {
       await sendCriticalEmail({
@@ -128,6 +150,8 @@ export async function notifyMany(
     if (preparedRows.length === 0) return;
 
     await svc.from('notifications').insert(preparedRows);
+
+    await schedulePush(toPushRows(preparedRows));
 
     // Team lifecycle notifications use this fan-out path. Critical rows must reach the same email
     // channel as single-recipient notifications; each send still respects the recipient's opt-in.
