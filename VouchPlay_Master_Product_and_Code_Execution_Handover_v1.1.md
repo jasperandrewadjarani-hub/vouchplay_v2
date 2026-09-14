@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.77
+# VouchPlay Master Product & Code Execution Handover v1.78
 
-_(File retains its `…v1.1.md` name; content is v1.77 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.78 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,15 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.78 (2026-09-14)
+
+_Post-install confirmation nudge (master_plan §2AZ addendum). No migration._
+
+- The install banner now listens for `appinstalled` and, the moment the app installs (via our button or
+  the browser's own menu), swaps to a short "You're all set - open VouchPlay from this icon on your home
+  screen" card that auto-retires after ~8s. No web API can launch the installed app or close the browser
+  tab, so this icon hand-off is the most possible. Android-only in practice (iOS has no `appinstalled`).
+
 ## v1.77 (2026-09-14)
 
 _Rounded app icon + aggressive install + notifications on by default (master_plan §2AZ addenda). No migration._

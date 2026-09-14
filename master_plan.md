@@ -5432,6 +5432,12 @@ insistent and an installed user gets notifications without hunting for a toggle.
   (`localStorage vp:push:auto-enabled`, set only once a real allow/deny is recorded); a decline is
   respected and never re-asked. Gated on `push_notifications_enabled`; anonymous viewers are skipped
   (a subscription needs an authenticated owner). No new setting, no migration.
+- **Post-install confirmation.** The install banner listens for `appinstalled` (fired whether the app
+  was installed via our button or the browser's own menu) and swaps to a short "You're all set - open
+  VouchPlay from this icon on your home screen" card, then auto-retires after ~8 s. This is the whole
+  hand-off: no web API can launch the installed standalone app or close the browser tab for the user, so
+  pointing them at the icon is the most that is possible. iOS has no `appinstalled` event, so the
+  confirmation is effectively Android-only; iPhone users are already walked through the steps sheet.
 
 
 ## 1. Prompt Contract

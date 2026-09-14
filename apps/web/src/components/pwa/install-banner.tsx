@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { usePwa } from '@/components/pwa/pwa-provider';
 import { openInChrome } from '@/lib/pwa/detect';
@@ -21,6 +21,11 @@ const APPEAR_DELAY_MS = 2500;
  * back for good only once the app is actually installed (`pwa.standalone`, at which point no branch
  * applies). Gated by the `pwa_install_banner_enabled` Admin kill switch; the passive ME-page card
  * (`AppInstallCard`) is the always-there way back in.
+ *
+ * Post-install confirmation (§2AZ addendum): the instant the app installs - via our button OR the
+ * browser's own menu (`appinstalled`) - the card swaps to a short "open from your home screen" state.
+ * No web API can launch the installed app or close this browser tab for the user, so a clear hand-off
+ * pointing at the icon is the most we can do. It auto-retires after a few seconds.
  */
 export function InstallBanner({ enabled }: { enabled: boolean }) {
   const pwa = usePwa();
@@ -30,7 +35,22 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
   const [visible, setVisible] = useState(false); // drives the slide-up/fade transition
   const [copied, setCopied] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
+  const [confirmDismissed, setConfirmDismissed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Switch to the confirmation card and retire the normal banner (session-dismiss) so nothing re-shows
+  // if `standalone` updates a tick later than the install event.
+  const markInstalled = useCallback(() => {
+    setJustInstalled(true);
+    setShown(true);
+    setDismissed(true);
+    try {
+      window.sessionStorage.setItem(DISMISS_KEY, '1');
+    } catch {
+      // best-effort only
+    }
+  }, []);
 
   const branch = deriveInstallBranch({
     ready: pwa.ready,
@@ -67,6 +87,20 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
     return () => cancelAnimationFrame(id);
   }, [shown]);
 
+  // Catch an install that happened outside our button (the browser's own "Install"/"Add" menu) so the
+  // confirmation still fires.
+  useEffect(() => {
+    window.addEventListener('appinstalled', markInstalled);
+    return () => window.removeEventListener('appinstalled', markInstalled);
+  }, [markInstalled]);
+
+  // Auto-retire the confirmation after a few seconds - it is an acknowledgement, not a task.
+  useEffect(() => {
+    if (!justInstalled) return;
+    const t = setTimeout(() => setConfirmDismissed(true), 8000);
+    return () => clearTimeout(t);
+  }, [justInstalled]);
+
   function dismiss() {
     setVisible(false);
     setShown(false);
@@ -78,6 +112,37 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
     }
   }
 
+  // Post-install confirmation takes precedence over any install branch (and shows even though `branch`
+  // is now null because the app is standalone).
+  if (enabled && justInstalled && !confirmDismissed) {
+    return (
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[calc(env(safe-area-inset-bottom)+4.75rem)] md:justify-end md:px-4 md:pb-4">
+        <div
+          role="status"
+          className={`border-border bg-surface pointer-events-auto flex w-full max-w-md items-center gap-3 rounded-2xl border p-3 shadow-lg transition-all duration-300 motion-reduce:transition-none md:max-w-sm ${
+            visible ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'
+          }`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand icon, no next/image needed */}
+          <img src="/icons/icon-192.png" alt="" aria-hidden className="h-11 w-11 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1">
+            <p className="text-foreground text-sm leading-tight font-semibold">You&rsquo;re all set</p>
+            <p className="text-foreground-muted mt-0.5 text-xs leading-snug">
+              Open VouchPlay from this icon on your home screen.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setConfirmDismissed(true)}
+            className="vp-gradient vp-glow shrink-0 rounded-xl px-3.5 py-2 text-xs font-semibold text-white"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!enabled || dismissed || !branch || !shown) return null;
 
   const copy = installBranchCopy(branch);
@@ -85,10 +150,12 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
   async function onAction() {
     switch (branch) {
       case 'android': {
-        // Any resolved outcome (installed or the user declined the OS prompt) retires the banner -
-        // re-nagging after a decision would be exactly the behaviour we are avoiding.
         const outcome = await pwa.promptInstall();
-        if (outcome !== 'unavailable') dismiss();
+        if (outcome === 'accepted') {
+          markInstalled(); // show the confirmation (appinstalled usually also fires; this is idempotent)
+        } else if (outcome === 'dismissed') {
+          dismiss(); // declined the OS prompt - stand down for this session
+        }
         break;
       }
       case 'android-inapp':

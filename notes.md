@@ -3221,3 +3221,11 @@ install: new `push-auto-enable.tsx` auto-requests permission + subscribes for a 
 standalone launch (immediate on Android Chrome, next-tap fallback on installed iOS; the OS permission
 dialog itself can't be bypassed). Once per device, decline respected, gated on `push_notifications_enabled`.
 No migration. Handover -> v1.77.
+
+## 2026-09-14 - Post-install confirmation nudge (§2AZ addendum)
+
+The install banner now listens for `appinstalled` and swaps to a short "You're all set - open VouchPlay
+from this icon on your home screen" card (auto-retires ~8s) the moment the app installs, whether via our
+button or the browser's own menu. It cannot launch the standalone app or close the browser tab - no web
+API allows either - so the icon hand-off is the most possible. Android-only in practice (iOS fires no
+`appinstalled`). No migration. Handover -> v1.78.
