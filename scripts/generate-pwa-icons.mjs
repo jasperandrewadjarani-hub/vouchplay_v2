@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 /**
- * PWA icon generator (master_plan §2AY decision A).
+ * PWA icon generator (master_plan §2AY decision A; emblem swapped to the rounded V in §2AZ addendum).
  *
- * Why emblem-only: `public/brand/vouchplay-logo.png` is 1254x1254 with the ring + V + pickleball
- * emblem in the top portion and the "VouchPlay" wordmark directly underneath it. The wordmark is
- * unreadable at icon sizes (down to 96px, or ~40px as rendered on an Android home screen), so every
- * generated icon uses the emblem alone, cropped off just below the V's bottom tip (source row 958 of
- * 1254) and then trimmed of its transparent margins.
+ * Source: `apps/web/public/brand/vouchplay-emblem.png` - the rounded, glossy "just the V" emblem
+ * (ring + V + pickleball) rendered neon-on-pure-black, 1254x1254, already wordmark-free. This replaced
+ * the older sharp-edged `vouchplay-logo.png`, which carried the "VouchPlay" wordmark underneath and so
+ * needed a wordmark crop; the rounded emblem needs none.
+ *
+ * Because the emblem is drawn on solid #000 (no alpha), every opaque icon is composited on a pure-black
+ * canvas so the emblem's own black margin melts seamlessly into it - no visible square. The PWA
+ * manifest's `background_color` is likewise pinned to #000 so the install splash matches the icon edge.
  *
  * Why a safe zone for the maskable icon: Android (and some launchers) crop a maskable icon to an
  * arbitrary shape (circle, squircle, rounded square, ...) using only the inner 80% "safe zone" of the
@@ -14,7 +17,7 @@
  * to ~62% of the canvas keeps it well inside that circle with margin to spare; the non-maskable icons
  * use ~86% instead since nothing crops them.
  *
- * Outputs (all PNG, opaque dark background unless noted):
+ * Outputs (all PNG, opaque pure-black background unless noted):
  *   apps/web/public/icons/icon-192.png          192x192, emblem @ ~86%
  *   apps/web/public/icons/icon-512.png          512x512, emblem @ ~86%
  *   apps/web/public/icons/icon-maskable-512.png 512x512, emblem @ ~62% (maskable safe zone)
@@ -24,14 +27,15 @@
  *   apps/web/src/app/apple-icon.png              180x180, emblem @ ~86%, opaque (iOS requires opaque;
  *                                                Next auto-links this as the apple-touch-icon)
  *
- * Idempotent: re-running regenerates every file from the source logo, in place. No state is kept
+ * Idempotent: re-running regenerates every file from the source emblem, in place. No state is kept
  * between runs.
  *
  * Usage:
  *   node scripts/generate-pwa-icons.mjs
  *
- * If a future logo revision shifts the emblem/wordmark boundary, adjust EMBLEM_CROP_HEIGHT below (and
- * re-run) rather than hand-editing any output PNG.
+ * To adopt a future emblem revision, replace `vouchplay-emblem.png` and re-run - do not hand-edit any
+ * output PNG. If the new emblem is drawn on something other than pure black, revisit ICON_BACKGROUND
+ * (and the manifest's background_color) and the badge luminance threshold below.
  */
 
 import { fileURLToPath } from 'node:url';
@@ -40,39 +44,36 @@ import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const SOURCE_LOGO = path.join(REPO_ROOT, 'apps/web/public/brand/vouchplay-logo.png');
+const SOURCE_EMBLEM = path.join(REPO_ROOT, 'apps/web/public/brand/vouchplay-emblem.png');
 
-// Brand dark background (packages/config/src/brand.ts THEME_COLORS.darkBackground). Duplicated as a
-// literal here (deliberately, not imported) because this is a plain Node script outside the app's
-// TS/bundler pipeline - keep in sync if that value ever changes.
-const DARK_BACKGROUND = '#080d17';
+// The emblem is drawn on solid #000; opaque icons and the manifest splash use the same pure black so
+// the emblem's own margin is invisible. (This is intentionally NOT the app's #080d17 dark surface -
+// compositing the opaque-black emblem tile onto #080d17 would show a black square.)
+const ICON_BACKGROUND = '#000000';
 
-// Source pixel row (of 1254) below which the "VouchPlay" wordmark begins. Verified against the actual
-// source file: the emblem's lowest content (the V's bottom tip) sits at row ~957; the wordmark's
-// topmost serifs start at row ~963. 958 sits in that ~5px gap.
-const EMBLEM_CROP_HEIGHT = 958;
+// Above this 0-255 luminance a source pixel is treated as emblem ink for the monochrome push badge;
+// at or below it is background. The neon emblem sits well above, the black ground at ~0, so the gap is
+// wide - 45 keeps the glow's dim halo out of the silhouette.
+const BADGE_LUMA_THRESHOLD = 45;
 
-/** Load the source logo, crop off the wordmark, and trim the remaining transparent margins. */
+/** Load the source emblem and trim its uniform black margin so "fit X%" is measured against the ink. */
 async function loadEmblem() {
-  const meta = await sharp(SOURCE_LOGO).metadata();
+  const meta = await sharp(SOURCE_EMBLEM).metadata();
   if (!meta.width || !meta.height) {
-    throw new Error(`Could not read dimensions of ${SOURCE_LOGO}`);
+    throw new Error(`Could not read dimensions of ${SOURCE_EMBLEM}`);
   }
-  const croppedHeight = Math.min(EMBLEM_CROP_HEIGHT, meta.height);
-  const cropped = await sharp(SOURCE_LOGO)
-    .extract({ left: 0, top: 0, width: meta.width, height: croppedHeight })
-    .png()
+  // trim() removes the uniform black border (the corner colour), stopping at the first glow pixel, so
+  // the emblem is measured by its actual ink rather than the source's built-in padding.
+  const trimmed = await sharp(SOURCE_EMBLEM)
+    .trim({ background: ICON_BACKGROUND, threshold: 20 })
     .toBuffer();
-  // trim() removes uniform transparent/near-transparent borders so "fit inside X%" below is measured
-  // against the emblem's actual ink, not incidental canvas padding.
-  const trimmed = await sharp(cropped).trim({ threshold: 10 }).toBuffer();
   const trimmedMeta = await sharp(trimmed).metadata();
   return { buffer: trimmed, width: trimmedMeta.width, height: trimmedMeta.height };
 }
 
 /**
  * Composite the emblem, scaled to `fitFraction` of a `size`x`size` canvas, centered on an opaque
- * `DARK_BACKGROUND` square.
+ * pure-black square.
  */
 async function renderOpaqueIcon(emblem, size, fitFraction) {
   const targetDim = Math.round(size * fitFraction);
@@ -87,35 +88,38 @@ async function renderOpaqueIcon(emblem, size, fitFraction) {
       width: size,
       height: size,
       channels: 4,
-      background: DARK_BACKGROUND,
+      background: ICON_BACKGROUND,
     },
   })
     .composite([{ input: resized, left, top }])
-    .flatten({ background: DARK_BACKGROUND }) // guarantee fully opaque output (iOS requires this)
+    .flatten({ background: ICON_BACKGROUND }) // guarantee fully opaque output (iOS requires this)
     .png()
     .toBuffer();
 }
 
 /**
- * Build the Android status-bar badge: a solid white silhouette (the emblem's alpha channel used as
- * the alpha of a flat white fill) on a transparent canvas, fitted to `fitFraction` of `size`.
+ * Build the Android status-bar badge: a solid white silhouette on a transparent canvas, fitted to
+ * `fitFraction` of `size`. The source has no alpha (it is neon on solid black), so the silhouette mask
+ * is derived from luminance - bright emblem ink becomes opaque, the black ground becomes transparent.
  */
 async function renderBadge(emblem, size, fitFraction) {
   const targetDim = Math.round(size * fitFraction);
-  const alpha = await sharp(emblem.buffer)
+  const mask = await sharp(emblem.buffer)
     .resize({ width: targetDim, height: targetDim, fit: 'inside' })
-    .ensureAlpha()
-    .extractChannel(3)
+    .flatten({ background: ICON_BACKGROUND })
+    .greyscale()
+    .threshold(BADGE_LUMA_THRESHOLD)
+    .toColourspace('b-w') // collapse to a single channel so it can serve as an alpha mask
     .toBuffer();
-  const alphaMeta = await sharp(alpha).metadata();
-  const w = alphaMeta.width ?? targetDim;
-  const h = alphaMeta.height ?? targetDim;
+  const maskMeta = await sharp(mask).metadata();
+  const w = maskMeta.width ?? targetDim;
+  const h = maskMeta.height ?? targetDim;
   // Base must be a 3-channel (RGB, no alpha) image before joinChannel adds the 4th (alpha) channel -
   // starting from a 4-channel create() would end up with 5 channels, which corrupts the output.
   const white = await sharp({
     create: { width: w, height: h, channels: 3, background: { r: 255, g: 255, b: 255 } },
   })
-    .joinChannel(alpha)
+    .joinChannel(mask)
     .png()
     .toBuffer();
   const left = Math.round((size - w) / 2);
@@ -137,7 +141,7 @@ async function writeFile(buffer, outPath) {
 }
 
 async function main() {
-  console.log(`Loading emblem from ${path.relative(REPO_ROOT, SOURCE_LOGO)} ...`);
+  console.log(`Loading emblem from ${path.relative(REPO_ROOT, SOURCE_EMBLEM)} ...`);
   const emblem = await loadEmblem();
   console.log(`  emblem trimmed to ${emblem.width}x${emblem.height}`);
 

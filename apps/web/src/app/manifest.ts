@@ -11,7 +11,10 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: THEME_COLORS.darkBackground,
+    // Pure black (not the app's #080d17 surface): the install splash centers the icon on this colour,
+    // and the icons are rendered neon-on-#000 (§2AZ), so black keeps the icon edge seamless. theme_color
+    // (the status-bar tint) stays the app surface colour.
+    background_color: '#000000',
     theme_color: THEME_COLORS.darkBackground,
     orientation: 'portrait',
     categories: ['sports', 'social'],

@@ -3207,3 +3207,17 @@ ME-page card. `AppInstallCard`'s in-app-browser row got the same Chrome hand-off
 copy-link-only). No database migration - additive client UI + one new settings row default. Deployed
 live during the open Hermosa registration window. Deferred: silent auto-redirect on page load (webviews
 block gesture-less navigation), forcing Safari on iPhone (no OS scheme), install-conversion analytics.
+
+## 2026-09-14 - Rounded app icon + aggressive install + notifications on by default (§2AZ addenda)
+
+Three follow-ups to the install banner, same day. (1) App icon swapped to the rounded, glossy "just the
+V" emblem (`apps/web/public/brand/vouchplay-emblem.png`, neon on solid black, wordmark-free) - replaces
+the sharp `vouchplay-logo.png`. `generate-pwa-icons.mjs` rewritten (no wordmark crop; opaque icons on
+pure black so no black square shows; badge silhouette from luminance since the source has no alpha); all
+six outputs regenerated; manifest `background_color` pinned to `#000000` so the splash matches the icon
+edge. (2) Install banner made persistent: dismiss is now session-scoped, not forever - it returns each
+visit until the user installs, to push everyone onto the installed app. (3) Notifications on by default at
+install: new `push-auto-enable.tsx` auto-requests permission + subscribes for a signed-in viewer on first
+standalone launch (immediate on Android Chrome, next-tap fallback on installed iOS; the OS permission
+dialog itself can't be bypassed). Once per device, decline respected, gated on `push_notifications_enabled`.
+No migration. Handover -> v1.77.

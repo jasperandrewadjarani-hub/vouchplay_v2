@@ -5234,8 +5234,9 @@ matchmaking emails now share the ~500/day Gmail cap.
 ### Decisions
 
 **A. Real icons, generated from the emblem.** A committed script (`scripts/generate-pwa-icons.mjs`,
-sharp) crops the ring + V + ball emblem from `public/brand/vouchplay-logo.png` (the wordmark is
-unreadable below 96 px), places it on the brand dark background (`THEME_COLORS.darkBackground`) and
+sharp) renders the ring + V + ball emblem (as of the §2AZ addendum, the rounded
+`public/brand/vouchplay-emblem.png` on solid black; originally the sharp `vouchplay-logo.png` with its
+wordmark cropped off, unreadable below 96 px) on a pure-black background and
 writes `icons/icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (emblem inside the 80% safe
 zone), `icons/badge-96.png` (white silhouette for the Android status bar), `app/icon.png` (favicon)
 and `app/apple-icon.png` (180 px, Next auto-links it). Manifest gains a stable `id: '/'`; everything
@@ -5374,10 +5375,10 @@ interactive.
 4. iPhone Safari -> **Show me how** - opens the existing `IosInstallSheet`.
 5. Desktop / unsupported -> renders nothing.
 
-**D. Anti-nag rules.** Shows at most once per device; the ~2.5 s delay keeps it off the first
-impression; dismiss (X) persists forever (`localStorage` key `vp:install-banner:dismissed`);
-disappears instantly on install or when already running standalone; the slide-up respects
-`prefers-reduced-motion`.
+**D. Timing + persistence.** The ~2.5 s delay keeps it off the first impression; the slide-up respects
+`prefers-reduced-motion`; it disappears the instant the app is installed / running standalone. Dismiss
+was originally once-per-device but is now SESSION-scoped (see the aggressive-install addendum below):
+the X tidies it away for the current visit only and it returns next visit until the app is installed.
 
 **E. New Admin kill switch, separate from the existing one.** `pwa_install_banner_enabled` (bool,
 default true, `pwa` settings group) lets Admin silence the auto-banner while keeping the passive
@@ -5401,6 +5402,36 @@ No database migration - purely additive client UI plus one new settings row defa
 `deriveInstallBranch()`, `lib/pwa/detect.ts` -> `openInChrome()`, `app-shell.tsx` (mount), existing
 `components/me/app-install-card.tsx` (in-app-browser row upgrade). Safe to ship during the open
 Hermosa registration window.
+
+### Addendum - rounded emblem for the app icon (2026-09-14)
+
+Revises §2AY decision A. The app/install icon now uses the rounded, glossy "just the V" emblem
+(`public/brand/vouchplay-emblem.png`, neon on solid #000, already wordmark-free) instead of the older
+sharp-edged `vouchplay-logo.png`, which carried the wordmark and needed a crop. `generate-pwa-icons.mjs`
+was rewritten: no wordmark crop; opaque icons composite on pure black (the emblem's own ground) so no
+black square shows; the Android badge silhouette is derived from luminance (the source has no alpha).
+The manifest `background_color` is pinned to `#000000` (literal, not the app's `#080d17` surface) so the
+install splash matches the icon edge; `theme_color` stays the app surface colour. All six outputs
+regenerated in place; no code path or migration involved.
+
+### Addendum - aggressive install + notifications on by default (2026-09-14)
+
+Product call: we want *every* user on the installed app, so the install nudge is deliberately more
+insistent and an installed user gets notifications without hunting for a toggle.
+
+- **Persistent banner.** The install banner's dismissal moved from `localStorage` (forever) to
+  `sessionStorage` (this visit only). The X still tidies it away, but it returns on the next visit and
+  keeps returning until the app is actually installed (`pwa.standalone`), at which point no branch
+  applies and it is gone. The Admin kill switch and the passive ME-page card are unchanged.
+- **Notifications on by default at install.** New `components/pwa/push-auto-enable.tsx`, mounted once in
+  `AppShell` (renders nothing). For a signed-in viewer running the standalone app, with push supported +
+  Admin-enabled and permission never yet asked, it requests permission and subscribes automatically -
+  so "on" is the default for an installed user. The browser's permission dialog is unavoidable and
+  cannot be pre-answered; the request runs immediately on Android Chrome and falls back to the viewer's
+  next tap where a gesture is required (installed iOS PWA). Attempted at most once per device
+  (`localStorage vp:push:auto-enabled`, set only once a real allow/deny is recorded); a decline is
+  respected and never re-asked. Gated on `push_notifications_enabled`; anonymous viewers are skipped
+  (a subscription needs an authenticated owner). No new setting, no migration.
 
 
 ## 1. Prompt Contract

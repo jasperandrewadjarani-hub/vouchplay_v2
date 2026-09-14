@@ -14,10 +14,13 @@ const APPEAR_DELAY_MS = 2500;
  * Global auto-surfacing install banner (master_plan §2AZ). A bottom "mini-infobar" that slides up a
  * couple of seconds after arrival on any page and offers the one install action that fits the device -
  * install prompt, Chrome hand-off, or iOS steps. Mounted once in `AppShell`, floating just above the
- * mobile bottom nav / bottom-right on desktop, so it never collides with the top nudge chain. Shown at
- * most once per device: dismissing it, or installing, hides it for good (localStorage). Gated by the
- * `pwa_install_banner_enabled` Admin kill switch; the passive ME-page card (`AppInstallCard`) stays as
- * the always-there way back in for anyone who dismissed this.
+ * mobile bottom nav / bottom-right on desktop, so it never collides with the top nudge chain.
+ *
+ * Persistence (§2AZ addendum - aggressive install push): dismiss is SESSION-scoped (`sessionStorage`),
+ * so the X only tidies it away for the current visit and it returns on the next one. It stops coming
+ * back for good only once the app is actually installed (`pwa.standalone`, at which point no branch
+ * applies). Gated by the `pwa_install_banner_enabled` Admin kill switch; the passive ME-page card
+ * (`AppInstallCard`) is the always-there way back in.
  */
 export function InstallBanner({ enabled }: { enabled: boolean }) {
   const pwa = usePwa();
@@ -37,10 +40,11 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
     ios: pwa.ios,
   });
 
-  // Read the once-per-device dismissal after mount (never during SSR).
+  // Read the per-session dismissal after mount (never during SSR). Session-scoped on purpose: the
+  // banner returns on the next visit until the app is installed (§2AZ addendum).
   useEffect(() => {
     try {
-      setDismissed(window.localStorage.getItem(DISMISS_KEY) === '1');
+      setDismissed(window.sessionStorage.getItem(DISMISS_KEY) === '1');
     } catch {
       setDismissed(false);
     }
@@ -68,9 +72,9 @@ export function InstallBanner({ enabled }: { enabled: boolean }) {
     setShown(false);
     setDismissed(true);
     try {
-      window.localStorage.setItem(DISMISS_KEY, '1');
+      window.sessionStorage.setItem(DISMISS_KEY, '1');
     } catch {
-      // Non-fatal: the banner may simply appear again on a later visit.
+      // Non-fatal: the banner may simply appear again sooner.
     }
   }
 
