@@ -14,47 +14,34 @@ import { SubmitButton } from '@/components/ui/button';
 const empty: FormState = {};
 
 export function LoginForm({ next }: { next?: string }) {
+  // Password-first (master_plan §2BB addendum): the email-code path is demoted to a quiet fallback
+  // link rather than an equal-weight tab, so a returning player with a password uses it (no email)
+  // instead of habitually requesting a login code and burning the SMTP cap. The code path stays one
+  // tap away for anyone who needs it.
   const [mode, setMode] = useState<'password' | 'code'>('password');
 
-  return (
-    <div className="space-y-5">
-      <div className="border-border bg-surface grid grid-cols-2 gap-1 rounded-xl border p-1">
-        <TabButton active={mode === 'password'} onClick={() => setMode('password')}>
-          Password
-        </TabButton>
-        <TabButton active={mode === 'code'} onClick={() => setMode('code')}>
-          Email code
-        </TabButton>
-      </div>
-
-      {mode === 'password' ? <PasswordLogin next={next} /> : <CodeLogin next={next} />}
-    </div>
+  return mode === 'password' ? (
+    <PasswordLogin next={next} onUseCode={() => setMode('code')} />
+  ) : (
+    <CodeLogin next={next} onUsePassword={() => setMode('password')} />
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
+function FallbackLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-        active ? 'bg-surface-muted text-foreground' : 'text-foreground-muted hover:text-foreground'
-      }`}
-    >
-      {children}
-    </button>
+    <p className="text-foreground-muted text-center text-xs">
+      <button
+        type="button"
+        onClick={onClick}
+        className="hover:text-foreground underline underline-offset-2"
+      >
+        {children}
+      </button>
+    </p>
   );
 }
 
-function PasswordLogin({ next }: { next?: string }) {
+function PasswordLogin({ next, onUseCode }: { next?: string; onUseCode: () => void }) {
   const [state, action] = useActionState(signInWithPassword, empty);
   return (
     <form action={action} className="space-y-4">
@@ -78,11 +65,12 @@ function PasswordLogin({ next }: { next?: string }) {
           Forgot password?
         </Link>
       </p>
+      <FallbackLink onClick={onUseCode}>Sign in with an email code instead</FallbackLink>
     </form>
   );
 }
 
-function CodeLogin({ next }: { next?: string }) {
+function CodeLogin({ next, onUsePassword }: { next?: string; onUsePassword: () => void }) {
   const [request, requestAction] = useActionState(requestEmailOtp, empty);
   const [verify, verifyAction] = useActionState(verifyEmailOtp, empty);
 
@@ -95,6 +83,7 @@ function CodeLogin({ next }: { next?: string }) {
           <Input id="code-email" name="email" type="email" autoComplete="email" required />
         </Field>
         <SubmitButton pendingLabel="Sending…">Email me a code</SubmitButton>
+        <FallbackLink onClick={onUsePassword}>Sign in with your password instead</FallbackLink>
       </form>
     );
   }

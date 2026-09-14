@@ -3269,3 +3269,15 @@ applies 0050 deliberately (gate turns on for the ~350+ base only then - not mid 
 lever, not code). Succeeding phase (not built): move transactional email off Gmail SMTP to Resend / Amazon
 SES / SendGrid before scale - the gate cuts auth codes now but notification volume will still outgrow the
 cap. Handover -> v1.80.
+
+## 2026-09-14 - §2BB applied + password-first login (email code demoted)
+
+Migration 0050 applied to production (`scripts/apply-0050.sql`); verification returned 623 exempt (already
+have a password or a federated identity) / 2 to be gated (email-only, no password) / 625 total, so the gate
+is live but only touches 2 users. Supabase Auth -> Sessions confirmed never-expire (single-session off,
+time-box 0, inactivity 0) - the "always signed in" lever is set. Login reframed password-first
+(`components/auth/login-form.tsx`): password is the default single form with "Forgot password?", and the
+email-code path is demoted to a muted fallback link (one tap away, not removed) to stop habitual OTP
+requests against the Gmail SMTP cap; signup unchanged (still OTP, gate converts new users to a password
+after). Succeeding phase: move transactional email off Gmail SMTP to Resend / SES / SendGrid before scale.
+Handover -> v1.81.

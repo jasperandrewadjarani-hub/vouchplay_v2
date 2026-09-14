@@ -5641,6 +5641,30 @@ deliberately applies the backing migration to the live user base.
   notifications - off Gmail SMTP to a dedicated provider (Resend / Amazon SES / SendGrid) before scale. The
   password gate cuts auth-code email now, but notification volume will still grow past Gmail's ~500/day cap.
 
+### Addendum (2026-09-14): applied + password-first login
+
+- **0050 applied.** Jasper ran `scripts/apply-0050.sql` against Supabase on 2026-09-14. The embedded
+  verification SELECT returned `password_set_true=623`, `password_set_false=2`, `profiles_total=625` - so
+  623 users already have a password or a federated (Google) identity and are exempt from the gate, and only
+  the 2 email-only users with no password will meet the password gate on their next sign-in. The gate is now
+  live but affects a tiny fraction of the base, exactly as designed.
+- **Supabase session settings confirmed.** Authentication -> Sessions was checked and set to: Enforce single
+  session per user = OFF; Time-box user sessions = 0 (never); Inactivity timeout = 0 (never). This is the
+  "always signed in" lever - the dashboard setting, not code - and it is now confirmed set correctly, so
+  persistent auth cookies are not undercut by a server-side timeout or time-box.
+- **Login reframed to password-first.** `apps/web/src/components/auth/login-form.tsx` now leads with a single
+  password form (Email + Password + Sign in, with "Forgot password?" beneath it) instead of the old
+  equal-weight "Password | Email code" tab pill. The email-code path is demoted to a quiet, muted secondary
+  link ("Sign in with an email code instead"); in code mode a matching "Sign in with your password instead"
+  link returns to password. The code path is still one tap away with proper button semantics - demoted, not
+  removed. Why: 623/625 users already have a password, but an equal-weight code tab invited habitual
+  login-code requests, and each one sends an OTP email against the Gmail SMTP cap; password-first cuts that.
+  **Signup is unchanged** - new users still verify via OTP, and the gate above converts them to a password
+  right after. Typecheck and lint pass; login renders password-first with the code fallback link.
+- **Succeeding phase (reiterated):** move transactional email off Gmail SMTP to a dedicated provider (Resend
+  / Amazon SES / SendGrid) before scale. Password-first login and the gate cut auth-code email now, but
+  notification volume will still outgrow Gmail's ~500/day cap.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

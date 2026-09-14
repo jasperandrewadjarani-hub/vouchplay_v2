@@ -101,3 +101,11 @@ missing.
 ```bash
 node scripts/backfill-skill-v2.mjs
 ```
+
+## apply-0050.sql (applied 2026-09-14)
+
+Migration 0050 (master_plan §2BB) added `profiles.password_set` and backfilled `true` for users with a
+password or a federated (Google) identity. Applied 2026-09-14; the embedded verification row returned
+`password_set_true=623`, `password_set_false=2`, `profiles_total=625` - so only 2 existing users will
+meet the password gate on next sign-in, and the rest are exempt. Additive, no RLS change, and the app
+reader (`getViewerPasswordStatus()`) fails open, so deploy order did not matter.

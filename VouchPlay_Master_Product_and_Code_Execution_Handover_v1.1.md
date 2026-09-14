@@ -1,9 +1,9 @@
 Warning: truncated output (original token count: 52712)
 Total output lines: 6749
 
-# VouchPlay Master Product & Code Execution Handover v1.80
+# VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.80 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.81 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.81 (2026-09-14)
+
+_Migration 0050 applied; login reframed password-first (master_plan §2BB addendum)._
+
+- **0050 applied** to production (`scripts/apply-0050.sql`): the verification row returned 623 exempt
+  (already have a password or a federated identity) / 2 to be gated (email-only, no password) / 625 total, so
+  the password gate is now live but only 2 existing users will meet it.
+- **Supabase session settings confirmed never-expire:** Authentication -> Sessions has single-session
+  enforcement OFF, time-box 0 (never), and inactivity timeout 0 (never) - the dashboard "always signed in"
+  lever is set correctly.
+- **Login is now password-first** (`components/auth/login-form.tsx`): password is the default single form
+  (with "Forgot password?"), and the email-code path is demoted to a quiet muted fallback link - still one
+  tap away, not removed - to cut habitual OTP requests against the Gmail SMTP cap. Signup is unchanged (still
+  OTP; the gate converts new users to a password right after).
+
 ## v1.80 (2026-09-14)
 
 _Mandatory password election after first email sign-in + persistent sessions (master_plan §2BB). Migration 0050._
