@@ -3358,3 +3358,22 @@ never exceed its identical size, so the member-count check is removed - open sea
 Search: the organizer list haystack was legal names + division only; `resolve()` already fetched
 `nickname` but never put it on the member, so `Mini.nickname` is now carried and search matches nickname,
 email and the guest partner note. Regression test added. Shipped alone ahead of the §2BG redesign.
+
+## 2026-09-15 - Manage teams rebuilt around "what needs me?" (§2BG, handover v1.83)
+
+Jasper approved the published mockup. Every open entry now sits in exactly one bucket - **Needs me**
+(wants to cancel · check receipt · top-up due · rule check, in that order) · **Waiting** (unpaid, partly
+paid, receipt declined, partner pending, waitlisted) · **Confirmed** - so the tab counts add up to All.
+Rows show one verdict pill, a money read where "paid" means verified ("Free / Unpaid / 1 of 2 paid /
+Paid"), names with nicknames, and at most two icon flags, replacing up to six chips. The top of the
+screen is a summary line (tap → divisions sheet with capacity), search (name / nickname / email, across
+all buckets while typing), scrollable bucket tabs (remembered per tournament), reason chips inside Needs
+me, and one row: Divisions ▾ · Filter (badge) · + Add entry. The filter sheet keeps only Sort, Payment
+(Not paid / Partly / Paid), Unverified, Partner (Open seat / Pending), Show closed - Status and
+Eligibility groups removed as redundant. New `team-card.tsx`: header with one status line and ⋯, a **Next
+step** card that states the decision with big buttons, roster with nicknames and in-card Resend code for
+unverified members, one Eligible line, one payment block (no duplicated actions), ⋯ actions opening one
+focused step sheet each (reclassify = radio rows with capacity), a single toast line for feedback. The
+Unverified accounts panel is removed (filter + flag + card instead). Bottom sheets, 44 px targets, sticky
+search/tabs, safe-area insets. No server or migration change. Succeeding: Phase B (0051) unchanged; an
+activity line on the card from `registration_events` next session.

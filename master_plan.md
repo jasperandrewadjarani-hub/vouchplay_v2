@@ -6052,6 +6052,141 @@ its parse input, so `.optional()` leaves it untouched). No migration - the nulla
 `getMyProfile` select. **UI:** `components/auth/onboarding-form.tsx` (editable in edit mode);
 `app/(app)/me/edit/page.tsx` (passes `dateOfBirth`).
 
+## 2BG. Manage teams, rebuilt around "what needs me?" - triage buckets, one verdict per row, a team card with a next step, filters cut to one axis (2026-09-15)
+
+Jasper, after using §2BE live (screenshots): the reclassify box errors ("team size does not match"); the
+screen is too cluttered; unverified accounts show no uploads or teams; filters are redundant ("what is the
+difference between Payment submitted and Has receipt?"); he cannot tell who paid or what needs
+confirming; search ignores nicknames; the team card shows no nicknames; tags are everywhere. He approved
+the published mockup and asked for it built, mobile-app friendly and intuitive.
+
+### Findings (code, 2026-09-15)
+
+1. **Reclassify** compared the team's current member count to the target `team_size` - an open-seat
+   doubles team (1 of 2) always failed. **Fixed and shipped as a hotfix** (`52b6eeb`), with search on
+   nickname + email + partner note.
+2. **Two overlapping money vocabularies on one row**: `statusChip` ("Check payment", "Top-up needed",
+   "Paid"…) and `moneyTag` ("Team paid", "N of M slots paid", "Under review"…), plus eligibility, partner,
+   unverified and needs-review chips - up to six tags per row.
+3. **Six filter groups, ~25 chips**: Status (raw enum), Eligibility, Payment, Partner, Requests/Accounts,
+   Division (16 chips). "Payment submitted" (Status) = "Has receipt" (Payment); "Confirmed" ≈ "Fully
+   paid"; the Eligibility group duplicates what "Needs review" already says.
+4. **Above the list** sit a capacity strip, a Reserved slots panel, an Unverified accounts panel (a
+   dead-end list: no receipt, no team), Sort, a "29 unverified" pill, Add entry, Select and Filters -
+   the first entry is two screens down on a phone.
+5. **The team card** (lane 4) renders Reclassify as an always-open dashed box above the roster, a header
+   status word that can contradict the eligibility chip, receipt actions in two places, inline dashed
+   reason boxes for every overflow action, and errors printed as loose lines at the bottom.
+6. `Mini.nickname` was fetched but dropped (fixed in the hotfix); nothing renders it yet.
+
+### Decisions
+
+**A. One question leads: which bucket does this entry sit in?** A pure model in `entry-view.ts`. Every
+open entry is in exactly ONE bucket, so the tab counts add up (Needs me + Waiting + Confirmed = All) - an
+organizer can trust the numbers.
+- **Needs me** - the organizer must decide something. Reasons, in priority order: *Wants to cancel*
+  (open cancellation request) · *Check receipt* (a submitted team or seat receipt) · *Top-up due*
+  (`topupDue > 0`) · *Rule check* (eligibility is not `eligible`).
+- **Confirmed** - `status = confirmed` with no reason above.
+- **Waiting** - everything else that is open: unpaid, partly paid, receipt declined (the player must
+  resend), partner pending, waitlisted. Nothing for the organizer to do yet.
+- **Closed** - withdrawn / rejected / cancelled / refunded; hidden unless "Show closed".
+
+**B. One verdict per row.** The row is: stacked avatars (a striped ghost for an open seat) · names with
+nicknames (the nickname in the brand cyan, in quotes) · `Division · money read` · ONE pill · at most two
+small icon flags. Pill = the bucket's words: the first Needs-me reason (amber), "Confirmed" (green),
+"Unpaid" / "Partly paid 1/2" / "Receipt declined" / "Waitlisted" (neutral), closed status (muted).
+Money read: "Free" · "Unpaid" · "1 of 2 paid" · "Paid" - paid means *verified*, never "a receipt exists".
+Flags: unverified account, partner not confirmed (icon + `aria-label`; the card spells them out).
+
+**C. The screen top, for a thumb.** In order: a one-line summary ("163 of 820 entered · 66 paid" - tap
+opens the divisions sheet with per-division capacity, replacing the always-on strip) · a full-width search
+("Name, nickname or email") · bucket tabs (horizontally scrollable, count badges, the selected Needs-me
+tab amber) · inside Needs me only, small reason chips with counts ("Receipts 8 · Rules 3 · Cancel 1",
+zeros hidden) · one action row: **Divisions ▾** (sheet: searchable checklist with n/m capacity) ·
+**Filter** icon with an active-count badge · **+ Add entry**. Search looks across every bucket while
+typed (tabs dim, "Searching all entries"), because "did Maria get in?" should never depend on the tab.
+The selected bucket is remembered per tournament (`localStorage`, fails silently); first visit opens Needs
+me when it has entries, otherwise All. "Select" becomes **Verify several**, shown only in Needs me when
+receipts are waiting.
+
+**D. Filters sheet, cut to what's left after the tabs.** Sort · Payment (Not paid · Partly paid · Paid;
+a free entry counts as paid) · Account (Unverified) · Partner (Open seat · Partner pending) · Show closed.
+Footer: **Clear** and **Show n entries**. Status and Eligibility groups are removed (the tabs and the
+Rule-check reason carry them).
+
+**E. The team card - a roster with a next step** (`components/tournaments/team-card.tsx`, bottom sheet on
+phones):
+- **Header**: avatars, names with nicknames, division · format, one status line (tone dot · verdict ·
+  money read), a ⋯ button beside close.
+- **Next step** (only in Needs me) - one amber card that says what to do, with big buttons: *Wants to
+  cancel* "“reason”" → Approve cancellation · Keep entry; *Check receipt* "₱X · Team receipt" → View ·
+  Verify · Decline; *Top-up due* "₱X still owed" → Confirm anyway; *Rule check* (reason lines) → Approve ·
+  Reclassify. When a second decision exists it shows as "Then: Rule check" under the buttons.
+- **Roster**: avatar · name · nickname · "Community: Advanced"; an unverified member shows an
+  *Unverified* chip with **Resend code** right there; a pending partner shows a clock chip; an open seat
+  shows **+ Add partner**; the guest partner note shows as "Partner: Maria (to be invited)". Tapping a
+  name opens the profile. Replace / Remove stay disabled ("Coming soon") until Phase B.
+- **Eligibility** as one line "✓ Eligible for this division" (with a small *Undo approval* when an override
+  exists); a problem appears in Next step instead.
+- **Payment**: one block. Team receipt (amount, state, View; Undo verify / Restore when relevant - Verify
+  and Decline live in Next step, never twice); seat lines ("Rene · Covered by team receipt", "Paid · Undo",
+  "Unpaid · Mark paid (cash)", "Receipt sent · View · Verify").
+- **⋯ More** opens a small action sheet: Reclassify division · Confirm without payment / Move back to review
+  · Reject entry / Restore entry · Refund payment · Request skill review · {name}. Each opens ONE focused
+  step sheet (big radio rows for divisions with n/m capacity; a reason field only where required; one
+  primary button) instead of inline dashed boxes.
+- **Feedback**: one toast line under the header (success green / error red) that clears on the next action.
+  No stray lines at the bottom. Confirmed and settled → a quiet "All set" line and the Award picker.
+
+**F. Unverified accounts are rows, not a panel.** The separate panel is removed; "Unverified" is a filter
+and a row flag, and the card carries the receipt, seats and **Resend code** - so the organizer sees the
+upload and acts in one place.
+
+**G. Mobile-app standards throughout**: 44 px minimum targets; bottom sheets with the safe-area inset and
+a drag handle; sticky search + tabs while the list scrolls; no hover-only meaning; tabular numbers for
+counts and money; `prefers-reduced-motion` respected; light and dark themes through the existing tokens;
+no explainer sentences.
+
+### Better suggestions folded in
+
+- Buckets that add up (A) - the trust property Jasper's "I don't know which ones paid" is really asking for.
+- Next step card (E) - the single biggest aid for non-technical organizers: the card tells you the decision.
+- Search across buckets (C); remembered bucket (C); reason chips inside Needs me (C).
+- Resend code inside the card (F) instead of a separate list.
+
+### Loose ends resolved
+
+- **Deployment skew**: no server contract changes; old clients keep working against the same actions.
+- **`lib/players/privileged.ts`** imports `isClosed`, `hasOpenSeat`, `hasUnconfirmedPartner` - kept.
+- **Bulk verify** keeps `verifyPaymentsBulk`; only its entry point moves.
+- **Free divisions**: money read "Free"; counts as paid in the Payment filter; a free unconfirmed entry is
+  Waiting (the organizer confirms it from ⋯ or the Confirm entry step).
+- **Reserved slots panel** (bare slots with no team) stays, collapsed, below the list.
+- **Export** untouched.
+
+### Succeeding phases
+
+- **Phase B (migration 0051, after 2026-09-16)** unchanged: replace / remove / merge players, non-user
+  entries by email, bulk import, Admin → Guests.
+- **Activity line on the card** ("Verified by Jasper · 2 h ago") from `registration_events` - next
+  session; valuable once several co-organizers work the same list.
+
+### Contracts
+
+**Model (`lib/tournaments/entry-view.ts`)**: `EntryBucket`, `NeedsReason`, `needsReasons`, `entryBucket`,
+`entryVerdict`, `moneyRead`, `entryFlags`, `EntryFilters` v2 (`bucket`, `reasons`, `divisions`, `payment`,
+`account`, `partner`, `includeClosed`, `search`), `DEFAULT_FILTERS`, `filterEntries`, `countBuckets`,
+`activeRefineCount`, `clearRefine`; kept: `isClosed`, `hasOpenSeat`, `hasUnconfirmedPartner`,
+`teamLabel`, `queuesFor`, `sortEntries`, `EntrySort`, `DEFAULT_SORT`, `amountLabel`.
+**UI**: `organizer-registrations.tsx` (list shell), new `team-card.tsx`, new `manage-sheets.tsx`
+(division + filter sheets); manage page drops the Unverified panel; `unverified-accounts-panel.tsx` removed.
+
+### Execution
+
+Docs → three Sonnet lanes in parallel (model + tests · list shell · team card) → main-session review →
+gates → commit → push.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

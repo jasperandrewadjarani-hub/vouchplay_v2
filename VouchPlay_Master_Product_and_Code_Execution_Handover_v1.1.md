@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.82 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.83 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,24 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.83 (2026-09-15)
+
+_Hotfix (reclassify open-seat teams; nickname/email search) + Manage teams rebuilt around "what needs me?" (master_plan §2BG). No migration._
+
+- **Hotfix `52b6eeb`:** `reclassifyRegistration` no longer compares the current member count to the
+  target team size (an open-seat doubles team always failed); organizer search matches nickname, email
+  and the guest partner note.
+- **Buckets:** every open entry sits in exactly one of Needs me (wants to cancel · check receipt · top-up
+  due · rule check) · Waiting · Confirmed, so the counts add up to All. One verdict pill and one money
+  read per row ("paid" = verified); nicknames everywhere; at most two icon flags.
+- **Screen top:** summary line → divisions sheet; search across all buckets; remembered bucket tabs;
+  reason chips in Needs me; Divisions ▾ · Filter · + Add entry. Filter sheet reduced to Sort, Payment,
+  Unverified, Partner, Show closed.
+- **Team card (`team-card.tsx`):** one status line + ⋯; a Next step card with the decision and big
+  buttons; roster with nicknames and in-card Resend code; one payment block; ⋯ actions as focused step
+  sheets. The Unverified accounts panel is removed (filter + flag + card).
+- **Succeeding:** Phase B (0051) unchanged; activity line on the card next session.
+
 ## v1.82 (2026-09-14)
 
 _Players tab doors + iPhone sex glyph + staff-link switch (master_plan §2BC); forgot-password by in-app code, standard password fields, PIN decision (§2BD); organizer powers phase A (§2BE); editable birthday in Edit profile (§2BF). No migration in this deploy._

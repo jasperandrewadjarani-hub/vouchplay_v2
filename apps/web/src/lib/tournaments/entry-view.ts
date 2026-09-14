@@ -1,53 +1,16 @@
 import type { OrganizerRegistration } from './registration-queries';
 
 /**
- * How one registration presents itself in the organizer's list (master_plan §1Z, §2AG/A5).
+ * How one registration presents itself in the organizer's list (master_plan §2BG).
  *
- * Pure and shared so the row, the detail sheet, the filters and the sort control cannot disagree
- * about what state an entry is in. Everything here answers one question: what does this organizer
- * need to decide?
+ * Pure and shared so the row, the team card, the filters and the sort control cannot disagree about
+ * what state an entry is in. Every open entry sits in exactly ONE bucket - `needsReasons`/
+ * `entryBucket` are the one place that decision is made, so the tab counts always add up (Needs me +
+ * Waiting + Confirmed = All).
  */
 
 export type EntryQueue =
   'needs_payment_review' | 'cancellation_requested' | 'needs_eligibility_review';
-
-/** The registration_status enum (migration 0008), mirrored here so filters/sort stay a closed set. */
-export type RegStatus =
-  | 'team_formed'
-  | 'payment_pending'
-  | 'payment_submitted'
-  | 'under_review'
-  | 'confirmed'
-  | 'waitlisted'
-  | 'rejected'
-  | 'withdrawn'
-  | 'cancelled'
-  | 'refunded';
-
-/** The registration_eligibility enum (migration 0008). */
-export type EligKind = 'eligible' | 'review' | 'skill_mismatch' | 'ineligible_hard_rule';
-
-/** Plain labels for the Status filter chips - never the raw database word. */
-export const STATUS_LABELS: Record<RegStatus, string> = {
-  team_formed: 'Team formed',
-  payment_pending: 'Awaiting payment',
-  payment_submitted: 'Payment submitted',
-  under_review: 'Under review',
-  confirmed: 'Confirmed',
-  waitlisted: 'Waitlisted',
-  rejected: 'Rejected',
-  withdrawn: 'Withdrawn',
-  cancelled: 'Cancelled',
-  refunded: 'Refunded',
-};
-
-/** Plain labels for the Eligibility filter chips. */
-export const ELIGIBILITY_LABELS: Record<EligKind, string> = {
-  eligible: 'Eligible',
-  review: 'Needs review',
-  skill_mismatch: 'Skill mismatch',
-  ineligible_hard_rule: 'Rule violation',
-};
 
 /** Entries an organizer has closed. Hidden by default: they are history, not work. */
 export const CLOSED_STATUSES = new Set(['withdrawn', 'cancelled', 'rejected', 'refunded']);
@@ -58,7 +21,9 @@ export function isClosed(entry: Pick<OrganizerRegistration, 'status'>): boolean 
 
 /**
  * The queues an entry currently sits in. An entry can be in more than one - a paid entry whose player
- * has asked to cancel needs both decisions - so this returns a set rather than a single bucket.
+ * has asked to cancel needs both decisions - so this returns a set rather than a single bucket. Kept
+ * unchanged (master_plan §2BG "Loose ends resolved"): `lib/players/privileged.ts` relies on the same
+ * shape of reasoning, and bulk-verify / other older call sites still read this set directly.
  */
 export function queuesFor(entry: OrganizerRegistration): EntryQueue[] {
   if (isClosed(entry)) return [];
@@ -92,378 +57,320 @@ export function hasOpenSeat(entry: OrganizerRegistration): boolean {
   return entry.teamSize > 1 && entry.members.length < entry.teamSize;
 }
 
-export interface StatusChip {
-  label: string;
-  /** Semantic tone. Never the only signal: the label always carries the meaning too (§34A). */
-  tone: 'action' | 'waiting' | 'done' | 'closed';
-}
-
-/**
- * One chip per entry, chosen by what the ORGANIZER must do next rather than by raw status. A list of
- * database enums is a list an organizer has to translate; this is the translation.
- *
- * §2AO A6: driven by `paymentSummary` (team receipt combined with every attached seat) rather than
- * only the team-scope `paymentStatus`, so a seat-only receipt or a partially paid doubles team reads
- * correctly too.
- */
-export function statusChip(entry: OrganizerRegistration): StatusChip {
-  if (isClosed(entry)) return { label: entry.status.replace(/_/g, ' '), tone: 'closed' };
-  if (entry.cancellationRequest) return { label: 'Cancellation asked', tone: 'action' };
-  const summary = entry.paymentSummary;
-  if (summary.submittedSeats > 0 || summary.teamReceipt === 'submitted') {
-    return { label: 'Check payment', tone: 'action' };
-  }
-  if (entry.status === 'confirmed') return { label: 'Confirmed', tone: 'done' };
-  if (entry.status === 'waitlisted') return { label: 'Waitlisted', tone: 'waiting' };
-  if (summary.state === 'partial') {
-    return summary.topupDue > 0
-      ? { label: 'Top-up needed', tone: 'action' }
-      : { label: `Partially paid ${summary.paidSeats}/${summary.totalSeats}`, tone: 'waiting' };
-  }
-  if (summary.state === 'paid') return { label: 'Paid', tone: 'done' };
-  if (summary.state === 'declined') return { label: 'Payment rejected', tone: 'action' };
-  return { label: 'Awaiting payment', tone: 'waiting' };
-}
-
-export interface MoneyTag {
-  label: string;
-  /** Semantic tone. Never the only signal: the label always carries the meaning too (§34A). */
-  tone: 'done' | 'waiting' | 'action' | 'closed';
-}
-
-/**
- * One money-only tag per entry, straight off `paymentSummary` (master_plan §2AP I). This is
- * deliberately narrower than `statusChip`: it never mentions cancellation requests or eligibility, so
- * a row can show BOTH tags side by side without repeating itself.
- *
- * §2AP C4: a CONFIRMED entry can still be only partially paid (an accepted partner release detaches a
- * seat without downgrading the entry, per §2AM). That is exactly the case an organizer must not miss,
- * so it surfaces as an action - amber, not a routine wait - even though every other chip on the row
- * already reads "done".
- */
-export function moneyTag(entry: OrganizerRegistration): MoneyTag {
-  const summary = entry.paymentSummary;
-
-  if (summary.teamReceipt === 'verified') return { label: 'Team paid', tone: 'done' };
-  if (summary.state === 'refunded') return { label: 'Refunded', tone: 'closed' };
-  if (summary.topupDue > 0) return { label: 'Top-up needed', tone: 'action' };
-  if (summary.state === 'declined') return { label: 'Declined', tone: 'action' };
-
-  if (summary.state === 'paid') {
-    // Fully paid seat-by-seat rather than by one team receipt (already handled above) - still named
-    // by the count, which is the more informative reading once there is more than one seat.
-    return { label: `${summary.paidSeats} of ${summary.totalSeats} slots paid`, tone: 'done' };
-  }
-
-  if (summary.state === 'partial') {
-    const openSeat = summary.seats.some((s) => s.playerId === null) || hasOpenSeat(entry);
-    if (openSeat) return { label: 'Slot paid · no partner yet', tone: 'waiting' };
-    const label = `${summary.paidSeats} of ${summary.totalSeats} slots paid`;
-    return { label, tone: entry.status === 'confirmed' ? 'action' : 'waiting' };
-  }
-
-  if (summary.submittedSeats > 0 || summary.state === 'submitted') {
-    return { label: 'Under review', tone: 'waiting' };
-  }
-
-  return { label: 'No receipt', tone: 'waiting' };
-}
-
 /** Money as one short string, or null when the division is free. */
 export function amountLabel(entry: OrganizerRegistration): string | null {
   if (entry.amountDue == null || entry.amountDue <= 0) return null;
   return `${entry.currency ?? 'PHP'} ${entry.amountDue.toLocaleString('en-US')}`;
 }
 
-export interface EntryCounts {
-  open: number;
-  closed: number;
-  needsPaymentReview: number;
-  cancellationRequested: number;
-  needsEligibilityReview: number;
-  /** §2AQ D: the count badge for the "Requests -> Wants to cancel" filter button. Same underlying
-   *  entries as `cancellationRequested` (both come from `queuesFor`'s `cancellation_requested`) -
-   *  named separately because the two surfaces are asked different questions ("what needs a
-   *  decision" vs. "how many match this filter"). */
-  wantsToCancel: number;
-  /** §2BE Decision E: the count badge for the "Requests -> Unverified account" filter button - how
-   *  many OPEN entries carry at least one unverified (guest) member. */
-  unverifiedAccounts: number;
-}
-
-export function countEntries(entries: readonly OrganizerRegistration[]): EntryCounts {
-  const counts: EntryCounts = {
-    open: 0,
-    closed: 0,
-    needsPaymentReview: 0,
-    cancellationRequested: 0,
-    needsEligibilityReview: 0,
-    wantsToCancel: 0,
-    unverifiedAccounts: 0,
-  };
-  for (const e of entries) {
-    if (isClosed(e)) {
-      counts.closed += 1;
-      continue;
-    }
-    counts.open += 1;
-    const queues = queuesFor(e);
-    if (queues.includes('needs_payment_review')) counts.needsPaymentReview += 1;
-    if (queues.includes('cancellation_requested')) {
-      counts.cancellationRequested += 1;
-      counts.wantsToCancel += 1;
-    }
-    if (queues.includes('needs_eligibility_review')) counts.needsEligibilityReview += 1;
-    if (e.members.some((m) => m.unverified === true)) counts.unverifiedAccounts += 1;
-  }
-  return counts;
-}
-
 // ---------------------------------------------------------------------------
-// Filters (master_plan §2AG/A5) - combinable: AND across groups, OR within a group.
+// One bucket per entry (master_plan §2BG Decision A)
 // ---------------------------------------------------------------------------
+
+export type EntryBucket = 'needs' | 'waiting' | 'confirmed' | 'closed';
+
+/** Priority order: the FIRST reason present is the one the verdict pill leads with. */
+export type NeedsReason = 'cancel' | 'receipt' | 'topup' | 'rule';
+
+export const NEEDS_REASON_LABELS: Record<NeedsReason, string> = {
+  cancel: 'Wants to cancel',
+  receipt: 'Check receipt',
+  topup: 'Top-up due',
+  rule: 'Rule check',
+};
+
+/** Short chip labels for the reason chips inside the Needs-me tab. */
+export const NEEDS_REASON_SHORT: Record<NeedsReason, string> = {
+  cancel: 'Cancel',
+  receipt: 'Receipts',
+  topup: 'Top-up',
+  rule: 'Rules',
+};
 
 /**
- * COMPAT NOTE: the previous shape was `{ divisionName: string; queue: 'all' | EntryQueue;
- * includeClosed: boolean; search: string }` - one queue, one division, both single-select. Only
- * this module and `organizer-registrations.tsx` ever read/wrote it (grepped, confirmed), so it is
- * renamed rather than aliased: every field is now an array of the values that group ADMITS (empty =
- * no constraint, i.e. "Any"). `queue` (a derived work-bucket) is dropped in favour of the raw
- * `statuses`/`eligibility`/`payment`/`partner` groups the handover asks for, which an organizer can
- * combine directly instead of picking one precomputed bucket; a cancellation request still surfaces
- * via the row's own chip and still sorts to the top under the default "needs me" order.
+ * Every reason THIS entry currently needs the organizer's attention, in priority order. Empty for a
+ * closed entry - closed entries never need anything from the organizer again.
  */
-/** §2AO A6: receipt-presence (unchanged) plus the two payment-summary states an organizer can now
- *  filter to directly. */
-export type PaymentFilterValue = 'has_proof' | 'no_proof' | 'partial' | 'paid';
+export function needsReasons(entry: OrganizerRegistration): NeedsReason[] {
+  if (isClosed(entry)) return [];
+  const reasons: NeedsReason[] = [];
+  if (entry.cancellationRequest != null) reasons.push('cancel');
+  const summary = entry.paymentSummary;
+  if (
+    summary.teamReceipt === 'submitted' ||
+    summary.submittedSeats > 0 ||
+    entry.paymentStatus === 'submitted'
+  ) {
+    reasons.push('receipt');
+  }
+  if (summary.topupDue > 0) reasons.push('topup');
+  if (entry.eligibilityStatus !== 'eligible') reasons.push('rule');
+  return reasons;
+}
 
-/** §2AQ D: a Status-adjacent group for the one player-initiated request an organizer must act on.
- *  §2BE Decision E adds 'unverified_account' alongside it - not a player request, but the same
- *  "needs the organizer's attention" shape, and the group already reads as Requests/Accounts. */
-export type RequestFilterValue = 'wants_to_cancel' | 'unverified_account';
+/** The one bucket this entry sits in. closed > needs > confirmed > waiting. */
+export function entryBucket(entry: OrganizerRegistration): EntryBucket {
+  if (isClosed(entry)) return 'closed';
+  if (needsReasons(entry).length > 0) return 'needs';
+  if (entry.status === 'confirmed') return 'confirmed';
+  return 'waiting';
+}
+
+export interface Verdict {
+  label: string;
+  /** Semantic tone. Never the only signal: the label always carries the meaning too (§34A). */
+  tone: 'action' | 'waiting' | 'done' | 'closed';
+}
+
+function capitalize(word: string): string {
+  return word.length > 0 ? word[0]!.toUpperCase() + word.slice(1) : word;
+}
+
+/** The single pill a row/card shows (master_plan §2BG Decision B). */
+export function entryVerdict(entry: OrganizerRegistration): Verdict {
+  const bucket = entryBucket(entry);
+
+  if (bucket === 'closed') {
+    return { label: capitalize(entry.status), tone: 'closed' };
+  }
+
+  if (bucket === 'needs') {
+    const [first] = needsReasons(entry);
+    return { label: NEEDS_REASON_LABELS[first!], tone: 'action' };
+  }
+
+  if (bucket === 'confirmed') {
+    return { label: 'Confirmed', tone: 'done' };
+  }
+
+  // waiting
+  if (entry.status === 'waitlisted') return { label: 'Waitlisted', tone: 'waiting' };
+  const summary = entry.paymentSummary;
+  if (summary.state === 'declined') return { label: 'Receipt declined', tone: 'waiting' };
+  if (summary.state === 'partial') {
+    return { label: `Partly paid ${summary.paidSeats}/${summary.totalSeats}`, tone: 'waiting' };
+  }
+  if (isFreeEntry(entry)) return { label: 'Not confirmed', tone: 'waiting' };
+  return { label: 'Unpaid', tone: 'waiting' };
+}
+
+/** True when nothing about this entry ever involves money. The division fee is the source of truth:
+ *  `amountDue` is null until a payment row exists, so an unpaid entry in a paid division with no
+ *  receipt yet must NOT read as free. Falls back to the payment/slot amounts only when the fee is
+ *  unknown (hand-built fixtures). */
+export function isFreeEntry(entry: OrganizerRegistration): boolean {
+  if (entry.divisionFee != null) return entry.divisionFee <= 0;
+  return (entry.amountDue ?? 0) <= 0 && entry.slots.every((s) => (s.amountDue ?? 0) <= 0);
+}
+
+/** The money read on a row - "paid" always means VERIFIED, never "a receipt exists" (master_plan
+ *  §2BG Decision B). */
+export function moneyRead(entry: OrganizerRegistration): string {
+  if (isFreeEntry(entry)) return 'Free';
+  const summary = entry.paymentSummary;
+  if (summary.teamReceipt === 'verified' || summary.state === 'paid') return 'Paid';
+  if (summary.state === 'refunded') return 'Refunded';
+  if (summary.totalSeats > 1 && summary.paidSeats > 0) {
+    return `${summary.paidSeats} of ${summary.totalSeats} paid`;
+  }
+  return 'Unpaid';
+}
+
+export type PaymentState = 'unpaid' | 'partial' | 'paid';
+
+/** The same read as `moneyRead`, collapsed to the three-value filter enum. */
+export function paymentState(entry: OrganizerRegistration): PaymentState {
+  if (isFreeEntry(entry)) return 'paid';
+  const summary = entry.paymentSummary;
+  if (summary.teamReceipt === 'verified' || summary.state === 'paid') return 'paid';
+  if (summary.totalSeats > 1 && summary.paidSeats > 0) return 'partial';
+  return 'unpaid';
+}
+
+export type EntryFlag = 'unverified' | 'partner_pending';
+
+/** The at-most-two small icon flags a row carries (master_plan §2BG Decision B). */
+export function entryFlags(entry: OrganizerRegistration): EntryFlag[] {
+  const flags: EntryFlag[] = [];
+  if (entry.members.some((m) => m.unverified === true)) flags.push('unverified');
+  if (hasUnconfirmedPartner(entry)) flags.push('partner_pending');
+  return flags;
+}
+
+/** The nickname shown beside a member's name, suppressed when it says nothing new - empty, or the
+ *  same (case-insensitively) as the first name or the whole name. */
+export function memberDisplay(m: { name: string; nickname?: string | null }): {
+  name: string;
+  nickname: string | null;
+} {
+  const trimmedName = m.name.trim();
+  const nickname = m.nickname?.trim() || null;
+  if (!nickname) return { name: m.name, nickname: null };
+  const firstName = trimmedName.split(/\s+/)[0] ?? '';
+  const lower = nickname.toLowerCase();
+  if (lower === trimmedName.toLowerCase() || lower === firstName.toLowerCase()) {
+    return { name: m.name, nickname: null };
+  }
+  return { name: m.name, nickname };
+}
+
+// ---------------------------------------------------------------------------
+// Filters (master_plan §2BG Decision D) - one axis of tabs (bucket) plus a small refine sheet.
+// ---------------------------------------------------------------------------
+
+export type BucketFilter = 'needs' | 'waiting' | 'confirmed' | 'all';
 
 export interface EntryFilters {
-  /** Division ids (not names - two divisions can share a display name). Empty = every division. */
+  bucket: BucketFilter;
+  /** Only applied when `bucket === 'needs'` and `search` is empty. OR within the group. */
+  reasons: NeedsReason[];
+  /** Division ids (not names - two divisions can share a display name). OR within the group. */
   divisions: string[];
-  statuses: RegStatus[];
-  eligibility: EligKind[];
-  /** §2AO A6: 'partial'/'paid' read from `paymentSummary.state` alongside the existing receipt-
-   *  presence values - an entry matches if it satisfies ANY selected value (OR within the group). */
-  payment: PaymentFilterValue[];
-  partner: ('confirmed' | 'unconfirmed' | 'none')[];
-  /** §2AQ D: entries with an open cancellation request (`entry.cancellationRequest != null`). */
-  requests: RequestFilterValue[];
-  /** Legacy single toggle, kept alongside the Status group (handover A5). Only decides visibility
-   *  when `statuses` is empty - an explicit Status pick is a more specific ask and wins outright. */
+  payment: PaymentState[];
+  /** Non-empty means "this entry must carry an unverified member" - the group has one possible value. */
+  account: 'unverified'[];
+  partner: ('open_seat' | 'pending')[];
   includeClosed: boolean;
   search: string;
 }
 
-/** §2AP I: the organizer's default view is receipts - entries with nothing to check are noise until
- *  asked for, so "Has receipt" is the one filter that starts applied (shown as a removable chip, so
- *  "show me everything" is one tap away). */
 export const DEFAULT_FILTERS: EntryFilters = {
+  bucket: 'needs',
+  reasons: [],
   divisions: [],
-  statuses: [],
-  eligibility: [],
-  payment: ['has_proof'],
+  payment: [],
+  account: [],
   partner: [],
-  requests: [],
   includeClosed: false,
   search: '',
 };
 
+function passesRefineFilters(entry: OrganizerRegistration, f: EntryFilters): boolean {
+  if (f.divisions.length > 0 && !f.divisions.includes(entry.divisionId)) return false;
+  if (f.payment.length > 0 && !f.payment.includes(paymentState(entry))) return false;
+  if (f.account.length > 0 && !entry.members.some((m) => m.unverified === true)) return false;
+  if (f.partner.length > 0) {
+    const keys: ('open_seat' | 'pending')[] = [];
+    if (hasOpenSeat(entry)) keys.push('open_seat');
+    if (hasUnconfirmedPartner(entry)) keys.push('pending');
+    if (!keys.some((k) => f.partner.includes(k))) return false;
+  }
+  return true;
+}
+
 /**
- * Filtering, in one place. AND across the groups below, OR within each group (an empty group applies
- * no constraint - "Any"). Search matches a player's name so an organizer can answer "did Maria get
- * in?" - which is the question they are actually asked, and which a status filter cannot answer.
+ * Filtering, in one place. Refine filters (divisions, payment, account, partner) always AND in.
+ * Closed entries are excluded unless `includeClosed`. A non-empty search IGNORES bucket and reasons
+ * and matches across every open (and, if included, closed) entry - "did Maria get in?" should never
+ * depend on which tab is selected. Otherwise the bucket tab decides, and `reasons` further narrows
+ * the Needs-me tab only.
  */
 export function filterEntries(
   entries: readonly OrganizerRegistration[],
-  filters: EntryFilters,
+  f: EntryFilters,
 ): OrganizerRegistration[] {
-  const needle = filters.search.trim().toLowerCase();
-  return entries.filter((e) => {
-    // Closed-visibility gate. An explicit Status selection is the more specific ask and decides
-    // visibility on its own, closed statuses included (so picking "Withdrawn" shows withdrawn
-    // entries even with "Show closed" off). With no Status picked, the legacy switch applies: closed
-    // hidden unless "Show closed" is on - not appended to the open list, exactly as before (§2O).
-    if (filters.statuses.length > 0) {
-      if (!filters.statuses.includes(e.status as RegStatus)) return false;
-    } else if (filters.includeClosed ? !isClosed(e) : isClosed(e)) {
-      return false;
-    }
+  const needle = f.search.trim().toLowerCase();
 
-    if (filters.divisions.length > 0 && !filters.divisions.includes(e.divisionId)) return false;
-
-    if (
-      filters.eligibility.length > 0 &&
-      !filters.eligibility.includes(e.eligibilityStatus as EligKind)
-    )
-      return false;
-
-    if (filters.payment.length > 0) {
-      const keys: PaymentFilterValue[] = [e.hasProof ? 'has_proof' : 'no_proof'];
-      if (e.paymentSummary.state === 'partial') keys.push('partial');
-      if (e.paymentSummary.state === 'paid') keys.push('paid');
-      if (!keys.some((k) => filters.payment.includes(k))) return false;
-    }
-
-    if (filters.partner.length > 0) {
-      const key: 'confirmed' | 'unconfirmed' | 'none' = hasOpenSeat(e)
-        ? 'none'
-        : hasUnconfirmedPartner(e)
-          ? 'unconfirmed'
-          : 'confirmed';
-      if (!filters.partner.includes(key)) return false;
-    }
-
-    if (filters.requests.length > 0) {
-      const keys: RequestFilterValue[] = [];
-      if (e.cancellationRequest != null) keys.push('wants_to_cancel');
-      if (e.members.some((m) => m.unverified === true)) keys.push('unverified_account');
-      if (!keys.some((k) => filters.requests.includes(k))) return false;
-    }
+  return entries.filter((entry) => {
+    const closed = isClosed(entry);
+    if (closed && !f.includeClosed) return false;
+    if (!passesRefineFilters(entry, f)) return false;
 
     if (needle) {
       // §2BG: players are known by their nickname / IGN on court, and organizers are often handed an
-      // email - so search matches both, not only the legal name and division.
-      const extras = e.members
+      // email - so search matches both, not only the legal name and division (same behaviour as the
+      // §2BG hotfix search).
+      const extras = entry.members
         .flatMap((m) => [m.nickname, (m as { email?: string | null }).email])
         .filter(Boolean)
         .join(' ');
       const haystack =
-        `${teamLabel(e)} ${extras} ${e.partnerNote ?? ''} ${e.divisionName}`.toLowerCase();
-      if (!haystack.includes(needle)) return false;
+        `${teamLabel(entry)} ${extras} ${entry.partnerNote ?? ''} ${entry.divisionName}`.toLowerCase();
+      return haystack.includes(needle);
+    }
+
+    if (f.bucket === 'all') return true;
+    if (closed) return false; // closed entries never sit in needs/waiting/confirmed
+    if (entryBucket(entry) !== f.bucket) return false;
+
+    if (f.bucket === 'needs' && f.reasons.length > 0) {
+      const reasons = needsReasons(entry);
+      if (!reasons.some((r) => f.reasons.includes(r))) return false;
     }
 
     return true;
   });
 }
 
-/** One removable chip for an active filter, plus enough to clear it again. */
-export type EntryFilterGroup =
-  | 'divisions'
-  | 'statuses'
-  | 'eligibility'
-  | 'payment'
-  | 'partner'
-  | 'requests'
-  | 'includeClosed'
-  | 'search';
-
-export interface EntryFilterChip {
-  group: EntryFilterGroup;
-  /** The array value this chip represents; empty string for the two non-array groups. */
-  value: string;
-  label: string;
-}
-
-const PAYMENT_LABELS: Record<PaymentFilterValue, string> = {
-  has_proof: 'Has receipt',
-  no_proof: 'No receipt',
-  partial: 'Partially paid',
-  paid: 'Fully paid',
-};
-const PARTNER_LABELS: Record<'confirmed' | 'unconfirmed' | 'none', string> = {
-  confirmed: 'Partner confirmed',
-  unconfirmed: 'Partner not confirmed',
-  none: 'No partner yet',
-};
-const REQUEST_LABELS: Record<RequestFilterValue, string> = {
-  wants_to_cancel: 'Wants to cancel',
-  unverified_account: 'Unverified account',
-};
-
-/**
- * Every active filter as a removable chip, in one place so the list and the "click to remove" logic
- * cannot disagree about what is currently applied.
- */
-export function describeEntryChips(
-  filters: EntryFilters,
-  divisions: readonly { id: string; name: string }[],
-): EntryFilterChip[] {
-  const divisionName = new Map(divisions.map((d) => [d.id, d.name]));
-  const chips: EntryFilterChip[] = [];
-  for (const id of filters.divisions) {
-    chips.push({ group: 'divisions', value: id, label: divisionName.get(id) ?? 'Division' });
-  }
-  for (const s of filters.statuses) {
-    chips.push({ group: 'statuses', value: s, label: STATUS_LABELS[s] });
-  }
-  for (const k of filters.eligibility) {
-    chips.push({ group: 'eligibility', value: k, label: ELIGIBILITY_LABELS[k] });
-  }
-  for (const p of filters.payment) {
-    chips.push({ group: 'payment', value: p, label: PAYMENT_LABELS[p] });
-  }
-  for (const p of filters.partner) {
-    chips.push({ group: 'partner', value: p, label: PARTNER_LABELS[p] });
-  }
-  for (const r of filters.requests) {
-    chips.push({ group: 'requests', value: r, label: REQUEST_LABELS[r] });
-  }
-  if (filters.includeClosed) {
-    chips.push({ group: 'includeClosed', value: '', label: 'Showing closed' });
-  }
-  if (filters.search.trim()) {
-    chips.push({ group: 'search', value: '', label: `"${filters.search.trim()}"` });
-  }
-  return chips;
-}
-
-/** Removes one value from one filter group (or clears the group entirely for the two scalar ones). */
-export function clearEntryFilter(
-  filters: EntryFilters,
-  group: EntryFilterGroup,
-  value: string,
-): EntryFilters {
-  switch (group) {
-    case 'divisions':
-      return { ...filters, divisions: filters.divisions.filter((v) => v !== value) };
-    case 'statuses':
-      return { ...filters, statuses: filters.statuses.filter((v) => v !== value) };
-    case 'eligibility':
-      return { ...filters, eligibility: filters.eligibility.filter((v) => v !== value) };
-    case 'payment':
-      return { ...filters, payment: filters.payment.filter((v) => v !== value) };
-    case 'partner':
-      return { ...filters, partner: filters.partner.filter((v) => v !== value) };
-    case 'requests':
-      return { ...filters, requests: filters.requests.filter((v) => v !== value) };
-    case 'includeClosed':
-      return { ...filters, includeClosed: false };
-    case 'search':
-      return { ...filters, search: '' };
-  }
+export interface BucketCounts {
+  needs: number;
+  waiting: number;
+  confirmed: number;
+  all: number;
+  closed: number;
+  reasons: Record<NeedsReason, number>;
 }
 
 /**
- * §2AQ D: back to TRULY "Any" everywhere - not `DEFAULT_FILTERS`, whose `payment: ['has_proof']`
- * chip is a starting point an organizer can already remove one tap at a time. "Clear all" is the
- * other button on the same screen and organizers expect it to mean "show me everything, no
- * exceptions" - returning `DEFAULT_FILTERS` here made it a no-op on first open of Manage (§2AQ
- * Findings 3).
+ * The tab/chip counts, so the tabs can show numbers that match what a tap on them will show. Counts
+ * after applying the refine filters (divisions, payment, account, partner) but NOT bucket, reasons,
+ * search, or includeClosed - so switching tabs, typing a search, or toggling "show closed" never
+ * makes the badges themselves flicker. `all` counts only open entries; `closed` is separate. An entry
+ * with two Needs-me reasons counts in both reason buckets.
  */
-export function clearAllEntryFilters(): EntryFilters {
-  return {
-    divisions: [],
-    statuses: [],
-    eligibility: [],
-    payment: [],
-    partner: [],
-    requests: [],
-    includeClosed: false,
-    search: '',
+export function countBuckets(
+  entries: readonly OrganizerRegistration[],
+  f: EntryFilters,
+): BucketCounts {
+  const counts: BucketCounts = {
+    needs: 0,
+    waiting: 0,
+    confirmed: 0,
+    all: 0,
+    closed: 0,
+    reasons: { cancel: 0, receipt: 0, topup: 0, rule: 0 },
   };
+
+  for (const entry of entries) {
+    if (!passesRefineFilters(entry, f)) continue;
+
+    if (isClosed(entry)) {
+      counts.closed += 1;
+      continue;
+    }
+
+    counts.all += 1;
+    const bucket = entryBucket(entry);
+    if (bucket === 'needs') {
+      counts.needs += 1;
+      for (const reason of needsReasons(entry)) counts.reasons[reason] += 1;
+    } else if (bucket === 'waiting') {
+      counts.waiting += 1;
+    } else if (bucket === 'confirmed') {
+      counts.confirmed += 1;
+    }
+  }
+
+  return counts;
+}
+
+/** How many refine-sheet selections are active - divisions are counted separately by the UI. */
+export function activeRefineCount(f: EntryFilters): number {
+  return f.payment.length + f.account.length + f.partner.length + (f.includeClosed ? 1 : 0);
+}
+
+/** Resets the refine sheet only - bucket, reasons, divisions and search are untouched. */
+export function clearRefine(f: EntryFilters): EntryFilters {
+  return { ...f, payment: [], account: [], partner: [], includeClosed: false };
 }
 
 // ---------------------------------------------------------------------------
-// Sort (master_plan §2AG/A5) - an Excel-like column sort over the already-loaded list.
+// Sort (master_plan §2AG/A5, §2BG) - an Excel-like column sort over the already-loaded list.
 // ---------------------------------------------------------------------------
 
 export type EntrySortKey =
   | 'needs_me'
+  | 'needs_first'
   | 'name'
   | 'division'
   | 'status'
@@ -479,8 +386,30 @@ export interface EntrySort {
 
 /** Newest submission first by default (owner request, 2026-09-13): organizers process the queue as it
  *  comes in, so the most recent entries lead. The "Needs me first" sort is still one tap away in the
- *  sort control. The default "Has receipt" payment filter (DEFAULT_FILTERS) is unchanged. */
+ *  sort control. */
 export const DEFAULT_SORT: EntrySort = { key: 'registered_at', dir: 'desc' };
+
+/** The filter sheet's sort picker (master_plan §2BG Decision D). */
+export const SORT_OPTIONS: { key: EntrySortKey; dir: 'asc' | 'desc'; label: string }[] = [
+  { key: 'registered_at', dir: 'desc', label: 'Newest first' },
+  { key: 'registered_at', dir: 'asc', label: 'Oldest first' },
+  { key: 'needs_first', dir: 'asc', label: 'Needs me first' },
+  { key: 'name', dir: 'asc', label: 'Team name A–Z' },
+  { key: 'division', dir: 'asc', label: 'Division' },
+];
+
+function bucketRank(entry: OrganizerRegistration): number {
+  switch (entryBucket(entry)) {
+    case 'needs':
+      return 0;
+    case 'waiting':
+      return 1;
+    case 'confirmed':
+      return 2;
+    case 'closed':
+      return 3;
+  }
+}
 
 function primaryCompare(
   a: OrganizerRegistration,
@@ -493,13 +422,15 @@ function primaryCompare(
       const bWork = queuesFor(b).length > 0 ? 0 : 1;
       return aWork - bWork;
     }
+    case 'needs_first':
+      return bucketRank(a) - bucketRank(b);
     case 'name':
       return teamLabel(a).localeCompare(teamLabel(b));
     case 'division':
       return a.divisionName.localeCompare(b.divisionName);
     case 'status':
-      // Sorted by the label the organizer actually sees in the column, not the raw enum.
-      return statusChip(a).label.localeCompare(statusChip(b).label);
+      // Sorted by the label the organizer actually sees in the pill, not the raw enum.
+      return entryVerdict(a).label.localeCompare(entryVerdict(b).label);
     case 'registered_at':
       return Date.parse(a.createdAt) - Date.parse(b.createdAt);
     case 'amount':
@@ -512,10 +443,9 @@ function primaryCompare(
 }
 
 /**
- * `sortEntries(entries)` with no second argument is the unchanged default: needs-a-decision first,
- * newest first inside each group. Every other key is a deterministic column sort with a stable
- * secondary sort by registration date, so two entries that tie on the chosen column never reorder
- * between renders.
+ * `sortEntries(entries)` with no second argument is the unchanged default: newest submission first.
+ * Every other key is a deterministic column sort with a stable secondary sort by registration date, so
+ * two entries that tie on the chosen column never reorder between renders.
  */
 export function sortEntries(
   entries: readonly OrganizerRegistration[],

@@ -935,6 +935,9 @@ export interface OrganizerRegistration {
   paymentId: string | null;
   paymentStatus: string | null;
   amountDue: number | null;
+  /** The division's per-entry fee (master_plan §2BG). `amountDue` is null until a payment row exists,
+   *  so "is this entry free?" must read the division fee, not the payment. Optional for fixtures. */
+  divisionFee?: number | null;
   currency: string | null;
   hasProof: boolean;
   /** The shared money-state verdict for this entry (master_plan §2AO A2/A6) - team receipt combined
@@ -1203,6 +1206,7 @@ export async function getOrganizerRegistrations(
       paymentId: pay?.id ?? null,
       paymentStatus: pay?.status ?? null,
       amountDue: pay ? Number(pay.amount_due) : null,
+      divisionFee: divisionFeeById.get(r.division_id) ?? null,
       currency: pay?.currency ?? null,
       hasProof: !!pay?.proof_storage_path,
       paymentSummary,

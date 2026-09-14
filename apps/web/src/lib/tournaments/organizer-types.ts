@@ -37,3 +37,28 @@ export type UnverifiedAccount = {
   status: string | null;
   lastCodeSentAt: string | null;
 };
+
+/**
+ * A division option for the reclassify/move picker (master_plan §2BE Decision B, §2BG lane C's
+ * `TeamCard`) - format/team-size only, distinct from `DivisionCapacityRow` below which carries the
+ * counts for the summary line and the Divisions sheet. Moved here from `organizer-registrations.tsx`
+ * (§2BG) so lane C's `team-card.tsx` can import it without depending on the list-shell component.
+ */
+export interface EligibilityDivisionOption {
+  id: string;
+  name: string;
+  format: string;
+  teamSize: number;
+}
+
+/** One division's slot picture for the summary line and `DivisionsSheet` (master_plan §2AG/A5,
+ *  §2BG) - "where do we stand?" Moved here from `organizer-registrations.tsx` (§2BG) alongside
+ *  `EligibilityDivisionOption` above. */
+export interface DivisionCapacityRow {
+  id: string;
+  name: string;
+  capacity: number;
+  registered: number;
+  paid: number;
+  pending: number;
+}
