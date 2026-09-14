@@ -192,7 +192,7 @@ export async function reclassifyRegistration(
       return { error: 'That team is already in this division.' };
     }
 
-    const [{ data: fromDivData }, { data: toDivData }, { count: memberCount }] = await Promise.all([
+    const [{ data: fromDivData }, { data: toDivData }] = await Promise.all([
       svc
         .from('divisions')
         .select('id, format, team_size')
@@ -203,10 +203,6 @@ export async function reclassifyRegistration(
         .select('id, tournament_id, format, team_size, status')
         .eq('id', newDivisionId)
         .maybeSingle(),
-      svc
-        .from('team_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('team_id', reg.team_id),
     ]);
     const toDiv = toDivData as {
       id: string;
@@ -221,9 +217,11 @@ export async function reclassifyRegistration(
     if (fromDiv && (fromDiv.format !== toDiv.format || fromDiv.team_size !== toDiv.team_size)) {
       return { error: 'You can only reclassify to a division with the same format and team size.' };
     }
-    if ((memberCount ?? 0) !== toDiv.team_size) {
-      return { error: 'The team size does not match the target division.' };
-    }
+    // §2BG: no member-count check. It compared the CURRENT member count to the target's team size,
+    // so a doubles team with an open seat (1 of 2) could never be reclassified - exactly the
+    // half-formed team an organizer most often needs to move. The format + team-size equality above
+    // already proves the two divisions are structurally identical, and a team can never hold more
+    // members than its (identical) size, so the open seat simply travels with the team.
 
     // Prevent an active duplicate registration in the target division.
     const { data: dup } = await svc

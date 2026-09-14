@@ -3347,3 +3347,14 @@ age 5-120, blank clears); `updateProfile` writes `date_of_birth`; `ProfileRow` +
 `OnboardingForm` renders an editable `type="date"` named `dateOfBirth` in edit mode (read-only guest display
 kept for onboarding, still un-named); edit page passes `initial.dateOfBirth`. Onboarding save unchanged
 (key absent → `.optional()`). No migration (nullable column exists). Handover -> v1.82 (same deploy batch).
+
+## 2026-09-15 - HOTFIX: reclassify an open-seat team; organizer search matches nickname + email (§2BG part 1)
+
+Jasper's screenshots: reclassifying Rene Villanueva Jr (Men's Doubles Advanced, doubles with an open seat)
+to High Intermediate failed with "The team size does not match the target division." Cause:
+`reclassifyRegistration` compared the team's CURRENT member count (1) to the target's `team_size` (2).
+The format + team-size equality check just above already proves structural compatibility and a team can
+never exceed its identical size, so the member-count check is removed - open seats travel with the team.
+Search: the organizer list haystack was legal names + division only; `resolve()` already fetched
+`nickname` but never put it on the member, so `Mini.nickname` is now carried and search matches nickname,
+email and the guest partner note. Regression test added. Shipped alone ahead of the §2BG redesign.

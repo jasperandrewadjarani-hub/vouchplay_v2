@@ -713,6 +713,40 @@ describe('combinable filters - AND across groups, OR within a group', () => {
     ).toEqual(['a', 'd']);
   });
 
+  it('search matches a nickname and an email, not only the legal name (§2BG)', () => {
+    const nickRows = [
+      entry({
+        id: 'n1',
+        members: [
+          {
+            id: 'p1',
+            name: 'Rene Villanueva Jr',
+            slug: 'rene',
+            avatarUrl: null,
+            nickname: 'Bogart',
+          },
+        ],
+      }),
+      entry({
+        id: 'n2',
+        members: [
+          {
+            id: 'p2',
+            name: 'Teej Panganiban',
+            slug: 'teej',
+            avatarUrl: null,
+            email: 'teej@example.com',
+          } as never,
+        ],
+      }),
+    ];
+    const base = { ...DEFAULT_FILTERS, payment: [] };
+    expect(filterEntries(nickRows, { ...base, search: 'bogart' }).map((r) => r.id)).toEqual(['n1']);
+    expect(filterEntries(nickRows, { ...base, search: 'TEEJ@EX' }).map((r) => r.id)).toEqual([
+      'n2',
+    ]);
+  });
+
   it('every group empty means every group applies no constraint, one at a time', () => {
     // A fully-open base, independent of DEFAULT_FILTERS' own receipts-only starting point (§2AP I) -
     // this test is about the general "empty group = Any" property, not about what ships as default.

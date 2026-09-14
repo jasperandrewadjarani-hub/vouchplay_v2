@@ -326,7 +326,14 @@ export function filterEntries(
     }
 
     if (needle) {
-      const haystack = `${teamLabel(e)} ${e.divisionName}`.toLowerCase();
+      // §2BG: players are known by their nickname / IGN on court, and organizers are often handed an
+      // email - so search matches both, not only the legal name and division.
+      const extras = e.members
+        .flatMap((m) => [m.nickname, (m as { email?: string | null }).email])
+        .filter(Boolean)
+        .join(' ');
+      const haystack =
+        `${teamLabel(e)} ${extras} ${e.partnerNote ?? ''} ${e.divisionName}`.toLowerCase();
       if (!haystack.includes(needle)) return false;
     }
 

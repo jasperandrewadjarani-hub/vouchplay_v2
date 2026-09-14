@@ -45,6 +45,9 @@ interface Mini {
   name: string;
   slug: string | null;
   avatarUrl: string | null;
+  /** The player's nickname / IGN (master_plan §2BG) - how players are known on court, so organizer
+   *  search and rows show it. Optional for hand-built fixtures, same as `unverified`. */
+  nickname?: string | null;
   /** master_plan §2AU F: an unverified guest account (`guest_created_at` set, `onboarded_at` still
    *  null) - drives the "Unverified account" chip on `OrganizerRegistration.members` and is available
    *  on every other `Mini` (team members, invitations) for free since they share this one resolver.
@@ -101,6 +104,7 @@ async function resolve(ids: string[]): Promise<Map<string, Mini>> {
         'VouchPlay player',
       slug: row.slug,
       avatarUrl: avatarUrl(row.avatar_path),
+      nickname: row.nickname?.trim() || null,
       unverified: unverifiedIds.has(row.id),
     });
   }
