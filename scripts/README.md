@@ -102,7 +102,14 @@ missing.
 node scripts/backfill-skill-v2.mjs
 ```
 
-## apply-0051.sql (status: pending - Jasper applies)
+## apply-0051.sql (status: APPLIED 2026-09-15 - verified)
+
+Applied by Jasper in the Supabase SQL editor on 2026-09-15. Verified read-only the same day: `player_badges`
+and `player_badge_progress` exist (0 rows before the first recompute), `profiles.pinned_badge_key` and
+`tournaments.commemorative_badge_label` exist, and the anon client reads `player_badges` under the public
+policy while `player_badge_progress` returns nothing (no policies, service-role only). Next step: Admin →
+Badges → Recompute now.
+
 
 Migration 0051 (master_plan §2BK): badges. Adds `player_badges` (auto + admin-granted badge rows),
 `profiles.pinned_badge_key`, `tournaments.commemorative_badge_label`, and `player_badge_progress`

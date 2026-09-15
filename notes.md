@@ -3427,3 +3427,10 @@ leaderboards cron + Admin "Recompute now" + per-player hooks. Players tab: quick
 cards with crown / badge row / big STS / sentence-case private, quick chips, vouch micro-reward, visitor
 preview; profile badge case with detail sheet, pin / hide, Almost there, Past; unlock moment. Planned
 migrations renumbered: organizer Phase B → 0052, PIN lock → 0053.
+
+## 2026-09-15 - Migration 0051 applied (§2BK)
+
+Jasper ran `scripts/apply-0051.sql`; verified read-only: both badge tables and both new columns present,
+anon reads `player_badges` under the public policy, `player_badge_progress` is service-role only.
+`player_badges` has 0 rows until the first Admin → Badges → Recompute now (the nightly leaderboards cron
+also runs it at 01:17 UTC).
