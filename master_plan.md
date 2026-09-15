@@ -6688,6 +6688,96 @@ still refreshes a page left open.
 **Measure:** Build CPU Minutes should stop growing on docs pushes; Function Invocations and Fluid Active CPU per day
 should fall. Compare the Usage page 48 h after deploy against the diagnosis baseline (~$1.80/day ongoing).
 
+## 2BP. "New" tag restored on player cards (2026-09-15)
+
+Jasper: the "New" tag disappeared from player cards. Cause: the §2BK card rebuild dropped `NewBadge` along with the
+old chip row, although the DTO still computes `isNew` (`isRecentlyOnboarded(onboarded_at, new_account_badge_days)`).
+Fix: `CardBadgeLine` (both compact and detailed cards) renders a small cyan "✦ New" pill FIRST in the tag line,
+styled like the lime "Looking" chip (`--accent-cyan`, defined for both themes), before badges - a newly joined
+player usually has no badges yet, and "new & unvouched first" is the directory's default sort, so the tag is what
+tells vouchers who to welcome. The window stays the Admin setting `new_account_badge_days`.
+
+## 2BQ. Next-entry discount per division - PROPOSAL, awaiting Jasper's approval (2026-09-15)
+
+Jasper: organizers want a 2nd-entry discount set per division - e.g. 1st entry PHP 1,500 per player, every further
+entry PHP 1,000 - with no date window; payment must automatically price each player's seat (both players on a 2nd
+entry, or one on a 1st and the partner on a 2nd). Brainstorm only - no code until approved.
+
+### Findings (code, 2026-09-15)
+
+- `quoteFee()` (`packages/core/src/tournaments/fees.ts`) prices **per player**: standard `divisions.fee_amount`,
+  optional `early_bird_fee_amount` per division inside the tournament-wide early-bird window; "a promo that is not
+  cheaper is not a promo"; the price is resolved **when the receipt is submitted**. `teamTotal = perPlayer × teamSize`.
+- Money is per seat already: `tournament_slots` (one row per player seat, `amount_due`), team receipts in `payments`,
+  combined by `summarizeEntryPayment()` (`seat-payments.ts`) which already computes `topupDue`. No SQL function
+  computes fees - pricing is TypeScript (`quoteFee` callers in `payment.ts`, `registration.ts`, the wizard and the
+  division browser).
+
+### Decisions (proposed)
+
+**A. The rule, in one sentence.** For each player, their **earliest live entry in a paid division of that
+tournament is their 1st entry** (full price); **every later live entry is a next entry** and that seat gets the
+division's next-entry price. Counted per player, per tournament, across all divisions; ordered by entry creation
+time (ties by id). Live = not withdrawn / rejected / cancelled / refunded. Entries in free divisions never count.
+
+**B. Configuration (organizer, per division).** A new optional field in the division editor, right under the
+early-bird price: **"Next-entry price (per player)"**, with a live one-line preview "1st entry PHP 1,500 · 2nd+
+PHP 1,000". Blank = no discount. Must be lower than the standard fee (same honesty rule as early bird). No dates.
+
+**C. Pricing each seat.** `quoteFee` becomes seat-aware: input gains `nextEntryFeeAmount` and `isNextEntry`; the seat
+price is the **lowest applicable price** among standard, early bird (if the window is open) and next entry (if
+`isNextEntry`) - discounts never stack, the player always gets the best single price. The quote returns
+`basis: 'standard' | 'early_bird' | 'next_entry'`. Team totals become the **sum of the seats**, not
+`perPlayer × teamSize` - so "Maria 1st entry PHP 1,500 + Ana 2nd entry PHP 1,000 = PHP 2,500".
+
+**D. Locking and history.** As today, a seat's price locks when its receipt is submitted. New
+`tournament_slots.price_basis` and `payments.price_basis` (text) record why that amount was charged, so later
+changes never rewrite history.
+
+**E. What the player sees (non-technical friendly).**
+- **Division browser / wizard**, signed-in player who already holds a live entry: the division price shows
+  "PHP 1,000" in bold with "PHP 1,500" struck through and a small lime chip **"2nd entry"**.
+- **Payment step**: one clean line per seat - "You · 1st entry · PHP 1,500" and "Ana · 2nd entry · PHP 1,000
+  (−500)" - then **Total PHP 2,500**. Paying only your own seat shows only your line.
+- **Done screen upsell** (complements the ask): when the division has a next-entry price, a card "Enter another
+  division for PHP 1,000" linking to the division browser.
+- Partner not yet named (open seat): the open seat is priced at full; when the partner who fills it turns out to
+  be on a next entry, the organizer card shows "Overpaid PHP 500" (refund or keep - organizer's call).
+
+**F. What the organizer sees.** Division editor field (B); Manage card payment block shows each seat's basis tag
+("2nd entry"); Overview revenue and the export use per-seat amounts; the export gains a `PriceBasis` column in the
+normalized workbook (the locked system sheet is unchanged).
+
+### Loose ends resolved
+
+- **Cancelling the 1st entry** (abuse check: enter two, pay only the cheap one, cancel the full one): the remaining
+  entry becomes the 1st entry. Unpaid seats re-price to full automatically; a seat already paid at the discount shows
+  **"Top-up due PHP 500"** through the existing top-up flow (organizer Needs you + player banner).
+- **Reclassify / merge / partner change:** paid seats keep their locked price; unpaid seats re-price; any gap shows as
+  top-up due or overpaid on the card.
+- **Organizer edits the next-entry price after people paid:** paid seats keep their amounts; only unpaid seats change.
+- **Reserved slots (paid before choosing a division):** priced at full as today; when attached to a division as a next
+  entry the difference shows as overpaid for the organizer to settle.
+- **Waitlisted entries** count as live (they hold a place); **guest entries** follow the same rule by guest profile.
+- **Early bird + next entry:** lowest price wins, shown with one tag, never both.
+- **Free divisions** (fee 0): unaffected and never make another entry "next".
+- **Receipt review:** the organizer's verify view compares amount submitted with the per-seat total and flags a
+  short payment as top-up due (existing behaviour, now with correct per-seat totals).
+
+### Contracts (for when approved)
+
+**Migration 0052 (additive):** `divisions.next_entry_fee_amount numeric(10,2) null check (>= 0)`,
+`tournament_slots.price_basis text`, `payments.price_basis text`. Organizer Phase B moves to **0053** and PIN lock to
+**0054**. **Core:** `quoteFee` seat-aware + `basis`; `entryRankFor(playerId, entries)`; `summarizeEntryPayment` uses
+per-seat due amounts; tests for every case above. **Server:** payment / registration / wizard quote callers pass
+`isNextEntry`; re-price on cancellation / reclassify / merge. **UI:** division editor field + preview, division
+browser price tag, wizard payment lines + total, Done-screen upsell, Manage card seat basis tag, export column.
+
+### Timing
+
+Build after the Hermosa registration window (closes 2026-09-16) unless Jasper wants it for a later tournament
+sooner - changing live prices mid-registration would reprice unpaid Hermosa seats.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

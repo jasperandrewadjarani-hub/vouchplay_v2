@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
 import type { BadgeView } from '@/lib/badges/types';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -42,12 +43,35 @@ function TierLine({
   return null;
 }
 
-/** Badge row + the lime "Looking" chip (master_plan §2BK F), one line, only rendered when there is
- *  something to show. */
-function CardBadgeLine({ badges, looking }: { badges: BadgeView[]; looking: boolean }) {
-  if (badges.length === 0 && !looking) return null;
+/** Badge row + the cyan "New" and lime "Looking" chips (master_plan §2BK F, "New" restored §2BP), one
+ *  line, only rendered when there is something to show. "New" leads: a newly joined player usually has
+ *  no badges yet, and "new & unvouched first" is the directory's default sort - the chip is what tells
+ *  a voucher who to welcome. */
+function CardBadgeLine({
+  badges,
+  looking,
+  isNew,
+}: {
+  badges: BadgeView[];
+  looking: boolean;
+  isNew: boolean;
+}) {
+  if (badges.length === 0 && !looking && !isNew) return null;
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+      {isNew && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold"
+          style={{
+            color: 'var(--accent-cyan)',
+            background: 'color-mix(in srgb, var(--accent-cyan) 14%, transparent)',
+          }}
+          title="Joined recently"
+        >
+          <Sparkles size={10} strokeWidth={2.75} aria-hidden />
+          New
+        </span>
+      )}
       {badges.length > 0 && <BadgeRow badges={badges} />}
       {looking && (
         <span
@@ -209,7 +233,11 @@ export function PlayerCard({
             )}
           </span>
           <span className="mt-1 block min-w-0">
-            <CardBadgeLine badges={player.badges} looking={player.lookingForPartner} />
+            <CardBadgeLine
+              badges={player.badges}
+              looking={player.lookingForPartner}
+              isNew={player.isNew}
+            />
           </span>
         </span>
         {/* Raised above the row overlay so both controls are independently tappable. */}
@@ -242,7 +270,11 @@ export function PlayerCard({
             )}
           </span>
           <span className="mt-1.5 block min-w-0">
-            <CardBadgeLine badges={player.badges} looking={player.lookingForPartner} />
+            <CardBadgeLine
+              badges={player.badges}
+              looking={player.lookingForPartner}
+              isNew={player.isNew}
+            />
           </span>
         </div>
         <ClubStack clubs={player.clubs} />

@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.90 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.91 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.91 (2026-09-15)
+
+_"New" tag restored on player cards (master_plan §2BP); next-entry discount proposed, not built (§2BQ)._
+
+- **Player cards** show a cyan "✦ New" tag again for recently joined players (window = Admin setting
+  `new_account_badge_days`).
+- **Next-entry discount (proposal):** per-division "Next-entry price (per player)"; each player's earliest live paid
+  entry in a tournament is full price, later entries use the next-entry price; lowest single price wins against early
+  bird; per-seat totals; price basis recorded; cancellations re-price or raise a top-up. Planned migration 0052 (organizer
+  Phase B → 0053, PIN lock → 0054). Awaiting approval.
+
 ## v1.90 (2026-09-15)
 
 _Vercel cost fixes #2 and #5 (master_plan §2BO)._

@@ -3501,3 +3501,13 @@ skip works in production.
   #6-#10 are not yet done.
 - Open proposal awaiting Jasper's OK (§2BN): a permanent non-directory test account + Playwright signed-in smoke test on
   a Vercel Preview before production promotes.
+
+## 2026-09-15 - "New" tag restored (§2BP); next-entry discount proposed (§2BQ, handover v1.91)
+
+"New" tag had vanished because the §2BK card rebuild dropped `NewBadge` though `isNew` was still computed; restored as a
+cyan "✦ New" pill leading the card tag line (compact + detailed). Next-entry discount: proposal only - per-division
+optional "Next-entry price (per player)"; a player's earliest live entry in a paid division of the tournament is their
+1st entry, later live entries price at the next-entry amount; lowest single price wins against early bird; team totals
+become the sum of seats; price basis recorded per seat/receipt; cancelling a 1st entry re-prices unpaid seats and turns
+already-paid discounted seats into "Top-up due". Migration would be 0052 (Phase B → 0053, PIN → 0054). Suggested timing:
+after the Hermosa window closes 2026-09-16.
