@@ -874,7 +874,21 @@ async function fetchCoachVouchersUncached(targetId: string): Promise<CoachVouche
     const voucherRows = (rows ?? []) as Array<{ voucher_id: string; skill_level: number }>;
     if (voucherRows.length === 0) return [];
 
-    const voucherIds = Array.from(new Set(voucherRows.map((r) => r.voucher_id)));
+    const allVoucherIds = Array.from(new Set(voucherRows.map((r) => r.voucher_id)));
+    // §2BR: only people who are STILL coaches appear as coach vouchers - removing the Coach role takes
+    // them off this list (their vouch stays, at player weight).
+    const { data: coachRoleRows } = await svc
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'coach')
+      .eq('status', 'active')
+      .in('user_id', allVoucherIds);
+    const activeCoachIds = new Set(
+      ((coachRoleRows ?? []) as { user_id: string }[]).map((r) => r.user_id),
+    );
+    const coachRows = voucherRows.filter((r) => activeCoachIds.has(r.voucher_id));
+    if (coachRows.length === 0) return [];
+    const voucherIds = Array.from(new Set(coachRows.map((r) => r.voucher_id)));
     const [{ data: profiles }, { data: verified }] = await Promise.all([
       svc
         .from('profiles')
@@ -901,7 +915,7 @@ async function fetchCoachVouchersUncached(targetId: string): Promise<CoachVouche
     );
     const verifiedIds = new Set((verified ?? []).map((r) => (r as { user_id: string }).user_id));
 
-    return voucherRows.map((r) => {
+    return coachRows.map((r) => {
       const p = profileById.get(r.voucher_id);
       const name =
         [p?.first_name, p?.last_name].filter(Boolean).join(' ').trim() ||

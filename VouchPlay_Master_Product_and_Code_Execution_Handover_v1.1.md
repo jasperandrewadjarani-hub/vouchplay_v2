@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.93 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.94 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.94 (2026-09-15)
+
+_Coach role at will (master_plan §2BR)._
+
+- Admins grant or remove **Coach** from Admin → Users → Roles (two-factor, reason >= 10 characters, audited); the
+  Coach application flow remains.
+- Coach and Organizer badges follow their role immediately and can no longer be hand-tagged; a hand-tagged copy is retired
+  when the role changes.
+- A vouch given as a coach carries coach weight only while the role is active (removing lowers it to player weight and
+  re-scores targets; re-granting restores it). Profile coach vouchers show current coaches only.
+
 ## v1.93 (2026-09-15)
 
 _Next-entry discount built (master_plan §2BQ); migration 0052._

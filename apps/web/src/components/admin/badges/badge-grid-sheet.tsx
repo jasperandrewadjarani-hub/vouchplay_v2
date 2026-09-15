@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Check } from 'lucide-react';
-import { BADGES, BADGE_FAMILIES } from '@vouchplay/config';
+import { BADGES, BADGE_FAMILIES, isRoleBadgeKey } from '@vouchplay/config';
 import { BadgeSymbol } from '@/components/badges/badge-symbol';
 import { BottomSheet } from '@/components/tournaments/manage-sheets';
 
@@ -56,8 +56,16 @@ export function BadgeGridSheet({
           <p className="text-foreground-muted text-xs">Up to {MAX_BADGES} badges per batch.</p>
         )}
         {Object.entries(BADGE_FAMILIES).map(([famKey, fam]) => {
-          const famBadges = BADGES.filter((b) => b.family === famKey);
-          if (famBadges.length === 0) return null;
+          // Coach / Organizer badges follow the role (§2BR) - not taggable here.
+          const famBadges = BADGES.filter((b) => b.family === famKey && !isRoleBadgeKey(b.key));
+          if (famBadges.length === 0) {
+            return famKey === 'roles' ? (
+              <p key={famKey} className="text-foreground-muted text-xs">
+                Coach and Organizer badges come with the role - grant or remove the role in Admin →
+                Users.
+              </p>
+            ) : null;
+          }
           return (
             <div key={famKey}>
               <h3 className="text-foreground-muted mb-2 text-xs font-semibold tracking-wide uppercase">

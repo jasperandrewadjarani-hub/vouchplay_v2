@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidateTag } from 'next/cache';
-import { badgeDef, isEventBadgeKey } from '@vouchplay/config';
+import { badgeDef, isEventBadgeKey, isRoleBadgeKey } from '@vouchplay/config';
 import { getOptionalUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/service';
 import { assertAdminActor } from '@/lib/moderation/staff';
@@ -169,6 +169,12 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
   if (isEventBadgeKey(input.badgeKey)) {
     return { ok: false, error: 'Event badges are set from Event badges, not tagged here.' };
   }
+  if (isRoleBadgeKey(input.badgeKey))
+    return {
+      ok: false,
+      error:
+        'The Coach and Organizer badges come from the role. Grant or remove the role in Admin → Users.',
+    };
   const def = badgeDef(input.badgeKey);
   if (!def) return { ok: false, error: 'Unknown badge.' };
   if (def.titleBadge && !input.event?.trim()) {
@@ -271,6 +277,12 @@ export async function adminTagBadgesBatch(
   if (badgeKeys.some((k) => isEventBadgeKey(k))) {
     return { ok: false, error: 'Event badges are set from Event badges, not tagged here.' };
   }
+  if (badgeKeys.some((k) => isRoleBadgeKey(k)))
+    return {
+      ok: false,
+      error:
+        'The Coach and Organizer badges come from the role. Grant or remove the role in Admin → Users.',
+    };
   const defs = badgeKeys.map((k) => ({ key: k, def: badgeDef(k) }));
   const unknown = defs.find((d) => !d.def);
   if (unknown) return { ok: false, error: 'Unknown badge.' };

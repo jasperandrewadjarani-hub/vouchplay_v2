@@ -11,6 +11,7 @@ import { recomputePlayerSkillProfile } from '@/lib/vouches/recompute';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import type { SafetyActionState } from './report';
 import { emitAnalyticsEvent } from '@/lib/analytics';
+import { afterRoleBadgeChange } from '@/lib/badges/role-badge';
 
 /**
  * User administration write actions (handover §30.1, §30.2, §30.8). Admin + aal2 only. Every write
@@ -28,6 +29,9 @@ const GRANTABLE_ROLES: readonly GlobalRole[] = [
   'super_admin',
 ];
 const PRIVILEGED: readonly GlobalRole[] = ['admin', 'super_admin'];
+
+/** Same floor the Coach revoke RPC enforces (`coach_application_reason_min_chars`, default 10). */
+const COACH_REASON_MIN = 10;
 
 function requireReason(reason: string): string | null {
   return (reason ?? '').trim().length === 0 ? 'A reason is required.' : null;
@@ -49,8 +53,10 @@ export async function grantRole(
   if (!actor) return { error: 'Admin access with a stepped-up (two-factor) session is required.' };
   if (!GRANTABLE_ROLES.includes(role as GlobalRole)) return { error: 'Unknown role.' };
   const r = role as GlobalRole;
-  if (r === 'coach') {
-    return { error: 'Approve a Coach application from the AAL2 Coach review workspace.' };
+  // §2BR: Admins can make someone a Coach directly ("at will") - the Coach application flow stays for
+  // players who apply themselves. A useful reason is required because the role raises vouch weight.
+  if (r === 'coach' && reason.trim().length < COACH_REASON_MIN) {
+    return { error: `Give a reason of at least ${COACH_REASON_MIN} characters for a Coach role.` };
   }
   if (PRIVILEGED.includes(r) && actor.role !== 'super_admin') {
     return { error: 'Only a Super Admin can grant Admin or Super Admin.' };
@@ -90,12 +96,17 @@ export async function grantRole(
     });
     await notify({
       recipientId: userId,
-      type: 'account_security',
-      params: { reason: `You were granted the ${r.replace('_', ' ')} role.` },
-      link: '/me',
+      type: r === 'coach' ? 'coach_application_result' : 'account_security',
+      params:
+        r === 'coach'
+          ? { outcome: 'approved' }
+          : { reason: `You were granted the ${r.replace('_', ' ')} role.` },
+      link: r === 'coach' ? '/me/roles/coach' : '/me',
       entityType: 'user_role',
       entityId: userId,
     });
+    await afterRoleBadgeChange(userId, r, { actorId: actor.viewerId, granted: true });
+    if (r === 'coach') emitAnalyticsEvent('coach_role_granted');
     await invalidatePlayer(svc, userId);
   } catch {
     return { error: 'That action failed. Please try again.' };
@@ -122,6 +133,11 @@ export async function revokeRole(
   if (requireReason(reason)) return { error: 'A reason is required.' };
 
   if (r === 'coach') {
+    if (reason.trim().length < COACH_REASON_MIN) {
+      return {
+        error: `Give a reason of at least ${COACH_REASON_MIN} characters to remove a Coach role.`,
+      };
+    }
     const supabase = await createClient();
     const { error } = await supabase.rpc('revoke_coach_role', {
       p_user_id: userId,
@@ -136,6 +152,7 @@ export async function revokeRole(
       entityType: 'user_role',
       entityId: userId,
     });
+    await afterRoleBadgeChange(userId, 'coach', { actorId: actor.viewerId, granted: false });
     await invalidatePlayer(createServiceClient(), userId);
     emitAnalyticsEvent('coach_role_revoked');
     revalidatePath(`/admin/users/${userId}`);
@@ -182,6 +199,7 @@ export async function revokeRole(
       entityType: 'user_role',
       entityId: userId,
     });
+    await afterRoleBadgeChange(userId, r, { actorId: actor.viewerId, granted: false });
     await invalidatePlayer(svc, userId);
   } catch {
     return { error: 'That action failed. Please try again.' };

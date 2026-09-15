@@ -3564,3 +3564,12 @@ PriceBasis column. Deploys held until the database is confirmed stable.
 production smoke against live DB: `/players`, `/tournaments`, Hermosa page, `/login` 200, Hermosa still "PHP 1,299 /
 player" (no division has a next-entry price yet). Pushed `b03715e`; Vercel "Deployment has completed"; production smoke
 same pages 200 in 0.3-1.1 s, no error pages. Signed-in checks by Jasper pending (load fixes + discount flow).
+
+## 2026-09-15 - Coach role at will (§2BR, handover v1.94)
+
+Admin → Users → Roles can grant/remove Coach directly (application flow kept). Badge follows the role (hand-tagged
+Coach/Organizer badges retired on role change; role badges no longer taggable). Coach-weight vouches count only while the
+role is active (re-weight on grant/remove/approval). Profile coach vouchers = current coaches only. Live facts at build:
+0 active coaches; 4 hand-tagged Coach badges (Adamkhan Alih, Quisma Yasin, Robert Jr Calapiz, Jacob John Andain) awaiting
+Jasper's per-person decision; 1 stale coach-weight vouch from test account "Phase13 Player" (role revoked); the 4 open role
+applications are all Organizer. No migration. Gates: typecheck, lint, 1,041 tests, format, build pass.

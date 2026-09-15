@@ -7,9 +7,9 @@ import { applyAccountAction, type AccountAction } from '@/lib/actions/moderation
 
 type Msg = { ok: boolean; text: string } | null;
 
-// Coach grants are created only by the transactional Coach-application decision RPC. Active Coach
-// roles still appear below and remain explicitly revocable from this Admin user surface.
-const GRANTABLE = ['organizer', 'moderator', 'support'] as const;
+// §2BR: Coach can be granted here directly (the Coach application flow still exists for players who
+// apply). Coach and Organizer bring their badge automatically; removing the role removes it.
+const GRANTABLE = ['coach', 'organizer', 'moderator', 'support'] as const;
 const PRIVILEGED = ['admin', 'super_admin'] as const;
 
 const ACCOUNT_ACTIONS: {
@@ -148,6 +148,13 @@ function RolesSection({
         placeholder="Reason (required, audited)"
         className={reasonInput}
       />
+      {(role === 'coach' || activeRoles.includes('coach')) && (
+        <p className="text-foreground-muted mt-1 text-xs">
+          Coach: reason of at least 10 characters. Granting gives the Coach badge and lets their
+          coach vouches (always public) count at coach weight; removing the role lowers those
+          vouches to player weight and removes the badge.
+        </p>
+      )}
 
       {roleOptions.length > 0 && (
         <div className="mt-2 flex gap-2">

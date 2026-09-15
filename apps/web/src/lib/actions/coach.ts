@@ -16,7 +16,7 @@ import { emitAnalyticsEvent } from '@/lib/analytics';
 import { PLAYERS_LIST_TAG } from '@/lib/players/queries';
 import type { SafetyActionState } from './report';
 import { writeAudit } from '@/lib/moderation/audit';
-import { computeAutoBadges } from '@/lib/badges/compute';
+import { afterRoleBadgeChange } from '@/lib/badges/role-badge';
 
 function values(formData: FormData, name: string): string[] {
   return formData
@@ -213,8 +213,8 @@ export async function decideCoachApplication(
   applicantReason: string,
   internalNote: string,
 ): Promise<SafetyActionState> {
-  if (!(await assertAdminActor()))
-    return { error: 'Admin access with a verified two-factor session is required.' };
+  const actor = await assertAdminActor();
+  if (!actor) return { error: 'Admin access with a verified two-factor session is required.' };
   const parsed = coachDecisionSchema.safeParse({ decision, applicantReason, internalNote });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Check the decision.' };
   const supabase = await createClient();
@@ -245,7 +245,12 @@ export async function decideCoachApplication(
     if (decision === 'approve') {
       // Best-effort badge recompute (master_plan §2BK D): an approved Coach role immediately
       // qualifies the Coach badge.
-      await computeAutoBadges({ playerIds: [result.user_id] }).catch(() => undefined);
+      // §2BR: badge follows the role (retires any hand-tagged copy) and a returning coach's earlier
+      // coach vouches regain coach weight.
+      await afterRoleBadgeChange(result.user_id, 'coach', {
+        actorId: actor.viewerId,
+        granted: true,
+      });
     }
   }
   emitAnalyticsEvent(

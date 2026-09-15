@@ -31,23 +31,36 @@ function round2(n: number): number {
 export async function reweightGivenVouches(voucherId: string): Promise<{ updated: number }> {
   try {
     const svc = createServiceClient();
-    const [settings, power, { data: idvRow }, { data: vouchRows }] = await Promise.all([
-      getVouchSettings(),
-      getVoucherPower(voucherId),
-      svc
-        .from('identity_verifications')
-        .select('id')
-        .eq('user_id', voucherId)
-        .eq('status', 'approved')
-        .limit(1)
-        .maybeSingle(),
-      svc
-        .from('vouches')
-        .select('id, target_id, used_coach_weight, effective_weight, skill_level')
-        .eq('voucher_id', voucherId)
-        .eq('status', 'active')
-        .limit(BOUND),
-    ]);
+    const [settings, power, { data: idvRow }, { data: vouchRows }, { data: coachRow }] =
+      await Promise.all([
+        getVouchSettings(),
+        getVoucherPower(voucherId),
+        svc
+          .from('identity_verifications')
+          .select('id')
+          .eq('user_id', voucherId)
+          .eq('status', 'approved')
+          .limit(1)
+          .maybeSingle(),
+        svc
+          .from('vouches')
+          .select('id, target_id, used_coach_weight, effective_weight, skill_level')
+          .eq('voucher_id', voucherId)
+          .eq('status', 'active')
+          .limit(BOUND),
+        svc
+          .from('user_roles')
+          .select('id')
+          .eq('user_id', voucherId)
+          .eq('role', 'coach')
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle(),
+      ]);
+    // §2BR: a vouch given AS a coach carries coach weight only while the Coach role is active - an
+    // Admin removing the role lowers those vouches to player weight, and granting it again restores
+    // them (the vouch keeps its public attribution either way).
+    const isCoachNow = !!coachRow;
     const voucherIdentityVerified = !!idvRow;
     const active = (vouchRows ?? []) as {
       id: string;
@@ -65,7 +78,7 @@ export async function reweightGivenVouches(voucherId: string): Promise<{ updated
       const nextWeight = round2(
         effectiveWeight(
           {
-            usedCoachWeight: v.used_coach_weight,
+            usedCoachWeight: v.used_coach_weight && isCoachNow,
             voucherIdentityVerified,
             voucherMinimalAccount: power.minimal,
           },

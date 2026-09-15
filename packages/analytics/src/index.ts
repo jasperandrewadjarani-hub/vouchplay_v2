@@ -20,6 +20,7 @@ export const ANALYTICS_EVENTS = [
   'coach_application_approved',
   'coach_application_rejected',
   'coach_role_revoked',
+  'coach_role_granted',
   'coach_evidence_opened',
   'leaderboard_viewed',
   'leaderboard_cta_selected',

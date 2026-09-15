@@ -6805,6 +6805,43 @@ is safe - a division without a next-entry price prices exactly as before, so not
   `team-card-parts.tsx`; `lib/actions/tournament.ts`; exports `schema.ts`, `build.ts`, `normalized-xlsx.ts`.
 - **Deferred:** a 3rd-entry price tier; discounts across tournaments; discount codes; a "Waive top-up" control.
 
+## 2BR. Coach role at will - Admin grant / remove, badge follows the role (2026-09-15)
+
+Jasper: assign and remove Coach roles at will (the badge comes with the role), keep the Coach application process.
+
+### Findings (2026-09-15)
+
+- Coach vouching power comes ONLY from an active `user_roles` coach row (checked in `submitVouch`); the Coach badge was
+  a label. `grantRole` refused coach ("approve an application"); `revokeRole` coach used the `revoke_coach_role` RPC but
+  did not refresh badges or re-weight past vouches.
+- Past coach vouches kept coach weight after a role removal (`reweightGivenVouches` read `used_coach_weight` only).
+- Live data: 0 active coach roles; 4 HAND-tagged Coach badges (Adamkhan Alih, Quisma Yasin, Robert Jr Calapiz, Jacob John
+  Andain) - badge without power; 1 active coach-weight vouch (w=2) from the test account "Phase13 Player" whose coach role
+  is revoked; the 4 open role applications are Organizer, not Coach.
+
+### Decisions (built)
+
+1. **Admin → Users → user → Roles** now offers **Coach** in "Grant role" (Admin + two-factor, reason >= 10 characters,
+   audited, player notified as an approved coach). Removing uses the same card (existing RPC, reason >= 10).
+2. **Badge follows the role** (`lib/badges/role-badge.ts` `afterRoleBadgeChange`, used by grant, revoke and application
+   approval): a hand-tagged Coach/Organizer badge is retired, an earlier "keep it off" is lifted on grant, and badges are
+   recomputed immediately (not at the nightly run).
+3. **Coach and Organizer badges can no longer be tagged by hand** (`ROLE_BADGE_KEYS`; server refuses, picker hides them
+   with a note pointing to Admin → Users).
+4. **Weight follows the role:** a vouch given AS a coach counts at coach weight only while the Coach role is active.
+   Removing the role re-weights those vouches to player weight (they stay public) and re-scores the players vouched for;
+   granting again restores them. Vouching as a player (anonymous or public) is unchanged.
+5. **Profile coach vouchers** list shows only people who are currently coaches.
+6. **Application flow unchanged** (player applies at /me/roles/coach; Admin approves in Staff → Role applications →
+   Coaches); approval now also runs step 2.
+
+### Not changed / deferred
+
+- The 4 hand-tagged Coach badges stay until Jasper decides per person: grant the Coach role (badge moves to the role) or
+  untag. The "Phase13 Player" coach-weight vouch re-weights the next time that account's vouches are re-weighted (or on an
+  Admin re-grant/remove); a one-off fix needs Jasper's OK.
+- No bulk "make coach" and no coach expiry dates.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

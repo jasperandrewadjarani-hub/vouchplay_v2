@@ -440,5 +440,16 @@ export function badgeDef(key: string): BadgeDef | null {
   return BADGES.find((b) => b.key === key) ?? null;
 }
 
+/**
+ * Badges that mirror a ROLE (master_plan §2BR): they come and go with the Coach / Organizer role and are
+ * never tagged by hand, because a hand-tagged "Coach" badge would advertise a vouching power the player
+ * does not have. Manage the role from Admin → Users instead.
+ */
+export const ROLE_BADGE_KEYS: readonly string[] = ['coach', 'organizer'];
+
+export function isRoleBadgeKey(key: string): boolean {
+  return ROLE_BADGE_KEYS.includes(key);
+}
+
 /** Keys of every catalog badge (excluding per-tournament event keys). */
 export const BADGE_KEYS: readonly string[] = BADGES.map((b) => b.key);
