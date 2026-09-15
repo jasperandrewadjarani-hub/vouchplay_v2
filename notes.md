@@ -3582,3 +3582,5 @@ entry even when paid; new organizer_create_solo_doubles_team), money move for me
 instead of blocks, Add entry without fit blocks, "Upload receipt" on unpaid seats (verified; whole-team option).
 Gates: typecheck, lint, 1,041 tests, format, build pass. Deploy order: Jasper applies scripts/apply-0054.sql first (Add
 entry for doubles calls the new RPC), then push.
+
+**Deployed 2026-09-16:** Jasper applied 0054 (both functions listed in SQL editor). Pushed `10a9ae0`; Vercel "Deployment has completed"; production smoke (signed out) /players, /tournaments, Hermosa page, /manage, /login 200 with no error pages. Signed-in merge of the two paid solo entries by Jasper pending.
