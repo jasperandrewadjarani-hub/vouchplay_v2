@@ -3479,3 +3479,6 @@ Cost diagnosis baseline: ~$1.80/day ongoing Vercel burn; 134 commits reached mai
 commit-range cases verified. #5: `experimental.staleTimes.dynamic = 30` - revisits within 30 s reuse the phone's
 render; writes still clear it (revalidatePath/Tag, redirect, router.refresh - audited per action module). Measure the
 Usage page after 48 h.
+
+Deploy `7c542f5` (§2BO) completed on Vercel 2026-09-15. This note is itself a docs-only push used to verify the
+Ignored Build Step end to end (expected: Vercel skips the build).
