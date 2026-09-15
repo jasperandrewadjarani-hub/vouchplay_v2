@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.88 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.89 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.89 (2026-09-15)
+
+_Incident fix: signed-in Players tab crash (master_plan §2BN)._
+
+- **Cause:** a Server Component passed a function prop (`hrefFor`) to a Client Component (`PlayersPagination`);
+  React Server Components cannot serialize functions, so every signed-in `/players` render threw.
+- **Fix:** pass serializable `pageHrefs: string[]` instead.
+- **Guard:** `scripts/check-rsc-function-props.mjs` now runs in `npm run lint` / CI and fails on any inline function
+  prop from a Server Component to a Client Component.
+- **Rules:** Server→Client props must be serializable; changes to signed-in render paths need a signed-in smoke test
+  before deploy (Playwright + permanent test account proposed, awaiting approval).
+
 ## v1.88 (2026-09-15)
 
 _Snappiness fixes (master_plan §2BM). No migration._

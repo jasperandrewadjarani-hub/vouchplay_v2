@@ -97,6 +97,14 @@ Log the change in `notes.md` and this file.
   migration 0033). `npm run lint` runs `scripts/check-migration-grants.mjs`, which fails on any
   unlocked security-definer function; read-only predicates called inside RLS live on its allowlist.
 - Public reads cache-first; no `select(*)` in list endpoints; STS recomputed on write, not read.
+- **Server → Client props must be serializable** (strings, numbers, booleans, arrays / plain objects, Dates, or
+  `'use server'` actions). Never pass a function (`hrefFor={(n) => …}`, `onX={…}`) from a Server Component to a
+  `'use client'` component - it type-checks and builds, then crashes the page at request time (incident §2BN,
+  signed-in Players tab down). `npm run lint` runs `scripts/check-rsc-function-props.mjs` to catch inline cases.
+- **Signed-in render paths need a signed-in smoke test before deploy.** `next build` and unit tests do not render
+  dynamic pages; a signed-out smoke test does not exercise signed-in branches.
+- **After closing a sheet, `await whenSheetsSettled()` before navigating or refreshing** (§2BM) - otherwise the
+  sheet's Back-to-close history pop undoes the navigation.
 
 ## Secrets
 Never commit secrets. `apps/web/.env.local` is gitignored. The `SUPABASE_SERVICE_ROLE_KEY` bypasses

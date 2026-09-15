@@ -150,7 +150,11 @@ async function PlayersResults({
         <PlayersPagination
           page={page}
           pageCount={pageCount}
-          hrefFor={(n) => `/players${playerFiltersToQuery(filters, { page: n, compact })}`}
+          // Strings, not a function: PlayersPagination is a Client Component (master_plan §2BN).
+          pageHrefs={Array.from(
+            { length: pageCount },
+            (_, i) => `/players${playerFiltersToQuery(filters, { page: i + 1, compact })}`,
+          )}
           label="Player pages"
         />
       ) : (

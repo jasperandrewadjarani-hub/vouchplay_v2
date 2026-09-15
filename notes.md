@@ -3459,3 +3459,14 @@ skeleton list (`PlayersListFrame`), tap delay removed; admin tag screen mirrors 
 `history.replaceState`, loads players from `GET /api/admin/badges/players` (admin + MFA guard, no-store,
 AbortController, latest request wins), the query pages in the database and reads skill/badge rows only for the
 30 on screen, skeleton rows while loading, local row updates after a batch instead of `router.refresh()`.
+
+## 2026-09-15 - INCIDENT: signed-in Players tab crashed; fixed + guard added (§2BN, handover v1.89)
+
+After `4c7c576`, `/players` showed the error boundary for every signed-in user. Cause: the server `PlayersResults`
+passed `hrefFor={(n) => ...}` (a function) to the new client `PlayersPagination`; React Server Components cannot
+serialize functions, so the render threw. Signed-out visitors were fine (no pagination). Not caught because
+typecheck allows it, `next build` doesn't render dynamic pages, tests don't render pages, and the §2BM smoke was
+signed out. Fix: pass `pageHrefs: string[]` built on the server. Prevention: `scripts/check-rsc-function-props.mjs`
+in `npm run lint` (fails on the crashing code, passes on the fix, no false positives); CLAUDE.md rule on
+serializable Server→Client props; signed-in smoke test required for signed-in render paths (Playwright + a
+permanent test account proposed, pending Jasper's OK).

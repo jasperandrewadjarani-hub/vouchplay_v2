@@ -6619,6 +6619,49 @@ responding.
   first instead of loading 2,000 profiles. Skeleton rows while loading. After a batch: close the review sheet →
   await settled → update affected rows locally (no `router.refresh()`).
 
+## 2BN. INCIDENT: Players tab down for signed-in users - function prop across the RSC boundary (2026-09-15)
+
+### What happened
+
+After deploy `4c7c576` (§2BM snappiness fixes), every **signed-in** visit to `/players` rendered the route error
+boundary ("Something went wrong on this page"). Signed-out visitors were unaffected.
+
+### Root cause (exact)
+
+`app/(app)/players/page.tsx` → `PlayersResults` (a **Server Component**) rendered
+`<PlayersPagination hrefFor={(n) => ...} />`. `PlayersPagination` lives in `components/players/players-nav.tsx`,
+a **Client Component** (`'use client'`). React Server Components serialize props sent to Client Components;
+**functions cannot be serialized**, so React throws at render time ("Functions cannot be passed directly to Client
+Components…"), and the page's error boundary replaced the content.
+
+- **Signed-in only**: pagination renders only when `authed`; visitors get the sign-up wall instead.
+- **Why no check caught it**: TypeScript allows the prop (the type says `(page: number) => string`); `next build`
+  does not execute per-request dynamic pages; unit tests never render pages; the local smoke test in §2BM ran
+  signed out; there is no signed-in end-to-end test.
+- **How it was introduced**: §2BM lane 1 wrapped the (server-compatible) shared `Pagination` in a new client
+  wrapper so it could read the nav context, and kept the existing call site's `hrefFor` function unchanged. The
+  shared `Pagination` itself is not a client component, which is why the same `hrefFor` pattern on `/clubs` is
+  fine.
+
+### Fix
+
+`PlayersPagination` now takes `pageHrefs: string[]` (built on the server) and reconstructs `hrefFor` on the client
+side. Verified: typecheck, lint, 1,028 tests, clean production build, and a local production smoke test.
+
+### Prevention
+
+1. **Automated guard** `scripts/check-rsc-function-props.mjs`, wired into `npm run lint` (CI): scans true Server
+   Components (modules never imported from a `'use client'` module) and fails when a component imported from a
+   `'use client'` module receives an inline function prop (`prop={() => …}`, `prop={function …}`, `onXxx={…}`).
+   Proven against the incident: it fails on the crashing code and passes on the fix, with no false positives.
+2. **Rule (added to CLAUDE.md)**: props from a Server Component to a Client Component must be serializable -
+   strings, numbers, booleans, arrays / plain objects, Dates, or `'use server'` actions. Build functions inside the
+   client component.
+3. **Verification rule**: any change touching a signed-in-only render path must be smoke-tested signed in before
+   deploy. Recommended follow-up (needs Jasper's OK because it creates auth users): a dedicated, permanent
+   non-directory test account plus a Playwright smoke test that loads `/players`, `/tournaments`, `/me`,
+   `/admin/badges` signed in on a Vercel Preview before promoting to production.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

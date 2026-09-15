@@ -131,12 +131,35 @@ export function PlayersListFrame({ children, compact }: { children: ReactNode; c
  * players list specifically; it is used from inside the (server) `PlayersResults` component, which
  * cannot call `usePlayersNav()` on its own.
  */
-export function PlayersPagination(props: {
+/**
+ * Players-page pagination wired to the nav provider (master_plan §2BM).
+ *
+ * Takes `pageHrefs` (page 1 → index 0) as PLAIN STRINGS, never a function: this is a Client Component
+ * rendered from the server `PlayersResults`, and React Server Components cannot pass functions across
+ * that boundary - an `hrefFor` function prop here crashed the signed-in Players tab in production
+ * (incident 2026-09-15, master_plan §2BN). The function is rebuilt on this side of the boundary.
+ */
+export function PlayersPagination({
+  page,
+  pageCount,
+  pageHrefs,
+  label,
+}: {
   page: number;
   pageCount: number;
-  hrefFor: (page: number) => string;
+  pageHrefs: string[];
   label?: string;
 }) {
   const ctx = usePlayersNav();
-  return <Pagination {...props} navigate={ctx?.navigate} pendingHref={ctx?.pendingHref ?? null} />;
+  const hrefFor = (n: number) => pageHrefs[n - 1] ?? pageHrefs[0] ?? '/players';
+  return (
+    <Pagination
+      page={page}
+      pageCount={pageCount}
+      hrefFor={hrefFor}
+      label={label}
+      navigate={ctx?.navigate}
+      pendingHref={ctx?.pendingHref ?? null}
+    />
+  );
 }
