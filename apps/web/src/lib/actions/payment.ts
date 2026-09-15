@@ -1327,6 +1327,169 @@ export async function markSeatPaid(
 }
 
 /**
+ * §2BS: an organizer uploads a receipt ON BEHALF of a player who paid outside the app (a manual entry,
+ * a screenshot sent by chat). The proof goes to the same private bucket, and because the organizer is
+ * the one vouching for it the payment is recorded as VERIFIED straight away. `scope`:
+ *  - 'seat' (default): one `tournament_slots` row for `playerId` at their seat price (§2BQ aware);
+ *  - 'team': the registration's team receipt (`payments`), covering every seat, at the seat-by-seat total.
+ * Refuses when that seat / team already has a live payment. Reversible with the existing Un-verify.
+ */
+export async function organizerUploadReceipt(
+  registrationId: string,
+  playerId: string | null,
+  tournamentId: string,
+  formData: FormData,
+): Promise<OrganizerActionResult> {
+  const user = await getOptionalUser();
+  if (!user) return { ok: false, error: 'Please sign in.' };
+  if (!(await authorizeOrganizer(user.id, tournamentId, 'manage_payments'))) {
+    return { ok: false, error: 'You do not have permission to review payments.' };
+  }
+  const scope = formData.get('scope') === 'team' ? 'team' : 'seat';
+  if (scope === 'seat' && !playerId) return { ok: false, error: 'Choose the player who paid.' };
+  const method = String(formData.get('method') ?? '').trim() || 'Receipt (uploaded by organizer)';
+  const reference = String(formData.get('transactionReference') ?? '').trim() || null;
+  const payerName = String(formData.get('payerName') ?? '').trim() || null;
+  const rawAmount = String(formData.get('amountSubmitted') ?? '').trim();
+  const typedAmount = rawAmount === '' ? null : Number(rawAmount);
+  if (typedAmount != null && (!Number.isFinite(typedAmount) || typedAmount < 0)) {
+    return { ok: false, error: 'Enter the amount paid as a number.' };
+  }
+
+  const svc = createServiceClient();
+  try {
+    const { data: regRow } = await svc
+      .from('registrations')
+      .select('id, tournament_id, team_id, division_id, status')
+      .eq('id', registrationId)
+      .maybeSingle();
+    const reg = regRow as {
+      tournament_id: string;
+      team_id: string;
+      division_id: string;
+      status: string;
+    } | null;
+    if (!reg || reg.tournament_id !== tournamentId) {
+      return { ok: false, error: 'Registration not found.' };
+    }
+    if (playerId) {
+      const { data: memberRow } = await svc
+        .from('team_members')
+        .select('id')
+        .eq('team_id', reg.team_id)
+        .eq('player_id', playerId)
+        .maybeSingle();
+      if (!memberRow) return { ok: false, error: 'That player is not on this team.' };
+    }
+    const seatQuote = await quoteRegistrationSeats(registrationId);
+    if (!seatQuote) return { ok: false, error: 'Division not found.' };
+    const now = new Date().toISOString();
+
+    if (scope === 'seat') {
+      const { data: liveRows } = await svc
+        .from('tournament_slots')
+        .select('id')
+        .eq('registration_id', registrationId)
+        .eq('player_id', playerId as string)
+        .in('status', ['submitted', 'verified'])
+        .limit(1);
+      if ((liveRows ?? []).length > 0) {
+        return { ok: false, error: 'This seat already has a live payment.' };
+      }
+    } else {
+      const { data: pay } = await svc
+        .from('payments')
+        .select('status')
+        .eq('registration_id', registrationId)
+        .maybeSingle();
+      const st = (pay as { status: string } | null)?.status;
+      if (st === 'submitted' || st === 'verified') {
+        return { ok: false, error: 'This team already has a live team receipt.' };
+      }
+    }
+
+    const upload = await uploadPaymentProof(
+      formData,
+      `${registrationId}/organizer-${scope}-${playerId ?? 'team'}-${Date.now()}-${randomSuffix()}`,
+    );
+    if (!upload.ok) return { ok: false, error: upload.error };
+
+    if (scope === 'seat') {
+      const seat = seatQuote.seats.find((s) => s.playerId === playerId);
+      const due = seat?.perPlayer ?? 0;
+      const { error } = await svc.from('tournament_slots').insert({
+        tournament_id: tournamentId,
+        player_id: playerId,
+        registration_id: registrationId,
+        division_id: reg.division_id,
+        status: 'verified',
+        method,
+        amount_due: due,
+        amount_submitted: typedAmount ?? due,
+        currency: seatQuote.currency,
+        payer_name: payerName,
+        transaction_reference: reference,
+        proof_storage_path: upload.path,
+        early_bird_applied: seat?.basis === 'early_bird',
+        price_basis: seat?.basis ?? null,
+        verified_by: user.id,
+        verified_at: now,
+        submitted_at: now,
+      });
+      if (error) {
+        await svc.storage.from(PAYMENT_PROOFS_BUCKET).remove([upload.path]);
+        return { ok: false, error: 'Could not record the payment. Please try again.' };
+      }
+    } else {
+      const { error } = await svc.from('payments').upsert(
+        {
+          registration_id: registrationId,
+          amount_due: seatQuote.total,
+          amount_submitted: typedAmount ?? seatQuote.total,
+          currency: seatQuote.currency,
+          price_basis: seatQuote.basisSummary,
+          method,
+          payer_name: payerName,
+          transaction_reference: reference,
+          proof_storage_path: upload.path,
+          status: 'verified',
+          verified_by: user.id,
+          verified_at: now,
+          submitted_at: now,
+          rejection_reason: null,
+        },
+        { onConflict: 'registration_id' },
+      );
+      if (error) {
+        await svc.storage.from(PAYMENT_PROOFS_BUCKET).remove([upload.path]);
+        return { ok: false, error: 'Could not record the payment. Please try again.' };
+      }
+    }
+
+    await svc.from('registration_events').insert({
+      registration_id: registrationId,
+      actor_id: user.id,
+      event_type: 'receipt_uploaded_by_organizer',
+      from_status: reg.status,
+      to_status: reg.status,
+      metadata: { scope, player_id: playerId, amount: typedAmount },
+    });
+    await writeAudit({
+      actorId: user.id,
+      action: 'payment.organizer_uploaded_receipt',
+      entityType: 'registration',
+      entityId: registrationId,
+      after: { scope, player_id: playerId, status: 'verified' },
+    });
+    await settleRegistration(registrationId, user.id);
+    await revalTournament(tournamentId);
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+  return { ok: true, message: 'Receipt uploaded and marked paid.' };
+}
+
+/**
  * Undo `markSeatPaid` (master_plan §2BE B): only ever a slot the organizer marked paid by hand
  * (`verified` + `method: 'cash_manual'`) - a real receipt goes through `unverifyPayment` instead, so
  * this refuses anything else rather than quietly un-verifying someone's proof. `rejected` slots are

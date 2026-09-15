@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import {
-  searchInvitablePlayers,
+  searchAssignablePlayers,
   assignPartner,
   type PlayerSearchResult,
 } from '@/lib/actions/registration';
@@ -48,13 +48,14 @@ export function AssignPartnerForm({
     timer.current = setTimeout(async () => {
       // master_plan §2AW: this form only ever renders on the organizer's Manage screen (see
       // organizer-registrations.tsx), so a fit-mismatch reason may name the candidate's real rating.
-      setMatches(await searchInvitablePlayers(query, divisionId, undefined, true));
+      // §2BS: organizer override search - rule misses come back as warnings, solo entries as merges.
+      setMatches(await searchAssignablePlayers(query, divisionId, teamId));
       setSearching(false);
     }, 250);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [query, chosen, divisionId]);
+  }, [query, chosen, divisionId, teamId]);
 
   const canSubmit = !!chosen && !chosen.blockedReason && reason.trim().length >= 3 && !pending;
 
@@ -113,13 +114,35 @@ export function AssignPartnerForm({
                 className="hover:bg-surface-muted flex min-h-11 w-full flex-col items-start justify-center px-2.5 py-1.5 text-left disabled:opacity-50"
               >
                 <span className="text-foreground text-xs font-medium">{m.name}</span>
-                {m.blockedReason && (
+                {m.blockedReason ? (
                   <span className="text-danger text-[11px]">{m.blockedReason}</span>
+                ) : (
+                  <>
+                    {m.mergeNote && (
+                      <span className="text-primary text-[11px] font-medium">{m.mergeNote}</span>
+                    )}
+                    {m.warning && (
+                      <span className="text-warning text-[11px]">
+                        Organizer override: {m.warning}
+                      </span>
+                    )}
+                  </>
                 )}
               </button>
             </li>
           ))}
         </ul>
+      )}
+
+      {chosen && (chosen.mergeNote || chosen.warning) && (
+        <div className="space-y-0.5 text-[11px]">
+          {chosen.mergeNote && <p className="text-primary font-medium">{chosen.mergeNote}</p>}
+          {chosen.warning && (
+            <p className="text-warning">
+              {chosen.warning} You can still assign them - division rules only limit players.
+            </p>
+          )}
+        </div>
       )}
 
       {chosen && (

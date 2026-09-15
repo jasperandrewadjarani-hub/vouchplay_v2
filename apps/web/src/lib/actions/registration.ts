@@ -34,6 +34,7 @@ import {
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 import {
   attachBareSlot,
+  moveMergedPlayerMoney,
   detachSlots,
   settleRegistration,
   summarizeRegistration,
@@ -592,6 +593,9 @@ export interface PlayerSearchResult {
    * on a team at all, or when `blockedReason` already rules them out).
    */
   mergeNote?: string | null;
+  /** §2BS: organizer search only - a division rule this player does not meet, shown as a warning
+   *  (organizers may seat them anyway; the rules apply on the player side). */
+  warning?: string | null;
 }
 
 /** The division columns the fit rule needs. Kept here so the shape is checked in one place. */
@@ -626,6 +630,9 @@ export async function searchInvitablePlayers(
    *  instead of being redacted. The eligibility VERDICT itself never depends on this - it always uses
    *  the real effective skill, exactly as before (§2AW decision E: matchmaking is unaffected). */
   privileged = false,
+  /** §2BS: organizer override - division-rule misses become warnings (not blocks), and any solo
+   *  entry the candidate holds (paid or not) is offered as a merge. */
+  organizerOverride = false,
 ): Promise<PlayerSearchResult[]> {
   const user = await getOptionalUser();
   if (!user) return [];
@@ -669,6 +676,7 @@ export async function searchInvitablePlayers(
   }));
 
   const reasons = new Map<string, string>();
+  const warnings = new Map<string, string>();
   if (divisionId && named.length > 0) {
     const [{ data: divRow }, { data: skillRows }, { data: actorRow }] = await Promise.all([
       svc
@@ -753,7 +761,7 @@ export async function searchInvitablePlayers(
               );
           const displayEffectiveSkill =
             displayRatings.communitySkillLevel ?? displayRatings.selfRatedSkill ?? null;
-          reasons.set(
+          (organizerOverride ? warnings : reasons).set(
             p.id,
             describeDivisionFit(verdict.reason, {
               subject: 'partner',
@@ -868,7 +876,21 @@ export async function searchInvitablePlayers(
             const hasSentInvite = teamsWithSentInvite.has(teamId);
             const regId = regByTeam.get(teamId);
             const teamPaid = regId ? paidRegIds.has(regId) : false;
-            if (!soleConfirmed || hasSentInvite) {
+            if (organizerOverride) {
+              if (members.length === 1) {
+                mergeNotes.set(
+                  p.id,
+                  teamPaid
+                    ? 'Has their own paid entry here - it will be merged into this team, with the payment'
+                    : 'Has their own entry here - it will be merged into this team',
+                );
+              } else {
+                reasons.set(
+                  p.id,
+                  'On a team with someone else in this division - split that team first',
+                );
+              }
+            } else if (!soleConfirmed || hasSentInvite) {
               reasons.set(p.id, 'Already on a team with someone else in this division');
             } else if (teamPaid) {
               reasons.set(p.id, 'Already paid for a whole team - ask the organizer');
@@ -887,6 +909,7 @@ export async function searchInvitablePlayers(
     city: p.city,
     blockedReason: reasons.get(p.id) ?? null,
     mergeNote: mergeNotes.get(p.id) ?? null,
+    warning: warnings.get(p.id) ?? null,
   }));
 }
 
@@ -945,6 +968,19 @@ export async function searchAssignablePlayers(
   const user = await getOptionalUser();
   if (!user) return [];
   const svc = createServiceClient();
+  // §2BS: this search reveals merge/paid notes, so it is organizer-only for the team's tournament.
+  const { data: teamRow } = await svc
+    .from('teams')
+    .select('tournament_id')
+    .eq('id', teamId)
+    .maybeSingle();
+  const tournamentId = (teamRow as { tournament_id: string } | null)?.tournament_id;
+  if (
+    !tournamentId ||
+    !(await authorizeOrganizer(user.id, tournamentId, 'approve_registrations'))
+  ) {
+    return [];
+  }
   const { data: memberRows } = await svc
     .from('team_members')
     .select('player_id, confirmed_at')
@@ -954,7 +990,7 @@ export async function searchAssignablePlayers(
   ).find((m) => m.confirmed_at);
   // master_plan §2AW: this is always an organizer-scoped search (Manage → assign a partner), so the
   // fit-mismatch reason may name the candidate's real rating rather than redacting it.
-  return searchInvitablePlayers(q, divisionId, confirmed?.player_id, true);
+  return searchInvitablePlayers(q, divisionId, confirmed?.player_id, true, true);
 }
 
 /** Map an `organizer_assign_partner` refusal to player-facing copy (master_plan §2AQ A3). Distinct
@@ -970,7 +1006,8 @@ const ASSIGN_PARTNER_ERRORS: Record<string, string> = {
   seat_not_vacant: 'This team has no open seat.',
   player_does_not_fit: "That player doesn't meet this division's rules.",
   mixed_pair: 'Mixed doubles needs one male and one female player.',
-  partner_conflict: 'One of you is already on a team in this division.',
+  partner_conflict:
+    'That player is on a team with someone else in this division. Remove them from that team first.',
 };
 function friendlyAssignPartner(msg: string | undefined): string {
   if (!msg) return 'That action failed. Please try again.';
@@ -1056,10 +1093,26 @@ export async function assignPartner(
     } | null;
     const registrationId = result?.registration_id ?? null;
     const otherMember = result?.other_member ?? null;
+    const mergedRegistrationId =
+      (data as { merged_registration_id?: string | null } | null)?.merged_registration_id ?? null;
+    let mergeMessage = '';
 
     // Best-effort follow-through: the seat is already assigned, so a failure past this point must not
     // be reported as a failed assignment.
     try {
+      // §2BS: the partner's own solo entry was merged in - their money follows them.
+      if (mergedRegistrationId && registrationId) {
+        const moved = await moveMergedPlayerMoney(
+          mergedRegistrationId,
+          registrationId,
+          p.id,
+          user.id,
+        );
+        mergeMessage =
+          moved.movedSlot || moved.copiedTeamReceipt
+            ? ' Their separate entry was merged in, with their payment.'
+            : ' Their separate entry was merged in.';
+      }
       if (registrationId) {
         const { data: regRow } = await svc
           .from('registrations')
@@ -1160,7 +1213,7 @@ export async function assignPartner(
       ok: true,
       teamId,
       registrationId: registrationId ?? undefined,
-      message: 'Partner assigned.',
+      message: `Partner assigned.${mergeMessage}`,
     };
   } catch {
     return { error: 'That action is temporarily unavailable.' };
@@ -3405,17 +3458,25 @@ function organizerFitNote(
   },
   onLiveTeam: boolean,
 ): { blocked: string | null; warning: string | null } {
+  // §2BS: organizers may enter anyone - division rules are warnings here, not blocks. Only an existing
+  // entry blocks (pair them from that entry's "Assign partner" instead, which merges entries).
+  if (onLiveTeam) {
+    return {
+      blocked:
+        'Already has an entry in this division - use Assign partner on an entry to pair them.',
+      warning: null,
+    };
+  }
   const singleSex = div.sex_classification === 'men' || div.sex_classification === 'women';
   if (singleSex && !player.sex) {
-    return { blocked: 'Sex not set on profile - required for this division.', warning: null };
+    return { blocked: null, warning: 'Sex not set on profile.' };
   }
-  if (div.sex_classification === 'men' && player.sex !== 'male') {
-    return { blocked: 'Sex does not match this division.', warning: null };
+  if (
+    (div.sex_classification === 'men' && player.sex !== 'male') ||
+    (div.sex_classification === 'women' && player.sex !== 'female')
+  ) {
+    return { blocked: null, warning: 'Sex does not match this division.' };
   }
-  if (div.sex_classification === 'women' && player.sex !== 'female') {
-    return { blocked: 'Sex does not match this division.', warning: null };
-  }
-  if (onLiveTeam) return { blocked: 'Already on a team in this division.', warning: null };
 
   let warning: string | null = null;
   if (div.skill_policy !== 'open' && div.maximum_skill != null) {
@@ -3618,10 +3679,15 @@ export async function createEntryForPlayers(input: {
     const player2 = playerIds[1];
     if (!player1) return { ok: false, error: 'Choose 1 or 2 players.' };
 
+    // §2BS: organizer override - division rules (skill, age, sex) are not enforced for player 1 either.
     const outcome =
       div.format === 'singles'
-        ? await doRegisterSolo(input.tournamentId, input.divisionId, player1)
-        : await doEnterDoublesSolo(input.tournamentId, input.divisionId, player1);
+        ? await doRegisterSolo(input.tournamentId, input.divisionId, player1, {
+            organizerId: user.id,
+          })
+        : await doEnterDoublesSolo(input.tournamentId, input.divisionId, player1, {
+            organizerId: user.id,
+          });
     if (outcome.error) return { ok: false, error: outcome.error };
     const registrationId = outcome.registrationId;
     const teamId = outcome.teamId;
@@ -3633,12 +3699,20 @@ export async function createEntryForPlayers(input: {
     const seatedPlayerIds = [player1];
 
     if (player2) {
-      const { error } = await svc.rpc('organizer_assign_partner', {
+      const { data: seatData, error } = await svc.rpc('organizer_assign_partner', {
         p_team_id: teamId,
         p_actor: user.id,
         p_player: player2,
         p_reason: trimmedReason,
       });
+      // §2BS: player 2's own solo entry (if any) was merged in - move their money onto this entry.
+      const mergedFrom =
+        (seatData as { merged_registration_id?: string | null } | null)?.merged_registration_id ??
+        null;
+      if (!error && mergedFrom) {
+        await moveMergedPlayerMoney(mergedFrom, registrationId, player2, user.id);
+        warnings.push('Player 2 had their own entry here - it was merged into this team.');
+      }
       if (error) {
         await logRpcRefusal({
           actorId: user.id,

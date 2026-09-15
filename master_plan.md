@@ -6842,6 +6842,49 @@ Jasper: assign and remove Coach roles at will (the badge comes with the role), k
   Admin re-grant/remove); a one-off fix needs Jasper's OK.
 - No bulk "make coach" and no coach expiry dates.
 
+## 2BS. Organizer partner override, merge paid solo entries, receipts on behalf (2026-09-16)
+
+Jasper (field issue): two players each entered the same doubles division alone (community Low Intermediate, entered
+Novice) and both paid. Pairing them from Manage was refused ("skill division... plays above"). Asked: organizers and
+admins add partners AT WILL regardless of division rules (rules apply on the player side only); merge entries where
+possible; add teams manually; upload receipts on behalf of players who paid.
+
+### Findings
+
+- `organizer_assign_partner` (0044) enforced the player-side doors: `player_fits_division`, mixed composition, and
+  `player_on_active_team_in_division` - so a partner with their OWN entry was refused as `partner_conflict` even though
+  that is exactly the merge case. The assign form also searched with the organizer's sex as the composition partner.
+- Organizer "Add entry" ran player 1 through `checkDivisionFit` + `create_solo_doubles_team` (fit in SQL), and blocked
+  sex mismatch in its search.
+- Organizers could "Mark paid (cash)" but not attach a receipt file for someone who paid outside the app.
+
+### Decisions (built)
+
+1. **Migration 0054** replaces `organizer_assign_partner` in place (same signature/grants): no fit or composition checks;
+   the partner's own SOLO entry in the division (live team with only them) is MERGED - released as `withdrawn` with event
+   `merged_into_team` (promotes the next waitlisted team, same as the 0045 player merge), invites cancelled, team
+   disbanded - **paid or not**; a partner on a team with someone else is still refused. Returns `merged_registration_id`.
+   New `organizer_create_solo_doubles_team` = the solo-team RPC without the fit check (organizer only; registration
+   window + division open still apply).
+2. **Money follows the merged player** (`moveMergedPlayerMoney`): their live seat slot is re-attached to the kept entry;
+   otherwise their live team receipt is copied into a seat slot (same status, proof, reference, amount sent; seat price
+   as amount due, so any excess shows as overpaid). The old payments row stays on the withdrawn entry as history.
+3. **Assign partner form** uses the organizer search (`searchAssignablePlayers`, now organizer-authorized): rule misses
+   show as amber "Organizer override: ..." warnings (selectable), solo entries show "it will be merged into this team
+   (with the payment)", only "on a team with someone else" blocks.
+4. **Add entry**: player 1 skips division fit (singles and doubles); search shows sex mismatch as a warning; an existing
+   entry still blocks there (pair from that entry's Assign partner, which merges).
+5. **Upload receipt on behalf** (`organizerUploadReceipt`, Manage → team card → unpaid seat → "Upload receipt"): file +
+   optional method / amount / reference; recorded **verified**; "covers the whole team" records the team receipt instead.
+   Seat price is §2BQ-aware. Reversible via Un-verify. Audited + registration event.
+
+### Not changed / deferred
+
+- Player-side rules (fit, composition, merge only when unpaid) are unchanged.
+- Merging two entries that BOTH have a partner, and a one-click "merge these two entries" picker from the list view.
+- Refund bookkeeping for a merged entry's original team receipt (kept as history on the withdrawn entry).
+- Migration numbering: 0054 this; Organizer Phase B → 0055; PIN lock → 0056.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

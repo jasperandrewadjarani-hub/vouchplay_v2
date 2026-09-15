@@ -35,6 +35,7 @@ import {
   verifyPayment,
   markSeatPaid,
   undoSeatPaid,
+  organizerUploadReceipt,
 } from '@/lib/actions/payment';
 import { issueOfficialAchievement } from '@/lib/actions/achievements';
 
@@ -657,6 +658,7 @@ function SeatLine({
   const [showUndo, setShowUndo] = useState(false);
   const [showUndoCash, setShowUndoCash] = useState(false);
   const [showMarkPaid, setShowMarkPaid] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const name = seat.playerId ? (nameById.get(seat.playerId) ?? 'Player') : null;
   const firstName = name ? (name.split(/\s+/)[0] ?? name) : 'Open';
   const topupAmount = Math.max(0, seat.amountDue - seat.amountSubmitted);
@@ -696,16 +698,50 @@ function SeatLine({
           <span className="flex items-center gap-1.5">
             <span className="text-foreground-muted text-xs">Unpaid</span>
             {seat.playerId && (
-              <button
-                type="button"
-                onClick={() => setShowMarkPaid((v) => !v)}
-                className={`${btnSmall} border-border text-foreground border`}
-              >
-                Mark paid (cash)
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUpload((v) => !v);
+                    setShowMarkPaid(false);
+                  }}
+                  className={`${btnSmall} border-border text-foreground border`}
+                >
+                  Upload receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMarkPaid((v) => !v);
+                    setShowUpload(false);
+                  }}
+                  className={`${btnSmall} border-border text-foreground border`}
+                >
+                  Mark paid (cash)
+                </button>
+              </>
             )}
           </span>
         </div>
+        {showUpload && seat.playerId && (
+          <OrganizerReceiptForm
+            playerFirstName={firstName}
+            pending={pending}
+            onCancel={() => setShowUpload(false)}
+            onSubmit={(formData) =>
+              run(async () => {
+                const res = await organizerUploadReceipt(
+                  registrationId,
+                  seat.playerId as string,
+                  tournamentId,
+                  formData,
+                );
+                if (res.ok) setShowUpload(false);
+                return res;
+              })
+            }
+          />
+        )}
         {showMarkPaid && seat.playerId && (
           <InlineConfirm
             prompt={`Mark ${firstName}'s seat as paid in cash?`}
@@ -1177,5 +1213,93 @@ export function AwardPicker({
         </button>
       </div>
     </section>
+  );
+}
+
+/**
+ * §2BS: the organizer uploads a receipt on a player's behalf (paid by bank/GCash outside the app). The
+ * payment is recorded as verified. "Covers the whole team" records it as the team receipt instead of
+ * this one seat.
+ */
+function OrganizerReceiptForm({
+  playerFirstName,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  playerFirstName: string;
+  pending: boolean;
+  onSubmit: (formData: FormData) => void;
+  onCancel: () => void;
+}) {
+  const field =
+    'border-border bg-background min-h-10 w-full rounded-lg border px-2.5 text-xs focus-visible:outline-2 focus-visible:outline-offset-2';
+  return (
+    <form
+      className="border-border space-y-2 rounded-lg border border-dashed p-2.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(new FormData(e.currentTarget));
+      }}
+    >
+      <p className="text-foreground text-xs font-semibold">
+        Upload {playerFirstName}&rsquo;s receipt
+      </p>
+      <input
+        name="proof"
+        type="file"
+        required
+        accept="image/png,image/jpeg,image/webp,application/pdf"
+        aria-label="Receipt file"
+        className="text-foreground-muted file:border-border file:bg-surface file:text-foreground w-full text-xs file:mr-2 file:rounded-lg file:border file:px-2.5 file:py-1 file:text-xs"
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          name="method"
+          placeholder="Method (e.g. GCash)"
+          aria-label="Method"
+          className={field}
+        />
+        <input
+          name="amountSubmitted"
+          type="number"
+          min={0}
+          step="0.01"
+          inputMode="decimal"
+          placeholder="Amount (optional)"
+          aria-label="Amount paid"
+          className={field}
+        />
+      </div>
+      <input
+        name="transactionReference"
+        placeholder="Reference # (optional)"
+        aria-label="Reference number"
+        className={field}
+      />
+      <label className="text-foreground flex min-h-10 items-center gap-2 text-xs">
+        <input type="checkbox" name="scope" value="team" className="h-4 w-4" />
+        This receipt covers the whole team
+      </label>
+      <p className="text-foreground-muted text-[11px]">
+        Recorded as paid (verified). Blank amount uses the seat price. You can un-verify it later.
+      </p>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={pending}
+          className="vp-gradient min-h-10 rounded-lg px-3 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {pending ? 'Uploading…' : 'Upload & mark paid'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-foreground-muted hover:text-foreground min-h-10 text-xs font-medium"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }

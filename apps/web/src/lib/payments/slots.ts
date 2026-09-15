@@ -13,7 +13,7 @@ import { tournamentTag } from '@/lib/tournaments/queries';
 import { notify } from '@/lib/notifications/create';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 import { sendConfirmationEmailForRegistration } from './confirmation-email';
-import { nextEntryRepricing } from '@/lib/tournaments/next-entry';
+import { nextEntryRepricing, quoteRegistrationSeats } from '@/lib/tournaments/next-entry';
 
 /**
  * The seat as the unit of payment (master_plan §2AO Decision A). This module is the ONLY place that
@@ -539,4 +539,145 @@ export async function settleRegistration(
   }
 
   return summary;
+}
+
+/**
+ * §2BS: an organizer merged a player's own solo entry (`fromRegistrationId`, now withdrawn) into
+ * another team's entry (`toRegistrationId`). The player's money follows them:
+ *  - a live seat slot on the old entry is re-attached to the new one;
+ *  - otherwise a live TEAM receipt on the old entry (player paid for "the whole team" while alone) is
+ *    copied into a seat slot on the new entry - same status, proof, reference and amount sent - so the
+ *    organizer sees it on the kept team (any excess shows as overpaid for them to settle). The old
+ *    payments row stays on the withdrawn entry as history.
+ * Never lowers or duplicates: if the player already has a live seat on the new entry nothing moves.
+ * Best-effort; returns what happened for the caller's audit/message.
+ */
+export async function moveMergedPlayerMoney(
+  fromRegistrationId: string,
+  toRegistrationId: string,
+  playerId: string,
+  actorId: string,
+): Promise<{ movedSlot: boolean; copiedTeamReceipt: boolean }> {
+  const out = { movedSlot: false, copiedTeamReceipt: false };
+  try {
+    const svc = createServiceClient();
+    const { data: toRow } = await svc
+      .from('registrations')
+      .select('id, division_id, tournament_id')
+      .eq('id', toRegistrationId)
+      .maybeSingle();
+    const toReg = toRow as { id: string; division_id: string; tournament_id: string } | null;
+    if (!toReg) return out;
+
+    const { data: existingRows } = await svc
+      .from('tournament_slots')
+      .select('id')
+      .eq('registration_id', toRegistrationId)
+      .eq('player_id', playerId)
+      .in('status', LIVE_STATUSES)
+      .limit(1);
+    if ((existingRows ?? []).length > 0) return out;
+
+    const { data: oldSlots } = await svc
+      .from('tournament_slots')
+      .select('id')
+      .eq('registration_id', fromRegistrationId)
+      .eq('player_id', playerId)
+      .in('status', LIVE_STATUSES)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    const oldSlot = ((oldSlots ?? []) as { id: string }[])[0];
+    if (oldSlot) {
+      const { error } = await svc
+        .from('tournament_slots')
+        .update({
+          registration_id: toRegistrationId,
+          division_id: toReg.division_id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', oldSlot.id);
+      if (!error) {
+        out.movedSlot = true;
+        await svc.from('registration_events').insert({
+          registration_id: toRegistrationId,
+          actor_id: actorId,
+          event_type: 'merged_payment_moved',
+          metadata: {
+            player_id: playerId,
+            slot_id: oldSlot.id,
+            from_registration: fromRegistrationId,
+          },
+        });
+      }
+      return out;
+    }
+
+    const { data: payRow } = await svc
+      .from('payments')
+      .select(
+        'id, status, amount_submitted, amount_due, currency, method, payer_name, transaction_reference, proof_storage_path, submitted_at, verified_by, verified_at',
+      )
+      .eq('registration_id', fromRegistrationId)
+      .in('status', LIVE_STATUSES)
+      .maybeSingle();
+    const pay = payRow as {
+      id: string;
+      status: string;
+      amount_submitted: number | null;
+      amount_due: number;
+      currency: string;
+      method: string | null;
+      payer_name: string | null;
+      transaction_reference: string | null;
+      proof_storage_path: string | null;
+      submitted_at: string | null;
+      verified_by: string | null;
+      verified_at: string | null;
+    } | null;
+    if (!pay) return out;
+
+    const quote = await quoteRegistrationSeats(toRegistrationId);
+    const seat = quote?.seats.find((s) => s.playerId === playerId);
+    const sent = Number(pay.amount_submitted ?? pay.amount_due);
+    const { data: inserted, error } = await svc
+      .from('tournament_slots')
+      .insert({
+        tournament_id: toReg.tournament_id,
+        player_id: playerId,
+        registration_id: toRegistrationId,
+        division_id: toReg.division_id,
+        status: pay.status,
+        amount_due: seat?.perPlayer ?? sent,
+        amount_submitted: sent,
+        currency: pay.currency,
+        method: pay.method,
+        payer_name: pay.payer_name,
+        transaction_reference: pay.transaction_reference,
+        proof_storage_path: pay.proof_storage_path,
+        early_bird_applied: seat?.basis === 'early_bird',
+        price_basis: seat?.basis ?? null,
+        submitted_at: pay.submitted_at ?? new Date().toISOString(),
+        verified_by: pay.verified_by,
+        verified_at: pay.verified_at,
+      })
+      .select('id')
+      .single();
+    if (!error && inserted) {
+      out.copiedTeamReceipt = true;
+      await svc.from('registration_events').insert({
+        registration_id: toRegistrationId,
+        actor_id: actorId,
+        event_type: 'merged_payment_moved',
+        metadata: {
+          player_id: playerId,
+          slot_id: (inserted as { id: string }).id,
+          from_registration: fromRegistrationId,
+          from_payment: pay.id,
+        },
+      });
+    }
+  } catch {
+    // best-effort - the organizer can still mark the seat paid by hand
+  }
+  return out;
 }

@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.94 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.95 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,16 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.95 (2026-09-16)
+
+_Organizer partner override, merging paid solo entries, receipts on behalf (master_plan §2BS); migration 0054._
+
+- Organizers/admins assign partners regardless of division rules (skill, age, sex, mixed); players still get the rules.
+- Assigning a partner who holds their own solo entry merges it into the team (paid or not); their payment moves with them.
+- Organizer Add entry no longer blocks on division fit.
+- Manage → unpaid seat → **Upload receipt**: attach a receipt for a player who paid outside the app (recorded as paid;
+  optionally as the whole-team receipt).
+
 ## v1.94 (2026-09-15)
 
 _Coach role at will (master_plan §2BR)._

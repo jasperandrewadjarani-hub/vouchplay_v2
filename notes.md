@@ -3573,3 +3573,12 @@ role is active (re-weight on grant/remove/approval). Profile coach vouchers = cu
 0 active coaches; 4 hand-tagged Coach badges (Adamkhan Alih, Quisma Yasin, Robert Jr Calapiz, Jacob John Andain) awaiting
 Jasper's per-person decision; 1 stale coach-weight vouch from test account "Phase13 Player" (role revoked); the 4 open role
 applications are all Organizer. No migration. Gates: typecheck, lint, 1,041 tests, format, build pass.
+
+## 2026-09-16 - Organizer partner override + merge paid solo entries + receipts on behalf (§2BS, handover v1.95)
+
+Field issue from Jasper: two solo entries (both paid, community Low Intermediate in a Novice division) could not be paired
+from Manage. Built: migration 0054 (organizer_assign_partner without fit/composition checks, merges the partner's solo
+entry even when paid; new organizer_create_solo_doubles_team), money move for merged players, organizer search warnings
+instead of blocks, Add entry without fit blocks, "Upload receipt" on unpaid seats (verified; whole-team option).
+Gates: typecheck, lint, 1,041 tests, format, build pass. Deploy order: Jasper applies scripts/apply-0054.sql first (Add
+entry for doubles calls the new RPC), then push.

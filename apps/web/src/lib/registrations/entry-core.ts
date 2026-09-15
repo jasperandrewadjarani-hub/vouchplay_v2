@@ -305,6 +305,8 @@ export async function doRegisterSolo(
   tournamentId: string,
   divisionId: string,
   userId: string,
+  /** §2BS: set when an ORGANIZER enters this player (caller already authorized) - skips division fit. */
+  opts: { organizerId?: string } = {},
 ): Promise<EntryOutcome> {
   const svc = createServiceClient();
   const { data: division } = await svc
@@ -316,8 +318,10 @@ export async function doRegisterSolo(
   if (!div) return { error: 'Division not found.' };
   if (div.format !== 'singles') return { error: 'This is a doubles division - form a team first.' };
 
-  const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
-  if (fitError) return { error: fitError };
+  if (!opts.organizerId) {
+    const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
+    if (fitError) return { error: fitError };
+  }
 
   // Reuse an existing active team for this player in this division, else create a solo team.
   const { data: myTeamRows } = await svc
@@ -375,6 +379,8 @@ export async function doEnterDoublesSolo(
   tournamentId: string,
   divisionId: string,
   userId: string,
+  /** §2BS: set when an ORGANIZER enters this player (caller already authorized) - skips division fit. */
+  opts: { organizerId?: string } = {},
 ): Promise<EntryOutcome> {
   const svc = createServiceClient();
   const { data: division } = await svc
@@ -387,14 +393,23 @@ export async function doEnterDoublesSolo(
   if (div.format !== 'doubles')
     return { error: 'This is a singles division - use Register instead.' };
 
-  const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
-  if (fitError) return { error: fitError };
+  if (!opts.organizerId) {
+    const fitError = await checkDivisionFit(divisionId, [{ playerId: userId, subject: 'you' }]);
+    if (fitError) return { error: fitError };
+  }
 
-  const { data: created, error: teamError } = await svc.rpc('create_solo_doubles_team', {
-    p_tournament_id: tournamentId,
-    p_division_id: divisionId,
-    p_actor: userId,
-  });
+  const { data: created, error: teamError } = opts.organizerId
+    ? await svc.rpc('organizer_create_solo_doubles_team', {
+        p_tournament_id: tournamentId,
+        p_division_id: divisionId,
+        p_player: userId,
+        p_actor: opts.organizerId,
+      })
+    : await svc.rpc('create_solo_doubles_team', {
+        p_tournament_id: tournamentId,
+        p_division_id: divisionId,
+        p_actor: userId,
+      });
   if (teamError) return await friendlyLogged(userId, 'create_solo_doubles_team', teamError.message);
   const teamId = (created as { team_id?: string } | null)?.team_id;
   if (!teamId) return { error: 'Could not start your entry. Please try again.' };
