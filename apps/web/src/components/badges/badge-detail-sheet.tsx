@@ -75,12 +75,7 @@ export function BadgeDetailSheet({
             className="pointer-events-none absolute h-[150px] w-[150px] rounded-full"
             style={{ background: `radial-gradient(circle, ${metal[1]}48, transparent 65%)` }}
           />
-          <BadgeSymbol
-            badgeKey={badge.key}
-            size={120}
-            number={badge.meta.number}
-            className="relative"
-          />
+          <BadgeSymbol badgeKey={badge.key} size={120} className="relative" />
         </div>
         <span
           className={`text-[11px] font-bold tracking-wide uppercase ${RARITY_COLOR[def.rarity]}`}

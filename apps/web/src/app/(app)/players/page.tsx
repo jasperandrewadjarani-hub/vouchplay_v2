@@ -14,6 +14,7 @@ import {
   type TournamentOption,
 } from '@/lib/tournaments/queries';
 import {
+  describeBadgeFilter,
   parsePlayerFilters,
   playerFiltersToQuery,
   normalizeCityKey,
@@ -28,7 +29,7 @@ import { QuickChips } from '@/components/players/quick-chips';
 import { QuickBar } from '@/components/players/quick-bar';
 import { YourGameCard } from '@/components/players/your-game-card';
 import { getPartnerLookingStrip } from '@/lib/partners/deck';
-import { getViewerGame } from '@/lib/badges/queries';
+import { getBadgeFilterOptions, getViewerGame, type BadgeFilterOption } from '@/lib/badges/queries';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
@@ -68,6 +69,7 @@ async function PlayersResults({
   staffLinks,
   showCommunitySkill,
   ownSlug,
+  badgeOptions,
 }: {
   filters: PlayerFilters;
   viewer: ViewerContext;
@@ -83,11 +85,17 @@ async function PlayersResults({
    *  is free) - their OWN card keeps the community chip even when the toggle hides it from other
    *  players (master_plan §2AO E: the flag hides the chip from OTHER players, not its owner). */
   ownSlug: string | null;
+  /** Badge names for the "{n} players with X, Y or Z" count line (§2BL C, item 7) - empty for a
+   *  signed-out viewer, harmless either way since `filters.badges` is a signed-in-only affordance. */
+  badgeOptions: BadgeFilterOption[];
 }) {
   const { players: allPlayers, total, page, pageCount } = await listPlayers(filters, viewer);
   // Signup wall (master_plan §2AH): anonymous visitors get a taste - the first 10 players, compact,
   // no pagination - then one warm prompt to join. Signed-in visitors are byte-identical to before.
   const players = authed ? allPlayers : allPlayers.slice(0, 10);
+  // "15 players with Legend, MVP or OG" (§2BL C item 7) - null when the badge filter is off, in
+  // which case the line reads exactly as it always has.
+  const badgeDescription = authed ? describeBadgeFilter(filters, badgeOptions) : null;
   return (
     <div className="space-y-5">
       {/* Records the exact list URL (filters/sort/page) so a later "Back to players" or Players-tab
@@ -98,7 +106,7 @@ async function PlayersResults({
           {authed
             ? total === 0
               ? 'No players match your search yet.'
-              : `${total} player${total === 1 ? '' : 's'}`
+              : `${total} player${total === 1 ? '' : 's'}${badgeDescription ? ` ${badgeDescription}` : ''}`
             : `A few of our ${total.toLocaleString()}+ players`}
         </p>
         {/* Sort and view controls are signed-in features - a guest sees a fixed compact preview.
@@ -191,6 +199,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     staffLinks,
     viewerGame,
     totalPlayers,
+    badgeOptions,
   ] = await Promise.all([
     getDirectoryCityOptions(),
     getDirectoryClubOptions(),
@@ -236,6 +245,10 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     // The compact header's "{n}+ players" (master_plan §2BK F): a cached head-only count with the
     // directory's own inclusion rules - not a second full directory load. Null hides the number.
     getDirectoryPlayerCount(),
+    // Badge filter options for the "Badge holders" quick chip (§2BL C, item 8) - signed-in only; an
+    // anonymous visitor never sees the chip (QuickChips itself isn't even rendered for them below),
+    // so there is nothing to fetch.
+    authed ? getBadgeFilterOptions() : Promise.resolve<BadgeFilterOption[]>([]),
   ]);
   const showCommunitySkill = profileVisibility.showCommunitySkill || viewer.isStaff;
   // §2BC decision A: which state the "Let people find you" / "Find a partner" doors react to - an
@@ -305,6 +318,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
             myLevelLabel={myLevelLabel}
             myCity={myCityKey}
             myCityLabel={myCityLabel}
+            badgeOptions={badgeOptions}
           />
         </>
       )}
@@ -325,6 +339,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           staffLinks={staffLinks}
           showCommunitySkill={showCommunitySkill}
           ownSlug={myProfile?.slug ?? null}
+          badgeOptions={badgeOptions}
         />
       </Suspense>
     </div>

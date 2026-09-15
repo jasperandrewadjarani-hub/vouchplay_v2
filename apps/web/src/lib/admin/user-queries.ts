@@ -1,5 +1,6 @@
 import 'server-only';
 import type { AccountStatus, GlobalRole } from '@vouchplay/db';
+import { SKILL_BANDS } from '@vouchplay/config';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
 
@@ -80,6 +81,136 @@ export async function searchUsers(query: string, limit = 25): Promise<AdminUserC
     }));
   } catch {
     return [];
+  }
+}
+
+export interface AdminBadgeTagPlayer {
+  id: string;
+  name: string;
+  nickname: string | null;
+  slug: string | null;
+  avatarUrl: string | null;
+  tierKey: string | null;
+  tierLabel: string | null;
+  tierColor: string | null;
+  city: string | null;
+  /** Live (not revoked, not expired) badge keys the player currently holds, any source. */
+  badgeKeys: string[];
+}
+
+/**
+ * Bounded above which the admin badge-tagging list is fetched, filtered (tier / "no badges yet") and
+ * paginated in memory rather than in SQL. Community tier lives in `player_skill_profiles` and "no
+ * badges" needs an anti-join against `player_badges` - PostgREST cannot express either against the
+ * `profiles` query below in one round trip, and the same trade-off is already accepted elsewhere in
+ * this codebase for admin-scale lists (see `idsMatchingIndexFilters` in `lib/players/filters.ts`).
+ * VouchPlay's whole player base is currently in the hundreds, far under this cap.
+ */
+const BADGE_TAG_CANDIDATE_CAP = 2000;
+
+/**
+ * Players for Admin → Badges' single-screen Tag flow (master_plan §2BL E). Unlike `searchUsers` /
+ * the public directory, this deliberately includes players hidden from the directory (admins tag
+ * everyone, not just who a visitor can see) and never applies `account_status`/visibility filters.
+ * `ids` (used for the "Selected (n)" quick filter and the review sheet) returns exactly those players,
+ * unpaginated, ignoring every other filter.
+ */
+export async function listPlayersForBadgeTagging(opts: {
+  q?: string;
+  /** Community skill ordinal (SKILL_BANDS). Players with no community rating never match. */
+  tier?: number;
+  city?: string;
+  noBadges?: boolean;
+  ids?: string[];
+  page?: number;
+  pageSize?: number;
+}): Promise<{ players: AdminBadgeTagPlayer[]; total: number }> {
+  const empty = { players: [], total: 0 };
+  try {
+    const svc = createServiceClient();
+    const pageSize = Math.min(Math.max(opts.pageSize ?? 30, 1), 100);
+    const page = Math.max(opts.page ?? 1, 1);
+    const byIds = !!opts.ids && opts.ids.length > 0;
+
+    let sel = svc
+      .from('profiles')
+      .select('id, first_name, last_name, nickname, slug, city, avatar_path')
+      .not('onboarded_at', 'is', null)
+      .order('created_at', { ascending: false });
+
+    if (byIds) {
+      sel = sel.in('id', opts.ids as string[]);
+    } else {
+      const q = opts.q?.trim();
+      if (q) {
+        const like = `%${q}%`;
+        sel = sel.or(
+          `first_name.ilike.${like},last_name.ilike.${like},nickname.ilike.${like},slug.ilike.${like}`,
+        );
+      }
+      if (opts.city?.trim()) sel = sel.ilike('city', `%${opts.city.trim()}%`);
+      sel = sel.limit(BADGE_TAG_CANDIDATE_CAP);
+    }
+
+    const { data, error } = await sel;
+    if (error) throw error;
+    const rows = (data ?? []) as Record<string, unknown>[];
+    if (rows.length === 0) return empty;
+    const ids = rows.map((r) => r.id as string);
+
+    const [{ data: skillRows }, { data: badgeRows }] = await Promise.all([
+      svc
+        .from('player_skill_profiles')
+        .select('player_id, community_skill_level')
+        .in('player_id', ids),
+      svc
+        .from('player_badges')
+        .select('player_id, badge_key')
+        .in('player_id', ids)
+        .is('revoked_at', null)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`),
+    ]);
+
+    const tierByPlayer = new Map<string, number>();
+    for (const r of (skillRows ?? []) as {
+      player_id: string;
+      community_skill_level: number | null;
+    }[]) {
+      if (r.community_skill_level != null) tierByPlayer.set(r.player_id, r.community_skill_level);
+    }
+    const badgesByPlayer = new Map<string, string[]>();
+    for (const r of (badgeRows ?? []) as { player_id: string; badge_key: string }[]) {
+      const arr = badgesByPlayer.get(r.player_id) ?? [];
+      arr.push(r.badge_key);
+      badgesByPlayer.set(r.player_id, arr);
+    }
+
+    let all: AdminBadgeTagPlayer[] = rows.map((r) => {
+      const ordinal = tierByPlayer.get(r.id as string);
+      const band = ordinal != null ? SKILL_BANDS.find((b) => b.ordinal === ordinal) : undefined;
+      return {
+        id: r.id as string,
+        name: displayName(r as never),
+        nickname: (r.nickname as string) ?? null,
+        slug: (r.slug as string) ?? null,
+        avatarUrl: avatarUrl((r.avatar_path as string) ?? null),
+        tierKey: band?.key ?? null,
+        tierLabel: band?.label ?? null,
+        tierColor: band?.color ?? null,
+        city: (r.city as string) ?? null,
+        badgeKeys: badgesByPlayer.get(r.id as string) ?? [],
+      };
+    });
+
+    if (opts.tier != null) all = all.filter((p) => tierByPlayer.get(p.id) === opts.tier);
+    if (opts.noBadges) all = all.filter((p) => p.badgeKeys.length === 0);
+
+    const total = all.length;
+    if (byIds) return { players: all, total };
+    const from = (page - 1) * pageSize;
+    return { players: all.slice(from, from + pageSize), total };
+  } catch {
+    return empty;
   }
 }
 

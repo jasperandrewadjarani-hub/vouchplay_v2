@@ -1,21 +1,19 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { Settings } from 'lucide-react';
 import { requireAdminPage } from '@/lib/moderation/staff';
-import { searchUsers, getUserAdminDetail } from '@/lib/admin/user-queries';
-import { nameInitials } from '@/lib/storage';
-import { PlayerAvatar } from '@/components/players/player-avatar';
+import { listPlayersForBadgeTagging } from '@/lib/admin/user-queries';
+import { getDirectoryCityOptions } from '@/lib/players/queries';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { BADGE_KEYS } from '@vouchplay/config';
 import {
-  getPlayerBadgesForAdmin,
   getBadgeHolders,
   listCommemorativeTournaments,
   countBadgeHolders,
 } from '@/lib/badges/queries';
 import { RecomputeButton } from '@/components/admin/badges/recompute-button';
-import { AdminBadgePlayerSearch } from '@/components/admin/badges/player-search';
-import { TagPlayerPanel } from '@/components/admin/badges/tag-player-panel';
+import { TagScreen } from '@/components/admin/badges/tag-screen';
 import { HoldersTab } from '@/components/admin/badges/holders-tab';
 import { EventBadgesTab } from '@/components/admin/badges/event-badges-tab';
 
@@ -24,11 +22,11 @@ export const metadata: Metadata = { title: 'Badges' };
 type Tab = 'tag' | 'holders' | 'events';
 
 interface Props {
-  searchParams: Promise<{ tab?: string; player?: string; badge?: string; q?: string }>;
+  searchParams: Promise<{ tab?: string; badge?: string; q?: string }>;
 }
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: 'tag', label: 'Tag a player' },
+  { key: 'tag', label: 'Tag' },
   { key: 'holders', label: 'Holders' },
   { key: 'events', label: 'Event badges' },
 ];
@@ -88,95 +86,37 @@ export default async function AdminBadgesPage({ searchParams }: Props) {
         </ul>
       </nav>
 
-      {tab === 'tag' && <TagSection playerId={sp.player} q={sp.q} />}
+      {tab === 'tag' && (
+        // TagScreen calls useSearchParams (to mirror the debounced search into the URL) - Next
+        // requires a Suspense boundary around any subtree that does, even on an already-dynamic page.
+        <Suspense fallback={null}>
+          <TagSection q={sp.q} />
+        </Suspense>
+      )}
       {tab === 'holders' && <HoldersSection badgeKey={sp.badge} />}
       {tab === 'events' && <EventsSection />}
     </section>
   );
 }
 
-async function TagSection({ playerId, q }: { playerId?: string; q?: string }) {
-  if (playerId) {
-    const [player, badges] = await Promise.all([
-      getUserAdminDetail(playerId),
-      getPlayerBadgesForAdmin(playerId),
-    ]);
-    if (!player) {
-      return (
-        <p className="text-foreground-muted border-border bg-surface rounded-2xl border p-6 text-center text-sm">
-          Player not found.{' '}
-          <Link href="/admin/badges?tab=tag" className="text-primary underline">
-            Search again
-          </Link>
-          .
-        </p>
-      );
-    }
-    return (
-      <div className="space-y-4">
-        <Link
-          href="/admin/badges?tab=tag"
-          className="text-foreground-muted hover:text-foreground text-xs"
-        >
-          ← Change player
-        </Link>
-        <TagPlayerPanel
-          player={{
-            id: player.id,
-            name: player.name,
-            avatarUrl: player.avatarUrl,
-            csl: player.skill.csl,
-            sts: player.skill.sts,
-          }}
-          badges={badges}
-        />
-      </div>
-    );
-  }
-
+/**
+ * Admin → Badges "Tag" tab (master_plan §2BL E): the one-screen batch tagging flow. The server only
+ * renders the first page (filter-less, or matching a shared `?q=`) - every subsequent search/filter/
+ * page/selection change happens client-side in `TagScreen` via the `adminListPlayersForBadgeTagging`
+ * action, since selection has to persist across all of those and that only works as client state.
+ */
+async function TagSection({ q }: { q?: string }) {
+  const [{ players, total }, cityOptions] = await Promise.all([
+    listPlayersForBadgeTagging({ q: q?.trim() || undefined, page: 1, pageSize: 30 }),
+    getDirectoryCityOptions(),
+  ]);
   return (
-    <div className="space-y-3">
-      <AdminBadgePlayerSearch initialQ={q ?? ''} />
-      {q && <SearchResults q={q} />}
-    </div>
-  );
-}
-
-async function SearchResults({ q }: { q: string }) {
-  const users = await searchUsers(q);
-  if (users.length === 0) {
-    return (
-      <p className="text-foreground-muted border-border bg-surface rounded-2xl border p-6 text-center text-sm">
-        No players match that search.
-      </p>
-    );
-  }
-  return (
-    <ul className="space-y-2">
-      {users.map((u) => (
-        <li key={u.id}>
-          <Link
-            href={`/admin/badges?tab=tag&player=${u.id}`}
-            className="border-border bg-surface vp-card relative flex items-center gap-3 rounded-2xl border p-3"
-          >
-            <PlayerAvatar
-              url={u.avatarUrl}
-              initials={nameInitials(u.name)}
-              name={u.name}
-              size="sm"
-            />
-            <div className="min-w-0 flex-1">
-              <span className="text-foreground truncate text-sm font-semibold">{u.name}</span>
-              <div className="text-foreground-muted flex flex-wrap items-center gap-x-2 text-xs">
-                {u.slug && <span>@{u.slug}</span>}
-                {u.city && <span>· {u.city}</span>}
-              </div>
-            </div>
-            <LinkSpinner />
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <TagScreen
+      initialPlayers={players}
+      initialTotal={total}
+      cityOptions={cityOptions}
+      initialQ={q?.trim() ?? ''}
+    />
   );
 }
 

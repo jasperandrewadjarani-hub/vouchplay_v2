@@ -309,3 +309,41 @@ body {
 .vp-badge-pop {
   animation: vp-badge-pop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }
+
+/* Badge holders chip (§2BL C): a slow diagonal light sweep across the idle gold chip, via an
+   absolutely-positioned ::after (not directly reachable with a Tailwind class, hence this small
+   rule). Already stilled by the global prefers-reduced-motion rule above (animation-duration:
+   0.01ms), same as `.vp-badge-rays`/`.vp-vouch-pop`; the explicit override below is redundant but
+   documents the intent at the point of use and survives if the global rule is ever narrowed. */
+@keyframes vp-badge-chip-sheen {
+  0% {
+    background-position: 160% 0;
+  }
+  100% {
+    background-position: -60% 0;
+  }
+}
+.vp-badge-chip-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.vp-badge-chip-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.65) 50%,
+    transparent 65%
+  );
+  background-size: 220% 100%;
+  animation: vp-badge-chip-sheen 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vp-badge-chip-sheen::after {
+    animation: none;
+    display: none;
+  }
+}

@@ -131,13 +131,7 @@ function BadgeSlot({
           : 'hover:bg-surface-muted'
       } ${badge.hidden || muted ? 'opacity-60' : ''}`}
     >
-      <BadgeSymbol
-        badgeKey={badge.key}
-        size={52}
-        number={badge.meta.number}
-        title={badge.name}
-        muted={muted}
-      />
+      <BadgeSymbol badgeKey={badge.key} size={52} title={badge.name} muted={muted} />
       <span className="text-foreground w-full truncate text-[10.5px] font-bold">{badge.name}</span>
       <span className="text-foreground-muted text-[9.5px] font-semibold">{caption}</span>
     </button>
@@ -150,7 +144,6 @@ function captionFor(b: BadgeView): string {
   if (b.hidden) return 'Hidden';
   if (b.pinned) return '★ Pinned';
   if (b.tally > 1) return `×${b.tally}`;
-  if (b.meta.number != null) return `#${b.meta.number}`;
   if (isEventBadgeKey(b.key)) return b.meta.label ?? badgeDef(b.key)?.name ?? 'Event';
   return formatShortMonthYear(b.awardedAt);
 }

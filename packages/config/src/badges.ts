@@ -86,26 +86,33 @@ export const BADGE_FAMILIES: Record<BadgeFamily, BadgeFamilyDef> = {
   },
 };
 
-/** [light, mid, dark] - light draws the glyph and the rare/legendary inner rim; mid → dark fills. */
-export const BADGE_METALS: Record<BadgeMetal, readonly [string, string, string]> = {
-  gold: ['#fde68a', '#f59e0b', '#92400e'],
-  silver: ['#f1f5f9', '#94a3b8', '#334155'],
-  bronze: ['#fed7aa', '#c2703d', '#5c2a0e'],
-  teal: ['#99f6e4', '#14b8a6', '#134e4a'],
-  cyan: ['#a5f3fc', '#06b6d4', '#164e63'],
-  blue: ['#bfdbfe', '#3b82f6', '#1e3a8a'],
-  copper: ['#fecaca', '#d9774a', '#6b2410'],
-  pink: ['#fbcfe8', '#ec4899', '#831843'],
-  lime: ['#ecfccb', '#84cc16', '#365314'],
-  green: ['#bbf7d0', '#22c55e', '#14532d'],
-  violet: ['#ddd6fe', '#8b5cf6', '#3b0764'],
-  indigo: ['#c7d2fe', '#6366f1', '#312e81'],
-  slate: ['#e2e8f0', '#64748b', '#1e293b'],
-  rose: ['#fecdd3', '#f43f5e', '#881337'],
-  onyx: ['#fde68a', '#1f2937', '#030712'],
-  amethyst: ['#f5d0fe', '#c026d3', '#4a044e'],
-  sky: ['#e0f2fe', '#38bdf8', '#0c4a6e'],
-  ember: ['#fed7aa', '#ea580c', '#431407'],
+/**
+ * [hi, mid, lo, deep] - the 3D emblem recipe's 4-stop vertical metal gradient (badge-symbol.tsx,
+ * master_plan §2BL A): `hi` is the top highlight and also draws the glyph/rare-rim light tone, `mid`
+ * → `lo` carry the face down to the bevel shadow, `deep` is the extruded-frame underside. Ported
+ * verbatim from the approved "Badges in 3D" sample's `METAL` table. Index semantics are unchanged
+ * from the previous 3-tone table (0 = light, 1 = mid, 2 = dark-ish) - `deep` is a new 4th tone
+ * appended at the end, so existing `metal[0]` / `metal[1]` / `metal[2]` call sites keep working.
+ */
+export const BADGE_METALS: Record<BadgeMetal, readonly [string, string, string, string]> = {
+  gold: ['#fff3bf', '#f7b733', '#b9730b', '#6b3d05'],
+  silver: ['#ffffff', '#c9d3de', '#7d8897', '#3d4552'],
+  bronze: ['#ffe0c2', '#d88a52', '#8f4a1f', '#4a220b'],
+  teal: ['#c9fff4', '#2cc9b0', '#11806f', '#073f37'],
+  cyan: ['#d6fbff', '#22c8e5', '#0b7c96', '#063c4a'],
+  blue: ['#dbe9ff', '#4d8cf5', '#1e4fb8', '#0e2663'],
+  copper: ['#ffd9c7', '#e2835a', '#9a4424', '#521f0d'],
+  pink: ['#ffd6ec', '#f062a8', '#a52066', '#560d33'],
+  lime: ['#f1ffcc', '#9ad53a', '#5a8a13', '#2c4607'],
+  green: ['#d4ffe2', '#35c46b', '#177a3d', '#0a3d1e'],
+  violet: ['#ebe3ff', '#9b74f7', '#5b2fc2', '#2d1266'],
+  indigo: ['#e0e5ff', '#7179f2', '#3a3fb3', '#1b1d5c'],
+  slate: ['#f1f5f9', '#8f9bab', '#4a5566', '#212833'],
+  rose: ['#ffdbe1', '#f25a74', '#a81d38', '#570b1b'],
+  onyx: ['#fff0b3', '#3a4150', '#161a22', '#050608'],
+  amethyst: ['#fbe0ff', '#d04ae6', '#851c9c', '#420b4f'],
+  sky: ['#e6f6ff', '#49bdf5', '#157db0', '#083e59'],
+  ember: ['#ffe1c2', '#f2762b', '#a83d0a', '#521a02'],
 };
 
 export const BADGE_RARITY_RANK: Record<BadgeRarity, number> = {

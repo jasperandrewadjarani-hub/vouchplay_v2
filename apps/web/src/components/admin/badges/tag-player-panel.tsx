@@ -25,13 +25,21 @@ interface PlayerHeader {
  * The selected-player view of Admin → Badges "Tag a player" (master_plan §2BK B): the player's live
  * + removed badges, and a grid of every catalog badge an admin can tag onto them - including normally
  * automatic ones, which Jasper's hard requirement calls out explicitly.
+ *
+ * Reused by §2BL's Tag screen: a chevron on each row opens this whole panel in a `BottomSheet`
+ * (`PlayerBadgesSheet`) so untag / allow-auto-again stay per-player, never bulk. `onChanged` is an
+ * optional hook the sheet uses to refetch its own data and refresh the underlying player row (the
+ * server actions this panel calls already `router.refresh()` themselves; `onChanged` covers state
+ * that lives outside the server-rendered tree, e.g. a chevron sheet's client-fetched badge list).
  */
 export function TagPlayerPanel({
   player,
   badges,
+  onChanged,
 }: {
   player: PlayerHeader;
   badges: AdminPlayerBadge[];
+  onChanged?: () => void;
 }) {
   const live = badges.filter((b) => !b.revokedAt);
   const revoked = badges.filter((b) => b.revokedAt);
@@ -65,7 +73,7 @@ export function TagPlayerPanel({
             {live.map((b) => (
               <li key={b.id} className="border-border bg-surface rounded-xl border p-3">
                 <div className="flex items-start gap-3">
-                  <BadgeSymbol badgeKey={b.key} size={32} number={b.meta.number} />
+                  <BadgeSymbol badgeKey={b.key} size={32} />
                   <div className="min-w-0 flex-1">
                     <p className="text-foreground text-sm font-semibold">{b.name}</p>
                     <p className="text-foreground-muted text-xs">
@@ -82,7 +90,7 @@ export function TagPlayerPanel({
                   </div>
                 </div>
                 <div className="mt-2">
-                  <UntagControl playerBadgeId={b.id} badgeName={b.name} />
+                  <UntagControl playerBadgeId={b.id} badgeName={b.name} onSuccess={onChanged} />
                 </div>
               </li>
             ))}
@@ -105,7 +113,11 @@ export function TagPlayerPanel({
                   {b.revokeReason && <p className="text-foreground-muted mt-1">{b.revokeReason}</p>}
                   {b.autoBlocked && (
                     <div className="mt-2">
-                      <AllowAutoAgainButton playerId={player.id} badgeKey={b.key} />
+                      <AllowAutoAgainButton
+                        playerId={player.id}
+                        badgeKey={b.key}
+                        onSuccess={onChanged}
+                      />
                     </div>
                   )}
                 </li>
@@ -117,16 +129,21 @@ export function TagPlayerPanel({
 
       <section>
         <h2 className="text-foreground mb-2 text-sm font-semibold">Tag a badge</h2>
-        <BadgeGrid heldKeys={heldKeys} playerId={player.id} firstName={firstName} />
+        <BadgeGrid
+          heldKeys={heldKeys}
+          playerId={player.id}
+          firstName={firstName}
+          onChanged={onChanged}
+        />
       </section>
     </div>
   );
 }
 
 function badgeCaption(b: AdminPlayerBadge): string | null {
+  // master_plan §2BL B: Pioneer's number is never shown anywhere.
   const parts: string[] = [];
   if (b.tally > 1) parts.push(`×${b.tally}`);
-  if (b.meta.number) parts.push(`#${b.meta.number}`);
   if (b.meta.event) parts.push(b.meta.event);
   if (b.meta.division) parts.push(b.meta.division);
   if (b.meta.medal) parts.push(b.meta.medal);
@@ -137,10 +154,12 @@ function BadgeGrid({
   heldKeys,
   playerId,
   firstName,
+  onChanged,
 }: {
   heldKeys: Set<string>;
   playerId: string;
   firstName: string;
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -191,6 +210,7 @@ function BadgeGrid({
       setResult(res.message ?? `Tagged ${def.name}.`);
       setSelectedKey(null);
       router.refresh();
+      onChanged?.();
     });
   }
 

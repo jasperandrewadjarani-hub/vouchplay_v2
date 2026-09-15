@@ -14,9 +14,13 @@ import { Switch } from '@/components/ui/switch';
 export function UntagControl({
   playerBadgeId,
   badgeName,
+  onSuccess,
 }: {
   playerBadgeId: string;
   badgeName: string;
+  /** Called in addition to `router.refresh()` - lets a client-fetched host (the §2BL chevron sheet)
+   *  refetch its own data too. */
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
@@ -40,6 +44,7 @@ export function UntagControl({
       setConfirming(false);
       setReason('');
       router.refresh();
+      onSuccess?.();
     });
   }
 

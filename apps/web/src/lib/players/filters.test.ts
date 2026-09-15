@@ -6,15 +6,18 @@ import {
   clampVouches,
   clearFilter,
   describeActiveFilters,
+  describeBadgeFilter,
   effectiveSkillOrdinal,
   hasAnyFilter,
   idsMatchingIndexFilters,
   inRange,
   intersectIds,
+  MAX_BADGE_FILTER_KEYS,
   matchesSkill,
   matchesSts,
   normalizeCityKey,
   orderIdsForSort,
+  parseBadgeKeys,
   parsePlayerFilters,
   parseSkills,
   playerFiltersToQuery,
@@ -449,6 +452,33 @@ describe('parseSkills', () => {
   });
 });
 
+describe('parseBadgeKeys', () => {
+  it('keeps known catalog keys and event-shaped keys, drops nonsense', () => {
+    expect(parseBadgeKeys('legend,mvp,event:abc-123,not-a-real-badge')).toEqual([
+      'legend',
+      'mvp',
+      'event:abc-123',
+    ]);
+  });
+
+  it('de-duplicates while preserving first-seen order', () => {
+    expect(parseBadgeKeys('mvp,legend,mvp')).toEqual(['mvp', 'legend']);
+  });
+
+  it(`caps at ${MAX_BADGE_FILTER_KEYS} keys`, () => {
+    const many = Array.from({ length: MAX_BADGE_FILTER_KEYS + 5 }, (_, i) => `event:e${i}`).join(
+      ',',
+    );
+    expect(parseBadgeKeys(many)).toHaveLength(MAX_BADGE_FILTER_KEYS);
+  });
+
+  it('is undefined when nothing valid survives', () => {
+    expect(parseBadgeKeys('nonsense,also-fake')).toBeUndefined();
+    expect(parseBadgeKeys('')).toBeUndefined();
+    expect(parseBadgeKeys(undefined)).toBeUndefined();
+  });
+});
+
 describe('playerFiltersToQuery', () => {
   it('round-trips through parsePlayerFilters', () => {
     const f: PlayerFilters = {
@@ -504,6 +534,26 @@ describe('playerFiltersToQuery', () => {
     expect(playerFiltersToQuery({}, { page: 1, compact: true })).toBe('');
     expect(playerFiltersToQuery({}, { page: 2, compact: false })).toBe('?view=detailed&page=2');
   });
+
+  it('writes badges and badgeMatch, and round-trips both back through parsePlayerFilters', () => {
+    const qs = playerFiltersToQuery({ badges: ['legend', 'mvp'], badgeMatch: 'all' });
+    expect(qs).toBe('?badges=legend%2Cmvp&badgeMatch=all');
+    const parsed = parsePlayerFilters(Object.fromEntries(new URLSearchParams(qs.slice(1))));
+    expect(parsed.badges).toEqual(['legend', 'mvp']);
+    expect(parsed.badgeMatch).toBe('all');
+  });
+
+  it('never writes badgeMatch=all without any badges selected', () => {
+    expect(playerFiltersToQuery({ badgeMatch: 'all' })).toBe('');
+  });
+
+  it('defaults to "any" - badgeMatch is omitted from the URL when unset', () => {
+    const qs = playerFiltersToQuery({ badges: ['og'] });
+    expect(qs).toBe('?badges=og');
+    expect(
+      parsePlayerFilters(Object.fromEntries(new URLSearchParams(qs.slice(1)))).badgeMatch,
+    ).toBe(undefined);
+  });
 });
 
 describe('activeFilterCount / hasAnyFilter', () => {
@@ -546,6 +596,12 @@ describe('activeFilterCount / hasAnyFilter', () => {
         tournament: 't1',
       }),
     ).toBe(7);
+  });
+
+  it('counts a badge selection as one filter, regardless of how many keys', () => {
+    expect(activeFilterCount({ badges: ['legend'] })).toBe(1);
+    expect(activeFilterCount({ badges: ['legend', 'mvp', 'og'] })).toBe(1);
+    expect(activeFilterCount({ badges: [] })).toBe(0);
   });
 });
 
@@ -626,6 +682,8 @@ describe('clearFilter', () => {
     openForSponsorship: true,
     newOnly: true,
     tournament: 't1',
+    badges: ['legend', 'mvp'],
+    badgeMatch: 'all',
     sort: 'newest',
     page: 4,
   };
@@ -659,6 +717,12 @@ describe('clearFilter', () => {
     expect(clearFilter(full, 'tournament').tournament).toBeUndefined();
   });
 
+  it('clears both badges and badgeMatch together', () => {
+    const next = clearFilter(full, 'badges');
+    expect(next.badges).toBeUndefined();
+    expect(next.badgeMatch).toBeUndefined();
+  });
+
   it('turns a toggle off rather than deleting it', () => {
     expect(clearFilter(full, 'coach').coach).toBe(false);
     expect(clearFilter(full, 'newOnly').newOnly).toBe(false);
@@ -675,5 +739,52 @@ describe('clearFilter', () => {
   it('does not mutate the input', () => {
     clearFilter(full, 'city');
     expect(full.city).toBe('zamboanga');
+  });
+});
+
+describe('describeBadgeFilter', () => {
+  const options = [
+    { key: 'legend', name: 'Legend' },
+    { key: 'mvp', name: 'MVP' },
+    { key: 'og', name: 'OG' },
+    { key: 'hof', name: 'Hall of Fame' },
+  ];
+
+  it('is null when no badge filter is active', () => {
+    expect(describeBadgeFilter({}, options)).toBeNull();
+    expect(describeBadgeFilter({ badges: [] }, options)).toBeNull();
+  });
+
+  it('names a single badge plainly', () => {
+    expect(describeBadgeFilter({ badges: ['legend'] }, options)).toBe('with Legend');
+  });
+
+  it('joins two with "or" for the default any-of-these match', () => {
+    expect(describeBadgeFilter({ badges: ['legend', 'mvp'] }, options)).toBe('with Legend or MVP');
+  });
+
+  it('joins two with "and" for an all-of-these match', () => {
+    expect(describeBadgeFilter({ badges: ['legend', 'mvp'], badgeMatch: 'all' }, options)).toBe(
+      'with Legend and MVP',
+    );
+  });
+
+  it('uses an Oxford-comma list for three, with the right conjunction', () => {
+    expect(describeBadgeFilter({ badges: ['legend', 'mvp', 'og'] }, options)).toBe(
+      'with Legend, MVP or OG',
+    );
+    expect(
+      describeBadgeFilter({ badges: ['legend', 'mvp', 'og'], badgeMatch: 'all' }, options),
+    ).toBe('with Legend, MVP and OG');
+  });
+
+  it('caps names at 3 and adds a "+n more" suffix', () => {
+    expect(describeBadgeFilter({ badges: ['legend', 'mvp', 'og', 'hof'] }, options)).toBe(
+      'with Legend, MVP or OG +1 more',
+    );
+  });
+
+  it('falls back to the raw key when the option list does not know a badge', () => {
+    expect(describeBadgeFilter({ badges: ['mystery_key'] }, options)).toBe('with mystery_key');
   });
 });

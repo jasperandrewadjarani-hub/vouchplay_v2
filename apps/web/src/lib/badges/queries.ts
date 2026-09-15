@@ -1,9 +1,22 @@
 import 'server-only';
-import { badgeDef, fieldVisible, parseVisibility, SKILL_BANDS } from '@vouchplay/config';
+import { unstable_cache } from 'next/cache';
+import {
+  BADGES,
+  EVENT_BADGE,
+  EVENT_BADGE_PREFIX,
+  badgeDef,
+  fieldVisible,
+  parseVisibility,
+  SKILL_BANDS,
+  type BadgeFamily,
+} from '@vouchplay/config';
 import { pickCardOrder } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { getBadgeSettings } from '@/lib/settings';
 import { avatarUrl } from '@/lib/storage';
+// Tags come from the dependency-free `@/lib/players/tags` (not `@/lib/players/queries`, which imports this
+// file), so there is no import cycle.
+import { PLAYERS_LIST_TAG } from '@/lib/players/tags';
 import type {
   AdminPlayerBadge,
   BadgeCase,
@@ -250,7 +263,7 @@ export async function getUncelebratedBadges(viewerId: string): Promise<BadgeView
 }
 
 /** Live (not expired), non-hidden holder counts per key - hidden rows never count publicly. */
-export async function countBadgeHolders(keys: string[]): Promise<Record<string, number>> {
+async function countBadgeHoldersUncached(keys: string[]): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   if (keys.length === 0) return out;
   try {
@@ -274,6 +287,208 @@ export async function countBadgeHolders(keys: string[]): Promise<Record<string, 
     // Fail open to zeros already seeded above.
   }
   return out;
+}
+
+/**
+ * Cached wrapper around {@link countBadgeHoldersUncached} (master_plan §2BL C) - same signature,
+ * same fail-open-to-zeros behaviour, but keyed on the sorted key list so opening the badge filter
+ * sheet (which asks for every catalog key at once) never hits the database on each open. 5 minutes,
+ * same as `getBadgeHolderIds` below; admin badge writes already `revalidateTag(PLAYERS_LIST_TAG)`
+ * (`lib/actions/badges.ts`'s `revalidatePlayer`, `adminRecomputeBadges`, `adminSetEventBadge`), so a
+ * fresh tag/untag/recompute is visible well before the 5 minutes are up.
+ */
+export async function countBadgeHolders(keys: string[]): Promise<Record<string, number>> {
+  if (keys.length === 0) return {};
+  const sortedKeys = [...keys].sort();
+  try {
+    const cached = unstable_cache(
+      () => countBadgeHoldersUncached(sortedKeys),
+      ['badge-holder-counts', sortedKeys.join(',')],
+      { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
+    );
+    const out = await cached();
+    // The cache is keyed on the SORTED list (so two callers asking for the same keys in a
+    // different order share one cache entry); return counts under every key the caller actually
+    // asked for, in case a duplicate was passed.
+    const result: Record<string, number> = {};
+    for (const key of keys) result[key] = out[key] ?? 0;
+    return result;
+  } catch {
+    const out: Record<string, number> = {};
+    for (const key of keys) out[key] = 0;
+    return out;
+  }
+}
+
+/**
+ * Player ids currently (live, non-hidden, not expired) holding a set of badges (master_plan §2BL C),
+ * for the Players tab "Badge holders" filter. `match: 'any'` (default) is a union; `'all'` requires
+ * every one of the ORIGINAL requested keys - a disabled key can never be live, so including one in
+ * an `'all'` request correctly yields no matches rather than silently dropping the requirement.
+ * Unknown keys (no `badgeDef`) are dropped before anything else. Fails open to `[]` on any error, so
+ * a broken read empties the FILTER, never the whole directory (the caller intersects this into
+ * `restrictIds`, and an empty `restrictIds` is a real "matched nobody", not "filter unavailable" -
+ * acceptable here because the badge filter is opt-in and additive, unlike the skill index in
+ * `players/filters.ts` which deliberately leaves itself unapplied on a load failure instead).
+ * Cached 5 minutes (`unstable_cache`, players-list tag), keyed on the sorted key list + match.
+ */
+export async function getBadgeHolderIds(
+  keys: string[],
+  match: 'any' | 'all' = 'any',
+): Promise<string[]> {
+  const cleanKeys = Array.from(new Set(keys.filter((k) => badgeDef(k) != null))).sort();
+  if (cleanKeys.length === 0) return [];
+  const normalizedMatch: 'any' | 'all' = match === 'all' ? 'all' : 'any';
+  try {
+    const cached = unstable_cache(
+      () => fetchBadgeHolderIdsUncached(cleanKeys, normalizedMatch),
+      ['badge-holder-ids', cleanKeys.join(','), normalizedMatch],
+      { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
+    );
+    return await cached();
+  } catch {
+    return [];
+  }
+}
+
+async function fetchBadgeHolderIdsUncached(
+  keys: string[],
+  match: 'any' | 'all',
+): Promise<string[]> {
+  try {
+    const settings = await getBadgeSettings();
+    if (!settings.enabled) return [];
+    const disabled = new Set(settings.disabledKeys);
+    const liveKeys = keys.filter((k) => !disabled.has(k));
+    if (liveKeys.length === 0) return [];
+    const svc = createServiceClient();
+    const now = new Date().toISOString();
+    const { data, error } = await svc
+      .from('player_badges')
+      .select('player_id, badge_key')
+      .in('badge_key', liveKeys)
+      .is('revoked_at', null)
+      .eq('hidden', false)
+      .or(`expires_at.is.null,expires_at.gt.${now}`);
+    if (error) throw error;
+    const rows = (data ?? []) as { player_id: string; badge_key: string }[];
+
+    if (match !== 'all') {
+      return Array.from(new Set(rows.map((r) => r.player_id)));
+    }
+    const heldByPlayer = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const held = heldByPlayer.get(row.player_id) ?? new Set<string>();
+      held.add(row.badge_key);
+      heldByPlayer.set(row.player_id, held);
+    }
+    const out: string[] = [];
+    for (const [playerId, held] of heldByPlayer) {
+      if (keys.every((k) => held.has(k))) out.push(playerId);
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+export interface BadgeFilterOption {
+  key: string;
+  name: string;
+  family: BadgeFamily;
+  holders: number;
+}
+
+const BADGE_FAMILY_ORDER: readonly BadgeFamily[] = [
+  'glory',
+  'community',
+  'growth',
+  'roles',
+  'special',
+];
+
+/** Every enabled catalog badge's current holder count, plus current event badges that have holders
+ *  (master_plan §2BL C `getBadgeFilterOptions`) - keys unavailable to the filter sheet are never
+ *  fetched by count in the first place, so a disabled catalog badge is dropped before the DB read
+ *  rather than shown with a stale/zero count. `tier_crown` IS included (name "Top of Tier" already
+ *  in the catalog) - Growth's avatar-only badge is still a real thing to filter by. */
+export async function getBadgeFilterOptions(): Promise<BadgeFilterOption[]> {
+  try {
+    const settings = await getBadgeSettings();
+    if (!settings.enabled) return [];
+    const disabled = new Set(settings.disabledKeys);
+    const catalogDefs = BADGES.filter((b) => !disabled.has(b.key));
+    const catalogKeys = catalogDefs.map((b) => b.key);
+    const catalogOrder = new Map(catalogKeys.map((k, i) => [k, i]));
+
+    const cachedEventSummaries = unstable_cache(
+      fetchEventBadgeSummariesUncached,
+      ['badge-filter-event-summaries'],
+      { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
+    );
+    const [counts, eventSummaries] = await Promise.all([
+      countBadgeHolders(catalogKeys),
+      cachedEventSummaries(),
+    ]);
+
+    const catalogOptions: BadgeFilterOption[] = catalogDefs.map((b) => ({
+      key: b.key,
+      name: b.name,
+      family: b.family,
+      holders: counts[b.key] ?? 0,
+    }));
+    const eventOptions: BadgeFilterOption[] = eventSummaries
+      .filter((e) => !disabled.has(e.key) && e.holders > 0)
+      .map((e) => ({ key: e.key, name: e.name, family: EVENT_BADGE.family, holders: e.holders }));
+
+    return [...catalogOptions, ...eventOptions].sort((a, b) => {
+      const familyDiff =
+        BADGE_FAMILY_ORDER.indexOf(a.family) - BADGE_FAMILY_ORDER.indexOf(b.family);
+      if (familyDiff !== 0) return familyDiff;
+      const ai = catalogOrder.get(a.key);
+      const bi = catalogOrder.get(b.key);
+      if (ai != null && bi != null) return ai - bi;
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function fetchEventBadgeSummariesUncached(): Promise<
+  { key: string; name: string; holders: number }[]
+> {
+  try {
+    const svc = createServiceClient();
+    const now = new Date().toISOString();
+    const { data, error } = await svc
+      .from('player_badges')
+      .select('badge_key, meta')
+      .like('badge_key', `${EVENT_BADGE_PREFIX}%`)
+      .is('revoked_at', null)
+      .eq('hidden', false)
+      .or(`expires_at.is.null,expires_at.gt.${now}`);
+    if (error) throw error;
+    const byKey = new Map<string, { count: number; label: string | null }>();
+    for (const row of (data ?? []) as {
+      badge_key: string;
+      meta: Record<string, unknown> | null;
+    }[]) {
+      const entry = byKey.get(row.badge_key) ?? { count: 0, label: null };
+      entry.count += 1;
+      if (!entry.label && typeof row.meta?.label === 'string') entry.label = row.meta.label;
+      byKey.set(row.badge_key, entry);
+    }
+    return Array.from(byKey.entries()).map(([key, v]) => ({
+      key,
+      name: v.label ?? EVENT_BADGE.name,
+      holders: v.count,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /** Everyone currently (live, non-hidden) holding one badge key - for the admin "holders" view. */

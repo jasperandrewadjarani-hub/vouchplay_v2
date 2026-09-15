@@ -11,9 +11,13 @@ import { adminAllowAutoAgain } from '@/lib/actions/badges';
 export function AllowAutoAgainButton({
   playerId,
   badgeKey,
+  onSuccess,
 }: {
   playerId: string;
   badgeKey: string;
+  /** Called in addition to `router.refresh()` - lets a client-fetched host (the §2BL chevron sheet)
+   *  refetch its own data too. */
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -28,6 +32,7 @@ export function AllowAutoAgainButton({
         return;
       }
       router.refresh();
+      onSuccess?.();
     });
   }
 

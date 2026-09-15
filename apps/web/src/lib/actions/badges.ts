@@ -7,10 +7,13 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { assertAdminActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { notify } from '@/lib/notifications/create';
-import { getBadgeSettings } from '@/lib/settings';
+import { getBadgeSettings, type BadgeSettings } from '@/lib/settings';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { computeAutoBadges } from '@/lib/badges/compute';
-import type { BadgeActionResult } from '@/lib/badges/types';
+import { getPlayerBadgesForAdmin } from '@/lib/badges/queries';
+import { getUserAdminDetail, listPlayersForBadgeTagging } from '@/lib/admin/user-queries';
+import type { AdminBadgeTagPlayer } from '@/lib/admin/user-queries';
+import type { AdminPlayerBadge, BadgeActionResult } from '@/lib/badges/types';
 
 /**
  * Badge admin + owner actions (master_plan §2BK B). Admin actions require an admin/super_admin with
@@ -48,28 +51,43 @@ export interface AdminTagBadgeInput {
   expiresAt?: string | null;
 }
 
-export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeActionResult> {
-  const actor = await assertAdminActor();
-  if (!actor)
-    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
+interface TagRowResult {
+  outcome: 'inserted' | 'converted' | 'updated' | 'skipped' | 'failed';
+  meta: Record<string, unknown>;
+  expiresAt: string | null;
+}
 
-  const reason = input.reason.trim();
-  if (reason.length < 3) return { ok: false, error: 'Give a reason of at least 3 characters.' };
-  if (isEventBadgeKey(input.badgeKey)) {
-    return { ok: false, error: 'Event badges are set from Event badges, not tagged here.' };
-  }
-  const def = badgeDef(input.badgeKey);
-  if (!def) return { ok: false, error: 'Unknown badge.' };
-  if (def.titleBadge && !input.event?.trim()) {
-    return { ok: false, error: 'This badge names an event - give the tournament/event name.' };
-  }
-
+/**
+ * The one place that actually writes a `player_badges` row for an admin tag (master_plan §2BL E) -
+ * shared by `adminTagBadge` (single) and `adminTagBadgesBatch`. No audit/notify/revalidate here;
+ * callers own those so single-tag callers can keep their exact prior behaviour (always write, one
+ * audit row, one notification) while the batch caller can fan those out differently (one audit row
+ * per player, notifications deferred, skip-if-already-granted).
+ *
+ * `opts.skipIfAlreadyGrant`: when true and a live row already exists with `source = 'grant'`, the
+ * row is left untouched and `'skipped'` is returned - the batch's "skip when the player already
+ * holds it live as grant" rule (§2BL E). When false (the single-tag caller), an existing row of
+ * either source is always refreshed with the new reason/meta/expiry, matching `adminTagBadge`'s
+ * pre-refactor behaviour exactly.
+ */
+async function writeBadgeTagRow(
+  svc: ReturnType<typeof createServiceClient>,
+  settings: BadgeSettings,
+  input: {
+    playerId: string;
+    badgeKey: string;
+    reason: string;
+    event?: string;
+    division?: string;
+    expiresAt?: string | null;
+    grantedBy: string;
+  },
+  opts: { skipIfAlreadyGrant: boolean },
+): Promise<TagRowResult> {
   try {
-    const svc = createServiceClient();
-    const settings = await getBadgeSettings();
     const { data: existingRaw } = await svc
       .from('player_badges')
-      .select('id, tally, meta')
+      .select('id, tally, meta, source')
       .eq('player_id', input.playerId)
       .eq('badge_key', input.badgeKey)
       .is('revoked_at', null)
@@ -78,7 +96,12 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
       id: string;
       tally: number;
       meta: Record<string, unknown> | null;
+      source: 'auto' | 'grant';
     } | null;
+
+    if (existing && existing.source === 'grant' && opts.skipIfAlreadyGrant) {
+      return { outcome: 'skipped', meta: existing.meta ?? {}, expiresAt: null };
+    }
 
     const meta: Record<string, unknown> = { ...(existing?.meta ?? {}) };
     if (input.event?.trim()) meta.event = input.event.trim();
@@ -107,24 +130,72 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
           source: 'grant',
           tally: Math.max(1, existing.tally ?? 1),
           meta,
-          granted_by: actor.viewerId,
-          grant_reason: reason,
+          granted_by: input.grantedBy,
+          grant_reason: input.reason,
           ...(expiresAt !== undefined ? { expires_at: expiresAt } : {}),
         })
         .eq('id', existing.id);
-      if (error) return { ok: false, error: 'Could not save the tag. Please try again.' };
-    } else {
-      const { error } = await svc.from('player_badges').insert({
-        player_id: input.playerId,
-        badge_key: input.badgeKey,
-        source: 'grant',
-        tally: 1,
+      if (error) return { outcome: 'failed', meta, expiresAt: expiresAt ?? null };
+      return {
+        outcome: existing.source === 'auto' ? 'converted' : 'updated',
         meta,
-        granted_by: actor.viewerId,
-        grant_reason: reason,
-        expires_at: expiresAt ?? null,
-      });
-      if (error) return { ok: false, error: 'Could not save the tag. Please try again.' };
+        expiresAt: expiresAt ?? null,
+      };
+    }
+
+    const { error } = await svc.from('player_badges').insert({
+      player_id: input.playerId,
+      badge_key: input.badgeKey,
+      source: 'grant',
+      tally: 1,
+      meta,
+      granted_by: input.grantedBy,
+      grant_reason: input.reason,
+      expires_at: expiresAt ?? null,
+    });
+    if (error) return { outcome: 'failed', meta, expiresAt: expiresAt ?? null };
+    return { outcome: 'inserted', meta, expiresAt: expiresAt ?? null };
+  } catch {
+    return { outcome: 'failed', meta: {}, expiresAt: null };
+  }
+}
+
+export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeActionResult> {
+  const actor = await assertAdminActor();
+  if (!actor)
+    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
+
+  const reason = input.reason.trim();
+  if (reason.length < 3) return { ok: false, error: 'Give a reason of at least 3 characters.' };
+  if (isEventBadgeKey(input.badgeKey)) {
+    return { ok: false, error: 'Event badges are set from Event badges, not tagged here.' };
+  }
+  const def = badgeDef(input.badgeKey);
+  if (!def) return { ok: false, error: 'Unknown badge.' };
+  if (def.titleBadge && !input.event?.trim()) {
+    return { ok: false, error: 'This badge names an event - give the tournament/event name.' };
+  }
+
+  try {
+    const svc = createServiceClient();
+    const settings = await getBadgeSettings();
+    const result = await writeBadgeTagRow(
+      svc,
+      settings,
+      {
+        playerId: input.playerId,
+        badgeKey: input.badgeKey,
+        reason,
+        event: input.event,
+        division: input.division,
+        expiresAt: input.expiresAt,
+        grantedBy: actor.viewerId,
+      },
+      // Never skip for the single-tag flow - exact pre-refactor behaviour (always write).
+      { skipIfAlreadyGrant: false },
+    );
+    if (result.outcome === 'failed') {
+      return { ok: false, error: 'Could not save the tag. Please try again.' };
     }
 
     await writeAudit({
@@ -133,7 +204,7 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
       action: 'badge.tag',
       entityType: 'player_badge',
       entityId: input.playerId,
-      after: { badgeKey: input.badgeKey, meta, expiresAt: expiresAt ?? null },
+      after: { badgeKey: input.badgeKey, meta: result.meta, expiresAt: result.expiresAt },
       reason,
     });
 
@@ -141,7 +212,8 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
       recipientId: input.playerId,
       type: 'badge_granted',
       params: {
-        extra: typeof meta.event === 'string' ? `${def.name} (${meta.event})` : def.name,
+        extra:
+          typeof result.meta.event === 'string' ? `${def.name} (${result.meta.event})` : def.name,
         reason,
       },
       link: '/me',
@@ -153,6 +225,225 @@ export async function adminTagBadge(input: AdminTagBadgeInput): Promise<BadgeAct
   } catch {
     return { ok: false, error: 'That action is temporarily unavailable.' };
   }
+}
+
+export interface AdminTagBadgesBatchInput {
+  playerIds: string[];
+  badgeKeys: string[];
+  reason: string;
+  event?: string;
+  division?: string;
+  expiresAt?: string | null;
+}
+
+export type AdminTagBadgesBatchResult =
+  | { ok: true; tagged: number; skipped: number; failed: number; message: string }
+  | { ok: false; error: string };
+
+/**
+ * Single-screen batch tagging (master_plan §2BL E): several badges onto several players at once.
+ * Reuses `writeBadgeTagRow` per (player, badge) pair with `skipIfAlreadyGrant: true` - a player who
+ * already holds a badge as an admin grant is left alone and counted as skipped, while a live `auto`
+ * row is converted to `grant` and counted as tagged, same as a brand-new row.
+ *
+ * DB writes happen first and are what the response's counts reflect; notifications for newly-tagged
+ * pairs are deferred to `after()` (Next 15.5) so a 100 x 10 batch's worst case (up to 1000 pairs,
+ * though the two caps below keep any single call far smaller) never makes the admin's click wait on
+ * push/in-app fan-out. One `audit_logs` row is written per player (not per pair), listing every
+ * badge key and its outcome. Cache tags are revalidated once at the end, not per write.
+ */
+export async function adminTagBadgesBatch(
+  input: AdminTagBadgesBatchInput,
+): Promise<AdminTagBadgesBatchResult> {
+  const actor = await assertAdminActor();
+  if (!actor)
+    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
+
+  const reason = input.reason.trim();
+  if (reason.length < 3) return { ok: false, error: 'Give a reason of at least 3 characters.' };
+
+  const playerIds = Array.from(new Set(input.playerIds));
+  if (playerIds.length === 0) return { ok: false, error: 'Choose at least one player.' };
+  if (playerIds.length > 100) return { ok: false, error: 'Choose at most 100 players at once.' };
+
+  const badgeKeys = Array.from(new Set(input.badgeKeys));
+  if (badgeKeys.length === 0) return { ok: false, error: 'Choose at least one badge.' };
+  if (badgeKeys.length > 10) return { ok: false, error: 'Choose at most 10 badges at once.' };
+  if (badgeKeys.some((k) => isEventBadgeKey(k))) {
+    return { ok: false, error: 'Event badges are set from Event badges, not tagged here.' };
+  }
+  const defs = badgeKeys.map((k) => ({ key: k, def: badgeDef(k) }));
+  const unknown = defs.find((d) => !d.def);
+  if (unknown) return { ok: false, error: 'Unknown badge.' };
+  const hasTitleBadge = defs.some((d) => d.def?.titleBadge);
+  if (hasTitleBadge && !input.event?.trim()) {
+    return {
+      ok: false,
+      error: 'One of these badges names an event - give the tournament/event name.',
+    };
+  }
+
+  try {
+    const svc = createServiceClient();
+    const settings = await getBadgeSettings();
+
+    let tagged = 0;
+    let skipped = 0;
+    let failed = 0;
+    const newlyTagged: { playerId: string; badgeKey: string; meta: Record<string, unknown> }[] = [];
+
+    for (const playerId of playerIds) {
+      const perPlayer: { badgeKey: string; outcome: TagRowResult['outcome'] }[] = [];
+      for (const badgeKey of badgeKeys) {
+        const result = await writeBadgeTagRow(
+          svc,
+          settings,
+          {
+            playerId,
+            badgeKey,
+            reason,
+            event: input.event,
+            division: input.division,
+            expiresAt: input.expiresAt,
+            grantedBy: actor.viewerId,
+          },
+          { skipIfAlreadyGrant: true },
+        );
+        perPlayer.push({ badgeKey, outcome: result.outcome });
+        if (result.outcome === 'failed') {
+          failed += 1;
+        } else if (result.outcome === 'skipped') {
+          skipped += 1;
+        } else {
+          tagged += 1;
+          newlyTagged.push({ playerId, badgeKey, meta: result.meta });
+        }
+      }
+      await writeAudit({
+        actorId: actor.viewerId,
+        actorRole: actor.role,
+        action: 'badge.tag_batch',
+        entityType: 'player_badge',
+        entityId: playerId,
+        after: {
+          badgeKeys,
+          results: perPlayer,
+          event: input.event?.trim() || null,
+          division: input.division?.trim() || null,
+        },
+        reason,
+      });
+    }
+
+    // Notifications run after the writes and never block/fail the batch (master_plan §2BL E).
+    const sendNotifications = async () => {
+      for (const { playerId, badgeKey, meta } of newlyTagged) {
+        const def = badgeDef(badgeKey);
+        if (!def) continue;
+        await notify({
+          recipientId: playerId,
+          type: 'badge_granted',
+          params: {
+            extra: typeof meta.event === 'string' ? `${def.name} (${meta.event})` : def.name,
+            reason,
+          },
+          link: '/me',
+          entityType: 'player_badge',
+        });
+      }
+    };
+    try {
+      const { after } = await import('next/server');
+      after(() => sendNotifications());
+    } catch {
+      // Outside a request scope (script/test) `after()` throws - fall back to awaiting inline.
+      await sendNotifications();
+    }
+
+    if (tagged > 0) {
+      revalidateTag(PLAYERS_LIST_TAG);
+      const affectedPlayerIds = Array.from(new Set(newlyTagged.map((t) => t.playerId)));
+      for (const playerId of affectedPlayerIds) {
+        const slug = await slugFor(playerId);
+        if (slug) revalidateTag(playerTag(slug));
+      }
+    }
+
+    const parts = [`${tagged} tagged`, `${skipped} skipped`];
+    if (failed > 0) parts.push(`${failed} failed`);
+    return { ok: true, tagged, skipped, failed, message: parts.join(' · ') };
+  } catch {
+    return { ok: false, error: 'That action is temporarily unavailable.' };
+  }
+}
+
+export type AdminListPlayersResult =
+  { ok: true; players: AdminBadgeTagPlayer[]; total: number } | { ok: false; error: string };
+
+/**
+ * Client-callable bridge to `listPlayersForBadgeTagging` (master_plan §2BL E): the Tag screen is a
+ * client component (selection has to persist across search/filter/page changes, which only works as
+ * client state), and `lib/admin/user-queries.ts` is `server-only`, so this thin admin-guarded action
+ * is what the client actually calls to fetch/refresh pages.
+ */
+export async function adminListPlayersForBadgeTagging(opts: {
+  q?: string;
+  tier?: number;
+  city?: string;
+  noBadges?: boolean;
+  ids?: string[];
+  page?: number;
+  pageSize?: number;
+}): Promise<AdminListPlayersResult> {
+  const actor = await assertAdminActor();
+  if (!actor)
+    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
+  const result = await listPlayersForBadgeTagging(opts);
+  return { ok: true, ...result };
+}
+
+export type AdminPlayerBadgeDetailResult =
+  | {
+      ok: true;
+      player: {
+        id: string;
+        name: string;
+        avatarUrl: string | null;
+        csl: number | null;
+        sts: number | null;
+      };
+      badges: AdminPlayerBadge[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * One player's full badge detail for the Tag screen's "existing badges" sheet (master_plan §2BL E,
+ * "a small chevron button on the row opens that player's existing badge panel"). Reuses
+ * `getUserAdminDetail` (header) and `getPlayerBadgesForAdmin` (every row, including revoked/blocked)
+ * exactly as the pre-§2BL "Tag a player" flow did.
+ */
+export async function adminGetPlayerBadgeDetail(
+  playerId: string,
+): Promise<AdminPlayerBadgeDetailResult> {
+  const actor = await assertAdminActor();
+  if (!actor)
+    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
+  const [detail, badges] = await Promise.all([
+    getUserAdminDetail(playerId),
+    getPlayerBadgesForAdmin(playerId),
+  ]);
+  if (!detail) return { ok: false, error: 'Player not found.' };
+  return {
+    ok: true,
+    player: {
+      id: detail.id,
+      name: detail.name,
+      avatarUrl: detail.avatarUrl,
+      csl: detail.skill.csl,
+      sts: detail.skill.sts,
+    },
+    badges,
+  };
 }
 
 export interface AdminUntagBadgeInput {

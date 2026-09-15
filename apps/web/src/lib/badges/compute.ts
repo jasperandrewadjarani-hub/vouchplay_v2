@@ -19,7 +19,7 @@ import {
 import { createServiceClient } from '@/lib/supabase/service';
 import { getBadgeSettings } from '@/lib/settings';
 import { notify } from '@/lib/notifications/create';
-import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
+import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/tags';
 
 /**
  * Automatic badge computation (master_plan §2BK D). Batched reads (no per-player query loops), the

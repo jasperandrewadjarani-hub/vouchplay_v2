@@ -10,7 +10,7 @@
  * Nothing here touches Supabase, React or `next/*` - it is unit-tested in `filters.test.ts`.
  */
 
-import { SKILL_BANDS, type SkillBand } from '@vouchplay/config';
+import { BADGE_KEYS, isEventBadgeKey, SKILL_BANDS, type SkillBand } from '@vouchplay/config';
 
 // ----------------------------------------------------------------------------
 // Sorting (§2AG A1, D3/D6)
@@ -142,6 +142,12 @@ export interface PlayerFilters {
   /** A tournament id (D7). Server-gated: applied only for staff or that tournament's organizers -
    *  never trust the client, so this field alone must never be treated as authorization. */
   tournament?: string;
+  /** Badge holders filter (§2BL C): up to `MAX_BADGE_FILTER_KEYS` catalog/event badge keys, sanitized
+   *  by {@link parseBadgeKeys}. Empty/absent means off. */
+  badges?: string[];
+  /** `'all'` requires holding every selected badge; absent (the default) is "any of these". Only
+   *  meaningful alongside `badges` - never set alone. */
+  badgeMatch?: 'all';
   /** Public sort choice, default `new_unvouched` (D6). Not a filter: excluded from
    *  `activeFilterCount` / chips / `clearFilter`, and never part of "how many filters are applied". */
   sort?: PlayerSort;
@@ -367,6 +373,29 @@ export function parseSkills(raw: string | undefined): number[] | undefined {
   return unique.length > 0 ? unique : undefined;
 }
 
+/** Highest number of badge keys the holders filter accepts at once (§2BL C) - matches the sheet's
+ *  own practical limit; a longer hand-edited URL is simply truncated rather than rejected. */
+export const MAX_BADGE_FILTER_KEYS = 10;
+
+const BADGE_KEY_SET = new Set(BADGE_KEYS);
+
+/** A key is worth keeping only if it is a known catalog key or shaped like an event badge key
+ *  (`event:<tournamentId>`) - the actual "does this event badge currently exist" check needs a DB
+ *  read and happens in `getBadgeHolderIds`/`getBadgeFilterOptions` instead; this stays pure. */
+function isPlausibleBadgeKey(key: string): boolean {
+  return BADGE_KEY_SET.has(key) || isEventBadgeKey(key);
+}
+
+export function parseBadgeKeys(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const parsed = raw
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => k.length > 0 && isPlausibleBadgeKey(k));
+  const unique = Array.from(new Set(parsed)).slice(0, MAX_BADGE_FILTER_KEYS);
+  return unique.length > 0 ? unique : undefined;
+}
+
 /** Parse one side of a range param, dropping it when it does not narrow the full span. */
 function parseStsBound(raw: string | undefined, isMax: boolean): number | undefined {
   if (raw == null) return undefined;
@@ -419,6 +448,11 @@ export function parsePlayerFilters(
   const pageNum = Number(one(sp.page));
   const sort = resolveSort(one(sp.sort), opts.staff ?? false);
 
+  const badges = parseBadgeKeys(one(sp.badges));
+  // `badgeMatch` is meaningless without `badges` (never set alone) - dropped rather than carried as
+  // dead state a hand-edited URL could otherwise smuggle in.
+  const badgeMatch: 'all' | undefined = badges && one(sp.badgeMatch) === 'all' ? 'all' : undefined;
+
   return {
     q: one(sp.q),
     city: normalizeCityKey(one(sp.city)) || undefined,
@@ -438,6 +472,8 @@ export function parsePlayerFilters(
     newOnly: flag(sp.new),
     tournament: one(sp.tournament),
     sort,
+    badges,
+    badgeMatch,
     page: Number.isInteger(pageNum) && pageNum > 0 ? pageNum : 1,
   };
 }
@@ -471,6 +507,10 @@ export function playerFiltersToQuery(f: PlayerFilters, opts: QueryOptions = {}):
   if (f.openForSponsorship) p.set('openForSponsorship', '1');
   if (f.newOnly) p.set('new', '1');
   if (f.tournament) p.set('tournament', f.tournament);
+  if (f.badges && f.badges.length > 0) {
+    p.set('badges', f.badges.join(','));
+    if (f.badgeMatch === 'all') p.set('badgeMatch', 'all');
+  }
   if (f.sort && f.sort !== DEFAULT_PLAYER_SORT) p.set('sort', f.sort);
   if (opts.compact === false) p.set('view', 'detailed');
   const page = opts.page ?? f.page ?? 1;
@@ -510,6 +550,7 @@ export function activeFilterCount(f: PlayerFilters): number {
   if (f.openForSponsorship) n += 1;
   if (f.newOnly) n += 1;
   if (f.tournament) n += 1;
+  if (f.badges && f.badges.length > 0) n += 1;
   return n;
 }
 
@@ -533,7 +574,8 @@ export type FilterChipKey =
   | 'lookingForPartner'
   | 'openForSponsorship'
   | 'newOnly'
-  | 'tournament';
+  | 'tournament'
+  | 'badges';
 
 export interface FilterChip {
   key: FilterChipKey;
@@ -649,8 +691,54 @@ export function clearFilter(f: PlayerFilters, key: FilterChipKey): PlayerFilters
     case 'tournament':
       delete next.tournament;
       break;
+    case 'badges':
+      delete next.badges;
+      delete next.badgeMatch;
+      break;
     default:
       next[key] = false;
   }
   return next;
+}
+
+// ----------------------------------------------------------------------------
+// Badge holders filter (§2BL C) - the applied state has its own gold quick chip and count line
+// rather than a generic `describeActiveFilters` entry (the chip already shows stacked badge art plus
+// a count/clear, so a second plain-text chip in the filter-sheet row would just repeat it); this
+// describes the count line above the results ("15 players with Legend, MVP or OG").
+// ----------------------------------------------------------------------------
+
+/** A badge option's key + display name - the shape `getBadgeFilterOptions()` returns, kept minimal
+ *  here so this module stays DB-free. */
+export interface BadgeFilterLabelSource {
+  key: string;
+  name: string;
+}
+
+/**
+ * "with Legend, MVP or OG" (`any`, the default) / "with Legend and MVP" (`all`) - names resolved
+ * from the caller's already-fetched option list, capped at 3 with "+n more" beyond that. Null when
+ * no badge filter is active. Unknown keys (option list stale/incomplete) fall back to the raw key
+ * rather than disappearing, so the count line never silently drops a selected badge.
+ */
+export function describeBadgeFilter(
+  f: Pick<PlayerFilters, 'badges' | 'badgeMatch'>,
+  options: BadgeFilterLabelSource[],
+): string | null {
+  if (!f.badges || f.badges.length === 0) return null;
+  const nameByKey = new Map(options.map((o) => [o.key, o.name]));
+  const names = f.badges.map((k) => nameByKey.get(k) ?? k);
+  const shown = names.slice(0, 3);
+  const extra = names.length - shown.length;
+  const conjunction = f.badgeMatch === 'all' ? 'and' : 'or';
+
+  let list: string;
+  if (shown.length === 1) {
+    list = shown[0] ?? '';
+  } else if (shown.length === 2) {
+    list = `${shown[0] ?? ''} ${conjunction} ${shown[1] ?? ''}`;
+  } else {
+    list = `${shown.slice(0, -1).join(', ')} ${conjunction} ${shown[shown.length - 1] ?? ''}`;
+  }
+  return `with ${list}${extra > 0 ? ` +${extra} more` : ''}`;
 }

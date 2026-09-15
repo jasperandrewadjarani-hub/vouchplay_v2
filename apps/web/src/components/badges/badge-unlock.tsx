@@ -93,12 +93,7 @@ export function BadgeUnlock({ badges }: { badges: BadgeView[] }) {
     >
       <span className="vp-badge-rays" aria-hidden />
       <div className="vp-badge-pop relative">
-        <BadgeSymbol
-          badgeKey={badge.key}
-          size={150}
-          number={badge.meta.number}
-          title={badge.name}
-        />
+        <BadgeSymbol badgeKey={badge.key} size={150} title={badge.name} />
       </div>
       <p className="text-warning relative mt-4 text-xs font-bold tracking-[0.2em] uppercase">
         New badge

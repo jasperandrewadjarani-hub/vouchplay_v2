@@ -3434,3 +3434,14 @@ Jasper ran `scripts/apply-0051.sql`; verified read-only: both badge tables and b
 anon reads `player_badges` under the public policy, `player_badge_progress` is service-role only.
 `player_badges` has 0 rows until the first Admin → Badges → Recompute now (the nightly leaderboards cron
 also runs it at 01:17 UTC).
+
+## 2026-09-15 - Badges round 2: 3D art, no Pioneer number, multi-badge filter, neon chips, batch tagging (§2BL, handover v1.87)
+
+Jasper approved the 3D sample. Every badge moves to one 3D recipe (extruded metal frame, bevelled core, embossed
+glyph, gloss, family ornaments, rarity accents; ornaments drop below 40 px); Legend and MVP get bespoke hero
+drawings (original SVG in the style of his references) with small variants. Pioneer's number is never shown
+(kept in meta so it is not reissued). Players tab: gold Badge holders chip → multi-select badge sheet with Any /
+All and live count, URL `badges=` + `badgeMatch=`, filter via `restrictIds`; holder counts cached 5 min; selected
+chips become solid neon cyan with a check and glow. Admin → Badges → Tag: badges tray + player list with
+multi-select on one screen, review sheet, `adminTagBadgesBatch` (≤100 players, ≤10 badges, audited per player,
+notifications after the writes). No migration; Supabase/Vercel impact small (see §2BL).

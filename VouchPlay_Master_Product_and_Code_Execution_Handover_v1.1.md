@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.86 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.87 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,18 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.87 (2026-09-15)
+
+_Badges round 2 (master_plan §2BL). No migration. 0051 applied and verified 2026-09-15._
+
+- **All badges in 3D** (extruded metal, bevelled core, embossed symbol, gloss, family ornaments, rarity
+  accents; simplified below 40 px). **Legend** and **MVP** get bespoke hero art. **Pioneer number removed**
+  from every display.
+- **Players tab:** gold **Badge holders** filter - pick several badges, Any / All, live count; selected filter
+  chips are now solid neon cyan with a check and glow.
+- **Admin → Badges:** tag several badges to several players from one screen (badges tray + player list +
+  review sheet, max 100 players per batch, audited per player). Untag stays per player.
+
 ## v1.86 (2026-09-15)
 
 _Badges + Players tab upgrade Phase 1 & 2 (master_plan §2BK). Migration 0051._

@@ -100,9 +100,9 @@ export function HoldersTab({
 }
 
 function holderCaption(h: BadgeHolder): string | null {
+  // master_plan §2BL B: Pioneer's number is never shown anywhere.
   const parts: string[] = [];
   if (h.tally > 1) parts.push(`×${h.tally}`);
-  if (h.meta.number) parts.push(`#${h.meta.number}`);
   if (h.meta.event) parts.push(h.meta.event);
   if (h.meta.division) parts.push(h.meta.division);
   if (h.meta.medal) parts.push(h.meta.medal);

@@ -39,7 +39,7 @@ export function BadgeRow({
 
   return (
     <div className={`flex min-w-0 items-center gap-1.5 ${className ?? ''}`}>
-      <BadgeSymbol badgeKey={first.key} size={size} number={first.meta.number} title={first.name} />
+      <BadgeSymbol badgeKey={first.key} size={size} title={first.name} />
       {metal && (
         <span
           className="vp-badge-name truncate text-xs font-bold"
@@ -54,13 +54,7 @@ export function BadgeRow({
         </span>
       )}
       {rest.map((b) => (
-        <BadgeSymbol
-          key={b.id}
-          badgeKey={b.key}
-          size={size}
-          number={b.meta.number}
-          title={b.name}
-        />
+        <BadgeSymbol key={b.id} badgeKey={b.key} size={size} title={b.name} />
       ))}
       {remaining > 0 && (
         <span className="text-foreground-muted bg-surface-muted shrink-0 rounded-full px-1.5 py-0.5 text-[10.5px] font-bold">

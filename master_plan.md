@@ -6525,6 +6525,63 @@ sheet, unlock), players tab components, `/admin/badges`.
 Docs → four Sonnet lanes (data + server · badge UI + profile · Players tab · admin) against the contracts
 above → review → gates → commit → push → Jasper applies `scripts/apply-0051.sql`, then taps **Recompute now**.
 
+## 2BL. Badges round 2: all badges in 3D, hero Legend / MVP, no Pioneer number, multi-badge filter, neon selected chips, single-screen batch tagging (2026-09-15)
+
+Jasper approved the "Badges in 3D" sample: make ALL badges more 3D, new game-style Legend and MVP art (his
+references were stock images - ours are original SVG drawings in that style), Pioneer number removed
+everywhere, a Badge holders filter on the Players tab that can select multiple badges, brighter selected
+filter chips, and admin tagging from a player list with multi-select (several badges to several players),
+the player list on the same screen. No migration.
+
+### Decisions
+
+**A. 3D recipe for every badge** (`components/badges/badge-symbol.tsx`, 120-unit viewBox): drop shadow →
+extruded frame (a `deep` copy offset down) → face with a 4-stop vertical metal gradient and rarity trim →
+recessed core (80 %, radial) with a top highlight and bottom shadow line → embossed glyph (dark offset
+stroke, then a white→light→mid gradient stroke) → clipped gloss sweep → family ornaments (Glory wings +
+red ribbon, Community ribbon tails, Growth crystal facets, Roles corner rivets, Special light rays) →
+rarity accents (Epic gem, Legendary gold wings + red gem + sparkle). `BADGE_METALS` gains a 4th `deep`
+tone. **Below 40 px** ornaments and gloss drop away (extrusion depth 4, thicker glyph) so cards stay
+legible. **Legend and MVP** use bespoke hero drawings (Legend: bevelled gold octagon, dark core, red standard,
+copper wings, sapphire gems, silver LEGEND lettering; MVP: crossed swords with red grips, gold caps and
+steel pommels behind a winged gold crest and a red plaque with gold MVP) with their own small variants.
+
+**B. Pioneer number gone.** The art, the badge row, the case caption and the detail sheet never show it. It
+stays in `meta.number` only so numbers are never reissued.
+
+**C. Badge holders filter** (Players tab, signed-in): the first quick chip, gold with a slow shine (none under
+reduced motion). Opens a bottom sheet: badges grouped by family with holder counts (dimmed "None yet"), multi-
+select, an **Any of these / All of these** switch with one explanatory line, footer **Clear (n)** and **Show n
+players** (live count). URL params `badges=key1,key2` and `badgeMatch=all` (any is default). Applied: the chip
+shows the stacked symbols + "n badges ✕"; the count line reads "15 players with Legend, MVP or OG" /
+"…with Legend and MVP". Server: `getBadgeHolderIds(keys, match)` (live, not hidden, not expired, disabled keys
+ignored) intersected into `listPlayers`' existing `restrictIds`; `countBadgeHolders` cached 5 min
+(`unstable_cache`, players-list tag) so opening the sheet never hits the database each time.
+
+**D. Selected chips are unmistakable**: selected = solid neon cyan fill (`#67e8f9 → #22d3ee`) with dark text, a
+check mark and a soft glow ring, in both themes; the Badge holders chip is gold. Applies to the Players quick
+chips and the admin list quick filters.
+
+**E. Admin tagging on one screen** (`/admin/badges` Tag tab replaces the search-first flow): a sticky **Badges to
+tag** tray (chosen badges with ✕, "+ Add badge" opens the badge grid sheet) above the player list - search,
+quick filters (tier, city, No badges yet, Selected (n)), rows with checkboxes, avatar, tier, current badges, and a
+green "Has X" when a row already holds a chosen badge. Sticky bar: "n badges · n players · n tags" + **Review
+and tag →**. Review sheet: the badges, every selected player with ✕ (and "has OG · MVP only" notes), event
+(required when any title badge is chosen), division (title badges), reason, and "n new tags · n skipped".
+Untag and "Allow automatic again" stay per player (tap a row → that player's badges), so nothing is removed in
+bulk. Holders and Event badges tabs unchanged.
+- Server `adminTagBadgesBatch({ playerIds, badgeKeys, reason, event?, division?, expiresAt? })`: admin guard,
+  ≤ 100 players and ≤ 10 badges per call, reuses the single-tag logic per pair (existing live rows skipped or
+  converted to `grant`), audit row per player, returns `{ ok, tagged, skipped, failed }`; notifications and pushes
+  run after the writes (`after()` from `next/server`) so a slow push never blocks or fails the batch.
+
+### Supabase / Vercel impact
+
+No migration or new env var. Art is inline SVG (no Storage, no image transforms). One indexed read when the
+badge filter is on; holder counts cached. A 100 × 3 batch ≈ 300 small inserts + 300 audit rows + in-app
+notifications (badge notifications are never email, so the Gmail cap is untouched). Batch cap + deferred pushes
+keep the request well inside the function time limit.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

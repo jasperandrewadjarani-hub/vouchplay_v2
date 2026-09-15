@@ -10,7 +10,7 @@ import {
   getNewAccountBadgeDays,
   getBadgeSettings,
 } from '@/lib/settings';
-import { getVisibleBadgesForPlayers } from '@/lib/badges/queries';
+import { getBadgeHolderIds, getVisibleBadgesForPlayers } from '@/lib/badges/queries';
 import {
   pickActiveSkill,
   selectSkillProfiles,
@@ -44,9 +44,9 @@ import {
   type SortableRow,
 } from './filters';
 
-export const PLAYERS_LIST_TAG = 'players:list';
-export const playerTag = (slug: string) => `player:${slug}`;
-export const commentsTag = (id: string) => `player-comments:${id}`;
+import { PLAYERS_LIST_TAG, playerTag, commentsTag } from './tags';
+
+export { PLAYERS_LIST_TAG, playerTag, commentsTag } from './tags';
 
 export const PAGE_SIZE = 24;
 
@@ -76,6 +76,8 @@ function filtersKey(f: PlayerFilters, staff: boolean): string {
     ofs: f.openForSponsorship ? 1 : 0,
     newOnly: f.newOnly ? 1 : 0,
     tournament: f.tournament ?? '',
+    badges: [...(f.badges ?? [])].sort().join(','),
+    badgeMatch: f.badgeMatch ?? '',
     sort: f.sort ?? 'new_unvouched',
     staff: staff ? 1 : 0,
     page: f.page ?? 1,
@@ -665,6 +667,16 @@ export async function listPlayers(
   }
   if (filters.club) {
     restrictIds = intersectIds(restrictIds, await fetchClubMemberIds(filters.club));
+  }
+  // Badge holders filter (§2BL C): additive, like the restrictions above - `getBadgeHolderIds` fails
+  // open to `[]` on any error, which correctly narrows to "no matches" rather than leaving the
+  // filter silently unapplied (the badge filter is opt-in and its own affordance shows the count, so
+  // an honest empty result is better than a filter that quietly does nothing).
+  if (filters.badges && filters.badges.length > 0) {
+    restrictIds = intersectIds(
+      restrictIds,
+      await getBadgeHolderIds(filters.badges, filters.badgeMatch === 'all' ? 'all' : 'any'),
+    );
   }
 
   const indexFilterActive = Boolean(
