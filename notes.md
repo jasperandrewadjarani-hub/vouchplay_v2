@@ -3482,3 +3482,22 @@ Usage page after 48 h.
 
 Deploy `7c542f5` (§2BO) completed on Vercel 2026-09-15. This note is itself a docs-only push used to verify the
 Ignored Build Step end to end (expected: Vercel skips the build).
+
+**Verified 2026-09-15:** docs-only commit `5a25ff6` showed on GitHub as Vercel "Canceled by Ignored Build Step" - the
+skip works in production.
+
+## 2026-09-15 - Live facts at session end (read-only production check)
+
+- Badges are live and populated: **387 live `player_badges` rows** (so Admin → Badges → Recompute now has run and
+  admins have tagged). Automatic: Proven 178, Pioneer 100, Club Captain 47, Rising 10, Top Contributor 10, Trusted
+  Voice 9, Top of Tier 7, Organizer 2. Tagged by admins: OG 17, Champion 2, Podium 2, Legend 1, MVP 1, Supporter 1.
+  Coach (auto) currently 0 holders.
+- **586 onboarded profiles.**
+- Supabase usage (cycle 13 Sep - 13 Oct 2026, seen 2026-09-15): Pro plan, no quota exceeded; egress 2.05 GB, cached
+  egress 1.50 GB, MAU 249, realtime peak 16 connections, storage image transformations 0 / 100, micro compute $0.81.
+- Vercel usage (cycle 8 Sep - 8 Oct 2026, day 7): $17.09 infrastructure of the $20 Pro credit; ongoing burn estimated
+  ~$1.80/day (full analysis: `working/P_006b_Vercel_Supabase_Cost_Diagnosis_(2026-09).md`, uncommitted by design).
+  Fixes #2 and #5 shipped (§2BO); #1 spend cap (Jasper), #3 bottom-nav prefetch off, #4 parallel AppShell reads and
+  #6-#10 are not yet done.
+- Open proposal awaiting Jasper's OK (§2BN): a permanent non-directory test account + Playwright signed-in smoke test on
+  a Vercel Preview before production promotes.
