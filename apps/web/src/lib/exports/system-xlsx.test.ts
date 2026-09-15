@@ -89,6 +89,7 @@ const fixture: TournamentExportSnapshot = {
       representedClubs: 'Cebu Smashers',
       registeredAt: d(2026, 9, 1),
       receiptLink: '',
+      priceBasis: '',
     },
   ],
 };

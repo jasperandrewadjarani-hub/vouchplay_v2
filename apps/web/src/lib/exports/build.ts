@@ -1,5 +1,6 @@
 import 'server-only';
 import { skillByOrdinal } from '@vouchplay/config';
+import { priceBasisLabel } from '@vouchplay/core';
 import { createServiceClient } from '@/lib/supabase/service';
 import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { loadSettingNumber } from '@/lib/settings';
@@ -197,7 +198,7 @@ export async function buildTournamentSnapshot(
   const { data: payData } = regIds.length
     ? await svc
         .from('payments')
-        .select('registration_id, status, amount_due, currency, proof_storage_path')
+        .select('registration_id, status, amount_due, currency, proof_storage_path, price_basis')
         .in('registration_id', regIds)
     : { data: [] };
   const payRows = (payData ?? []) as {
@@ -206,8 +207,20 @@ export async function buildTournamentSnapshot(
     amount_due: number;
     currency: string;
     proof_storage_path: string | null;
+    price_basis: string | null;
   }[];
   const payByReg = new Map(payRows.map((p) => [p.registration_id, p]));
+  // "standard,next_entry" (one token per seat, member order) -> "Standard, 2nd entry" (§2BQ). Blank
+  // when no payment row exists yet, or the basis was never recorded pre-migration-0052.
+  const priceBasisWords = (raw: string | null | undefined): string => {
+    if (!raw) return '';
+    return raw
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .map((token) => (token === 'standard' ? 'Standard' : (priceBasisLabel(token) ?? token)))
+      .join(', ');
+  };
 
   // Time-boxed signed links to each submitted proof, so an organizer can hand the export to whoever
   // does the bank reconciliation without opening each one in the app (§2O). The window is counted
@@ -344,6 +357,7 @@ export async function buildTournamentSnapshot(
       representedClubs: clubs.join(', '),
       registeredAt: dateOrNull(r.created_at),
       receiptLink: receiptByReg.get(r.id) ?? '',
+      priceBasis: priceBasisWords(pay?.price_basis),
     };
   });
 

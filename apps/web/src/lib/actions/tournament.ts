@@ -20,6 +20,7 @@ import {
   phDateInputToIso,
   isManageableTournamentStatus,
   tournamentArchiveNameMatches,
+  isValidNextEntryFee,
 } from '@vouchplay/core';
 import { getOptionalUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -578,6 +579,11 @@ function divisionPatchFromForm(formData: FormData) {
   const d = parsed.data;
   const rawEarly = String(formData.get('earlyBirdFeeAmount') ?? '').trim();
   const earlyBirdFee = rawEarly === '' ? null : Math.max(0, Number(rawEarly) || 0);
+  const rawNextEntry = String(formData.get('nextEntryFeeAmount') ?? '').trim();
+  const nextEntryFee = rawNextEntry === '' ? null : Math.max(0, Number(rawNextEntry) || 0);
+  if (!isValidNextEntryFee(d.feeAmount, nextEntryFee)) {
+    return { error: 'The next-entry price must be lower than the entry fee.' };
+  }
   return {
     data: {
       name_override: d.nameOverride || null,
@@ -594,6 +600,9 @@ function divisionPatchFromForm(formData: FormData) {
       // Blank means no promo. An early amount that is not cheaper is rejected at quote time, so a
       // typo can never quietly raise the price (§1V).
       early_bird_fee_amount: earlyBirdFee,
+      // Blank means no next-entry discount. Validated above so a typo can never quietly raise the
+      // price a returning player is quoted (§2BQ).
+      next_entry_fee_amount: nextEntryFee,
       currency: d.currency.toUpperCase(),
       skill_verified_required: d.skillVerifiedRequired,
       minimum_sts: d.minimumSts ?? null,

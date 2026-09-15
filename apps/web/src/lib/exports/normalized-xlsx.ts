@@ -58,6 +58,7 @@ export async function buildNormalizedWorkbook(
     'Represented clubs',
     'Registered',
     'Receipt link',
+    'PriceBasis',
   ];
   const reg = wb.addWorksheet('Registrations');
   reg.addRow(regHeaders);
@@ -75,10 +76,11 @@ export async function buildNormalizedWorkbook(
       r.representedClubs,
       r.registeredAt,
       r.receiptLink,
+      r.priceBasis || '',
     ]);
   }
   reg.getColumn(11).numFmt = 'yyyy-mm-dd';
-  styleSheet(reg, regHeaders, [22, 24, 40, 12, 20, 14, 10, 10, 10, 28, 14, 46]);
+  styleSheet(reg, regHeaders, [22, 24, 40, 12, 20, 14, 10, 10, 10, 28, 14, 46, 16]);
 
   // --- Players ---
   const plHeaders = [

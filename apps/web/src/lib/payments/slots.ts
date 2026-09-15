@@ -13,6 +13,7 @@ import { tournamentTag } from '@/lib/tournaments/queries';
 import { notify } from '@/lib/notifications/create';
 import { notifyRegistrationTeam } from '@/lib/notifications/registration-notify';
 import { sendConfirmationEmailForRegistration } from './confirmation-email';
+import { nextEntryRepricing } from '@/lib/tournaments/next-entry';
 
 /**
  * The seat as the unit of payment (master_plan §2AO Decision A). This module is the ONLY place that
@@ -28,7 +29,7 @@ import { sendConfirmationEmailForRegistration } from './confirmation-email';
 export type SlotRow = TournamentSlotRow;
 
 const SLOT_COLUMNS =
-  'id, tournament_id, player_id, registration_id, division_id, status, amount_due, amount_submitted, currency, method, payer_name, transaction_reference, proof_storage_path, early_bird_applied, submitted_at, verified_by, verified_at, rejection_reason, notification_sent_at, created_at, updated_at';
+  'id, tournament_id, player_id, registration_id, division_id, status, amount_due, amount_submitted, currency, method, payer_name, transaction_reference, proof_storage_path, early_bird_applied, price_basis, submitted_at, verified_by, verified_at, rejection_reason, notification_sent_at, created_at, updated_at';
 
 const LIVE_STATUSES = ['submitted', 'verified'];
 /** Registration statuses `settleRegistration` is allowed to act on. A confirmed (or otherwise closed)
@@ -290,7 +291,26 @@ export async function buildEntryPaymentInput(
     confirmed_at: string | null;
   }[];
   const teamPayment = payRow as { status: string } | null;
-  const slots = (slotsByReg.get(registrationId) ?? []).map(toSeatSlotInput);
+  const slotRows = slotsByReg.get(registrationId) ?? [];
+  // §2BQ: a seat paid at the next-entry price whose earlier entry was since cancelled is a 1st entry
+  // now, and owes the difference - surfaced through the existing top-up state.
+  const repriced = await nextEntryRepricing(
+    registrationId,
+    slotRows
+      .filter((row) => LIVE_STATUSES.includes(row.status))
+      .map((row) => ({
+        id: row.id,
+        playerId: row.player_id,
+        priceBasis: row.price_basis,
+        amountDue: Number(row.amount_due),
+        submittedAt: row.submitted_at,
+      })),
+  );
+  const slots = slotRows.map((row) => {
+    const input = toSeatSlotInput(row);
+    const due = repriced.get(row.id);
+    return due != null ? { ...input, amountDue: due } : input;
+  });
 
   const division = {
     fee_amount: Number(divisionRow.fee_amount),

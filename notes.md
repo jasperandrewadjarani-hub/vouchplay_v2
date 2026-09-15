@@ -3546,3 +3546,16 @@ If 0053 is taken by the indexes, Organizer Phase B → 0054 and PIN lock → 005
 `scripts/apply-0052.sql` (not applied), per-seat payment pricing, read-time top-up, wizard/browser/receipt/Done UI,
 organizer editor field, Manage seat tag (needs `priceBasis` projected in `getOrganizerRegistrations`), export
 PriceBasis column. Deploys held until the database is confirmed stable.
+
+## 2026-09-15 - Load fixes deployed (f1d5d84); next-entry discount built (§2BQ, handover v1.92-v1.93)
+
+- **Load fixes live** (`f1d5d84`, Vercel "Deployment has completed" 10:45 UTC): 0053 applied by Jasper (both indexes
+  verified); vouches-given counts only load for that filter; nav prefetch off; AppShell parallel. Production smoke
+  (signed out): `/players` 0.5-0.9 s, `/tournaments` 0.3 s, Hermosa page 1.1-1.7 s, no error pages. Jasper chose deploy-then-
+  check (option A) because the branch preview failed on Vercel (log not visible here; likely Supabase env vars not set for
+  Preview) - signed-in check by Jasper pending.
+- **Micro after upgrade** (Jasper screenshot 18:48 PH, 24 h view): latest hourly bar swap small (~50 MB), commit limit
+  raised, CPU ~10% with little IOwait, 22 connections.
+- **§2BQ built** (see master_plan §2BQ "As built"). Gates: typecheck, lint, 1,041 tests, format, build all pass. Not yet
+  deployed: `DIVISION_COLUMNS` reads `divisions.next_entry_fee_amount`, so **Jasper must apply `scripts/apply-0052.sql`
+  before the deploy**. Migration numbering: 0052 discount, 0053 indexes, Organizer Phase B 0054, PIN lock 0055.

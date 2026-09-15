@@ -9,6 +9,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { PAYMENT_PROOFS_BUCKET } from '@/lib/storage';
 import { loadSettingNumber, isSlotReservationsEnabled } from '@/lib/settings';
 import { authorizeOrganizer } from '@/lib/tournaments/authz';
+import { loadPricingContext, quoteRegistrationSeats } from '@/lib/tournaments/next-entry';
 import { checkActorCanInteract } from '@/lib/moderation/enforcement';
 import { writeAudit, logRpcRefusal } from '@/lib/moderation/audit';
 import { tournamentTag } from '@/lib/tournaments/queries';
@@ -142,39 +143,12 @@ export async function submitPayment(
       return { error: 'This registration is not awaiting payment.' };
     }
 
-    // fee_amount is PER PLAYER since migration 0026, so the amount owed is fee x team size.
-    // The early-bird price is resolved HERE, at submission - the amount owed is the amount that was
-    // true when the receipt was sent, not when the entry was started (§1V).
-    const { data: division } = await svc
-      .from('divisions')
-      .select('fee_amount, early_bird_fee_amount, currency, team_size, tournament_id')
-      .eq('id', r.division_id)
-      .maybeSingle();
-    const div = division as {
-      fee_amount: number;
-      early_bird_fee_amount: number | null;
-      currency: string;
-      team_size: number;
-      tournament_id: string;
-    } | null;
-    if (!div) return { error: 'Division not found.' };
-    const { data: tourn } = await svc
-      .from('tournaments')
-      .select('early_bird_starts_at, early_bird_ends_at')
-      .eq('id', div.tournament_id)
-      .maybeSingle();
-    const t = tourn as {
-      early_bird_starts_at: string | null;
-      early_bird_ends_at: string | null;
-    } | null;
-    const quote = quoteFee({
-      feeAmount: Number(div.fee_amount),
-      earlyBirdFeeAmount:
-        div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
-      earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
-      earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
-      teamSize: div.team_size,
-    });
+    // fee_amount is PER PLAYER since migration 0026, and since §2BQ each seat is priced on its own (a
+    // 1st entry and a partner's 2nd entry cost different amounts), so the team owes the SUM of its
+    // seats. Resolved HERE, at submission - the amount owed is the amount that was true when the
+    // receipt was sent, not when the entry was started (§1V).
+    const seatQuote = await quoteRegistrationSeats(registrationId);
+    if (!seatQuote) return { error: 'Division not found.' };
 
     // Upload proof (required).
     const file = formData.get('proof');
@@ -190,9 +164,10 @@ export async function submitPayment(
     const { error: payErr } = await svc.from('payments').upsert(
       {
         registration_id: registrationId,
-        amount_due: quote.teamTotal,
-        amount_submitted: p.amountSubmitted ?? quote.teamTotal,
-        currency: div.currency,
+        amount_due: seatQuote.total,
+        amount_submitted: p.amountSubmitted ?? seatQuote.total,
+        currency: seatQuote.currency,
+        price_basis: seatQuote.basisSummary,
         method: p.method,
         payer_name: p.payerName || null,
         transaction_reference: p.transactionReference || null,
@@ -344,35 +319,19 @@ export async function submitSeatPayment(
       return { error: 'This registration is not awaiting payment.' };
     }
 
-    const { data: division } = await svc
-      .from('divisions')
-      .select('fee_amount, early_bird_fee_amount, currency, tournament_id')
-      .eq('id', r.division_id)
-      .maybeSingle();
-    const div = division as {
-      fee_amount: number;
-      early_bird_fee_amount: number | null;
-      currency: string;
-      tournament_id: string;
-    } | null;
-    if (!div) return { error: 'Division not found.' };
-    const { data: tourn } = await svc
-      .from('tournaments')
-      .select('early_bird_starts_at, early_bird_ends_at')
-      .eq('id', div.tournament_id)
-      .maybeSingle();
-    const t = tourn as {
-      early_bird_starts_at: string | null;
-      early_bird_ends_at: string | null;
-    } | null;
-    const quote = quoteFee({
-      feeAmount: Number(div.fee_amount),
-      earlyBirdFeeAmount:
-        div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
-      earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
-      earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
-      teamSize: 1,
-    });
+    // §2BQ: this player's own seat price - the next-entry price when this is not their 1st entry.
+    const [seatQuote, ctx] = await Promise.all([
+      quoteRegistrationSeats(registrationId),
+      loadPricingContext(r.division_id),
+    ]);
+    const mySeat = seatQuote?.seats.find((s) => s.playerId === actor.id) ?? null;
+    if (!seatQuote || !ctx || !mySeat) return { error: 'Division not found.' };
+    const div = { currency: ctx.division.currency, tournament_id: ctx.division.tournamentId };
+    const quote = {
+      perPlayer: mySeat.perPlayer,
+      basis: mySeat.basis,
+      earlyBirdApplied: mySeat.basis === 'early_bird',
+    };
 
     const { data: existingRows } = await svc
       .from('tournament_slots')
@@ -410,6 +369,7 @@ export async function submitSeatPayment(
           proof_storage_path: upload.path,
           status: 'submitted',
           early_bird_applied: quote.earlyBirdApplied,
+          price_basis: quote.basis,
           submitted_at: now,
           rejection_reason: null,
           notification_sent_at: null,
@@ -439,6 +399,7 @@ export async function submitSeatPayment(
           transaction_reference: p.transactionReference || null,
           proof_storage_path: upload.path,
           early_bird_applied: quote.earlyBirdApplied,
+          price_basis: quote.basis,
           submitted_at: now,
         })
         .select('id')
@@ -604,6 +565,7 @@ export async function submitSlotReservation(
           proof_storage_path: upload.path,
           status: 'submitted',
           early_bird_applied: quote.earlyBirdApplied,
+          price_basis: quote.earlyBirdApplied ? 'early_bird' : 'standard',
           submitted_at: now,
           rejection_reason: null,
           notification_sent_at: null,
@@ -633,6 +595,7 @@ export async function submitSlotReservation(
           transaction_reference: p.transactionReference || null,
           proof_storage_path: upload.path,
           early_bird_applied: quote.earlyBirdApplied,
+          price_basis: quote.earlyBirdApplied ? 'early_bird' : 'standard',
           submitted_at: now,
         })
         .select('id')
@@ -1281,27 +1244,9 @@ export async function markSeatPaid(
       .maybeSingle();
     if (!memberRow) return { ok: false, error: 'That player is not on this team.' };
 
-    const { data: divRow } = await svc
-      .from('divisions')
-      .select('fee_amount, early_bird_fee_amount, currency, team_size')
-      .eq('id', reg.division_id)
-      .maybeSingle();
-    const div = divRow as {
-      fee_amount: number;
-      early_bird_fee_amount: number | null;
-      currency: string;
-      team_size: number;
-    } | null;
-    if (!div) return { ok: false, error: 'Division not found.' };
-    const { data: tournRow } = await svc
-      .from('tournaments')
-      .select('early_bird_starts_at, early_bird_ends_at')
-      .eq('id', tournamentId)
-      .maybeSingle();
-    const t = tournRow as {
-      early_bird_starts_at: string | null;
-      early_bird_ends_at: string | null;
-    } | null;
+    // §2BQ: seat-by-seat quote, so a player on their 2nd entry is marked paid at the next-entry price.
+    const seatQuote = await quoteRegistrationSeats(registrationId);
+    if (!seatQuote) return { ok: false, error: 'Division not found.' };
     const playerName = (await getActorMini(playerId)).name;
     const now = new Date().toISOString();
 
@@ -1317,14 +1262,8 @@ export async function markSeatPaid(
       if (existing && (existing.status === 'submitted' || existing.status === 'verified')) {
         return { ok: false, error: 'This seat already has a live payment.' };
       }
-      const quote = quoteFee({
-        feeAmount: Number(div.fee_amount),
-        earlyBirdFeeAmount:
-          div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
-        earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
-        earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
-        teamSize: 1,
-      });
+      const seat = seatQuote.seats.find((s) => s.playerId === playerId);
+      if (!seat) return { ok: false, error: 'That player is not on this team.' };
       const { error: insErr } = await svc.from('tournament_slots').insert({
         tournament_id: tournamentId,
         player_id: playerId,
@@ -1332,9 +1271,11 @@ export async function markSeatPaid(
         division_id: reg.division_id,
         status: 'verified',
         method: 'cash_manual',
-        amount_due: quote.perPlayer,
-        amount_submitted: quote.perPlayer,
-        currency: div.currency,
+        amount_due: seat.perPlayer,
+        amount_submitted: seat.perPlayer,
+        currency: seatQuote.currency,
+        price_basis: seat.basis,
+        early_bird_applied: seat.basis === 'early_bird',
         payer_name: playerName,
         verified_by: user.id,
         verified_at: now,
@@ -1342,20 +1283,13 @@ export async function markSeatPaid(
       });
       if (insErr) return { ok: false, error: 'Could not record the payment. Please try again.' };
     } else {
-      const quote = quoteFee({
-        feeAmount: Number(div.fee_amount),
-        earlyBirdFeeAmount:
-          div.early_bird_fee_amount != null ? Number(div.early_bird_fee_amount) : null,
-        earlyBirdStartsAt: t?.early_bird_starts_at ?? null,
-        earlyBirdEndsAt: t?.early_bird_ends_at ?? null,
-        teamSize: div.team_size,
-      });
       const { error: upErr } = await svc.from('payments').upsert(
         {
           registration_id: registrationId,
-          amount_due: quote.teamTotal,
-          amount_submitted: quote.teamTotal,
-          currency: div.currency,
+          amount_due: seatQuote.total,
+          amount_submitted: seatQuote.total,
+          currency: seatQuote.currency,
+          price_basis: seatQuote.basisSummary,
           method: 'cash_manual',
           payer_name: playerName,
           status: 'verified',

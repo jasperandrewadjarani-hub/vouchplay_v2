@@ -16,7 +16,14 @@ import {
 } from '@vouchplay/core';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { bandLabelFor, moneyPerPlayer, quoteFor, skillLabelFor } from './shared';
+import {
+  bandLabelFor,
+  moneyPerPlayer,
+  quoteFor,
+  skillLabelFor,
+  viewerHasOtherPaidEntry,
+} from './shared';
+import { PriceBasisTag } from './seat-price-lines';
 import type { WizardTournament } from './types';
 
 interface DivisionRow {
@@ -26,7 +33,7 @@ interface DivisionRow {
   full: boolean;
   invited: boolean;
   fitMessage: string | null;
-  price: { text: string; earlyBirdApplied: boolean };
+  price: ReturnType<typeof moneyPerPlayer>;
   topupOverBareSlot: number | null;
 }
 
@@ -133,8 +140,12 @@ export function DivisionStep({
                 playerLevel: skillLabelFor(effectiveSkill),
               })
             : null;
-        const price = moneyPerPlayer(d, tournament.earlyBird);
-        const quote = quoteFor(d, tournament.earlyBird);
+        // §2BQ: a division the viewer has not entered yet costs their next-entry price when they
+        // already hold a live entry in another paid division.
+        const viewerNext =
+          !registered && viewerHasOtherPaidEntry(state, tournament.divisions, d.id);
+        const price = moneyPerPlayer(d, tournament.earlyBird, viewerNext);
+        const quote = quoteFor(d, tournament.earlyBird, undefined, viewerNext);
         const topupOverBareSlot =
           bareSlot && quote.perPlayer > bareSlot.amountDue
             ? quote.perPlayer - bareSlot.amountDue
@@ -213,6 +224,12 @@ export function DivisionStep({
         </div>
         <div className="text-foreground-muted mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           <span className="font-medium">{r.price.text}</span>
+          {r.price.nextEntryApplied && (
+            <>
+              <s>{r.price.standardText}</s>
+              <PriceBasisTag basis="next_entry" />
+            </>
+          )}
           {r.price.earlyBirdApplied && tournament.earlyBird.endsAt && (
             <span className="text-success inline-flex items-center gap-1 font-medium">
               <Clock size={11} aria-hidden />

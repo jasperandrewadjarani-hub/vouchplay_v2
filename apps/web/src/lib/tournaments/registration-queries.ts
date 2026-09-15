@@ -22,6 +22,7 @@ import {
 } from '@/lib/payments/slots';
 import type { UnverifiedAccount } from './organizer-types';
 import { divisionName } from './dto';
+import { nextEntryRepricing } from '@/lib/tournaments/next-entry';
 import { getPartnerLockAt } from './queries';
 
 /** §2AT Decision C: the cancellation-request lifecycle on a registration, oldest to newest. Both the
@@ -973,6 +974,8 @@ export interface OrganizerRegistration {
     hasProof: boolean;
     rejectionReason: string | null;
     submittedAt: string | null;
+    /** standard | early_bird | next_entry (§2BQ) - drives the seat's small price tag. */
+    priceBasis?: string | null;
   }[];
 }
 
@@ -1176,9 +1179,40 @@ export async function getOrganizerRegistrations(
     if (d.fee_amount != null) divisionFeeById.set(d.id, Number(d.fee_amount));
   }
 
+  // §2BQ: a seat paid at the next-entry price whose earlier entry was since cancelled owes the
+  // difference - the same read-time re-price the player's own view uses (`buildEntryPaymentInput`), so
+  // the organizer card and the player card agree. Only registrations holding such a seat do any work.
+  const repricedByReg = new Map(
+    await Promise.all(
+      regRows
+        .filter((r) => (slotsByReg.get(r.id) ?? []).some((s) => s.price_basis === 'next_entry'))
+        .map(
+          async (r) =>
+            [
+              r.id,
+              await nextEntryRepricing(
+                r.id,
+                (slotsByReg.get(r.id) ?? [])
+                  .filter((s) => s.status === 'submitted' || s.status === 'verified')
+                  .map((s) => ({
+                    id: s.id,
+                    playerId: s.player_id,
+                    priceBasis: s.price_basis,
+                    amountDue: Number(s.amount_due),
+                    submittedAt: s.submitted_at,
+                  })),
+              ),
+            ] as const,
+        ),
+    ),
+  );
+
   return regRows.map((r) => {
     const pay = payByReg.get(r.id);
     const teamSize = divTeamSize.get(r.division_id) ?? 2;
+    const repriced = repricedByReg.get(r.id);
+    const dueFor = (s: { id: string; amount_due: number }) =>
+      repriced?.get(s.id) ?? Number(s.amount_due);
     const slots = slotsByReg.get(r.id) ?? [];
     const paymentSummary = summarizeEntryPayment({
       teamSize,
@@ -1187,7 +1221,7 @@ export async function getOrganizerRegistrations(
       slots: slots.map((s) => ({
         playerId: s.player_id,
         status: s.status,
-        amountDue: Number(s.amount_due),
+        amountDue: dueFor(s),
         amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
         createdAt: s.created_at,
       })),
@@ -1235,11 +1269,12 @@ export async function getOrganizerRegistrations(
         playerId: s.player_id,
         playerName: profiles.get(s.player_id)?.name ?? 'VouchPlay player',
         status: s.status,
-        amountDue: Number(s.amount_due),
+        amountDue: dueFor(s),
         amountSubmitted: s.amount_submitted != null ? Number(s.amount_submitted) : null,
         hasProof: !!s.proof_storage_path,
         rejectionReason: s.rejection_reason,
         submittedAt: s.submitted_at,
+        priceBasis: s.price_basis ?? null,
       })),
     };
   });

@@ -63,6 +63,8 @@ export interface DivisionDTO {
   feeAmount: number;
   /** Optional discounted per-player price while the tournament early-bird window is open. */
   earlyBirdFeeAmount: number | null;
+  /** Optional per-player price for a player's 2nd-or-later entry in this tournament (§2BQ). */
+  nextEntryFeeAmount: number | null;
   currency: string;
   skillVerifiedRequired: boolean;
   minimumSts: number | null;
@@ -230,6 +232,8 @@ export function toDivisionDTO(row: DivisionRow, registeredTeams = 0): DivisionDT
     feeAmount: Number(row.fee_amount),
     earlyBirdFeeAmount:
       row.early_bird_fee_amount != null ? Number(row.early_bird_fee_amount) : null,
+    nextEntryFeeAmount:
+      row.next_entry_fee_amount != null ? Number(row.next_entry_fee_amount) : null,
     currency: row.currency,
     skillVerifiedRequired: row.skill_verified_required,
     minimumSts: row.minimum_sts != null ? Number(row.minimum_sts) : null,
@@ -276,7 +280,7 @@ export function toTournamentCardDTO(
 export const DIVISION_COLUMNS =
   'id, tournament_id, name_override, skill_policy, minimum_skill, maximum_skill, format, ' +
   'sex_classification, minimum_age, maximum_age, team_size, capacity_teams, fee_amount, currency, ' +
-  'early_bird_fee_amount, ' +
+  'early_bird_fee_amount, next_entry_fee_amount, ' +
   'skill_verified_required, minimum_sts, organizer_approval_required, max_entries_per_player, ' +
   'registration_open_at, registration_close_at, status, created_at, updated_at';
 

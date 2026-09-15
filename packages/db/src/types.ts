@@ -452,6 +452,8 @@ export interface DivisionRow {
   /** Price PER PLAYER since migration 0026. */
   fee_amount: number;
   early_bird_fee_amount: number | null;
+  /** Optional price PER PLAYER for a 2nd-or-later entry (migration 0052, master_plan §2BQ). */
+  next_entry_fee_amount: number | null;
   currency: string;
   skill_verified_required: boolean;
   minimum_sts: number | null;
@@ -616,6 +618,8 @@ export interface PaymentRow {
   verified_by: string | null;
   verified_at: string | null;
   rejection_reason: string | null;
+  /** Per-seat bases in member order, comma-joined (migration 0052, master_plan §2BQ). */
+  price_basis?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -651,6 +655,8 @@ export interface TournamentSlotRow {
   /** §2AT Decision D (migration 0045). Optional: absent until the migration is applied - a rejected
    *  bare slot the player has dismissed ("Remove"), so it stops resurfacing as their latest reservation. */
   dismissed_at?: string | null;
+  /** standard | early_bird | next_entry (migration 0052, master_plan §2BQ). Null before 0052. */
+  price_basis?: string | null;
   created_at: string;
   updated_at: string;
 }

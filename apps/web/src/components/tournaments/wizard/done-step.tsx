@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { CircleCheck } from 'lucide-react';
+import { CircleCheck, Sparkles } from 'lucide-react';
+import { formatFee } from '@vouchplay/core';
 import { Button } from '@/components/ui/button';
 import { formatMonthDay } from '@/lib/format-date';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
@@ -21,6 +22,8 @@ export interface DoneOutcome {
   partnerChosenLater: boolean;
   isReservation: boolean;
   registrationCloseAt: string | null;
+  /** The division just entered, or null for a reservation. */
+  divisionId?: string | null;
 }
 
 /**
@@ -34,12 +37,15 @@ export function DoneStep({
   tournament,
   state,
   onViewRegistrations,
+  onEnterAnother,
 }: {
   outcome: DoneOutcome;
   tournament: WizardTournament;
   state: ViewerRegistrationState;
   onViewRegistrations: () => void;
   onClose: () => void;
+  /** §2BQ upsell: reopen the division list for another entry at the next-entry price. */
+  onEnterAnother?: () => void;
 }) {
   const headline = outcome.isReservation
     ? 'Slot reserved - receipt sent'
@@ -69,6 +75,32 @@ export function DoneStep({
   // from; otherwise a single line pointing at the one thing that would unlock it. Either way this is
   // wholly optional - "Decide later" (i.e. just tapping the button below without touching this card)
   // is always fine.
+  // master_plan §2BQ E: complement the ask - once a PAID entry exists, another division with a
+  // next-entry price is cheaper. Offered only when such a division is open and not already entered.
+  const enteredDivision = tournament.divisions.find((d) => d.id === outcome.divisionId);
+  const nextEntryOffers =
+    !outcome.isReservation &&
+    outcome.registrationId &&
+    enteredDivision &&
+    enteredDivision.feeAmount > 0
+      ? tournament.divisions.filter(
+          (d) =>
+            d.id !== enteredDivision.id &&
+            d.status === 'open' &&
+            d.feeAmount > 0 &&
+            d.nextEntryFeeAmount != null &&
+            d.nextEntryFeeAmount < d.feeAmount &&
+            !state.registrationsByDivision[d.id],
+        )
+      : [];
+  const cheapestOffer = nextEntryOffers.reduce<(typeof nextEntryOffers)[number] | null>(
+    (best, d) =>
+      !best || (d.nextEntryFeeAmount ?? Infinity) < (best.nextEntryFeeAmount ?? Infinity)
+        ? d
+        : best,
+    null,
+  );
+
   const hasEligibleClubs = state.eligibleClubs.length > 0;
   const hasClubSelected = state.clubReps.length > 0;
 
@@ -96,6 +128,27 @@ export function DoneStep({
             No partner yet? Find one
           </Link>
         </p>
+      )}
+
+      {cheapestOffer && onEnterAnother && (
+        <div className="border-success/40 bg-success/10 rounded-xl border p-3 text-left">
+          <p className="text-foreground flex items-center gap-1.5 text-sm font-bold">
+            <Sparkles size={15} className="text-success shrink-0" aria-hidden />
+            {nextEntryOffers.length === 1
+              ? `Play ${cheapestOffer.name} for ${formatFee(cheapestOffer.currency, cheapestOffer.nextEntryFeeAmount ?? 0)}`
+              : `Play one more division from ${formatFee(cheapestOffer.currency, cheapestOffer.nextEntryFeeAmount ?? 0)}`}
+          </p>
+          <p className="text-foreground-muted mt-0.5 text-xs">
+            Your next entry in this tournament costs less per player.
+          </p>
+          <button
+            type="button"
+            onClick={onEnterAnother}
+            className="bg-success mt-2 inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold text-white"
+          >
+            See divisions
+          </button>
+        </div>
       )}
 
       <div className="border-border bg-surface-muted rounded-xl border p-3 text-left">

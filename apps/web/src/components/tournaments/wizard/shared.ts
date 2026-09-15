@@ -27,35 +27,70 @@ export function skillLabelFor(ordinal: number | null): string | null {
 }
 
 /** "PHP 1,500 / player", with an early-bird chip line when it applies. fee_amount is per-player
- *  since migration 0026 - never divide by team size again (§1V). */
+ *  since migration 0026 - never divide by team size again (§1V). `isNextEntry` prices the viewer's
+ *  own seat as a 2nd-or-later entry (§2BQ); `standardText` is the struck-through full price then. */
 export function moneyPerPlayer(
-  d: Pick<DivisionDTO, 'feeAmount' | 'earlyBirdFeeAmount' | 'currency' | 'teamSize'>,
+  d: Pick<
+    DivisionDTO,
+    'feeAmount' | 'earlyBirdFeeAmount' | 'nextEntryFeeAmount' | 'currency' | 'teamSize'
+  >,
   earlyBird: WizardTournament['earlyBird'],
-): { text: string; earlyBirdApplied: boolean } {
+  isNextEntry = false,
+): { text: string; earlyBirdApplied: boolean; nextEntryApplied: boolean; standardText: string } {
   const quote = quoteFee({
     feeAmount: d.feeAmount,
     earlyBirdFeeAmount: d.earlyBirdFeeAmount,
     earlyBirdStartsAt: earlyBird.startsAt,
     earlyBirdEndsAt: earlyBird.endsAt,
+    nextEntryFeeAmount: d.nextEntryFeeAmount,
+    isNextEntry,
     teamSize: d.teamSize,
   });
-  if (quote.perPlayer <= 0) return { text: 'Free', earlyBirdApplied: false };
+  const standardText = formatFee(d.currency, quote.standardPerPlayer);
+  if (quote.perPlayer <= 0)
+    return { text: 'Free', earlyBirdApplied: false, nextEntryApplied: false, standardText };
   return {
     text: `${formatFee(d.currency, quote.perPlayer)} / player`,
     earlyBirdApplied: quote.earlyBirdApplied,
+    nextEntryApplied: quote.nextEntryApplied,
+    standardText,
   };
 }
 
-export function quoteFor(d: DivisionDTO, earlyBird: WizardTournament['earlyBird'], at?: Date) {
+export function quoteFor(
+  d: DivisionDTO,
+  earlyBird: WizardTournament['earlyBird'],
+  at?: Date,
+  isNextEntry = false,
+) {
   return quoteFee(
     {
       feeAmount: d.feeAmount,
       earlyBirdFeeAmount: d.earlyBirdFeeAmount,
       earlyBirdStartsAt: earlyBird.startsAt,
       earlyBirdEndsAt: earlyBird.endsAt,
+      nextEntryFeeAmount: d.nextEntryFeeAmount,
+      isNextEntry,
       teamSize: d.teamSize,
     },
     at,
+  );
+}
+
+/**
+ * §2BQ: the viewer's seat in `divisionId` is a next entry when they already hold a live entry in a
+ * DIFFERENT paid division of this tournament. `registrationsByDivision` holds only live entries the
+ * viewer has accepted, which is exactly what the server counts. An existing entry in `divisionId` is
+ * judged by creation order on the server - this client read is for the price shown before it exists.
+ */
+export function viewerHasOtherPaidEntry(
+  state: Pick<ViewerRegistrationState, 'registrationsByDivision'> | null,
+  divisions: readonly Pick<DivisionDTO, 'id' | 'feeAmount'>[],
+  divisionId: string | null,
+): boolean {
+  if (!state) return false;
+  return Object.keys(state.registrationsByDivision).some(
+    (id) => id !== divisionId && (divisions.find((d) => d.id === id)?.feeAmount ?? 0) > 0,
   );
 }
 

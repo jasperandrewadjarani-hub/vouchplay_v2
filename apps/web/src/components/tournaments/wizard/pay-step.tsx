@@ -7,7 +7,9 @@ import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { Button } from '@/components/ui/button';
 import { formatMonthDay } from '@/lib/format-date';
-import { quoteFor } from './shared';
+import { quoteFor, viewerHasOtherPaidEntry } from './shared';
+import { useEntryQuote } from './use-entry-quote';
+import { PriceBasisTag, SeatPriceLines } from './seat-price-lines';
 import type { WizardPayFor, WizardTournament } from './types';
 
 /**
@@ -20,6 +22,8 @@ export function PayStep({
   tournament,
   division,
   state,
+  registrationId = null,
+  partnerSlug = null,
   pending = false,
   onChoose,
   onPayLater,
@@ -28,6 +32,10 @@ export function PayStep({
   /** The chosen division, or null when this is a bare-slot reservation (no division yet). */
   division: DivisionDTO | null;
   state: ViewerRegistrationState;
+  /** The entry, when it already exists (Back from Receipt) - priced by the server seat by seat. */
+  registrationId?: string | null;
+  /** The partner named on the Partner step, so their own 1st/2nd entry can be priced (§2BQ). */
+  partnerSlug?: string | null;
   /** True while `startEntry` is in flight - disables the option cards to prevent a double entry. */
   pending?: boolean;
   onChoose: (payFor: WizardPayFor) => void;
@@ -35,7 +43,18 @@ export function PayStep({
 }) {
   const [payLaterOpen, setPayLaterOpen] = useState(false);
   const isReservation = !division;
-  const quote = division ? quoteFor(division, tournament.earlyBird) : null;
+  // §2BQ: before the entry exists the viewer's own seat is exact locally; the server answers for the
+  // whole team (the partner's own entries decide their seat) and for an entry that already exists.
+  const viewerNext =
+    !registrationId && viewerHasOtherPaidEntry(state, tournament.divisions, division?.id ?? null);
+  const quote = division ? quoteFor(division, tournament.earlyBird, undefined, viewerNext) : null;
+  const entryQuote = useEntryQuote(division, { registrationId, partnerSlug });
+  const serverMySeat = entryQuote.quote?.seats.find((s) => s.isViewer) ?? null;
+  const mySeatPrice =
+    serverMySeat?.perPlayer ??
+    (registrationId && entryQuote.applies ? null : (quote?.perPlayer ?? null));
+  const mySeatBasis = serverMySeat?.basis ?? quote?.basis ?? 'standard';
+  const teamQuote = entryQuote.quote;
   const slotPrice = state.slotPrice;
   const isDoubles = Boolean(division && division.teamSize > 1);
 
@@ -80,10 +99,26 @@ export function PayStep({
               className="border-border bg-surface hover:border-primary/50 min-h-11 w-full rounded-xl border p-4 text-left disabled:opacity-60"
             >
               <p className="text-foreground text-sm font-semibold">Pay for my slot</p>
-              <p className="text-foreground mt-1 text-lg font-bold">
-                {formatFee(division.currency, quote.perPlayer)}
+              <p className="text-foreground mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-lg font-bold">
+                {mySeatPrice == null ? (
+                  <span className="text-foreground-muted text-sm font-medium">
+                    Working out your price…
+                  </span>
+                ) : (
+                  <>
+                    {formatFee(division.currency, mySeatPrice)}
+                    {mySeatBasis === 'next_entry' && (
+                      <>
+                        <s className="text-foreground-muted text-xs font-medium">
+                          {formatFee(division.currency, quote.standardPerPlayer)}
+                        </s>
+                        <PriceBasisTag basis="next_entry" />
+                      </>
+                    )}
+                  </>
+                )}
               </p>
-              {quote.earlyBirdApplied && earlyBirdNote(quote.earlyBirdEndsAt)}
+              {mySeatBasis === 'early_bird' && earlyBirdNote(quote.earlyBirdEndsAt)}
               {isDoubles && (
                 <p className="text-foreground-muted mt-1 text-xs">
                   Your partner pays their own slot.
@@ -102,13 +137,45 @@ export function PayStep({
                   <Users size={15} aria-hidden />
                   Pay for the whole team
                 </p>
-                <p className="text-foreground mt-1 text-lg font-bold">
-                  {formatFee(division.currency, quote.teamTotal)}
-                </p>
-                <p className="text-foreground-muted mt-1 text-xs">
-                  {formatFee(division.currency, quote.perPlayer)} per player x {division.teamSize}{' '}
-                  players
-                </p>
+                {entryQuote.applies ? (
+                  entryQuote.loading || !teamQuote ? (
+                    <p className="text-foreground-muted mt-1 text-sm">
+                      {entryQuote.loading
+                        ? 'Working out the team price…'
+                        : 'Price shown on the next step'}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-foreground mt-1 text-lg font-bold">
+                        {formatFee(teamQuote.currency, teamQuote.total)}
+                      </p>
+                      <div className="mt-1">
+                        <SeatPriceLines
+                          seats={teamQuote.seats}
+                          currency={teamQuote.currency}
+                          total={teamQuote.total}
+                          saved={teamQuote.saved}
+                          showTotal={false}
+                        />
+                      </div>
+                      {teamQuote.saved > 0 && (
+                        <p className="text-success text-xs font-bold">
+                          You save {formatFee(teamQuote.currency, teamQuote.saved)}
+                        </p>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <>
+                    <p className="text-foreground mt-1 text-lg font-bold">
+                      {formatFee(division.currency, quote.teamTotal)}
+                    </p>
+                    <p className="text-foreground-muted mt-1 text-xs">
+                      {formatFee(division.currency, quote.perPlayer)} per player x{' '}
+                      {division.teamSize} players
+                    </p>
+                  </>
+                )}
                 {quote.earlyBirdApplied && earlyBirdNote(quote.earlyBirdEndsAt)}
               </button>
             )}

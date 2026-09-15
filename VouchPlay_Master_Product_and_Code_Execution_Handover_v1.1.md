@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.91 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.93 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,33 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.93 (2026-09-15)
+
+_Next-entry discount built (master_plan §2BQ); migration 0052._
+
+- **Organizer:** each division has an optional **Next-entry price (per player)** under the early-bird price, with a live
+  "1st entry / 2nd+ entry" preview; it must be lower than the entry fee. Blank = no discount.
+- **The rule:** a player's earliest live entry (not withdrawn / cancelled / rejected / refunded) in a PAID division of
+  the tournament, on which their membership is confirmed, is their 1st entry; every later one is a next entry. Unconfirmed
+  invitations never count. Lowest single price wins against early bird (never stacked).
+- **Payments are priced seat by seat** (`quoteRegistrationSeats`): team receipt = sum of seats; seat receipt = the payer's
+  own seat; organizer "mark paid" uses the same quote. `tournament_slots.price_basis` / `payments.price_basis` record why.
+  Reserved (bare) slots stay at the lowest standard price and never lower when attached.
+- **Cancelling a 1st entry:** a seat already paid at the next-entry price is re-priced at read time to what a 1st entry
+  cost when its receipt was sent, surfacing as the existing **Top-up due** on both the player's and organizer's cards.
+- **Player UI:** discounted price with the full price struck through and a "2nd entry" tag in the division list and
+  wizard; one line per player plus total and "You save" on Pay / Receipt; Done screen offers "Play one more division
+  for PHP …". **Organizer UI:** "2nd entry" / "Early bird" tag per seat; export workbook (normalized) gains PriceBasis.
+
+## v1.92 (2026-09-15)
+
+_Production outage: Supabase Nano out of memory → Disk IO throttled; database load fixes; migration 0053._
+
+- Compute upgraded **Nano → Micro** (same price on Pro). Migration **0053**: indexes `vouch_revisions (changed_by,
+  created_at)`, `notifications (entity_id, type)`. Players directory no longer re-reads every vouch per refresh; nav
+  links no longer prefetch; AppShell per-viewer reads run in one parallel round. Hermosa registration open until
+  2026-10-15. Organizer Phase B → migration 0054, PIN lock → 0055.
+
 ## v1.91 (2026-09-15)
 
 _"New" tag restored on player cards (master_plan §2BP); next-entry discount proposed, not built (§2BQ)._

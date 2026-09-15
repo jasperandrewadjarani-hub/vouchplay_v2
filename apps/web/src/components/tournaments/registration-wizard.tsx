@@ -426,6 +426,16 @@ export function RegistrationWizard({
     setWizard((w) => ({ ...w, payFor }));
   }
 
+  /** §2BQ upsell: reopen the wizard at Division with fresh state, so the entry just made is counted and
+   *  other divisions show the next-entry price. */
+  function handleEnterAnother() {
+    onClose();
+    // A unique query string: the launcher only re-opens on a CHANGED search string, and the URL may
+    // already carry ?register=1 from the visit that opened this wizard.
+    router.push(`?register=1&another=${Date.now()}`, { scroll: false });
+    router.refresh();
+  }
+
   function handleViewRegistrations() {
     const regId = wizard.registrationId;
     onClose();
@@ -570,6 +580,8 @@ export function RegistrationWizard({
             tournament={tournament}
             division={wizard.reservationOnly ? null : division}
             state={effectiveState}
+            registrationId={wizard.registrationId}
+            partnerSlug={wizard.partner?.slug ?? null}
             pending={wizard.submitting}
             onChoose={(payFor) =>
               void (mode === 'guest' ? handleGuestPayChoose(payFor) : handlePayChoose(payFor))
@@ -634,10 +646,12 @@ export function RegistrationWizard({
               partnerChosenLater: wizard.partnerChosenLater,
               isReservation,
               registrationCloseAt: tournament.registrationCloseAt ?? null,
+              divisionId: wizard.divisionId ?? division?.id ?? null,
             }}
             tournament={tournament}
             state={effectiveState}
             onViewRegistrations={handleViewRegistrations}
+            onEnterAnother={mode === 'player' ? handleEnterAnother : undefined}
             onClose={onClose}
           />
         )}

@@ -3,7 +3,8 @@
 import { PaymentModalBody, type PaymentDetails } from '../payment-modal';
 import type { DivisionDTO } from '@/lib/tournaments/dto';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
-import { quoteFor } from './shared';
+import { quoteFor, viewerHasOtherPaidEntry } from './shared';
+import { useEntryQuote } from './use-entry-quote';
 import type { WizardPayFor, WizardTournament } from './types';
 
 /**
@@ -32,7 +33,14 @@ export function ReceiptStep({
   onChangePayFor: (payFor: WizardPayFor) => void;
   onSuccess: () => void;
 }) {
-  const quote = division ? quoteFor(division, tournament.earlyBird) : null;
+  // §2BQ: a division with a next-entry price is priced by the server, seat by seat, once the entry
+  // exists - the same quote the payment action charges. Every other division prices locally as before.
+  const entryQuote = useEntryQuote(division, { registrationId });
+  const localNext =
+    !registrationId && viewerHasOtherPaidEntry(state, tournament.divisions, division?.id ?? null);
+  const quote = division ? quoteFor(division, tournament.earlyBird, undefined, localNext) : null;
+  const serverQuote = entryQuote.quote;
+  const mySeat = serverQuote?.seats.find((s) => s.isViewer) ?? null;
   const slotPrice = state.slotPrice;
   const reg = division ? state.registrationsByDivision[division.id] : undefined;
   // The switch only makes sense once there is a choice to make: a doubles entry with a registration
@@ -63,9 +71,11 @@ export function ReceiptStep({
             registrationId,
             tournamentId: tournament.id,
             divisionName: division?.name ?? null,
-            amountDue: quote?.perPlayer ?? 0,
+            amountDue: mySeat?.perPlayer ?? quote?.perPlayer ?? 0,
             currency: division?.currency ?? 'PHP',
-            earlyBird: quote?.earlyBirdApplied ?? false,
+            earlyBird: mySeat ? mySeat.basis === 'early_bird' : (quote?.earlyBirdApplied ?? false),
+            nextEntry: mySeat ? mySeat.basis === 'next_entry' : (quote?.nextEntryApplied ?? false),
+            standardPerPlayer: mySeat?.standardPerPlayer ?? quote?.standardPerPlayer,
             instructions: tournament.paymentInstructions,
             methods: tournament.paymentMethods,
             paymentStatus: reg?.paymentStatus ?? null,
@@ -77,8 +87,10 @@ export function ReceiptStep({
             registrationId,
             tournamentId: tournament.id,
             divisionName: division?.name ?? null,
-            amountDue: quote?.teamTotal ?? 0,
+            amountDue: serverQuote?.total ?? quote?.teamTotal ?? 0,
             perPlayer: quote?.perPlayer ?? null,
+            seatLines: serverQuote?.seats,
+            saved: serverQuote?.saved,
             teamSize: division?.teamSize ?? 1,
             currency: division?.currency ?? 'PHP',
             earlyBird: quote?.earlyBirdApplied ?? false,
@@ -124,7 +136,13 @@ export function ReceiptStep({
           </button>
         </div>
       )}
-      <PaymentModalBody details={details} onSuccess={onSuccess} />
+      {entryQuote.applies && entryQuote.loading ? (
+        <p role="status" className="text-foreground-muted py-6 text-center text-sm">
+          Working out your price…
+        </p>
+      ) : (
+        <PaymentModalBody details={details} onSuccess={onSuccess} />
+      )}
     </div>
   );
 }

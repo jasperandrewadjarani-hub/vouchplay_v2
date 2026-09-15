@@ -12,6 +12,8 @@ import { RegisterActions } from './register-actions';
 import { PartnerChangeActions } from './partner-change-actions';
 import { describeRegistrationStatus, type SlotTone } from '@/lib/tournaments/registration-status';
 import { RegistrationWizard, type WizardTournament } from './registration-wizard';
+import { viewerHasOtherPaidEntry } from './wizard/shared';
+import { PriceBasisTag } from './wizard/seat-price-lines';
 
 /** Chip colour by tone. Green is reserved for a genuinely secured (confirmed) entry (§2G). "Invited"
  *  is its own neutral tone - an invitation is not yet a state the viewer's own slot has (§2AP C1/E). */
@@ -31,19 +33,27 @@ const TONE_CHIP: Record<SlotTone, string> = {
 
 // fee_amount IS the per-player price since migration 0026 - it is no longer divided by team size
 // (§1V). Dividing again would quietly halve every quoted price.
-function moneyPerPlayer(d: DivisionDTO, earlyBird: WizardTournament['earlyBird']): string {
+function moneyPerPlayer(
+  d: DivisionDTO,
+  earlyBird: WizardTournament['earlyBird'],
+  isNextEntry = false,
+): { text: string; was: string | null; nextEntry: boolean } {
   const quote = quoteFee({
     feeAmount: d.feeAmount,
     earlyBirdFeeAmount: d.earlyBirdFeeAmount,
     earlyBirdStartsAt: earlyBird.startsAt,
     earlyBirdEndsAt: earlyBird.endsAt,
+    nextEntryFeeAmount: d.nextEntryFeeAmount,
+    isNextEntry,
     teamSize: d.teamSize,
   });
-  if (quote.perPlayer <= 0) return 'Free';
+  if (quote.perPlayer <= 0) return { text: 'Free', was: null, nextEntry: false };
   const base = `${formatFee(d.currency, quote.perPlayer)} / player`;
+  const was = formatFee(d.currency, quote.standardPerPlayer);
+  if (quote.nextEntryApplied) return { text: base, was, nextEntry: true };
   return quote.earlyBirdApplied
-    ? `${base} (early bird, was ${formatFee(d.currency, quote.standardPerPlayer)})`
-    : base;
+    ? { text: `${base} (early bird, was ${was})`, was: null, nextEntry: false }
+    : { text: base, was: null, nextEntry: false };
 }
 
 /** The band a division is for, in words - "Beginner", or "Beginner to Novice". Null when open. */
@@ -244,7 +254,26 @@ export function DivisionBrowser({
                     <div className="text-foreground-muted flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="inline-flex items-center gap-1">
                         <Coins size={12} aria-hidden />
-                        {moneyPerPlayer(d, earlyBird)}
+                        {(() => {
+                          // §2BQ: a division not yet entered costs the next-entry price once the
+                          // viewer holds a live entry in another paid division.
+                          const price = moneyPerPlayer(
+                            d,
+                            earlyBird,
+                            !registered && viewerHasOtherPaidEntry(state, divisions, d.id),
+                          );
+                          return (
+                            <>
+                              <span
+                                className={price.nextEntry ? 'text-success font-bold' : undefined}
+                              >
+                                {price.text}
+                              </span>
+                              {price.was && <s>{price.was}</s>}
+                              {price.nextEntry && <PriceBasisTag basis="next_entry" />}
+                            </>
+                          );
+                        })()}
                       </span>
                       {isFull && (
                         <span className="text-warning inline-flex items-center gap-1 font-medium">

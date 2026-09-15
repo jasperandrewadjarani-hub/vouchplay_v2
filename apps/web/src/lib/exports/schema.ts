@@ -265,6 +265,11 @@ export interface ExportRegistrationRow {
   /** A time-boxed signed URL to the submitted payment proof, for bank review (§2O). Empty when there
    *  is no proof. Expires; never a public path. */
   receiptLink: string;
+  /** "Standard" / "Early bird" / "2nd entry" (§2BQ), one per seat in member order joined by ", " -
+   *  from `payments.price_basis`. Empty when no payment row exists yet or the basis was never
+   *  recorded (pre-migration-0052 payments). Normalized/CSV exports only - the locked system sheet
+   *  never carries this. */
+  priceBasis: string;
 }
 
 export interface TournamentExportSnapshot {

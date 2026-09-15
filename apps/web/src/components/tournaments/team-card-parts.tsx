@@ -16,6 +16,7 @@ import {
   HARD_RULE_LABELS,
   REASON_LABELS,
   FLAG_LABELS,
+  priceBasisLabel,
   type SeatSummary,
 } from '@vouchplay/core';
 import { OFFICIAL_ACHIEVEMENTS } from '@vouchplay/config';
@@ -744,11 +745,22 @@ function SeatLine({
     tone = 'text-warning';
   }
 
+  const basisLabel = priceBasisLabel(slot.priceBasis);
+
   return (
     <li className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-foreground-muted text-sm">{firstName}</span>
-        <span className={`text-xs font-semibold tabular-nums ${tone}`}>{label}</span>
+        <span className="flex items-center gap-1.5">
+          {/* Quiet: this is provenance for the amount next to it, not a status the organizer
+              needs to act on (§2BQ). */}
+          {basisLabel && (
+            <span className="border-border text-foreground-muted inline-flex items-center rounded-full border px-2 py-0.5 text-[11px]">
+              {basisLabel}
+            </span>
+          )}
+          <span className={`text-xs font-semibold tabular-nums ${tone}`}>{label}</span>
+        </span>
       </div>
       {slot.rejectionReason && slot.status === 'rejected' && (
         <p className="text-danger text-[11px]">{slot.rejectionReason}</p>

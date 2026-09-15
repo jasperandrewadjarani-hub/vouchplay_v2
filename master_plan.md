@@ -6697,7 +6697,7 @@ styled like the lime "Looking" chip (`--accent-cyan`, defined for both themes), 
 player usually has no badges yet, and "new & unvouched first" is the directory's default sort, so the tag is what
 tells vouchers who to welcome. The window stays the Admin setting `new_account_badge_days`.
 
-## 2BQ. Next-entry discount per division - PROPOSAL, awaiting Jasper's approval (2026-09-15)
+## 2BQ. Next-entry discount per division - BUILT 2026-09-15 (approved by Jasper; migration 0052)
 
 Jasper: organizers want a 2nd-entry discount set per division - e.g. 1st entry PHP 1,500 per player, every further
 entry PHP 1,000 - with no date window; payment must automatically price each player's seat (both players on a 2nd
@@ -6775,8 +6775,35 @@ browser price tag, wizard payment lines + total, Done-screen upsell, Manage card
 
 ### Timing
 
-Build after the Hermosa registration window (closes 2026-09-16) unless Jasper wants it for a later tournament
-sooner - changing live prices mid-registration would reprice unpaid Hermosa seats.
+Jasper approved building now (2026-09-15). Correction: Hermosa registration is open until 2026-10-15. Shipping mid-window
+is safe - a division without a next-entry price prices exactly as before, so nothing changes until an organizer sets one.
+
+### As built (2026-09-15) - deviations and decisions made while building
+
+- **Counts only CONFIRMED memberships** on other entries (the entry being priced always counts for its members). Otherwise
+  anyone could invite a player onto a throwaway entry and change what their real entry costs.
+- **Refunded** registrations are not live (added to withdrawn / cancelled / rejected).
+- **Early bird tie:** when early bird and next entry cost the same, the basis is early bird (it carries a deadline).
+- **Cancellation top-up is read-time** (`nextEntryRepricing`, used by `buildEntryPaymentInput` and
+  `getOrganizerRegistrations`): covers every cancellation path (withdraw, reject, hold expiry, refund) without each one
+  remembering to re-price. The seat is owed what a 1st entry cost at its receipt's submission time (early bird kept if the
+  window was open then). Stored `amount_due` is not rewritten; entering another division later makes it a next entry again.
+- **Reserved (bare) slots** keep the standard lowest price; attaching never lowers `amount_due` (existing rule), so a
+  reserved seat that becomes a next entry shows as covered/overpaid for the organizer to settle.
+- **Team receipt basis** is stored per seat in member order, comma-joined (`standard,next_entry`).
+- **Wizard pricing:** divisions WITH a next-entry price ask the server (`getEntryQuote`, read-only) for per-seat prices -
+  before the entry exists (viewer + named partner) and after (by registration). Divisions without one price locally with
+  no round trip. The receipt waits for the server quote ("Working out your price…") so it never shows a wrong amount.
+- **Done-screen upsell** reopens the wizard via `?register=1&another=<ts>` with a refresh, so the new entry is counted.
+- **No "Waive" button** (Jasper did not ask for it; organizers can already mark a seat paid by hand).
+- `quoteSlotPrice` / reservations unchanged. The SQL helper `division_effective_fee` (migration 0026) is not player-aware and
+  is not used by these paths.
+- **Files:** core `packages/core/src/tournaments/fees.ts` (+ tests); `apps/web/src/lib/tournaments/next-entry.ts`;
+  `lib/actions/entry-quote.ts`; `lib/actions/payment.ts`; `lib/payments/slots.ts`; `lib/tournaments/registration-queries.ts`;
+  wizard `shared.ts`, `use-entry-quote.ts`, `seat-price-lines.tsx`, `pay-step.tsx`, `receipt-step.tsx`, `division-step.tsx`,
+  `done-step.tsx`; `registration-wizard.tsx`, `payment-modal.tsx`, `division-browser.tsx`, `division-fields.tsx`,
+  `team-card-parts.tsx`; `lib/actions/tournament.ts`; exports `schema.ts`, `build.ts`, `normalized-xlsx.ts`.
+- **Deferred:** a 3rd-entry price tier; discounts across tournaments; discount codes; a "Waive top-up" control.
 
 ## 2. System Architecture and Component Specs
 

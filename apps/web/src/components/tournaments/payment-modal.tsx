@@ -14,6 +14,8 @@ import { SubmitButton } from '@/components/ui/button';
 import type { ViewerRegistrationState } from '@/lib/tournaments/registration-queries';
 import { RegistrationWizard, resolvePayFor } from './registration-wizard';
 import type { WizardTournament } from './wizard/types';
+import type { EntryQuoteSeat } from '@/lib/actions/entry-quote';
+import { PriceBasisTag, SeatPriceLines } from './wizard/seat-price-lines';
 
 const empty: PaymentActionState = {};
 
@@ -33,6 +35,13 @@ export interface PaymentDetails {
   perPlayer?: number | null;
   teamSize?: number;
   earlyBird?: boolean;
+  /** §2BQ: this seat is priced as the player's 2nd-or-later entry. */
+  nextEntry?: boolean;
+  /** The full per-player price, struck through when a discount applies. */
+  standardPerPlayer?: number;
+  /** §2BQ: a team priced seat by seat - one line per player, replacing "per player x N". */
+  seatLines?: EntryQuoteSeat[];
+  saved?: number;
   currency: string;
   instructions: string | null;
   methods: string | null;
@@ -63,6 +72,10 @@ export function PaymentModalBody({
     perPlayer,
     teamSize = 1,
     earlyBird = false,
+    nextEntry = false,
+    standardPerPlayer,
+    seatLines,
+    saved = 0,
     currency,
     instructions,
     methods,
@@ -95,15 +108,36 @@ export function PaymentModalBody({
         <p className="text-foreground text-xl font-bold">
           Send {currency} {amountDue.toLocaleString()}
         </p>
-        {mode === 'team' && perPlayer != null && teamSize > 1 && (
+        {mode === 'team' && seatLines && seatLines.length > 0 && (
+          <div className="mt-1.5">
+            <SeatPriceLines
+              seats={seatLines}
+              currency={currency}
+              total={amountDue}
+              saved={saved}
+              showTotal={saved > 0}
+            />
+          </div>
+        )}
+        {mode === 'team' && !seatLines && perPlayer != null && teamSize > 1 && (
           <p className="text-foreground-muted mt-0.5 text-xs">
             {currency} {perPlayer.toLocaleString()} per player x {teamSize} players
             {earlyBird ? ' (early bird price)' : ''}
           </p>
         )}
         {mode === 'seat' && (
-          <p className="text-foreground-muted mt-0.5 text-xs">
+          <p className="text-foreground-muted mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
             Your slot{earlyBird ? ' (early bird price)' : ''}
+            {nextEntry && (
+              <>
+                <PriceBasisTag basis="next_entry" />
+                {standardPerPlayer != null && standardPerPlayer > amountDue && (
+                  <s>
+                    {currency} {standardPerPlayer.toLocaleString()}
+                  </s>
+                )}
+              </>
+            )}
           </p>
         )}
         {mode === 'reservation' && (
