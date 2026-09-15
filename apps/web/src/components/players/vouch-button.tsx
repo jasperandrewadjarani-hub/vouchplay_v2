@@ -2,12 +2,21 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ThumbsUp, CheckCircle2 } from 'lucide-react';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { Modal } from '@/components/ui/modal';
 import { formatVouchCooldown } from '@/lib/vouches/cooldown';
 import { VouchForm } from './vouch-form';
+
+/** sessionStorage key a card's Vouch link stamps right before it navigates to the profile to submit
+ *  the vouch there (master_plan §2BK F "vouch reward"). Read once, on mount, by the SAME slug's card
+ *  when it next renders with `hasVouched` true - i.e. after "Back to players" returns from a
+ *  successful submission - so the "+1" plays exactly once, on the card that started it, without
+ *  touching the vouch form or its server action at all. */
+function justVouchedKey(slug: string): string {
+  return `vp:justVouched:${slug}`;
+}
 
 /**
  * Vouch entry point + auth gate (handover §8.1, §9.1; §2U/§2V).
@@ -58,6 +67,29 @@ export function VouchButton({
     mode === 'profile' && resumed && authed && !isOwnProfile,
   );
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Vouch micro-reward (master_plan §2BK F): "+1" floats off the button once, the moment a card
+  // discovers its OWN just-started vouch went through. Never fires on first load for someone who
+  // already had a standing vouch - only when the sessionStorage marker this same card stamped is
+  // still there to be claimed.
+  const [popping, setPopping] = useState(false);
+  useEffect(() => {
+    if (mode !== 'card' || !hasVouched || typeof window === 'undefined') return;
+    try {
+      const key = justVouchedKey(slug);
+      if (!window.sessionStorage.getItem(key)) return;
+      window.sessionStorage.removeItem(key);
+    } catch {
+      return;
+    }
+    setPopping(true);
+    try {
+      navigator.vibrate?.(18);
+    } catch {
+      // Best-effort haptic only - iOS Safari has no navigator.vibrate at all.
+    }
+    const timer = setTimeout(() => setPopping(false), 900);
+    return () => clearTimeout(timer);
+  }, [mode, hasVouched, slug]);
 
   const pad = size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2.5 text-sm';
   const btn = `inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${pad}`;
@@ -102,14 +134,36 @@ export function VouchButton({
     <button
       type="button"
       onClick={() => setConfirmOpen(true)}
-      className={`${btn} ${vouchedCls}`}
+      className={`${btn} ${vouchedCls} relative`}
       aria-label={`You vouched for ${label}`}
     >
       <CheckCircle2 size={iconSize} aria-hidden />
       Vouched
+      {popping && (
+        <span
+          aria-hidden
+          className="text-accent-lime vp-vouch-pop pointer-events-none absolute -top-2 right-1 text-xs font-extrabold motion-reduce:hidden"
+        >
+          +1
+        </span>
+      )}
     </button>
   ) : mode === 'card' ? (
-    <Link href={`/players/${slug}?intent=vouch`} className={`${btn} ${primaryCls}`}>
+    <Link
+      href={`/players/${slug}?intent=vouch`}
+      onClick={() => {
+        // Stamped right before the trip to the profile - the far side of that trip (submitting the
+        // vouch, then "Back to players") is completely untouched (§2Y's fixed-position overlay
+        // structure below is also untouched); this only decides whether THIS card plays the reward
+        // once its own hasVouched flips true.
+        try {
+          window.sessionStorage.setItem(justVouchedKey(slug), '1');
+        } catch {
+          // Private browsing / storage disabled: the reward simply never plays - not load-bearing.
+        }
+      }}
+      className={`${btn} ${primaryCls}`}
+    >
       <ThumbsUp size={iconSize} aria-hidden />
       Vouch
       <LinkSpinner size={iconSize} />

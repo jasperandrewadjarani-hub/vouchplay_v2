@@ -38,7 +38,11 @@ export function SettingsForm({ values, meta }: Props) {
         const fields = SETTINGS_CATALOG.filter((f) => f.group === group.key);
         if (fields.length === 0) return null;
         return (
-          <fieldset key={group.key} className="border-border bg-surface rounded-2xl border p-4">
+          <fieldset
+            key={group.key}
+            id={group.key}
+            className="border-border bg-surface scroll-mt-24 rounded-2xl border p-4"
+          >
             <legend className="text-foreground px-1 text-sm font-semibold">{group.label}</legend>
             {group.help && <p className="text-foreground-muted mb-3 text-xs">{group.help}</p>}
             <div className="space-y-3">

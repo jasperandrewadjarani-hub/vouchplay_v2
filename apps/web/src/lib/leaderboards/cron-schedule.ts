@@ -87,6 +87,10 @@ export interface CronRunAuditFacts {
   contributionRows?: number;
   coachEvidencePurged?: number;
   errorCode?: string;
+  /** Best-effort badge recompute run at the end of a published cycle (master_plan §2BK D). */
+  badgesAwarded?: number;
+  badgesUpdated?: number;
+  badgesRetired?: number;
 }
 
 /** One short sentence naming what the last run did, for an operator rather than an engineer. */

@@ -15,6 +15,7 @@ import {
   CLUB_LOGO_IMAGE_PROFILE,
   normalizeUploadedImage,
 } from '@/lib/images/normalize-upload-image';
+import { computeAutoBadges } from '@/lib/badges/compute';
 
 /** Notify one user about the outcome of their club join request (§27.1). Best-effort. */
 async function notifyClubJoinResult(
@@ -189,6 +190,9 @@ export async function createClub(
 
     revalidateTag(CLUBS_LIST_TAG);
     revalidateTag(userClubsTag(user.id));
+    // Best-effort badge recompute (master_plan §2BK D): the new owner immediately qualifies the Club
+    // Captain badge.
+    await computeAutoBadges({ playerIds: [user.id] }).catch(() => undefined);
   } catch {
     return { error: 'Club creation is temporarily unavailable. Please try again shortly.' };
   }

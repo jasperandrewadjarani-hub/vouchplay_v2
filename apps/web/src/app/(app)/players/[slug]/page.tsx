@@ -42,12 +42,16 @@ import { VouchComments } from '@/components/players/vouch-comments';
 import { AchievementsPanel } from '@/components/players/achievements-panel';
 import { SkillTagsPanel } from '@/components/players/skill-tags-panel';
 import { BackToPlayersLink } from '@/components/players/list-return';
+import { BadgeCaseSection } from '@/components/badges/badge-case';
+import { BadgeSymbol } from '@/components/badges/badge-symbol';
 import {
   getPlayerSkillTags,
   getPlayerAchievements,
   getPlayerHistory,
 } from '@/lib/players/profile-extras';
 import { getContributionProgress } from '@/lib/leaderboards/queries';
+import { getBadgeCase, countBadgeHolders } from '@/lib/badges/queries';
+import type { BadgeView } from '@/lib/badges/types';
 import { getVouchSettings, getProfileVisibilityFlags, loadSettingFlag } from '@/lib/settings';
 import { formatMonthYear } from '@/lib/format-date';
 import { countHeldVouchesForTarget } from '@/lib/vouches/held';
@@ -126,6 +130,7 @@ export default async function PlayerProfilePage({ params }: Params) {
     heldVouchCount,
     identityPending,
     visibilityFlags,
+    badgeCase,
   ] = await Promise.all([
     getPlayerSkillTags(player.id, viewer.viewerId),
     getPlayerAchievements(player.id, viewer.viewerId),
@@ -137,7 +142,24 @@ export default async function PlayerProfilePage({ params }: Params) {
     // else's profile and never exposes the document itself.
     player.isOwnProfile ? hasPendingIdentityVerification(player.id) : Promise.resolve(false),
     getProfileVisibilityFlags(),
+    // Badge case (master_plan §2BK E) - fails open (empty case) if the badges migration hasn't
+    // landed yet or the query errors, per the badge readers' documented fail-open contract.
+    getBadgeCase(player.id, viewer.viewerId),
   ]);
+  // Holder counts for the badges this viewer can actually tap open (earned + past) - the detail
+  // sheet's "Held by n" fact. Depends on badgeCase, so it runs after the batch above rather than
+  // inside it.
+  const badgeHolderCounts = await countBadgeHolders([
+    ...new Set([...badgeCase.earned, ...badgeCase.past].map((b: BadgeView) => b.key)),
+  ]);
+  // Pinned badge shown on the avatar (§2BK E): only when the pinned key is actually present among
+  // this viewer's visible earned badges - a hidden pin (owner-only) never shows publicly.
+  const pinnedBadge =
+    badgeCase.pinnedKey != null
+      ? ((badgeCase.earned as BadgeView[]).find(
+          (b) => b.key === badgeCase.pinnedKey && !b.hidden,
+        ) ?? null)
+      : null;
   // §2AO E: the two Admin profile-visibility toggles. The community chip stays visible to the owner
   // and staff even when Admin hides it from other players (the wizard/fit messages speak in terms of
   // it); the vouch-meter toggle deliberately does NOT carve out the owner - off means nobody but
@@ -199,14 +221,26 @@ export default async function PlayerProfilePage({ params }: Params) {
             top-right on desktop and a prominent row under the name on mobile (§2Y). */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-5">
           <div className="flex min-w-0 items-start gap-4">
-            <PlayerAvatar
-              url={player.avatarUrl}
-              initials={player.initials}
-              name={player.displayName}
-              size="lg"
-              verified={player.identityVerified}
-              className="ring-primary/25 shrink-0 ring-4"
-            />
+            <div className="relative shrink-0">
+              <PlayerAvatar
+                url={player.avatarUrl}
+                initials={player.initials}
+                name={player.displayName}
+                size="lg"
+                verified={player.identityVerified}
+                className="ring-primary/25 ring-4"
+              />
+              {pinnedBadge && (
+                <span className="border-surface bg-surface absolute -right-1.5 -bottom-1.5 rounded-full border-2">
+                  <BadgeSymbol
+                    badgeKey={pinnedBadge.key}
+                    size={26}
+                    number={pinnedBadge.meta.number}
+                    title={`Pinned: ${pinnedBadge.name}`}
+                  />
+                </span>
+              )}
+            </div>
             <div className="min-w-0">
               <h1 className="text-foreground truncate text-2xl font-semibold tracking-tight">
                 {player.displayName}
@@ -338,6 +372,14 @@ export default async function PlayerProfilePage({ params }: Params) {
           />
         </div>
       </header>
+
+      {/* Badge case (master_plan §2BK E): trophy shelf right after the header's credentials, ahead
+          of the deeper skill/achievement sections and well before the vouch comments. */}
+      <BadgeCaseSection
+        badgeCase={badgeCase}
+        isOwner={player.isOwnProfile}
+        holderCounts={badgeHolderCounts}
+      />
 
       {/* §2AO E: off → hidden from everyone except staff, the owner included - deliberately no
           owner carve-out here (unlike the community chip above). */}

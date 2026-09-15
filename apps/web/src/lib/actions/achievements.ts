@@ -9,6 +9,7 @@ import { authorizeOrganizer } from '@/lib/tournaments/authz';
 import { writeAudit } from '@/lib/moderation/audit';
 import { notify } from '@/lib/notifications/create';
 import { getActorMini, getTeamMemberIds, getTournamentMini } from '@/lib/notifications/recipients';
+import { computeAutoBadges } from '@/lib/badges/compute';
 
 export interface AchievementActionState {
   ok?: boolean;
@@ -421,6 +422,9 @@ export async function issueOfficialAchievement(
       });
       await revalPlayer(svc, playerId);
     }
+    // Best-effort badge recompute for this team (master_plan §2BK D): a fresh official result can
+    // immediately qualify Champion/Legend/Podium/MVP/Fair Play. Never blocks the achievement itself.
+    await computeAutoBadges({ playerIds: members }).catch(() => undefined);
   } catch {
     return { error: 'That action is temporarily unavailable.' };
   }

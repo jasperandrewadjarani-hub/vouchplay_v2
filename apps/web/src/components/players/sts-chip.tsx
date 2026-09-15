@@ -20,6 +20,7 @@ export function StsChip({
   voucherCount,
   terse = false,
   interactive = true,
+  variant = 'chip',
 }: {
   sts: number | null;
   /**
@@ -36,6 +37,13 @@ export function StsChip({
    * placements render a plain chip and rely on the profile page for the explanation.
    */
   interactive?: boolean;
+  /**
+   * 'chip' (default): the original bordered pill, unchanged for every existing caller. 'stacked'
+   * (master_plan §2BK F): a big plain number with the vouch count on its own line underneath, for
+   * the redesigned player card - the number itself is the tap target, same explainer dialog either
+   * way. Ignored when `interactive` is false.
+   */
+  variant?: 'chip' | 'stacked';
 }) {
   const [open, setOpen] = useState(false);
 
@@ -59,26 +67,44 @@ export function StsChip({
     );
   }
 
+  const ariaLabel = `Skill-Trust Score ${value.toFixed(1)} out of 5${
+    voucherCount ? `, from ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}` : ''
+  }. What does this mean?`;
+
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`Skill-Trust Score ${value.toFixed(1)} out of 5${
-          voucherCount ? `, from ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}` : ''
-        }. What does this mean?`}
-        className="border-border text-foreground-muted hover:border-primary hover:text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
-      >
-        STS {value.toFixed(1)}
-        {voucherCount != null && voucherCount > 0 && (
-          <span className="opacity-70">
-            {terse
-              ? ` · ${voucherCount}`
-              : ` · ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}`}
+      {variant === 'stacked' ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={ariaLabel}
+          className="flex flex-col items-end text-right focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          <span className="text-foreground text-lg leading-none font-extrabold tabular-nums">
+            {value.toFixed(1)}
           </span>
-        )}
-        <HelpCircle size={11} aria-hidden />
-      </button>
+          <span className="text-foreground-muted text-[10px] tabular-nums">
+            {voucherCount ?? 0} vouch{(voucherCount ?? 0) === 1 ? '' : 'es'}
+          </span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-label={ariaLabel}
+          className="border-border text-foreground-muted hover:border-primary hover:text-foreground inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          STS {value.toFixed(1)}
+          {voucherCount != null && voucherCount > 0 && (
+            <span className="opacity-70">
+              {terse
+                ? ` · ${voucherCount}`
+                : ` · ${voucherCount} vouch${voucherCount === 1 ? '' : 'es'}`}
+            </span>
+          )}
+          <HelpCircle size={11} aria-hidden />
+        </button>
+      )}
 
       {open && (
         <Modal

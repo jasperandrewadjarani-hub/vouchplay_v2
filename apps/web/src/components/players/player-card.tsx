@@ -1,29 +1,78 @@
 import Link from 'next/link';
-import { MapPin, UserSearch, Handshake, GraduationCap, Medal } from 'lucide-react';
 import type { PlayerCardDTO } from '@/lib/players/dto';
+import type { BadgeView } from '@/lib/badges/types';
 import { LinkSpinner } from '@/components/ui/link-spinner';
 import { StaffPlayerActivityLink } from '@/components/staff/staff-player-activity-link';
+import { BadgeRow } from '@/components/badges/badge-row';
 import { CompactRowPending } from './compact-row-pending';
-import { PlayerAvatar } from './player-avatar';
+import { TierRingAvatar } from './tier-ring-avatar';
 import { ClubStack } from './club-stack';
 import { VouchButton } from './vouch-button';
-import {
-  SkillPill,
-  StsChip,
-  SexBadge,
-  SkillVerifiedBadge,
-  CoachBadge,
-  CoachVouchedBadge,
-  OrganizerBadge,
-  LookingForPartnerBadge,
-  OpenForSponsorshipBadge,
-  NewBadge,
-  RatingsPrivateChip,
-} from './badges';
+import { StsChip, SexBadge, RatingsPrivateInline } from './badges';
+
+/** Tier line shared by both card variants (master_plan §2BK F): a coloured dot + band label + its
+ *  source, or the sentence-case "Ratings private" stand-in - never the old pill-shaped `SkillPill`,
+ *  which read as louder chrome than the redesigned card wants. */
+function TierLine({
+  skill,
+  showPrivacyLock,
+}: {
+  skill: { band: { color: string; label: string }; source: 'community' | 'self' } | null;
+  showPrivacyLock: boolean;
+}) {
+  if (skill) {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-bold">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{
+            background: skill.band.color,
+            boxShadow: `0 0 0 3px color-mix(in srgb, ${skill.band.color} 20%, transparent)`,
+          }}
+          aria-hidden
+        />
+        <span className="text-foreground truncate">{skill.band.label}</span>
+        <span className="text-foreground-muted shrink-0 font-semibold">
+          · {skill.source === 'community' ? 'Community' : 'Self-rated'}
+        </span>
+      </span>
+    );
+  }
+  if (showPrivacyLock) return <RatingsPrivateInline />;
+  return null;
+}
+
+/** Badge row + the lime "Looking" chip (master_plan §2BK F), one line, only rendered when there is
+ *  something to show. */
+function CardBadgeLine({ badges, looking }: { badges: BadgeView[]; looking: boolean }) {
+  if (badges.length === 0 && !looking) return null;
+  return (
+    <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+      {badges.length > 0 && <BadgeRow badges={badges} />}
+      {looking && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-extrabold"
+          style={{
+            color: 'var(--accent-lime)',
+            background: 'color-mix(in srgb, var(--accent-lime) 12%, transparent)',
+          }}
+        >
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: 'var(--accent-lime)' }}
+            aria-hidden
+          />
+          Looking
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
- * Concise player card (handover §8.1). Renders only fields that are present ("Do not render empty
- * fields"). Community Skill is shown when available; otherwise the clearly-labeled Self-Rated band.
+ * Player card (master_plan §2BK F, replacing the handover §8.1 layout). Same information hierarchy
+ * in both variants: tier-ring avatar, name + nickname + sex only, one tier line, an optional badge
+ * line, a big comparable STS with the vouch count underneath, and the Vouch action.
  */
 export function PlayerCard({
   player,
@@ -45,8 +94,8 @@ export function PlayerCard({
    *  the self-rated pill only, exactly like a player with no community skill yet. */
   showCommunitySkill?: boolean;
   /** master_plan §2AW: true when this card is the signed-in viewer's OWN card - shows their private-
-   *  ratings reminder chip after the pill instead of nothing. The caller derives this (e.g.
-   *  `player.slug === ownSlug`), never this component. */
+   *  ratings reminder chip instead of nothing. The caller derives this (e.g. `player.slug === ownSlug`),
+   *  never this component. */
   isOwn?: boolean;
 }) {
   // Anonymous visitors get one warm, consistent signup prompt whenever they reach for depth
@@ -62,8 +111,8 @@ export function PlayerCard({
         ? { band: player.selfRatedSkill, source: 'self' as const }
         : null;
   // §2AW: when the skill slot would otherwise render nothing because the field that would have gone
-  // there is private for this viewer, show one lock chip instead. When it DID come through (the
-  // owner's own card, or a privileged viewer), append the owner's own reminder chip after the pill -
+  // there is private for this viewer, show one lock line instead. When it DID come through (the
+  // owner's own card, or a privileged viewer), append the owner's own reminder after the tier line -
   // never for anyone else's card.
   const communityChipHidden = player.communityRatingPrivate && !player.communitySkill;
   const selfChipHidden = player.selfRatingPrivate && !player.selfRatedSkill;
@@ -74,6 +123,49 @@ export function PlayerCard({
     ((skill.source === 'community' && player.communityRatingPrivate) ||
       (skill.source === 'self' && player.selfRatingPrivate));
 
+  const avatar = (
+    <TierRingAvatar
+      url={player.avatarUrl}
+      initials={player.initials}
+      name={player.displayName}
+      size="sm"
+      verified={player.identityVerified}
+      ringColor={skill?.band.color ?? null}
+      pct={player.vouchStrengthPct}
+      crown={Boolean(player.crownTier)}
+    />
+  );
+
+  const nameLine = (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="text-foreground truncate text-sm font-extrabold">{player.displayName}</span>
+      {player.nickname && (
+        <span className="text-accent-cyan shrink-0 truncate text-xs font-bold">
+          &ldquo;{player.nickname}&rdquo;
+        </span>
+      )}
+      <SexBadge sex={player.sex} symbolOnly />
+    </span>
+  );
+
+  const rightColumn = (
+    <>
+      <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} variant="stacked" />
+      <VouchButton
+        slug={player.slug}
+        targetName={player.displayName}
+        authed={authed}
+        hasVouched={player.viewerHasVouched}
+        canUpdateInMs={player.viewerVouchCanUpdateInMs}
+        size="sm"
+        mode="card"
+      />
+      {/* Staff-only review entry point (master_plan §2AN decision 6), end of the action cluster
+          so it never competes with the Vouch button for the first tap. */}
+      {staffLinks && <StaffPlayerActivityLink slug={player.slug} size="sm" />}
+    </>
+  );
+
   if (compact) {
     return (
       /*
@@ -82,7 +174,7 @@ export function PlayerCard({
        * the player is what assistive tech and the keyboard use. The STS chip and the Vouch action
        * are raised above the overlay with "z-10", so one tap does exactly one thing.
        */
-      <div className="border-border bg-surface hover:border-primary/40 hover:bg-surface-muted focus-within:border-primary relative flex min-h-14 items-center gap-3 rounded-xl border p-2.5 transition-colors">
+      <div className="border-border bg-surface hover:border-primary/40 hover:bg-surface-muted focus-within:border-primary relative flex items-center gap-3 rounded-2xl border p-2.5 transition-colors">
         {/*
           Mouse/touch overlay making the whole row one large tap target. It is hidden from assistive
           tech and from the tab order, because the player's name below is the real, named link - so
@@ -94,103 +186,35 @@ export function PlayerCard({
           prefetch={false}
           aria-hidden
           tabIndex={-1}
-          className="absolute inset-0 rounded-xl"
+          className="absolute inset-0 rounded-2xl"
         >
           {/* useLinkStatus only reports for the Link it sits inside, and nearly every tap lands on
               this overlay rather than on the name, so the cue has to be here as well (§1T). */}
           <CompactRowPending />
         </Link>
-        <PlayerAvatar
-          url={player.avatarUrl}
-          initials={player.initials}
-          name={player.displayName}
-          size="sm"
-          verified={player.identityVerified}
-          className="ring-primary/15 shrink-0 ring-2 ring-offset-0"
-        />
+        {avatar}
         {/* NOT positioned: a positioned sibling after the overlay in DOM order would paint
             above it and swallow row taps. Only the trailing controls are raised. */}
         <span className="min-w-0 flex-1">
-          {/* Line one: name, nickname, sex. The name truncates last. */}
-          <span className="flex min-w-0 items-center gap-1.5">
-            <Link href={profileHref} prefetch={false} className="min-w-0 shrink">
-              <span className="text-foreground block truncate text-sm font-semibold">
-                {player.displayName}
+          <Link href={profileHref} prefetch={false} className="min-w-0">
+            {nameLine}
+            <CompactRowPending />
+          </Link>
+          <span className="mt-1 block min-w-0">
+            <TierLine skill={skill} showPrivacyLock={showPrivacyLock} />
+            {showOwnPrivacyReminder && (
+              <span className="ml-1.5">
+                <RatingsPrivateInline own />
               </span>
-              <CompactRowPending />
-            </Link>
-            {player.nickname && (
-              <span className="text-foreground-muted min-w-0 shrink-[3] truncate text-xs">
-                &ldquo;{player.nickname}&rdquo;
-              </span>
-            )}
-            <SexBadge sex={player.sex} symbolOnly />
-            {/* Approved-coach marker on the compact row (master_plan §2AG A3): previously only the
-                detailed card and profile showed Coach status. A small icon, same treatment as the
-                partner/sponsorship icons beside it, so line one stays on one line. */}
-            {player.isCoach && (
-              <GraduationCap size={13} className="text-primary shrink-0" aria-label="Coach" />
-            )}
-            {/* Compact marker for master_plan §2AO D2: a coach has vouched for THIS player's skill -
-                independent of whether this player is themself a coach, so it sits beside (not
-                instead of) the GraduationCap icon above. */}
-            {player.coachVouched && (
-              <span
-                className="shrink-0"
-                title="A coach has vouched for this player's skill"
-                aria-label="Coach-vouched"
-              >
-                <Medal size={13} className="text-accent-cyan" aria-hidden />
-              </span>
-            )}
-            {/* A small icon, not a pill, so line one still holds the name/nickname/sex without
-                wrapping (§1H/§1T). It marks who is open to a partner at a glance, and it is the same
-                looking_for_partner flag the filter and the profile badge use (§2L). */}
-            {player.lookingForPartner && (
-              <UserSearch
-                size={13}
-                className="shrink-0"
-                style={{ color: 'var(--accent-lime)' }}
-                aria-label="Looking for a partner"
-              />
-            )}
-            {/* Same open_for_sponsorship flag as the filter, profile badge, and detailed card (§2T).
-                Primary colour mirrors the detailed OpenForSponsorship badge; lime = partner above. */}
-            {player.openForSponsorship && (
-              <Handshake
-                size={13}
-                className="text-primary shrink-0"
-                aria-label="Open to sponsorship"
-              />
             )}
           </span>
-          {/* Line two: the skill pill, plus the neutral "New" pill when it applies (§2AG A3). Club
-              logos used to sit beside the skill pill and pushed longer pills onto a second line,
-              which leaves the whole list ragged (§1H, §1T) - nothing else joins this line. */}
-          {(skill || showPrivacyLock || player.isNew) && (
-            <span className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
-              {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-              {showPrivacyLock && <RatingsPrivateChip />}
-              {showOwnPrivacyReminder && <RatingsPrivateChip own />}
-              {player.isNew && <NewBadge />}
-            </span>
-          )}
+          <span className="mt-1 block min-w-0">
+            <CardBadgeLine badges={player.badges} looking={player.lookingForPartner} />
+          </span>
         </span>
         {/* Raised above the row overlay so both controls are independently tappable. */}
-        <span className="relative z-10 flex w-[92px] shrink-0 flex-col items-end gap-1.5">
-          <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} terse />
-          <VouchButton
-            slug={player.slug}
-            targetName={player.displayName}
-            authed={authed}
-            hasVouched={player.viewerHasVouched}
-            canUpdateInMs={player.viewerVouchCanUpdateInMs}
-            size="sm"
-            mode="card"
-          />
-          {/* Staff-only review entry point (master_plan §2AN decision 6), end of the action cluster
-              so it never competes with the Vouch button for the first tap. */}
-          {staffLinks && <StaffPlayerActivityLink slug={player.slug} size="sm" />}
+        <span className="relative z-10 flex shrink-0 flex-col items-end gap-1.5">
+          {rightColumn}
         </span>
       </div>
     );
@@ -200,74 +224,31 @@ export function PlayerCard({
     <div className="border-border bg-surface vp-card flex flex-col gap-2.5 rounded-2xl border p-3.5">
       <div className="flex items-start gap-3">
         <Link href={profileHref} prefetch={false} aria-label={player.displayName}>
-          <PlayerAvatar
-            url={player.avatarUrl}
-            initials={player.initials}
-            name={player.displayName}
-            size="sm"
-            verified={player.identityVerified}
-            className="ring-primary/20 ring-2 ring-offset-0"
-          />
+          {avatar}
         </Link>
         <div className="min-w-0 flex-1">
           {/* The name is the other thing people tap on a detailed card, so it gets the same pending
               feedback as "View profile" below. The spinner sits after the truncating name. */}
-          <Link
-            href={profileHref}
-            className="hover:text-primary flex min-w-0 items-center gap-1.5 font-semibold"
-          >
-            <span className="truncate">{player.displayName}</span>
+          <Link href={profileHref} className="hover:text-primary flex min-w-0 items-center gap-1.5">
+            {nameLine}
             <LinkSpinner />
           </Link>
-          {player.nickname && (
-            <p className="text-foreground-muted truncate text-sm">
-              &ldquo;{player.nickname}&rdquo;
-            </p>
-          )}
-          <div className="text-foreground-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            {player.city && (
-              <span className="inline-flex items-center gap-1">
-                <MapPin size={12} aria-hidden />
-                {player.city}
+          <span className="mt-1.5 block min-w-0">
+            <TierLine skill={skill} showPrivacyLock={showPrivacyLock} />
+            {showOwnPrivacyReminder && (
+              <span className="ml-1.5">
+                <RatingsPrivateInline own />
               </span>
             )}
-            <SexBadge sex={player.sex} />
-          </div>
+          </span>
+          <span className="mt-1.5 block min-w-0">
+            <CardBadgeLine badges={player.badges} looking={player.lookingForPartner} />
+          </span>
         </div>
         <ClubStack clubs={player.clubs} />
       </div>
 
-      {/* The STS chip always renders now (0.0 when nobody has vouched yet, §2B), so this row is no
-          longer conditional on there being a score to show. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {skill && <SkillPill band={skill.band} source={skill.source} size="sm" />}
-        {showPrivacyLock && <RatingsPrivateChip />}
-        {showOwnPrivacyReminder && <RatingsPrivateChip own />}
-        <StsChip sts={player.sts} voucherCount={player.uniqueVoucherCount} />
-      </div>
-
-      {/* No IdentityVerifiedBadge pill here (master_plan §2AN decision 3): the check on the avatar
-          above replaces it on cards - less clutter. The pill stays on the full profile page, where
-          its hover text explains what it means. */}
-      {(player.skillVerified ||
-        player.isCoach ||
-        player.coachVouched ||
-        player.isOrganizer ||
-        player.lookingForPartner ||
-        player.openForSponsorship ||
-        player.isNew) && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {player.skillVerified && <SkillVerifiedBadge />}
-          {player.isCoach && <CoachBadge />}
-          {player.coachVouched && <CoachVouchedBadge />}
-          {player.isOrganizer && <OrganizerBadge />}
-          {player.lookingForPartner && <LookingForPartnerBadge />}
-          {player.openForSponsorship && <OpenForSponsorshipBadge />}
-          {player.isNew && <NewBadge />}
-        </div>
-      )}
-
-      <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+      <div className="border-border mt-auto flex items-center justify-between gap-2 border-t pt-2.5">
         <Link
           href={profileHref}
           className="text-primary inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
@@ -275,20 +256,7 @@ export function PlayerCard({
           View profile
           <LinkSpinner />
         </Link>
-        <span className="flex items-center gap-2">
-          <VouchButton
-            slug={player.slug}
-            targetName={player.displayName}
-            authed={authed}
-            hasVouched={player.viewerHasVouched}
-            canUpdateInMs={player.viewerVouchCanUpdateInMs}
-            size="sm"
-            mode="card"
-          />
-          {/* Staff-only review entry point (master_plan §2AN decision 6), end of the action cluster
-              so it never competes with the Vouch button for the first tap. */}
-          {staffLinks && <StaffPlayerActivityLink slug={player.slug} size="sm" />}
-        </span>
+        <span className="flex items-center gap-2">{rightColumn}</span>
       </div>
     </div>
   );

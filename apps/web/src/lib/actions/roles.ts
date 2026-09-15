@@ -8,6 +8,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { assertAdminActor } from '@/lib/moderation/staff';
 import { writeAudit } from '@/lib/moderation/audit';
 import { notify } from '@/lib/notifications/create';
+import { computeAutoBadges } from '@/lib/badges/compute';
 import type { SafetyActionState } from './report';
 
 /**
@@ -110,6 +111,9 @@ async function decideApplication(
         approved_by: actor.viewerId,
         approved_at: new Date().toISOString(),
       });
+      // Best-effort badge recompute (master_plan §2BK D): an approved Organizer role can immediately
+      // qualify the Organizer badge once they own a non-draft tournament.
+      await computeAutoBadges({ playerIds: [a.user_id] }).catch(() => undefined);
     }
     await writeAudit({
       actorId: actor.viewerId,

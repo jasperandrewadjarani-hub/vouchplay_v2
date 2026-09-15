@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Trophy,
   Building2,
+  Medal,
 } from 'lucide-react';
 import { requireAdminPage } from '@/lib/moderation/staff';
 import { LinkSpinner } from '@/components/ui/link-spinner';
@@ -43,6 +44,12 @@ export default async function AdminHome() {
       label: 'Club administration',
       desc: 'Verify, unverify, suspend, and reinstate clubs.',
       icon: Building2,
+    },
+    {
+      href: '/admin/badges',
+      label: 'Badges',
+      desc: 'Tag or untag any badge, see holders, set event badges.',
+      icon: Medal,
     },
     {
       href: '/admin/analytics',

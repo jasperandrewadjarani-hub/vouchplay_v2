@@ -5818,7 +5818,7 @@ card after the password gate) so Jasper can push adoption without a deploy. Stor
 (no client policy), scrypt via Node `crypto` (no new dependency); 5 wrong tries → 15-minute lockout,
 10 → password sign-in required. Unlock state = httpOnly signed cookie `vp_unlock` (HMAC keyed like
 `vp_guest`, sliding expiry) read in `app-shell.tsx`: while locked the shell renders only the PIN pad,
-so no page data reaches the client. **Phase 3 (migration 0052, after the Hermosa window)** - designed
+so no page data reaches the client. **Phase 3 (migration 0053, after the Hermosa window)** - designed
 here, built next.
 
 ### Loose ends resolved
@@ -5836,7 +5836,7 @@ here, built next.
 **UI:** `app/(auth)/forgot-password/page.tsx` (two-step), `components/ui/password-input.tsx`
 (`PasswordInput`, `PasswordPair`), `login-form.tsx`, `password-setup-gate.tsx`, `set-password-form.tsx`.
 **Docs:** `docs/EMAIL_TEMPLATES.md` (Reset Password template with `{{ .Token }}` + token-hash link).
-**Phase 3 (not built):** migration 0052 `profile_pins`; settings `pin_lock_mode`, `pin_lock_idle_minutes`;
+**Phase 3 (not built):** migration 0053 `profile_pins`; settings `pin_lock_mode`, `pin_lock_idle_minutes`;
 `lib/pin/*`, `components/auth/pin-lock-screen.tsx`, ME → Security card.
 
 ## 2BE. Organizer powers: every decision retractable, reclassify at will, the team sheet as a roster card, guest-account monitoring, add / replace / merge / import entries (2026-09-14)
@@ -5944,7 +5944,7 @@ player: "{Organizer} entered you in {tournament} · {division}{ with {partner}}.
 organizer or request cancellation." Because 0044's RPC refuses a skill-mismatch seat when
 `enforce_skill_floor` is on, that case returns the reason verbatim today and is lifted by **D**.
 
-**D. Phase B (migration 0051, apply after the Hermosa window closes 2026-09-16; functions only, additive):**
+**D. Phase B (migration 0052, apply after the Hermosa window closes 2026-09-16; functions only, additive):**
 - `organizer_assign_partner` v2 adds `p_override_fit boolean`: still refuses `WRONG_SEX`,
   `MIXED_COMPOSITION` and an age rule when the DOB is known; skips the skill ceiling and unknown-DOB
   refusals when set, recording `fit_overridden` in the event metadata (the sheet then shows the
@@ -6016,14 +6016,14 @@ player's existing cancellation request - the same guarantees the assign-partner 
 (`registration_reverted`, `registration_restored`, `organizer_entered_you`).
 **UI:** `organizer-registrations.tsx` (roster-card sheet, filter value), `add-entry-wizard.tsx`,
 `unverified-accounts-panel.tsx`.
-**Phase B:** migration 0051 (four definer functions, each followed by revoke / grant), non-user entry,
+**Phase B:** migration 0052 (four definer functions, each followed by revoke / grant), non-user entry,
 import, Admin guests.
 
 ### Execution
 
 Docs → four Sonnet lanes in parallel (Players tab §2BC · Auth §2BD · Organizer server §2BE-A/B/C/E ·
 Organizer UI §2BE-A/C/E, against the contracts above) → main-session review → gates → commit → Jasper
-updates the Reset Password email template, pushes. Phase B (0051 + non-user + import + Admin guests) and
+updates the Reset Password email template, pushes. Phase B (0052 + non-user + import + Admin guests) and
 Phase 3 (PIN quick unlock) follow in the next session.
 
 ## 2BF. Birthday is editable in Edit profile (2026-09-14)
@@ -6167,7 +6167,7 @@ no explainer sentences.
 
 ### Succeeding phases
 
-- **Phase B (migration 0051, after 2026-09-16)** unchanged: replace / remove / merge players, non-user
+- **Phase B (migration 0052, after 2026-09-16)** unchanged: replace / remove / merge players, non-user
   entries by email, bulk import, Admin → Guests.
 - **Activity line on the card** ("Verified by Jasper · 2 h ago") from `registration_events` - next
   session; valuable once several co-organizers work the same list.
@@ -6288,7 +6288,7 @@ reads in parallel (the Players page first). Measured before and after in the rep
 
 ### Succeeding phases
 
-Unchanged: Phase B (migration 0051, after 2026-09-16) - replace / remove / merge players, non-user entries,
+Unchanged: Phase B (migration 0052, after 2026-09-16) - replace / remove / merge players, non-user entries,
 bulk import, Admin → Guests; activity line on the card.
 
 **New, found while measuring H:** the middleware (`lib/supabase/middleware.ts`) calls `auth.getUser()` - a
@@ -6355,6 +6355,175 @@ Home already reads; milestone moments for vouch givers; a blurred preview row in
 (`player_vouches_per_24h = 0`), so it would mislead. Private ratings stay redacted at the DTO (§2AW) - the
 ring and STS obey the same redaction. Rank data comes from existing leaderboard snapshots (no new query per
 row).
+
+## 2BK. Badges + Players tab upgrade (Phase 1 and 2), built together (2026-09-15, migration 0051)
+
+Jasper approved the Players tab sample (§2BJ) and the badge sample ("VouchPlay Badge Case"), and asked for
+Phase 1, Phase 2 and badges built now: "apply the badges based on your settings, just make sure we can
+manually tag/untag badges for players in the admin side", plus a new **OG** badge - granted manually to
+players who have been in the scene for years, since before most others were playing.
+
+**Migration renumbering.** 0051 was reserved for organizer Phase B and 0052 for the PIN lock; neither was
+written. Badges take **0051**; Phase B becomes **0052**, PIN lock **0053** (master_plan updated; earlier
+notes / changelog entries keep their original wording).
+
+### Findings (code + production read)
+
+1. Official results already exist: `achievements` (`type = 'official'`, `issuer_type = 'organizer'`,
+   `verification_status`) + `player_achievements.placement`, written by `issueOfficialAchievement`.
+   Peer-nominated claims (`issuer_type = 'peer'`, 0024) must never count.
+2. Roles in `user_roles (role, status)`; club roles in `club_members.role`; partner matches in
+   `partner_matches.status`; contribution and players boards with `player_leaderboard_momentum
+   (private_rank, previous_rank)` rebuilt by the 01:17 UTC leaderboards cron.
+3. No community-skill history exists, so Level Up needs a small tracker.
+4. The directory DTO already carries community band, STS, unique vouchers, private-rating flags, coach /
+   organizer / club-owner flags; filters already support `skills`, `city`, `coach`, `lookingForPartner`.
+5. Established players have no 24 h vouch cap, so no "vouches left today" meter anywhere.
+
+### A. The catalog (23 badges, `packages/config/src/badges.ts`)
+
+Frame = family (shield Glory · medal Community · hexagon Growth · tile Roles · star Special); metal =
+badge; rim = rarity (Common · Rare · Epic · Legendary). Symbols drawn as SVG from the config, 16-150 px.
+
+| Key | Name | Family | Rarity | Normally | Rule (numbers are settings) |
+|---|---|---|---|---|---|
+| `champion` | Champion | Glory | Rare | auto | official 1st place within 12 months; tally = titles in window |
+| `legend` | Legend | Glory | Legendary | auto | 3+ official titles all-time; permanent; replaces Champion on cards |
+| `podium` | Podium | Glory | Common | auto | official 2nd/3rd within 12 months (silver/bronze in meta) |
+| `mvp` | MVP | Glory | Epic | auto | official MVP award |
+| `fairplay` | Fair Play | Glory | Rare | auto | official Sportsmanship award |
+| `regular` | Tour Regular | Glory | Common | auto | confirmed entries in 5 completed tournaments; levels 15 / 30 |
+| `top_contributor` | Top Contributor | Community | Epic | auto | top 10 contribution board this season; leaves when out |
+| `trusted_voice` | Trusted Voice | Community | Rare | auto | 25 standing vouches given (active, voucher not flagged) |
+| `pioneer` | Pioneer | Community | Epic | auto | first 100 onboarded; numbered #1-100, never reissued |
+| `og` | OG | Community | Legendary | **granted** | in the scene for years, before most were playing |
+| `captain` | Club Captain | Community | Common | auto | owner/admin of an active club |
+| `matchmaker` | Matchmaker | Community | Common | auto | 3 swipe matches that entered a tournament |
+| `rising` | Rising | Growth | Rare | auto | top 10 climbers (≥3 places) on the players board this month; 30 days |
+| `level_up` | Level Up | Growth | Common | auto | community skill moved up a tier; 30 days |
+| `proven` | Proven | Growth | Common | auto | rating backed by 15 different players (not Skill Verified) |
+| `tier_crown` | Top of Tier | Growth | Epic | auto | highest STS in a community tier (≥5 vouchers, rating public); shown as a crown on the avatar |
+| `coach` | Coach | Roles | Rare | auto | active coach role |
+| `organizer` | Organizer | Roles | Rare | auto | active organizer who has run ≥1 non-draft tournament |
+| `referee` | Referee | Roles | Common | granted | |
+| `ambassador` | Ambassador | Roles | Rare | granted | |
+| `hof` | Hall of Fame | Special | Legendary | granted | permanent |
+| `supporter` | Supporter | Special | Epic | granted | sponsors / patrons |
+| `event:<tournamentId>` | e.g. Rise of Empires 2026 | Special | Common | auto | confirmed entrants of a tournament an admin marked commemorative |
+
+**OG vs Pioneer:** Pioneer = early on *VouchPlay* (automatic, numbered). OG = early in *the scene*
+(manual, community memory). Both can be held.
+
+### B. Admin tag / untag (Jasper's requirement)
+
+- **Admins can tag any badge on any player** - including normally-automatic ones - and **untag any badge**.
+  Admin → Badges (new `/admin/badges`, admin / super-admin, MFA step-up like other staff pages).
+- Tag: player → badge grid → reason (required, audited) → optional expiry (defaults to the badge's rule) →
+  for title badges (Champion, Legend, Podium, MVP, Fair Play) the event name is required (covers events held
+  outside VouchPlay). A tagged badge has `source = 'grant'` and the nightly job never removes it.
+- Untag: reason required; "Keep it off" (default on) sets `auto_blocked` so the nightly job cannot re-award
+  an automatic badge; "Allow automatic again" lifts it. Every tag / untag / lift writes `audit_logs` and
+  notifies the player (in-app + push; untag is silent on push).
+- Also on Admin → Badges: holders per badge (earned vs tagged), **Recompute now**, and **Event badges**
+  (mark a tournament commemorative with a label). Thresholds + `badge_disabled_keys` live in Admin →
+  Settings, group "Badges".
+
+### C. Data (migration `0051_badges.sql`, additive, safe during the registration window)
+
+- `player_badges`: `player_id`, `badge_key` (`^[a-z0-9_:-]{2,80}$`), `source` (`auto|grant`), `tally`,
+  `meta jsonb` (event, division, tournamentId, number, tier, level, medal), `awarded_at`, `expires_at`,
+  `granted_by`, `grant_reason`, `revoked_at`, `revoked_by`, `revoke_reason`, `auto_blocked`, `hidden`,
+  `celebrated_at`, timestamps. Unique live row per `(player_id, badge_key) where revoked_at is null`.
+- `profiles.pinned_badge_key text`; `tournaments.commemorative_badge_label text`;
+  `player_badge_progress (player_id pk, community_level_seen, community_level_seen_at, level_up_at)`.
+- RLS on: public select only live, not hidden, not expired rows; a player selects all their own rows; staff
+  select all; no client write policies (service role in audited actions). **No security-definer functions**.
+- Code is fail-open before the migration: every badge reader returns empty on error, so the deploy and
+  the migration can land in either order.
+
+### D. Awarding
+
+- Pure rules `packages/core/src/badges/rules.ts` (`evaluateAutoBadges(inputs, settings, now)`) with tests.
+- `lib/badges/compute.ts computeAutoBadges({ playerIds? })`: batched reads → rules → diff against live
+  `auto` rows: insert new (notify `badge_earned` once), update tally / meta / expiry silently, retire rows
+  that stopped qualifying (`revoked_at`, reason `auto:no_longer_qualifies`, not blocked). Never touches
+  `grant` rows; skips keys with an admin block.
+- Runs at the end of the leaderboards cron (fresh momentum), from **Recompute now**, and best-effort for
+  one player after an official result is issued, a coach/organizer role is approved, or a club is created.
+- Pioneer numbering: first run numbers the first 100 by `onboarded_at, id`; later runs only append while
+  fewer than the cutoff exist; numbers never change or return.
+
+### E. Display rules
+
+- **Card**: at most two symbols (first named in its metal colour) + "+N"; order = pinned → rarity → newest;
+  Legend hides Champion; `tier_crown` renders as a crown on the avatar, not in the row.
+- **Profile badge case**: earned grid (tally / number as the caption), pinned star, "Almost there" (own
+  profile only: up to 3 nearest locked badges with progress), "Past" shelf (own only, expired). Tap →
+  detail sheet (big symbol, rarity · family, why, event / division / date / holders; own: Pin, Hide).
+- **Unlock moment**: after the legal and password gates, the viewer's uncelebrated badges show one at a
+  time (pop + soft rays, reduced-motion still) with Pin to my card / See my badge case; dismissal stamps
+  `celebrated_at`. Grants celebrate too; retirements never do.
+- Badges never affect STS, vouch weight, eligibility or Skill Verified. Private ratings hide numbers, not
+  badges. Disabled accounts show none.
+
+### F. Players tab - Phase 1
+
+- **Quick bar** replaces the three doors: Leaderboards ("RJ is #1") · Find me ("Visible" / "Hidden"; visitors
+  "Join free") · Partners ("36 looking" / "Swipe to match"), same sheets as today, ~52 px.
+- **Your game** (signed-in, onboarded): tier ring avatar, tier + STS, players-board rank with movement
+  (▲/▼ from `previous_rank`), progress "Vouches to a trusted rating: n / 15" (= Proven threshold); tap →
+  own profile. Unrated: "Get 3 vouches to get rated" style copy from the existing thresholds.
+- **Player card**: tier-colour ring filling with vouch strength (`uniqueVouchers / proven threshold`;
+  neutral and empty when the community rating is private), crown for Top of Tier, name + nickname + sex
+  symbol only, one tier line or "🔒 Ratings private" (sentence case), badge row + a lime "Looking" chip,
+  big STS with "N vouches", Vouch button. Coach / sponsorship icons leave the card (Coach is a badge;
+  sponsorship stays on the profile and in filters).
+- **Quick chips** (signed-in): My level · Near me · Looking for partner · Coaches - toggles of existing URL
+  filters, highlighted when active.
+- **Vouch reward**: after a successful vouch from a card, "+1" floats, `navigator.vibrate(18)` on Android,
+  button settles to "✓ Vouched"; reduced motion = no float.
+
+### G. Players tab - Phase 2 (built now)
+
+Crowns (via `tier_crown`), trophies / Rising as badges (replacing the §2BJ tags), unlock moments as the
+milestone celebrations, and a **visitor preview**: two blurred placeholder rows (no real data) above the
+sign-up wall with "Unlock 560+ players".
+
+### Loose ends resolved
+
+- Duplicate notifications: only first award of a key notifies; re-computations and expiries are silent.
+- An admin tag of an automatic badge the player already earns converts the row to `grant` (kept even if the
+  rule later fails).
+- A peer-nominated or unverified achievement never feeds a Glory badge.
+- Cache: every badge write revalidates the players list tag and the player's profile tag.
+- Disabled badge keys (`badge_disabled_keys`) are hidden everywhere and skipped by the job; existing rows stay.
+- Tier crown requires a public community rating (a crown on a private player would reveal their tier).
+- Event badge label is admin-only; removing the label retires those badges silently.
+
+### Succeeding
+
+Phase B (0052) and PIN lock (0053) unchanged. Later ideas: badge showcase on leaderboards, organizer-issued
+event badge art, share card image for new badges.
+
+### Contracts
+
+**Config** `badges.ts`: `BADGES`, `BadgeDef { key, name, family, metal, glyph, rarity, normally: 'auto' |
+'grant', titleBadge, timeBound, avatarOnly? }`, `BADGE_FAMILIES`, `BADGE_METALS`, `BADGE_RARITY_RANK`,
+`badgeDef(key)` (resolves `event:*`); settings group `badges`. **Types** `lib/badges/types.ts`:
+`BadgeView { id, key, name, tally, meta, awardedAt, expiresAt, source, hidden, pinned }`, `BadgeCase`,
+`BadgeProgress`, `ViewerGame`. **Server**: `lib/badges/queries.ts` (`getVisibleBadgesForPlayers`,
+`getBadgeCase(profileId, viewerId)`, `getUncelebratedBadges`, `getBadgeHolders`,
+`getPlayerBadgesForAdmin`, `countBadgeHolders`, `getViewerGame`, `listCommemorativeTournaments`),
+`lib/players/queries.ts` `getDirectoryPlayerCount` (cached head count for the header), `lib/badges/compute.ts`,
+`lib/actions/badges.ts` (`adminTagBadge`, `adminUntagBadge`, `adminAllowAutoAgain`, `adminRecomputeBadges`,
+`adminSetEventBadge`, `pinMyBadge`, `setMyBadgeHidden`, `markBadgesCelebrated`), notifications
+`badge_earned`, `badge_granted`, `badge_revoked`. **UI**: `components/badges/*` (symbol, row, case, detail
+sheet, unlock), players tab components, `/admin/badges`.
+
+### Execution
+
+Docs → four Sonnet lanes (data + server · badge UI + profile · Players tab · admin) against the contracts
+above → review → gates → commit → push → Jasper applies `scripts/apply-0051.sql`, then taps **Recompute now**.
 
 ## 2. System Architecture and Component Specs
 

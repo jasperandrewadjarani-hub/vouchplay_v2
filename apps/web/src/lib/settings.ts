@@ -7,7 +7,13 @@ import {
   type SkillAlgorithmVersion,
 } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
-import type { ContributionConfig, V2Params, AnomalyParams, PartnerWeights } from '@vouchplay/core';
+import type {
+  ContributionConfig,
+  V2Params,
+  AnomalyParams,
+  PartnerWeights,
+  BadgeRuleSettings,
+} from '@vouchplay/core';
 
 export const SYSTEM_SETTINGS_TAG = 'system_settings';
 
@@ -378,6 +384,48 @@ export interface LeaderboardSettings {
     clubs: Record<string, number>;
   };
   minimumScores: { players: number; community: number; clubs: number };
+}
+
+export interface BadgeSettings {
+  enabled: boolean;
+  /** Parsed `badge_disabled_keys` (comma list), trimmed, empty strings dropped. */
+  disabledKeys: string[];
+  rules: BadgeRuleSettings;
+}
+
+/** Badges (master_plan §2BK). Every number a rule uses lives in system_settings, group `badges`. */
+export async function getBadgeSettings(): Promise<BadgeSettings> {
+  const m = await loadSettings();
+  const bool = (key: SystemSettingsKey, fallback: boolean) =>
+    typeof m[key] === 'boolean' ? (m[key] as boolean) : fallback;
+  const disabledRaw = typeof m.badge_disabled_keys === 'string' ? m.badge_disabled_keys : '';
+  const disabledKeys = disabledRaw
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean);
+  return {
+    enabled: bool('badges_enabled', true),
+    disabledKeys,
+    rules: {
+      championWindowMonths: num(m, 'badge_champion_window_months'),
+      legendMinTitles: num(m, 'badge_legend_min_titles'),
+      podiumWindowMonths: num(m, 'badge_podium_window_months'),
+      regularMinEvents: num(m, 'badge_regular_min_events'),
+      regularLevel2Events: num(m, 'badge_regular_level2_events'),
+      regularLevel3Events: num(m, 'badge_regular_level3_events'),
+      topContributorSize: num(m, 'badge_top_contributor_size'),
+      trustedVoiceMinVouches: num(m, 'badge_trusted_voice_min_vouches'),
+      pioneerCutoff: num(m, 'badge_pioneer_cutoff'),
+      matchmakerMinEntered: num(m, 'badge_matchmaker_min_entered'),
+      risingTopN: num(m, 'badge_rising_top_n'),
+      risingMinClimb: num(m, 'badge_rising_min_climb'),
+      risingDays: num(m, 'badge_rising_days'),
+      levelUpDays: num(m, 'badge_level_up_days'),
+      provenMinVouchers: num(m, 'badge_proven_min_vouchers'),
+      tierCrownMinVouchers: num(m, 'badge_tier_crown_min_vouchers'),
+      organizerMinTournaments: num(m, 'badge_organizer_min_tournaments'),
+    },
+  };
 }
 
 export async function getLeaderboardSettings(): Promise<LeaderboardSettings> {

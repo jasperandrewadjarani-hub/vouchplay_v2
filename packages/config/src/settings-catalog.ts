@@ -29,7 +29,8 @@ export type SettingGroupKey =
   | 'announcement'
   | 'vouch_integrity'
   | 'directory'
-  | 'pwa';
+  | 'pwa'
+  | 'badges';
 
 export interface SettingGroup {
   key: SettingGroupKey;
@@ -131,6 +132,11 @@ export const SETTING_GROUPS: readonly SettingGroup[] = [
     key: 'pwa',
     label: 'App & push',
     help: 'The installable app (service worker, home-screen prompt) and Web Push kill switches (master_plan §2AY).',
+  },
+  {
+    key: 'badges',
+    label: 'Badges',
+    help: 'Thresholds for every automatic badge rule and the disabled-keys list (master_plan §2BK). Admins can still tag/untag any badge on any player regardless of these numbers.',
   },
 ] as const;
 
@@ -1545,6 +1551,168 @@ export const SETTINGS_CATALOG: readonly SettingField[] = [
     min: 0,
     max: 90,
     help: 'How recently a player must have onboarded to show the neutral "New" pill and match "New this week" (0 disables it, §2AG D5).',
+  },
+
+  // Badges (master_plan §2BK)
+  {
+    key: 'badges_enabled',
+    label: 'Badges enabled',
+    group: 'badges',
+    kind: 'bool',
+    help: 'Off hides every badge everywhere (cards, profiles, admin) and pauses the nightly job.',
+  },
+  {
+    key: 'badge_disabled_keys',
+    label: 'Disabled badge keys',
+    group: 'badges',
+    kind: 'text',
+    maxLength: 2000,
+    help: 'Comma-separated catalog keys to hide everywhere and skip in the nightly job. Existing rows on a disabled key are left as-is, just hidden.',
+  },
+  {
+    key: 'badge_champion_window_months',
+    label: 'Champion window (months)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 120,
+    help: 'How far back an official 1st-place title still counts toward Champion.',
+  },
+  {
+    key: 'badge_legend_min_titles',
+    label: 'Legend minimum titles (all-time)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 100,
+  },
+  {
+    key: 'badge_podium_window_months',
+    label: 'Podium window (months)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 120,
+    help: 'How far back an official 2nd/3rd place still counts toward Podium.',
+  },
+  {
+    key: 'badge_regular_min_events',
+    label: 'Tour Regular: level 1 events',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+    help: 'Confirmed entries in completed tournaments to earn Tour Regular.',
+  },
+  {
+    key: 'badge_regular_level2_events',
+    label: 'Tour Regular: level 2 events',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+  },
+  {
+    key: 'badge_regular_level3_events',
+    label: 'Tour Regular: level 3 events',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+  },
+  {
+    key: 'badge_top_contributor_size',
+    label: 'Top Contributor board size',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 100,
+    help: 'Top N on the Community Champions board earn Top Contributor; falls off when out.',
+  },
+  {
+    key: 'badge_trusted_voice_min_vouches',
+    label: 'Trusted Voice: minimum vouches given',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 10000,
+  },
+  {
+    key: 'badge_pioneer_cutoff',
+    label: 'Pioneer cutoff (first N onboarded)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 100000,
+    help: 'Numbers are assigned once by onboarded_at and never reused, even if this cutoff later changes.',
+  },
+  {
+    key: 'badge_matchmaker_min_entered',
+    label: 'Matchmaker: minimum entered matches',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+    help: 'Swipe matches that went on to enter a tournament together.',
+  },
+  {
+    key: 'badge_rising_top_n',
+    label: 'Rising: top N climbers',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 100,
+  },
+  {
+    key: 'badge_rising_min_climb',
+    label: 'Rising: minimum places climbed',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+  },
+  {
+    key: 'badge_rising_days',
+    label: 'Rising: badge lifetime (days)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 365,
+  },
+  {
+    key: 'badge_level_up_days',
+    label: 'Level Up: badge lifetime (days)',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 365,
+  },
+  {
+    key: 'badge_proven_min_vouchers',
+    label: 'Proven: minimum unique vouchers',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+    help: 'Also the "vouches to a trusted rating" target shown on the Players tab.',
+  },
+  {
+    key: 'badge_tier_crown_min_vouchers',
+    label: 'Top of Tier: minimum unique vouchers',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+    help: 'A private community rating never qualifies, regardless of this number.',
+  },
+  {
+    key: 'badge_organizer_min_tournaments',
+    label: 'Organizer badge: minimum tournaments run',
+    group: 'badges',
+    kind: 'int',
+    min: 1,
+    max: 1000,
+    help: 'Non-draft tournaments owned by the organizer.',
   },
 ] as const;
 

@@ -3413,3 +3413,17 @@ refusing when ambiguous; `demand-options.ts` supplies `bandKeys`; tests pin the 
 tab: plan + sample artifact ("Players Tab Level-Up") for a slim quick bar, a "Your game" card, tier-ring
 player cards with a big STS, sentence-case "Ratings private", a vouch micro-reward and quick filter chips
 (Phase 1); crowns/trophies/Rising, milestones and a visitor preview (Phase 2). Not built - waiting on Jasper.
+
+## 2026-09-15 - Badges + Players tab Phase 1 & 2 (§2BK, migration 0051, handover v1.86)
+
+Jasper approved both samples and asked for everything built, with manual tag/untag in admin and a new
+granted **OG** badge (years in the scene; distinct from automatic numbered Pioneer). 23 badges in five
+families; most earned automatically from verified data (official organizer results only, roles, clubs,
+boards, vouches, momentum), OG / Referee / Ambassador / Hall of Fame / Supporter granted. Admins can tag and
+untag ANY badge (reason required, audited, player notified; untag can block automatic re-award). Migration
+0051 (`player_badges`, `profiles.pinned_badge_key`, `tournaments.commemorative_badge_label`,
+`player_badge_progress`; RLS, no definer functions; fail-open readers). Nightly compute at the end of the
+leaderboards cron + Admin "Recompute now" + per-player hooks. Players tab: quick bar, Your game card, tier-ring
+cards with crown / badge row / big STS / sentence-case private, quick chips, vouch micro-reward, visitor
+preview; profile badge case with detail sheet, pin / hide, Almost there, Past; unlock moment. Planned
+migrations renumbered: organizer Phase B → 0052, PIN lock → 0053.

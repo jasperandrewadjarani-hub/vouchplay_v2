@@ -36,3 +36,4 @@ export * from './partners/score';
 export * from './offers/lifecycle';
 export * from './offers/targeting';
 export * from './time/ph-time';
+export * from './badges/rules';

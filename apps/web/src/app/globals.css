@@ -188,6 +188,30 @@ body {
 }
 
 /*
+ * Vouch micro-reward (master_plan §2BK F): a "+1" that floats up and fades from a card's Vouch
+ * button once a vouch it started is confirmed (see `VouchButton`'s sessionStorage handoff - the
+ * animation plays on return to the list, never inside the vouch form/server action itself). The
+ * global `prefers-reduced-motion` block above already zeroes this animation's duration, so no
+ * separate reduced-motion override is needed here.
+ */
+@keyframes vp-vouch-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.85);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) scale(1.05);
+  }
+}
+.vp-vouch-pop {
+  animation: vp-vouch-pop 0.9s ease-out both;
+}
+
+/*
  * Dual-thumb range slider (master_plan §2AG A2, `components/ui/dual-range.tsx`): two native range
  * inputs stacked on one drawn track. Each input's own runnable track is made transparent (the
  * visible track/fill is a pair of plain divs the component draws itself) and `pointer-events: none`
@@ -232,4 +256,56 @@ body {
   border: 3px solid var(--surface);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   cursor: pointer;
+}
+
+/*
+ * Badges (master_plan §2BK). `--vp-badge-name-light`/`-dark` are set inline per instance
+ * (`BadgeRow`/`BADGE_METALS[metal]`) - the actual color is per-badge data, so it can't be a static
+ * Tailwind class. This pair of rules is what makes it track the app's manual `.dark` class toggle
+ * (next-themes `attribute="class"`) rather than `light-dark()`, which would follow the OS preference
+ * instead and disagree with a manual override - the same reason `.vp-topbar` above pins its own
+ * `color-scheme` rather than relying on the media query.
+ */
+.vp-badge-name {
+  color: var(--vp-badge-name-light, currentColor);
+}
+.dark .vp-badge-name {
+  color: var(--vp-badge-name-dark, currentColor);
+}
+
+/* Unlock moment (§2BK E): slow rotating rays behind the celebrating badge, and its pop-in. Both are
+   already stilled by the prefers-reduced-motion block above (animation-duration: 0.01ms), which lands
+   each on its final frame instantly - a still, fully-visible badge with no rotation. */
+@keyframes vp-badge-rays-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.vp-badge-rays {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 560px;
+  height: 560px;
+  transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(
+    from 0deg,
+    rgba(251, 191, 36, 0.07) 0 8deg,
+    transparent 8deg 20deg
+  );
+  border-radius: 50%;
+  animation: vp-badge-rays-spin 24s linear infinite;
+}
+@keyframes vp-badge-pop {
+  0% {
+    transform: scale(0.4) rotate(-12deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+.vp-badge-pop {
+  animation: vp-badge-pop 0.9s cubic-bezier(0.2, 1.4, 0.4, 1) both;
 }

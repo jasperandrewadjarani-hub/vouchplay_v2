@@ -21,6 +21,7 @@ import {
 } from '@vouchplay/config';
 import type { GlobalRole, ProfileRow } from '@vouchplay/db';
 import { avatarUrl } from '@/lib/storage';
+import type { BadgeView } from '@/lib/badges/types';
 
 export interface ViewerContext {
   /** The signed-in viewer's user id, or null for anonymous. */
@@ -121,6 +122,20 @@ export interface PlayerCardDTO {
    * Defaults to false when the column is not yet present - see `queries.ts`'s defensive read.
    */
   coachVouched: boolean;
+  /**
+   * Live badges in card order (master_plan §2BK E/F). Defaults to `[]` when the caller does not load
+   * badges for this surface (e.g. a fixture/test that predates badges).
+   */
+  badges: BadgeView[];
+  /** `meta.tier` of a live `tier_crown` badge - rendered as a crown on the avatar, never in the badge
+   *  row itself. Null when not crowned. */
+  crownTier: string | null;
+  /**
+   * `min(100, round(uniqueVoucherCount / badge_proven_min_vouchers * 100))` - the tier ring's fill on
+   * the Players tab card (§2BK F). Null when the community rating is private to this viewer (a filled
+   * ring would leak how close they are to a public rating).
+   */
+  vouchStrengthPct: number | null;
 }
 
 /**
@@ -252,6 +267,11 @@ export interface ProfileExtras {
   coachVouched?: boolean;
   /** Profile-query-only (§2AO D3); never populated for the directory list. See `CoachVoucherDTO`. */
   coachVouchers?: CoachVoucherDTO[];
+  /** Live badges in card order (master_plan §2BK E/F), from one batched
+   *  `getVisibleBadgesForPlayers` read per page. Undefined/missing -> `[]`. */
+  badges?: BadgeView[];
+  /** Admin `badge_proven_min_vouchers` (defaults to the seeded default, 15). */
+  provenMinVouchers?: number;
 }
 
 export function toPlayerCardDTO(
@@ -275,6 +295,20 @@ export function toPlayerCardDTO(
     visibility,
     { viewerId: viewer.viewerId, privileged: viewer.isStaff || Boolean(viewer.ratingsPrivileged) },
   );
+
+  const badges = extras.badges ?? [];
+  const crownTier = (() => {
+    const crown = badges.find((b) => b.key === 'tier_crown');
+    const tier = crown?.meta.tier;
+    return typeof tier === 'string' ? tier : null;
+  })();
+  const provenTarget = extras.provenMinVouchers ?? 15;
+  const vouchStrengthPct = ratings.communityHidden
+    ? null
+    : Math.max(
+        0,
+        Math.min(100, Math.round(((extras.skill?.uniqueVoucherCount ?? 0) / provenTarget) * 100)),
+      );
 
   return {
     slug: row.slug ?? row.id,
@@ -304,6 +338,9 @@ export function toPlayerCardDTO(
     viewerVouchCanUpdateInMs: null,
     clubs: extras.clubs ?? [],
     coachVouched: extras.coachVouched ?? false,
+    badges,
+    crownTier,
+    vouchStrengthPct,
   };
 }
 

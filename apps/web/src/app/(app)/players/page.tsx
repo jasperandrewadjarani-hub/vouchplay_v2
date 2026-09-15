@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { SKILL_BANDS, skillByOrdinal } from '@vouchplay/config';
 import { getViewerContext, getMyProfile } from '@/lib/auth';
 import {
   getDirectoryCityOptions,
   getDirectoryClubOptions,
+  getDirectoryPlayerCount,
   listPlayers,
 } from '@/lib/players/queries';
 import {
@@ -14,6 +16,7 @@ import {
 import {
   parsePlayerFilters,
   playerFiltersToQuery,
+  normalizeCityKey,
   type PlayerFilters,
   type SearchParamRecord,
 } from '@/lib/players/filters';
@@ -21,8 +24,11 @@ import type { ViewerContext } from '@/lib/players/dto';
 import { PlayerCard } from '@/components/players/player-card';
 import { PlayerListSkeleton } from '@/components/players/player-list-skeleton';
 import { SearchFilters } from '@/components/players/search-filters';
-import { DirectoryDoors } from '@/components/players/directory-doors';
+import { QuickChips } from '@/components/players/quick-chips';
+import { QuickBar } from '@/components/players/quick-bar';
+import { YourGameCard } from '@/components/players/your-game-card';
 import { getPartnerLookingStrip } from '@/lib/partners/deck';
+import { getViewerGame } from '@/lib/badges/queries';
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
@@ -137,9 +143,10 @@ async function PlayersResults({
         />
       ) : (
         <SignupWall
-          title="See every player"
-          message={`Sign up to search ${total.toLocaleString()}+ players, filter, and open profiles.`}
+          title={`Unlock ${total.toLocaleString()}+ players`}
+          message="Get your own rating card, climb the boards, and find a partner."
           next="/players"
+          placeholderRows={2}
         />
       )}
     </div>
@@ -182,6 +189,8 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     partnerLooking,
     partnerSettings,
     staffLinks,
+    viewerGame,
+    totalPlayers,
   ] = await Promise.all([
     getDirectoryCityOptions(),
     getDirectoryClubOptions(),
@@ -219,26 +228,52 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     // /staff/players/[slug] page itself stays reachable by URL regardless (role + step-up gated).
     // Non-staff never make this round trip at all (short-circuited here, same as before).
     viewer.isStaff ? loadSettingFlag('staff_activity_links_enabled', true) : Promise.resolve(false),
+    // The "Your game" card (master_plan §2BK F) - the viewer's own tier/STS/rank/progress. Fails
+    // open (lane-1 contract, `lib/badges/queries.ts`) - a read error here degrades to no card, never
+    // to a broken page. Whether it actually renders also depends on onboarding, checked below once
+    // `myProfile` is in hand.
+    authed ? getViewerGame(viewer.viewerId as string).catch(() => null) : Promise.resolve(null),
+    // The compact header's "{n}+ players" (master_plan §2BK F): a cached head-only count with the
+    // directory's own inclusion rules - not a second full directory load. Null hides the number.
+    getDirectoryPlayerCount(),
   ]);
   const showCommunitySkill = profileVisibility.showCommunitySkill || viewer.isStaff;
   // §2BC decision A: which state the "Let people find you" / "Find a partner" doors react to - an
   // anonymous or not-yet-onboarded viewer has no profile to toggle, so they get routed elsewhere.
-  const authDoorState = !authed ? 'anon' : myProfile?.onboarded_at ? 'onboarded' : 'not_onboarded';
+  const onboarded = Boolean(myProfile?.onboarded_at);
+  const authDoorState = !authed ? 'anon' : onboarded ? 'onboarded' : 'not_onboarded';
+
+  // Quick chips (master_plan §2BK F "My level"): the viewer's community band ordinal, falling back
+  // to self-rated - `viewerGame` only resolves once onboarded, so this is null for everyone else too,
+  // which is exactly what hides the chip.
+  const myLevelOrdinal =
+    (viewerGame?.tier
+      ? SKILL_BANDS.find((b) => b.key === viewerGame.tier?.key)?.ordinal
+      : undefined) ??
+    (typeof myProfile?.self_rated_skill === 'number' ? myProfile.self_rated_skill : null) ??
+    null;
+  const myLevelLabel =
+    viewerGame?.tier?.label ??
+    (myLevelOrdinal != null ? (skillByOrdinal(myLevelOrdinal)?.label ?? null) : null);
+  const myCityLabel = myProfile?.city ?? null;
+  const myCityKey = myCityLabel ? normalizeCityKey(myCityLabel) || null : null;
 
   return (
     <div className="space-y-5">
-      <div className="vp-in space-y-1">
+      <div className="vp-in flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h1 className="text-foreground text-3xl font-extrabold tracking-tight">
           <span className="vp-gradient-text">Players</span>
         </h1>
-        <p className="text-foreground-muted text-sm">
-          Skill reputations built by the people you actually play with.
-        </p>
+        {totalPlayers != null && (
+          <span className="text-foreground-muted text-sm">
+            {totalPlayers.toLocaleString()}+ players
+          </span>
+        )}
       </div>
 
-      {/* One row of three doors - Leaderboards, Let people find you, Find a partner - replacing the
-          three stacked blocks that used to sit above the list (master_plan §2BC decision A). */}
-      <DirectoryDoors
+      {/* One slim quick bar - Leaderboards, Find me, Partners - replacing the three tall doors that
+          used to sit above the list (master_plan §2BK F). */}
+      <QuickBar
         authState={authDoorState}
         board={leaders}
         lookingForPartner={Boolean(myProfile?.looking_for_partner)}
@@ -247,16 +282,31 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
         partnerMatchmakingEnabled={partnerSettings.enabled}
       />
 
-      {/* Search, filters, sort and the availability card are signed-in features (master_plan §2AH):
-          a guest sees the header, the leaders card and a fixed 10-player preview, nothing to tune. */}
+      {/* "Your game" (master_plan §2BK F): signed-in, onboarded, and there is something to show -
+          `getViewerGame` (lane 1) is what actually decides eligibility server-side; this is just the
+          null-check on its result. */}
+      {authed && onboarded && viewerGame && <YourGameCard game={viewerGame} />}
+
+      {/* Search, filters, sort and the quick chips are signed-in features (master_plan §2AH): a guest
+          sees the header, the quick bar and a fixed 10-player preview, nothing to tune. */}
       {authed && (
-        <SearchFilters
-          current={filters}
-          cityOptions={cityOptions}
-          clubOptions={clubOptions}
-          tournamentOptions={tournamentOptions}
-          compact={compact}
-        />
+        <>
+          <SearchFilters
+            current={filters}
+            cityOptions={cityOptions}
+            clubOptions={clubOptions}
+            tournamentOptions={tournamentOptions}
+            compact={compact}
+          />
+          <QuickChips
+            current={filters}
+            compact={compact}
+            myLevelOrdinal={myLevelOrdinal}
+            myLevelLabel={myLevelLabel}
+            myCity={myCityKey}
+            myCityLabel={myCityLabel}
+          />
+        </>
       )}
 
       {/* Keyed on the filters + view so any search/filter/sort/page/view change remounts the

@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.85 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.86 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.86 (2026-09-15)
+
+_Badges + Players tab upgrade Phase 1 & 2 (master_plan §2BK). Migration 0051._
+
+- **Badges:** 23 badges (Glory, Community, Growth, Roles, Special) incl. a granted **OG** badge; most earned
+  automatically from verified data, some granted. **Admins can tag / untag any badge** at Admin → Badges
+  (reason, audit, notification, optional block on automatic re-award), view holders, recompute, and mark
+  event badges. Badges never affect STS, vouch weight, eligibility or Skill Verified.
+- **Players tab:** quick bar, Your game card, tier-ring player cards (crown, badge row, big STS,
+  sentence-case "Ratings private"), quick filter chips, vouch micro-reward, visitor preview.
+- **Profile:** badge case with detail sheet, pin / hide, Almost there, Past; unlock moment for new badges.
+- **Migration 0051** (`scripts/apply-0051.sql`): additive; readers fail open. Jasper applies it, then taps
+  Admin → Badges → Recompute now.
+- **Renumbered plans:** organizer Phase B is now migration 0052, PIN lock 0053.
+
 ## v1.85 (2026-09-15)
 
 _Interest meter duplicate rows fixed (master_plan §2BI); Players tab redesign proposed, not built (§2BJ)._

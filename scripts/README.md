@@ -102,6 +102,24 @@ missing.
 node scripts/backfill-skill-v2.mjs
 ```
 
+## apply-0051.sql (status: pending - Jasper applies)
+
+Migration 0051 (master_plan §2BK): badges. Adds `player_badges` (auto + admin-granted badge rows),
+`profiles.pinned_badge_key`, `tournaments.commemorative_badge_label`, and `player_badge_progress`
+(the Level Up tracker). Additive only, no security-definer functions, RLS on both new tables (public
+live-badge read + owner/staff on `player_badges`; no policies at all on `player_badge_progress`,
+service-role only). Every badge reader in the app fails open to empty/null on a missing table/column,
+so this migration and the code deploy can land in either order - apply whenever convenient, then tap
+**Recompute now** in Admin → Badges to populate the first round of automatic badges.
+
+```bash
+# Paste scripts/apply-0051.sql (byte-identical to supabase/migrations/0051_badges.sql) into the
+# Supabase SQL editor. Expect the verification blocks to show rowsecurity=true for both new tables,
+# the player_badges column list, exactly one RLS policy (player_badges_public_read - none on
+# player_badge_progress, which is service-role only), and both new columns
+# (profiles.pinned_badge_key, tournaments.commemorative_badge_label).
+```
+
 ## apply-0050.sql (applied 2026-09-14)
 
 Migration 0050 (master_plan §2BB) added `profiles.password_set` and backfilled `true` for users with a

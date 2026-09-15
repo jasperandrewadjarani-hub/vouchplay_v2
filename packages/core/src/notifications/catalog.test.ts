@@ -46,6 +46,40 @@ describe('notification catalog (§27)', () => {
   it('falls back gracefully for an unknown type', () => {
     expect(notificationDef('does_not_exist')).toBeUndefined();
   });
+
+  describe('badges (§2BK)', () => {
+    it('badge_earned / badge_granted / badge_revoked are all non-critical (mutable, in-app first)', () => {
+      for (const type of ['badge_earned', 'badge_granted', 'badge_revoked']) {
+        const def = notificationDef(type)!;
+        expect(def.critical, type).toBe(false);
+        expect(def.category, type).toBe('badges');
+      }
+      expect(MUTABLE_CATEGORIES).toContain('badges');
+      expect(CATEGORY_LABELS.badges).toBeTruthy();
+    });
+
+    it('builds badge_earned copy from the badge name', () => {
+      const def = notificationDef('badge_earned')!;
+      expect(def.title({ extra: 'Champion' })).toBe('You earned Champion');
+      expect(def.body({})).toBe('It now shows on your badge case.');
+    });
+
+    it('builds badge_granted copy, preferring the admin reason when given', () => {
+      const def = notificationDef('badge_granted')!;
+      expect(def.title({ extra: 'OG' })).toBe('You were awarded OG');
+      expect(def.body({ extra: 'OG', reason: 'In the scene since 2015.' })).toBe(
+        'In the scene since 2015.',
+      );
+      expect(def.body({ extra: 'OG' })).toBe('It now shows on your badge case.');
+    });
+
+    it('builds badge_revoked copy and allows an empty body when no reason was given', () => {
+      const def = notificationDef('badge_revoked')!;
+      expect(def.title({ extra: 'Rising' })).toBe('Rising was removed from your profile');
+      expect(def.body({ reason: 'Awarded in error.' })).toBe('Awarded in error.');
+      expect(def.body({})).toBeUndefined();
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

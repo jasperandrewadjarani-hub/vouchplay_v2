@@ -4,7 +4,13 @@ import type { SkillAlgorithmVersion } from '@vouchplay/config';
 import { createPublicClient } from '@/lib/supabase/public';
 import { createServiceClient } from '@/lib/supabase/service';
 import { avatarUrl } from '@/lib/storage';
-import { getVouchSettings, getActiveSkillVersion, getNewAccountBadgeDays } from '@/lib/settings';
+import {
+  getVouchSettings,
+  getActiveSkillVersion,
+  getNewAccountBadgeDays,
+  getBadgeSettings,
+} from '@/lib/settings';
+import { getVisibleBadgesForPlayers } from '@/lib/badges/queries';
 import {
   pickActiveSkill,
   selectSkillProfiles,
@@ -501,6 +507,30 @@ interface RawListResult {
  * ceiling the skill-index SCALE NOTE above already documents the directory against, so nothing here
  * is a new limit, just the existing one applied one step earlier in the pipeline.
  */
+/**
+ * How many players the directory lists, unfiltered (master_plan §2BK F: the Players header's "{n}+
+ * players"). Same inclusion rules as `fetchListRows` - active, onboarded, not opted out of the
+ * directory - as a head-only count (no rows, no skill/badge reads), cached like the list itself.
+ * Null on any error so the header hides the number rather than showing a wrong one.
+ */
+export const getDirectoryPlayerCount = unstable_cache(
+  async (): Promise<number | null> => {
+    try {
+      const { count, error } = await createPublicClient()
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('account_status', 'active')
+        .not('onboarded_at', 'is', null)
+        .or('profile_visibility->>directory.is.null,profile_visibility->>directory.neq.hidden');
+      return error ? null : (count ?? null);
+    } catch {
+      return null;
+    }
+  },
+  ['players-directory-count'],
+  { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
+);
+
 async function fetchListRows(
   f: PlayerFilters,
   restrictIds: string[] | null,
@@ -705,18 +735,28 @@ export async function listPlayers(
   const pageRows = orderedRows.slice(from, from + PAGE_SIZE);
 
   const ids = pageRows.map((r) => r.id);
-  const [facts, skills, coachVouchCounts, clubs, vouchMap, newAccountBadgeDays] = await Promise.all(
-    [
-      fetchBadgeFacts(ids),
-      fetchSkillSnapshots(ids, skillVersion),
-      fetchCoachVouchCounts(ids),
-      getUserClubsBulk(ids),
-      viewer.viewerId
-        ? getViewerVouchCooldownMap(viewer.viewerId)
-        : Promise.resolve(new Map<string, number>()),
-      getNewAccountBadgeDays(),
-    ],
-  );
+  const [
+    facts,
+    skills,
+    coachVouchCounts,
+    clubs,
+    vouchMap,
+    newAccountBadgeDays,
+    badgesByPlayer,
+    badgeSettings,
+  ] = await Promise.all([
+    fetchBadgeFacts(ids),
+    fetchSkillSnapshots(ids, skillVersion),
+    fetchCoachVouchCounts(ids),
+    getUserClubsBulk(ids),
+    viewer.viewerId
+      ? getViewerVouchCooldownMap(viewer.viewerId)
+      : Promise.resolve(new Map<string, number>()),
+    getNewAccountBadgeDays(),
+    // One batched badge read for the whole page (master_plan §2BK, directory card DTO).
+    getVisibleBadgesForPlayers(ids),
+    getBadgeSettings(),
+  ]);
   const players = pageRows.map((row) => {
     const f = facts[row.id] ?? emptyFacts();
     const extras: ProfileExtras = {
@@ -725,6 +765,8 @@ export async function listPlayers(
       skill: skills[row.id] ?? null,
       clubs: clubs[row.id] ?? [],
       coachVouched: (coachVouchCounts[row.id] ?? 0) > 0,
+      badges: badgesByPlayer.get(row.id) ?? [],
+      provenMinVouchers: badgeSettings.rules.provenMinVouchers,
     };
     const dto = toPlayerCardDTO(row, extras, viewer, newAccountBadgeDays);
     const cooldown = vouchMap.get(row.id);
@@ -851,15 +893,26 @@ export async function getPlayerBySlug(
     ['player-coach-vouchers', row.id],
     { revalidate: 60, tags: [playerTag(slug)] },
   );
-  const [facts, skills, coachVouchCounts, clubs, coachVouchers, newAccountBadgeDays] =
-    await Promise.all([
-      fetchBadgeFacts([row.id]),
-      fetchSkillSnapshots([row.id], skillVersion),
-      fetchCoachVouchCounts([row.id]),
-      getUserClubs(row.id),
-      fetchCoachVouchers(),
-      getNewAccountBadgeDays(),
-    ]);
+  const [
+    facts,
+    skills,
+    coachVouchCounts,
+    clubs,
+    coachVouchers,
+    newAccountBadgeDays,
+    badgesByPlayer,
+    badgeSettings,
+  ] = await Promise.all([
+    fetchBadgeFacts([row.id]),
+    fetchSkillSnapshots([row.id], skillVersion),
+    fetchCoachVouchCounts([row.id]),
+    getUserClubs(row.id),
+    fetchCoachVouchers(),
+    getNewAccountBadgeDays(),
+    // One batched badge read for this profile (master_plan §2BK).
+    getVisibleBadgesForPlayers([row.id]),
+    getBadgeSettings(),
+  ]);
   const f = facts[row.id] ?? emptyFacts();
   const extras: ProfileExtras = {
     roles: f.roles,
@@ -868,6 +921,8 @@ export async function getPlayerBySlug(
     clubs,
     coachVouched: (coachVouchCounts[row.id] ?? 0) > 0,
     coachVouchers,
+    badges: badgesByPlayer.get(row.id) ?? [],
+    provenMinVouchers: badgeSettings.rules.provenMinVouchers,
   };
   return toPlayerProfileDTO(row, extras, viewer, newAccountBadgeDays);
 }

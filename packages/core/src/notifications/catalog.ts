@@ -17,7 +17,8 @@ export type NotificationCategory =
   | 'leaderboards'
   | 'roles'
   | 'moderation'
-  | 'security';
+  | 'security'
+  | 'badges';
 
 export interface NotificationParams {
   actorName?: string;
@@ -596,6 +597,29 @@ export const NOTIFICATION_CATALOG: Record<string, NotificationTypeDef> = {
     (p) =>
       `${who(p)} entered you in ${p.divisionName ?? 'a division'}${p.extra ? ` with ${p.extra}` : ''}. Not right? Ask the organizer or request a cancellation from My registrations.`,
   ),
+
+  // --- Badges (master_plan §2BK) - non-critical, mutable. Only the FIRST award of a key notifies;
+  // recomputations and expiries are silent (§2BK "Loose ends"). Revoke is in-app only (no push) - the
+  // push channel is decided by the caller (`lib/badges/compute.ts` / `lib/actions/badges.ts`), not by
+  // this catalog, since criticality alone does not model it here.
+  badge_earned: t(
+    'badges',
+    false,
+    (p) => `You earned ${p.extra ?? 'a badge'}`,
+    () => 'It now shows on your badge case.',
+  ),
+  badge_granted: t(
+    'badges',
+    false,
+    (p) => `You were awarded ${p.extra ?? 'a badge'}`,
+    (p) => p.reason ?? 'It now shows on your badge case.',
+  ),
+  badge_revoked: t(
+    'badges',
+    false,
+    (p) => `${p.extra ?? 'A badge'} was removed from your profile`,
+    (p) => p.reason ?? undefined,
+  ),
 };
 
 export function notificationDef(type: string): NotificationTypeDef | undefined {
@@ -623,4 +647,5 @@ export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   roles: 'Role applications',
   moderation: 'Moderation',
   security: 'Account & security',
+  badges: 'Badges',
 };

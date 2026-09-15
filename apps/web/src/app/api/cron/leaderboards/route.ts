@@ -10,6 +10,7 @@ import { createServiceClient } from '@/lib/supabase/service';
 import { purgeExpiredCoachEvidence } from '@/lib/coach/evidence';
 import { getLeaderboardSettings } from '@/lib/settings';
 import { writeAudit } from '@/lib/moderation/audit';
+import { computeAutoBadges } from '@/lib/badges/compute';
 
 export const maxDuration = 60;
 
@@ -107,6 +108,12 @@ export async function GET(request: Request) {
         .in('id', pendingIds)
         .eq('status', 'pending');
     revalidateTag(LEADERBOARD_CACHE_TAG);
+
+    // Badges (master_plan §2BK D): best-effort, after fresh momentum - Rising and Top of Tier read
+    // the momentum this run just rebuilt. `computeAutoBadges` fails open (zero counts) on any error,
+    // so a badge problem never fails the leaderboard publish that already succeeded above.
+    const badges = await computeAutoBadges();
+
     await auditRun({
       outcome: 'published',
       ranAt,
@@ -116,8 +123,11 @@ export async function GET(request: Request) {
       entriesPublished: result.entries,
       contributionRows: result.contributionRows,
       coachEvidencePurged,
+      badgesAwarded: badges.awarded,
+      badgesUpdated: badges.updated,
+      badgesRetired: badges.retired,
     });
-    return NextResponse.json({ ok: true, ...result, coachEvidencePurged });
+    return NextResponse.json({ ok: true, ...result, coachEvidencePurged, badges });
   } catch {
     if (pendingIds.length)
       await db

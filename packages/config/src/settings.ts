@@ -108,6 +108,29 @@ export const DEFAULT_SYSTEM_SETTINGS = {
   reports_per_24h: 10,
   skill_reviews_per_24h: 5,
 
+  // Badges (master_plan §2BK). Every number a rule uses lives here - the catalog
+  // (packages/config/src/badges.ts) is fixed vocabulary only. `badge_disabled_keys` hides listed
+  // keys everywhere and skips them in the nightly job; existing rows on a disabled key stay put.
+  badges_enabled: true,
+  badge_disabled_keys: '',
+  badge_champion_window_months: 12,
+  badge_legend_min_titles: 3,
+  badge_podium_window_months: 12,
+  badge_regular_min_events: 5,
+  badge_regular_level2_events: 15,
+  badge_regular_level3_events: 30,
+  badge_top_contributor_size: 10,
+  badge_trusted_voice_min_vouches: 25,
+  badge_pioneer_cutoff: 100,
+  badge_matchmaker_min_entered: 3,
+  badge_rising_top_n: 10,
+  badge_rising_min_climb: 3,
+  badge_rising_days: 30,
+  badge_level_up_days: 30,
+  badge_proven_min_vouchers: 15,
+  badge_tier_crown_min_vouchers: 5,
+  badge_organizer_min_tournaments: 1,
+
   // Eligibility engine thresholds (handover §25.4, ELIG_V1). Admin-tunable, never hardcoded.
   eligibility_min_unique_vouchers: 2,
   eligibility_review_below_sts: 3.0,

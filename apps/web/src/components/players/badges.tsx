@@ -271,3 +271,27 @@ export function RatingsPrivateChip({ own = false }: { own?: boolean }) {
     </span>
   );
 }
+
+/**
+ * Player-card-only "Ratings private" treatment (master_plan §2BK F): sentence case, a quiet 12px
+ * lock, no uppercase/tracked pill background - stands in for the tier line itself rather than
+ * sitting beside it like `RatingsPrivateChip` does elsewhere. "It reads as a choice the player made,
+ * not a warning" (the approved Players tab sample). Deliberately a SEPARATE component rather than a
+ * new variant of `RatingsPrivateChip`, so the profile page and partner card - which this lane does
+ * not touch - keep their existing pill exactly as it is today.
+ */
+export function RatingsPrivateInline({ own = false }: { own?: boolean }) {
+  return (
+    <span
+      className="text-foreground-muted inline-flex min-w-0 items-center gap-1 text-xs font-semibold"
+      title={
+        own
+          ? 'Only you, tournament organizers and staff can see this rating.'
+          : 'This player keeps their ratings private.'
+      }
+    >
+      <Lock size={12} aria-hidden className="shrink-0" />
+      <span className="truncate">{own ? 'Private' : 'Ratings private'}</span>
+    </span>
+  );
+}

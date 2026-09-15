@@ -21,6 +21,13 @@ export interface NotifyInput {
   /** Optional copy overrides (else built from the @vouchplay/core catalog). */
   title?: string;
   body?: string;
+  /**
+   * When true, this notification is created in-app only - Web Push is never scheduled for it, even
+   * though the type itself is non-critical (so email is unaffected either way). Used by badge_revoked
+   * (master_plan §2BK): earning/granting a badge should be able to wake a phone, but a quiet
+   * retirement should not. Every other caller is unaffected (defaults to false).
+   */
+  skipPush?: boolean;
 }
 
 interface Prepared {
@@ -111,7 +118,7 @@ export async function notify(input: NotifyInput): Promise<void> {
 
     await svc.from('notifications').insert(prepared.row);
 
-    await schedulePush(toPushRows([prepared.row]));
+    if (!input.skipPush) await schedulePush(toPushRows([prepared.row]));
 
     if (prepared.critical) {
       await sendCriticalEmail({

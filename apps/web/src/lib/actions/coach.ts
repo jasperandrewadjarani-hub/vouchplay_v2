@@ -16,6 +16,7 @@ import { emitAnalyticsEvent } from '@/lib/analytics';
 import { PLAYERS_LIST_TAG } from '@/lib/players/queries';
 import type { SafetyActionState } from './report';
 import { writeAudit } from '@/lib/moderation/audit';
+import { computeAutoBadges } from '@/lib/badges/compute';
 
 function values(formData: FormData, name: string): string[] {
   return formData
@@ -241,6 +242,11 @@ export async function decideCoachApplication(
       entityType: 'role_application',
       entityId: applicationId,
     });
+    if (decision === 'approve') {
+      // Best-effort badge recompute (master_plan §2BK D): an approved Coach role immediately
+      // qualifies the Coach badge.
+      await computeAutoBadges({ playerIds: [result.user_id] }).catch(() => undefined);
+    }
   }
   emitAnalyticsEvent(
     decision === 'request_information'

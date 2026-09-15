@@ -14,6 +14,7 @@ import { PasswordSetupGate } from './auth/password-setup-gate';
 import { SiteFooter } from './site-footer';
 import { IdentityNudgeBanner } from './identity/identity-nudge-banner';
 import { UnpaidSlotStrip } from './tournaments/unpaid-slot-strip';
+import { BadgeUnlock } from './badges/badge-unlock';
 import { loadSettingFlag, loadSettingText } from '@/lib/settings';
 import { viewerIsStaff } from '@/lib/moderation/staff';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/auth';
 import { getVoucherPowerCached, type VoucherPower } from '@/lib/vouches/voucher-power';
 import { getViewerUnpaidSlots } from '@/lib/tournaments/unpaid';
+import { getUncelebratedBadges } from '@/lib/badges/queries';
 
 /**
  * App shell: sticky header, desktop sidebar, mobile bottom nav, centered max-width content
@@ -115,6 +117,21 @@ export async function AppShell({ children }: { children: ReactNode }) {
     gated || legal.needsAcceptance || !passwordGateEnabled
       ? { needsPassword: false }
       : await getViewerPasswordStatus();
+
+  // Badge unlock moment (master_plan §2BK E): only for a signed-in, onboarded viewer, and only once
+  // the maintenance gate, legal gate and password gate are all clear - mirrors the same conditions
+  // those gates above compute, rather than re-deriving its own. `getMyProfile()` is request-memoised
+  // (§2AB), so this costs nothing extra when the unpaid-slot/minimal-power checks above already
+  // called it. The query itself is documented fail-open (empty on error), so this stays cheap and
+  // never blocks the shell even before migration 0051 lands.
+  const uncelebratedBadges =
+    gated || legal.needsAcceptance || passwordStatus.needsPassword
+      ? []
+      : await (async () => {
+          const profile = await getMyProfile();
+          if (!profile?.onboarded_at) return [];
+          return getUncelebratedBadges(profile.id);
+        })();
 
   // Launch/campaign pop-up: only loaded when an Admin has switched it on.
   const welcome = welcomeEnabled
@@ -221,6 +238,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
         {/* Notifications on by default once installed (master_plan §2AZ addendum): auto-requests
           permission + subscribes for a signed-in viewer running the standalone app. Renders nothing. */}
         {!gated && <PushAutoEnable adminEnabled={pushEnabled} authed={authed} />}
+        {uncelebratedBadges.length > 0 && <BadgeUnlock badges={uncelebratedBadges} />}
         {legal.needsAcceptance && <LegalConsentGate />}
         {passwordStatus.needsPassword && <PasswordSetupGate email={viewer?.email ?? null} />}
       </div>

@@ -16,3 +16,4 @@ export * from './visibility';
 export * from './ph-cities';
 export * from './moderation';
 export * from './achievements';
+export * from './badges';
