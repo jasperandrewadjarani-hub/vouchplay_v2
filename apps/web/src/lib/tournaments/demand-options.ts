@@ -73,13 +73,22 @@ export function mergeLegacyDemand(
   const shapes: DemandDivisionShape[] = divisions.filter(PUBLIC_DIVISION_STATUSES).flatMap((d) => {
     const key = demandKeyForDivision(d.id);
     if (!key) return [];
-    // Only a single-band division can stand in for a single-band taxonomy entry.
-    const singleBand =
-      d.skillPolicy === 'band' && d.minimumSkill != null && d.maximumSkill === d.minimumSkill;
+    const banded = d.skillPolicy === 'band' && d.minimumSkill != null;
+    const singleBand = banded && d.maximumSkill === d.minimumSkill;
+    // Every band the division admits (§2BI), so interest still folds after an organizer widens a range.
+    const bandKeys: string[] = [];
+    if (banded) {
+      const top = d.maximumSkill ?? (d.minimumSkill as number);
+      for (let o = d.minimumSkill as number; o <= top; o++) {
+        const band = skillByOrdinal(o)?.key;
+        if (band) bandKeys.push(band);
+      }
+    }
     return [
       {
         key,
         skillBandKey: singleBand ? (skillByOrdinal(d.minimumSkill as number)?.key ?? null) : null,
+        bandKeys,
         sex: d.sexClassification,
         hasAgeFloor: d.minimumAge != null,
       },

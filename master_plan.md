@@ -6308,6 +6308,54 @@ containment rule; `moneyRead` sent states; `PaymentState` + `'sent'`; `entryFlag
 `manage-sheets.tsx`, `team-card.tsx` / `team-card-parts.tsx`, `add-entry-wizard.tsx`, manage `loading.tsx`,
 Overview tiles, bottom nav, Players page.
 
+## 2BI. Interest meter shows duplicate division rows again (2026-09-15)
+
+Jasper (screenshots): the Hermosa "Tournament interest" breakdown again lists "Novice Men's 6", "Novice
+Mixed 3", "High Intermediate Women's 1" below "Men's Doubles Novice", "Mixed Doubles Novice", "Women's
+Doubles High Intermediate".
+
+**Cause (production read, 2026-09-15).** Legacy planning-taxonomy interest (`novice_men`, `novice_mixed`,
+`high_intermediate_women`, …) is folded into real divisions by `legacyDemandAliases`, which only matched a
+**single-band** division (min skill = max skill). The organizer has since widened ranges: Men's and Mixed
+Doubles Novice now run Novice–High Intermediate (2–4), Women's Doubles High Intermediate runs High Int–
+Advanced (4–5). No single-band match remained, so those keys fell back to their own rows. Single-band
+divisions (Low Int men, etc.) still folded, which is why only some rows came back.
+
+**Decision.** `DemandDivisionShape` carries `bandKeys` (every band the division admits, lowest first) and
+the match runs most-specific-first, never guessing: (1) an exact single-band division; (2) else the one
+division whose range STARTS at that band; (3) else the one division whose range CONTAINS it. Two or more
+candidates at any step keeps the legacy row (e.g. two mixed divisions both starting at High Int). Tests pin
+the current Hermosa shape. No data is changed - folding happens at read time.
+
+## 2BJ. Players tab: slimmer, more "game" - PROPOSAL, awaiting Jasper's approval (2026-09-15)
+
+Jasper: the Leaderboards / Let people find you / Find a partner cards take too much room; "RATINGS PRIVATE"
+should not be uppercase; brainstorm a more gamified feel. Plan and sample only - no code until approved.
+Sample: artifact "Players Tab Level-Up".
+
+**Phase 1 (on approval).**
+- **Quick bar** - the three doors become one row of compact buttons (icon tile + label + live one-liner:
+  "RJ is #1", "● Visible" / "Join free", "36 looking"), ~52 px instead of ~120 px. Find me opens the
+  existing availability sheet.
+- **"Your game" card** (signed-in, onboarded) - own avatar with tier ring, tier + STS, board rank with weekly
+  movement, and a progress bar toward a trusted rating (unique vouchers vs the eligibility evidence
+  threshold). Tap → own profile.
+- **Player card** - avatar ring in the community-skill tier colour that fills with vouch strength; STS as a
+  large comparable number with "N vouches" beneath; one tier line ("High Intermediate · Community"); up to
+  two tags (Looking for partner, Coach); the icon row after the name reduced to the sex symbol.
+- **"Ratings private"** in sentence case with a lock, muted (drop the `uppercase` treatment).
+- **Vouch micro-reward** - "+1" float, a light haptic on Android (`navigator.vibrate`), settles to
+  "✓ Vouched"; respects reduced motion.
+- **Quick filter chips** - My level · Near me · Looking for partner · Coaches above the full filter panel.
+
+**Phase 2.** Crown for the #1 in each tier, trophy tags from official awards, ▲ Rising from the momentum data
+Home already reads; milestone moments for vouch givers; a blurred preview row in the visitor wall.
+
+**Guardrails.** No daily-vouch-budget meter: established players have no 24 h cap
+(`player_vouches_per_24h = 0`), so it would mislead. Private ratings stay redacted at the DTO (§2AW) - the
+ring and STS obey the same redaction. Rank data comes from existing leaderboard snapshots (no new query per
+row).
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

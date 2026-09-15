@@ -25,6 +25,13 @@ export interface DemandDivisionShape {
    * range or is open. Only a single-band division can stand in for a single-band taxonomy entry.
    */
   skillBandKey: string | null;
+  /**
+   * Every skill band the division admits, lowest first (e.g. `['novice', 'low_intermediate',
+   * 'high_intermediate']`), or absent/empty for an open division. Lets a taxonomy key fold into a
+   * division whose range the organizer widened (master_plan §2BI) - the fix for the "Novice Men's"
+   * row reappearing once Hermosa's Men's Doubles Novice became Novice-High Intermediate.
+   */
+  bandKeys?: readonly string[];
   /** `men` | `women` | `mixed` | `genderless`. */
   sex: string;
   /** True when the division has a minimum age, i.e. it is the event's age-restricted division. */
@@ -48,6 +55,27 @@ function onlyMatch(divisions: DemandDivisionShape[]): string | null {
 }
 
 /**
+ * The one division a skill taxonomy key means, most specific rule first - and never a guess:
+ * 1. a single-band division of exactly that band;
+ * 2. else the division whose range STARTS at that band ("Men's Doubles Novice" = Novice-High Int);
+ * 3. else the only division whose range CONTAINS that band.
+ * At any rule, two or more candidates means ambiguous: stop and keep the legacy row.
+ */
+function skillMatch(pool: DemandDivisionShape[], band: string): string | null {
+  const rules: ((d: DemandDivisionShape) => boolean)[] = [
+    (d) => d.skillBandKey === band,
+    (d) => (d.bandKeys?.[0] ?? null) === band,
+    (d) => d.bandKeys?.includes(band) ?? false,
+  ];
+  for (const rule of rules) {
+    const hits = pool.filter(rule);
+    if (hits.length === 1) return hits[0]!.key;
+    if (hits.length > 1) return null;
+  }
+  return null;
+}
+
+/**
  * Map legacy taxonomy keys onto division keys: `{ novice_men: 'div_abc...' }`.
  *
  * Age keys (`age_50_plus_men`) match on the age floor and category rather than the exact age, because
@@ -65,10 +93,9 @@ export function legacyDemandAliases(
     const [prefix, category] = parts;
     const target = prefix.startsWith(AGE_PREFIX)
       ? onlyMatch(divisions.filter((d) => d.hasAgeFloor && d.sex === category))
-      : onlyMatch(
-          divisions.filter(
-            (d) => !d.hasAgeFloor && d.sex === category && d.skillBandKey === prefix,
-          ),
+      : skillMatch(
+          divisions.filter((d) => !d.hasAgeFloor && d.sex === category),
+          prefix,
         );
     if (target) aliases[legacyKey] = target;
   }

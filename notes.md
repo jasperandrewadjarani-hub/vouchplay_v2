@@ -3402,3 +3402,14 @@ own `loading.tsx`, and a shared ancestor boundary does not re-show between sibli
 frozen; now each tab has one, the nav item turns active on tap (`useLinkStatus`), and Players/Home/
 Tournaments/Me read in parallel. Remaining floor (not changed, flagged): middleware `auth.getUser()` network
 call on every navigation.
+
+## 2026-09-15 - Interest meter duplicates fixed (§2BI); Players tab redesign proposed (§2BJ, awaiting approval)
+
+Interest breakdown again showed "Novice Men's 6 / Novice Mixed 3 / High Intermediate Women's 1" beside their
+real divisions. Production read: the organizer widened Men's/Mixed Doubles Novice to Novice–High Int and
+Women's Doubles High Int to High Int–Advanced; the legacy-key fold only matched single-band divisions.
+`legacyDemandAliases` now matches exact band → range that starts at the band → only range containing it,
+refusing when ambiguous; `demand-options.ts` supplies `bandKeys`; tests pin the current Hermosa shape. Players
+tab: plan + sample artifact ("Players Tab Level-Up") for a slim quick bar, a "Your game" card, tier-ring
+player cards with a big STS, sentence-case "Ratings private", a vouch micro-reward and quick filter chips
+(Phase 1); crowns/trophies/Rising, milestones and a visitor preview (Phase 2). Not built - waiting on Jasper.

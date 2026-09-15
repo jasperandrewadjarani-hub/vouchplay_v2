@@ -57,6 +57,62 @@ describe('legacyDemandAliases', () => {
   });
 });
 
+describe('legacyDemandAliases after an organizer widens a division range (§2BI)', () => {
+  const ranged = (key: string, sex: string, bands: string[]): DemandDivisionShape => ({
+    key,
+    skillBandKey: bands.length === 1 ? bands[0]! : null,
+    bandKeys: bands,
+    sex,
+    hasAgeFloor: false,
+  });
+  // Production shape read on 2026-09-15: Novice divisions now run Novice-High Int, WD High Int runs
+  // High Int-Advanced, two mixed divisions both start at High Int, alongside single-band divisions.
+  const HERMOSA_NOW: DemandDivisionShape[] = [
+    ranged('div_b1m', 'men', ['beginner']),
+    ranged('div_l3m', 'men', ['low_intermediate']),
+    ranged('div_h4m', 'men', ['high_intermediate']),
+    ranged('div_nov_m', 'men', ['novice', 'low_intermediate', 'high_intermediate']),
+    ranged('div_adv_m', 'men', ['advanced', 'pro']),
+    ranged('div_b1w', 'women', ['beginner']),
+    ranged('div_n2w', 'women', ['novice']),
+    ranged('div_l3w', 'women', ['low_intermediate']),
+    ranged('div_hi_w', 'women', ['high_intermediate', 'advanced']),
+    ranged('div_b1x', 'mixed', ['beginner']),
+    ranged('div_l3x', 'mixed', ['low_intermediate']),
+    ranged('div_nov_x', 'mixed', ['novice', 'low_intermediate', 'high_intermediate']),
+    ranged('div_adv_x1', 'mixed', ['high_intermediate', 'advanced', 'pro']),
+    ranged('div_adv_x2', 'mixed', ['high_intermediate', 'advanced', 'pro']),
+  ];
+
+  it('folds the three keys that reappeared as duplicate rows', () => {
+    expect(
+      legacyDemandAliases(['novice_men', 'novice_mixed', 'high_intermediate_women'], HERMOSA_NOW),
+    ).toEqual({
+      novice_men: 'div_nov_m',
+      novice_mixed: 'div_nov_x',
+      high_intermediate_women: 'div_hi_w',
+    });
+  });
+
+  it('prefers an exact single-band division over a range that also contains the band', () => {
+    // high_intermediate_men: the exact High Int division wins over Novice-High Int.
+    expect(legacyDemandAliases(['high_intermediate_men'], HERMOSA_NOW)).toEqual({
+      high_intermediate_men: 'div_h4m',
+    });
+    expect(legacyDemandAliases(['low_intermediate_men'], HERMOSA_NOW)).toEqual({
+      low_intermediate_men: 'div_l3m',
+    });
+  });
+
+  it('still refuses to guess when two ranges start at the same band', () => {
+    expect(legacyDemandAliases(['high_intermediate_mixed'], HERMOSA_NOW)).toEqual({});
+  });
+
+  it('folds into the only division that contains a band when none starts there', () => {
+    expect(legacyDemandAliases(['pro_men'], HERMOSA_NOW)).toEqual({ pro_men: 'div_adv_m' });
+  });
+});
+
 describe('mergeDemandCounts', () => {
   it('sums a legacy count into its division and drops the legacy row', () => {
     const merged = mergeDemandCounts({ novice_men: 6, div_n2m: 1 }, { novice_men: 'div_n2m' });

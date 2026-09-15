@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.84 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.85 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.85 (2026-09-15)
+
+_Interest meter duplicate rows fixed (master_plan §2BI); Players tab redesign proposed, not built (§2BJ)._
+
+- **Interest meter:** legacy planning-taxonomy interest now folds into divisions whose skill range the
+  organizer widened (exact band → range starting at the band → only range containing it; never guesses).
+  Fixes "Novice Men's / Novice Mixed / High Intermediate Women's" reappearing beside their divisions.
+- **Players tab (proposal):** slim quick bar, "Your game" card, tier-ring player cards, sentence-case
+  "Ratings private", vouch micro-reward, quick filter chips; Phase 2 crowns / trophies / Rising / milestones.
+  Awaiting approval - see §2BJ.
+
 ## v1.84 (2026-09-15)
 
 _Manage teams field-test fixes (master_plan §2BH). No migration._
