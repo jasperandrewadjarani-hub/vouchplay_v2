@@ -3559,3 +3559,8 @@ PriceBasis column. Deploys held until the database is confirmed stable.
 - **§2BQ built** (see master_plan §2BQ "As built"). Gates: typecheck, lint, 1,041 tests, format, build all pass. Not yet
   deployed: `DIVISION_COLUMNS` reads `divisions.next_entry_fee_amount`, so **Jasper must apply `scripts/apply-0052.sql`
   before the deploy**. Migration numbering: 0052 discount, 0053 indexes, Organizer Phase B 0054, PIN lock 0055.
+
+**Deployed 2026-09-15 (~11:15 UTC):** Jasper applied 0052 (3 columns verified in SQL editor and via REST 200s). Local
+production smoke against live DB: `/players`, `/tournaments`, Hermosa page, `/login` 200, Hermosa still "PHP 1,299 /
+player" (no division has a next-entry price yet). Pushed `b03715e`; Vercel "Deployment has completed"; production smoke
+same pages 200 in 0.3-1.1 s, no error pages. Signed-in checks by Jasper pending (load fixes + discount flow).
