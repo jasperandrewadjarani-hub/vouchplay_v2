@@ -44,6 +44,9 @@ export function BottomNav() {
               ) : (
                 <Link
                   href={item.href}
+                  // Load fix #3 (notes 2026-09-15): no background prerender of every tab - each prefetch ran
+                  // the whole AppShell and its database reads. Taps still get instant pending feedback.
+                  prefetch={false}
                   aria-current={active ? 'page' : undefined}
                   className={className}
                 >

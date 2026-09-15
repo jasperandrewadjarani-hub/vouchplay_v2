@@ -107,7 +107,13 @@ export function PlayersNavLink({
   }
 
   return (
-    <Link href={href} className={className} aria-current={ariaCurrent} onClick={onClick}>
+    <Link
+      href={href}
+      prefetch={false}
+      className={className}
+      aria-current={ariaCurrent}
+      onClick={onClick}
+    >
       <NavLinkPendingOverride.Provider value={isPending}>
         {children}
       </NavLinkPendingOverride.Provider>

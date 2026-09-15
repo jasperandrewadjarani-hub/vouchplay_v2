@@ -294,7 +294,7 @@ const fetchSkillIndex = unstable_cache(
     const out: Record<string, SkillIndexEntry> = {};
     try {
       const supabase = createPublicClient();
-      const [profilesRes, { rows: skillRows }, givenRes] = await Promise.all([
+      const [profilesRes, { rows: skillRows }] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, self_rated_skill, onboarded_at, first_name, last_name, nickname')
@@ -305,7 +305,6 @@ const fetchSkillIndex = unstable_cache(
           (columns) => supabase.from('player_skill_profiles').select(columns),
           'player_id',
         ),
-        supabase.from('vouches').select('voucher_id').eq('status', 'active').limit(10000),
       ]);
 
       const skills = new Map<string, { csl: number | null; sts: number; received: number }>();
@@ -316,12 +315,6 @@ const fetchSkillIndex = unstable_cache(
           sts: active.sts ?? 0,
           received: active.evidenceCount ?? 0,
         });
-      }
-
-      const given = new Map<string, number>();
-      for (const r of givenRes.data ?? []) {
-        const voucherId = (r as { voucher_id: string }).voucher_id;
-        given.set(voucherId, (given.get(voucherId) ?? 0) + 1);
       }
 
       for (const p of profilesRes.data ?? []) {
@@ -342,7 +335,8 @@ const fetchSkillIndex = unstable_cache(
           effectiveSkill: effectiveSkillOrdinal(s?.csl ?? null, row.self_rated_skill),
           sts: s?.sts ?? 0,
           vouchesReceived: s?.received ?? 0,
-          vouchesGiven: given.get(row.id) ?? 0,
+          // Filled in by `fetchVouchesGivenCounts` only when the "vouches given" filter is used.
+          vouchesGiven: 0,
           onboardedAt: row.onboarded_at,
           displayName: name,
         };
@@ -355,6 +349,34 @@ const fetchSkillIndex = unstable_cache(
   },
   ['player-skill-index'],
   { revalidate: 60, tags: [PLAYERS_LIST_TAG] },
+);
+
+/**
+ * Active vouches given, per voucher - ONLY for the rarely used "vouches given" filter (2026-09-15
+ * outage follow-up). It used to be part of `fetchSkillIndex`, which re-read every active vouch
+ * (~7k rows) on each 60 s refresh of the directory even though no default view needs the number.
+ */
+const fetchVouchesGivenCounts = unstable_cache(
+  async (): Promise<Record<string, number>> => {
+    const out: Record<string, number> = {};
+    try {
+      const supabase = createPublicClient();
+      const { data } = await supabase
+        .from('vouches')
+        .select('voucher_id')
+        .eq('status', 'active')
+        .limit(10000);
+      for (const r of data ?? []) {
+        const voucherId = (r as { voucher_id: string }).voucher_id;
+        out[voucherId] = (out[voucherId] ?? 0) + 1;
+      }
+    } catch {
+      // Empty map: the given filter matches only zero-given players rather than failing the page.
+    }
+    return out;
+  },
+  ['player-vouches-given'],
+  { revalidate: 300, tags: [PLAYERS_LIST_TAG] },
 );
 
 /** Ids of the active members of one club (for the club filter). */
@@ -691,7 +713,18 @@ export async function listPlayers(
   // The sort options that need per-player vouches-received/STS facts, not just the DB row.
   const sortNeedsIndex = sort === 'new_unvouched' || sort === 'most_vouched' || sort === 'sts_desc';
   // Fetched at most once and reused for both filtering and ordering.
-  const index = indexFilterActive || sortNeedsIndex ? await fetchSkillIndex(skillVersion) : null;
+  const givenFilterActive = Boolean(
+    (filters.givenMin != null && filters.givenMin > 0) || filters.givenMax != null,
+  );
+  const baseIndex =
+    indexFilterActive || sortNeedsIndex ? await fetchSkillIndex(skillVersion) : null;
+  let index = baseIndex;
+  if (baseIndex && givenFilterActive) {
+    const given = await fetchVouchesGivenCounts();
+    index = Object.fromEntries(
+      Object.entries(baseIndex).map(([id, e]) => [id, { ...e, vouchesGiven: given[id] ?? 0 }]),
+    );
+  }
   if (indexFilterActive && index && Object.keys(index).length > 0) {
     // An index that failed to load is empty, and restricting to nothing would empty the directory
     // for everyone. Leave these filters unapplied rather than lie about the result.

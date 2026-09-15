@@ -71,14 +71,25 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // place outright. Skipped under maintenance gating and for a viewer who has not onboarded yet (they
   // cannot hold a registration). The rest of the chain is skipped entirely once this shows, the same
   // way the identity nudge already skips once minimal-power or unvouched shows below.
-  const unpaidSlots = gated
-    ? null
-    : await (async () => {
-        const profile = await getMyProfile();
-        if (!profile?.onboarded_at) return null;
-        const slots = await getViewerUnpaidSlots();
-        return slots.count > 0 ? slots : null;
-      })();
+  //
+  // Load fix #4 (notes 2026-09-15 outage): the reads that do not short-circuit each other run in ONE
+  // parallel round instead of one after another, and a signed-out visitor skips every per-viewer read.
+  // The nudge chain below stays sequential because each link skips a query when an earlier one shows.
+  const profile = authed && !gated ? await getMyProfile() : null;
+  const onboardedId = profile?.onboarded_at ? profile.id : null;
+  const [unpaidRaw, legal, passwordRaw, badgesRaw] = await Promise.all([
+    onboardedId ? getViewerUnpaidSlots() : Promise.resolve(null),
+    // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
+    // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
+    gated ? Promise.resolve({ needsAcceptance: false }) : getViewerLegalStatus(),
+    // Mandatory password election (§2BB) - see `passwordStatus` below for the sequencing rule.
+    gated || !passwordGateEnabled
+      ? Promise.resolve({ needsPassword: false })
+      : getViewerPasswordStatus(),
+    // Badge unlock moment (§2BK E) - shown only once every blocking gate is clear (below).
+    onboardedId ? getUncelebratedBadges(onboardedId) : Promise.resolve([]),
+  ]);
+  const unpaidSlots = unpaidRaw && unpaidRaw.count > 0 ? unpaidRaw : null;
   const showUnpaid = Boolean(unpaidSlots);
   // Nudge an onboarded player who has no vouches yet: their reputation is empty until people they
   // have played with vouch for them (§2O). Skipped under maintenance gating or when the unpaid-slot
@@ -90,12 +101,10 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // mutually-exclusive nudge chain - it explains WHY the generic "unvouched" nudge would otherwise show
   // (and wins over it), rather than stacking a second strip that says the same thing two ways.
   const minimalPower: VoucherPower | null =
-    gated || showUnpaid
+    gated || showUnpaid || !onboardedId
       ? null
       : await (async () => {
-          const profile = await getMyProfile();
-          if (!profile?.onboarded_at) return null;
-          const power = await getVoucherPowerCached(profile.id);
+          const power = await getVoucherPowerCached(onboardedId);
           return power.minimal ? power : null;
         })();
   // Identity self-nudge (master_plan §2AG Phase C, D2): only one self-nudge strip is ever visible at
@@ -105,18 +114,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
     gated || showUnpaid || nudge.unvouched || minimalPower
       ? { show: false }
       : await getViewerIdentityNudge();
-  // Blocking Terms/Privacy acceptance (§2R). Skipped under maintenance gating (staff resolve that
-  // first) and fail-open in the reader, so it never locks anyone out. Rendered as an overlay below.
-  const legal = gated ? { needsAcceptance: false } : await getViewerLegalStatus();
   // Mandatory password election (§2BB): a signed-in, onboarded email user with no password is shown a
   // blocking gate so their next visits use a password instead of an emailed login code (SMTP cost).
   // Sequenced AFTER the legal gate - one blocking overlay at a time; once Terms are accepted the shell
   // refreshes and this shows next. Skipped under maintenance gating. Reader fails open (no gate) until
   // migration 0050 is applied, so this is inert on deploy and turns on only when Jasper applies it.
-  const passwordStatus =
-    gated || legal.needsAcceptance || !passwordGateEnabled
-      ? { needsPassword: false }
-      : await getViewerPasswordStatus();
+  const passwordStatus = legal.needsAcceptance ? { needsPassword: false } : passwordRaw;
 
   // Badge unlock moment (master_plan §2BK E): only for a signed-in, onboarded viewer, and only once
   // the maintenance gate, legal gate and password gate are all clear - mirrors the same conditions
@@ -125,13 +128,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
   // called it. The query itself is documented fail-open (empty on error), so this stays cheap and
   // never blocks the shell even before migration 0051 lands.
   const uncelebratedBadges =
-    gated || legal.needsAcceptance || passwordStatus.needsPassword
-      ? []
-      : await (async () => {
-          const profile = await getMyProfile();
-          if (!profile?.onboarded_at) return [];
-          return getUncelebratedBadges(profile.id);
-        })();
+    gated || legal.needsAcceptance || passwordStatus.needsPassword ? [] : badgesRaw;
 
   // Launch/campaign pop-up: only loaded when an Admin has switched it on.
   const welcome = welcomeEnabled

@@ -3511,3 +3511,38 @@ optional "Next-entry price (per player)"; a player's earliest live entry in a pa
 become the sum of seats; price basis recorded per seat/receipt; cancelling a 1st entry re-prices unpaid seats and turns
 already-paid discounted seats into "Top-up due". Migration would be 0052 (Phase B → 0053, PIN → 0054). Suggested timing:
 after the Hermosa window closes 2026-09-16.
+
+## 2026-09-15 - Production outage: Supabase Nano out of memory → Disk IO budget throttled; upgraded to Micro
+
+**Symptom (~16:40-17:25 PH):** site 504s. Vercel healthy (`/login` ~0.3 s); DB-backed pages hung past 40 s. Direct
+probes bypassing Vercel: Storage status 200 in 0.5 s, but Auth health 504 "upstream request timeout" after 45 s and
+PostgREST no answer in 90 s. Supabase status page: no matching incident. Nothing had been deployed (production still
+`a570b06`); no cron running.
+
+**Root cause:** compute was **Nano (0.5 GB RAM, shared CPU)**. Memory usage showed ~450-550 MB swap and memory commitment
+1.63 GB above the ~1.1 GB commit limit; swapping drained the Disk IO burst budget (banner "about to deplete its Disk IO
+Budget", baseline 5 MB/s), CPU was mostly IOwait with a 100% spike, so Postgres stalled. Ruled out: connections (26 of
+60), data size (database 0.06 GB, largest table `leaderboard_snapshot_entries` 7.6 MB; disk 0.35 of 2 GB). Load
+context: ~852k API gateway and ~168k Auth requests on the overview. Daily backups working (last backup 15 h before).
+
+**Fix:** Jasper restarted the project (recovered ~09:31 UTC), then upgraded compute **Nano → Micro (1 GB, 2-core)** -
+same price ($0.01344/h, "Free Upgrade" on Pro). Verified 09:52 UTC: Auth 225-450 ms, PostgREST 115-290 ms; `/players`
+0.9-1.3 s, `/tournaments` 0.3-0.4 s, Hermosa page 0.6-0.9 s, no error pages. Small (2 GB, $0.0206/h) declined for now
+(cost); revisit if swap climbs past ~300 MB again.
+
+**Full-scan findings** (`pg_stat_user_tables`, ~20 min after restart; read-only `scripts/diagnose-db-load.sql`):
+`vouches` 42 seq scans / 297k rows - the Players skill index reads every active vouch to count "given"
+(`lib/players/queries.ts` `fetchSkillIndex`, 60 s cache); `notifications` 5 scans / 50k rows - reminder history filtered by
+`actor_id` (no index; `registration-queries.ts`); `vouch_revisions` 4 scans / 34k rows, 0 index scans - vouch rate-limit
+count by `changed_by` (no index; `actions/vouch.ts`). **Proposed, awaiting approval:** migration 0053 indexes
+`vouch_revisions (changed_by, created_at)` and `notifications (actor_id, type, created_at desc)`; aggregate "vouches
+given" in SQL instead of shipping ~7k rows; cost fixes #3 (nav prefetch / per-request auth) and #4 (parallel AppShell).
+If 0053 is taken by the indexes, Organizer Phase B → 0054 and PIN lock → 0055.
+
+**Correction:** Hermosa registration is open **until 2026-10-15** (Jasper), not 2026-09-16 as earlier notes assumed. The
+§2BQ next-entry discount does not need to wait for it: divisions without a next-entry price price exactly as before.
+
+**§2BQ status at this point:** implemented locally, uncommitted, not deployed - core rule + tests, migration 0052 +
+`scripts/apply-0052.sql` (not applied), per-seat payment pricing, read-time top-up, wizard/browser/receipt/Done UI,
+organizer editor field, Manage seat tag (needs `priceBasis` projected in `getOrganizerRegistrations`), export
+PriceBasis column. Deploys held until the database is confirmed stable.
