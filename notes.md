@@ -3377,3 +3377,28 @@ focused step sheet each (reclassify = radio rows with capacity), a single toast 
 Unverified accounts panel is removed (filter + flag + card instead). Bottom sheets, 44 px targets, sticky
 search/tabs, safe-area insets. No server or migration change. Succeeding: Phase B (0051) unchanged; an
 activity line on the card from `registration_events` next session.
+
+## 2026-09-15 - Manage teams field-test fixes (§2BH, handover v1.84)
+
+Jasper's live test. Causes found: Back had no history handling (sheets were state only, so Back left the
+page); "56 confirmed vs 28" because any non-eligible eligibility status counted as a Rule-check to-do and
+to-dos outranked Confirmed - the engine's advisory `review` (unrated / low evidence / playing down) sits on
+112 entries; the card header stacked avatars over a two-line name and repeated the roster; "Check receipt ·
+Unpaid" because a sent receipt read as unpaid; icon-only flags; slow Manage because every load called
+`auth.admin.getUserById` per team member (~300 calls) for emails; tabs clipped at phone width with a faint
+selected state. Fixes: `useBackToClose` hook (Back closes the top sheet, nested sheets one at a time);
+"Needs you" becomes an amber to-do button above a 3-column All / Not confirmed / Confirmed control whose
+Confirmed equals Overview's count, with a one-line caption and solid selected fill; Rule check only for
+skill mismatch / hard rule on unconfirmed entries (advisory review = "Low evidence" note); money read
+"₱2,598 sent"; flags as short words; card header = team name from nicknames + full division, roster keeps
+the people, nickname hidden when the name contains it, one "Covers both seats" line; guest-only emails +
+manage `loading.tsx`; bottom-nav instant pending state + prefetch + parallel page reads.
+Build notes: the Back hook was rebuilt around one module-level stack + single `popstate` listener (the
+first token-based version raced async `history.back()` against the next sheet's push); its core `armSheet`
+is covered by a 7-case history simulation (single, ×, nested, multi-level re-arm, card+menu together,
+same-tick swap, navigate-away). Overview "Fully paid teams" was always 0 because `manage/page.tsx` never set
+`fullyPaid` on `computeOverview`'s input - the four tiles now derive from `entry-view`. Nav: tab pages had no
+own `loading.tsx`, and a shared ancestor boundary does not re-show between sibling routes, so taps looked
+frozen; now each tab has one, the nav item turns active on tap (`useLinkStatus`), and Players/Home/
+Tournaments/Me read in parallel. Remaining floor (not changed, flagged): middleware `auth.getUser()` network
+call on every navigation.

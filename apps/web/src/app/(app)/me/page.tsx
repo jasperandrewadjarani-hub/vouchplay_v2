@@ -39,18 +39,27 @@ export default async function MePage({
     );
   }
 
-  const profile = await getMyProfile();
-  const [isStaff, isAdmin, installPromptEnabled, pushEnabled] = await Promise.all([
+  // Every read below is independent - none of them depend on each other's result, only on `user.id`,
+  // which is already known. They used to run as three separate sequential steps (profile, then the
+  // staff/PWA flags, then the organizer-role queries); one batch runs every round trip concurrently
+  // instead (master_plan §2BH decision H). `getMyProfile`/`loadSettingFlag` already fail open.
+  const svc = createServiceClient();
+  const [
+    profile,
+    isStaff,
+    isAdmin,
+    installPromptEnabled,
+    pushEnabled,
+    { data: orgRole },
+    { data: orgApp },
+    { data: visibilityRow },
+  ] = await Promise.all([
+    getMyProfile(),
     viewerIsStaff(),
     viewerIsAdmin(),
     loadSettingFlag('pwa_install_prompt_enabled', true),
     loadSettingFlag('push_notifications_enabled', true),
-  ]);
-  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '-';
-
-  // Organizer role state (§17.1) for the apply-as-organizer card.
-  const svc = createServiceClient();
-  const [{ data: orgRole }, { data: orgApp }, { data: visibilityRow }] = await Promise.all([
+    // Organizer role state (§17.1) for the apply-as-organizer card.
     svc
       .from('user_roles')
       .select('id')
@@ -69,6 +78,7 @@ export default async function MePage({
     // card and the Privacy settings page need the raw visibility jsonb.
     svc.from('profiles').select('profile_visibility').eq('id', user.id).maybeSingle(),
   ]);
+  const fullName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') || '-';
   const isOrganizer = !!orgRole;
   const hasPendingOrgApp = !!orgApp;
   const ratingsVisibility = parseVisibility(

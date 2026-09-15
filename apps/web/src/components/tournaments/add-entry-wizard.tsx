@@ -6,6 +6,7 @@ import { Check, X } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { useBackToClose } from '@/lib/hooks/use-back-to-close';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 import { createEntryForPlayers, searchPlayersForOrganizer } from '@/lib/actions/registration';
 import type { OrganizerPlayerSearchResult } from '@/lib/tournaments/organizer-types';
@@ -33,6 +34,7 @@ const STEPS: { key: Step; label: string }[] = [
   { key: 'payment', label: 'Payment' },
   { key: 'review', label: 'Review' },
 ];
+const STEP_ORDER: Step[] = STEPS.map((s) => s.key);
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -235,6 +237,11 @@ export function AddEntryWizard({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ warnings: string[] } | null>(null);
 
+  // master_plan §2BH Decision A: phone Back steps back one screen at a time instead of leaving the
+  // wizard. One entry while the wizard is open; `useBackToClose` re-arms itself after a Back that only
+  // stepped back, and in-wizard Next/Back buttons never touch history.
+  useBackToClose(true, handleBack);
+
   const division = divisions.find((d) => d.id === divisionId) ?? null;
   const isDoubles = (division?.teamSize ?? 1) > 1;
 
@@ -250,14 +257,27 @@ export function AddEntryWizard({
   }
 
   function next() {
-    const order: Step[] = ['division', 'players', 'payment', 'review'];
-    const i = order.indexOf(step);
-    if (i < order.length - 1) setStep(order[i + 1] as Step);
+    const i = STEP_ORDER.indexOf(step);
+    if (i < STEP_ORDER.length - 1) setStep(STEP_ORDER[i + 1] as Step);
   }
   function back() {
-    const order: Step[] = ['division', 'players', 'payment', 'review'];
-    const i = order.indexOf(step);
-    if (i > 0) setStep(order[i - 1] as Step);
+    const i = STEP_ORDER.indexOf(step);
+    if (i > 0) setStep(STEP_ORDER[i - 1] as Step);
+  }
+
+  /** The phone's Back gesture: the confirmation screen just closes; otherwise step back, or close the
+   *  whole wizard from the first step - never leaving the tournament page underneath. */
+  function handleBack() {
+    if (success) {
+      onClose();
+      return;
+    }
+    const i = STEP_ORDER.indexOf(step);
+    if (i <= 0) {
+      onClose();
+      return;
+    }
+    setStep(STEP_ORDER[i - 1] as Step);
   }
 
   async function submit() {
@@ -283,164 +303,171 @@ export function AddEntryWizard({
 
   if (success) {
     return (
-      <Modal title="Entry added" onClose={onClose} align="center">
-        <div className="space-y-3">
-          <p className="text-success text-sm font-medium">Entry added.</p>
-          {success.warnings.length > 0 && (
-            <ul className="text-warning space-y-1 text-xs">
-              {success.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          )}
-          <Button type="button" variant="secondary" onClick={onClose} className="w-full">
-            Done
-          </Button>
-        </div>
-      </Modal>
+      <>
+        <Modal title="Entry added" onClose={onClose} align="center">
+          <div className="space-y-3">
+            <p className="text-success text-sm font-medium">Entry added.</p>
+            {success.warnings.length > 0 && (
+              <ul className="text-warning space-y-1 text-xs">
+                {success.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
+            <Button type="button" variant="secondary" onClick={onClose} className="w-full">
+              Done
+            </Button>
+          </div>
+        </Modal>
+      </>
     );
   }
 
   return (
-    <Modal title="Add entry" onClose={onClose} align="center">
-      <AddEntryRail step={step} />
+    <>
+      <Modal title="Add entry" onClose={onClose} align="center">
+        <AddEntryRail step={step} />
 
-      {step === 'division' && (
-        <div className="space-y-2">
-          {divisions.length === 0 && (
-            <p className="text-foreground-muted text-sm">No divisions on this tournament yet.</p>
-          )}
-          <ul className="border-border divide-border divide-y overflow-hidden rounded-xl border">
-            {divisions.map((d) => (
-              <li key={d.id}>
-                <button
-                  type="button"
-                  aria-pressed={divisionId === d.id}
-                  onClick={() => setDivisionId(d.id)}
-                  className={`flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2.5 text-left ${
-                    divisionId === d.id ? 'bg-primary/5' : 'hover:bg-surface-muted'
-                  }`}
-                >
-                  <span>
-                    <span className="text-foreground block text-sm font-medium">{d.name}</span>
-                    <span className="text-foreground-muted block text-xs">
-                      {d.teamSize > 1 ? 'Doubles' : 'Singles'} · {d.format}
+        {step === 'division' && (
+          <div className="space-y-2">
+            {divisions.length === 0 && (
+              <p className="text-foreground-muted text-sm">No divisions on this tournament yet.</p>
+            )}
+            <ul className="border-border divide-border divide-y overflow-hidden rounded-xl border">
+              {divisions.map((d) => (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    aria-pressed={divisionId === d.id}
+                    onClick={() => setDivisionId(d.id)}
+                    className={`flex min-h-11 w-full items-center justify-between gap-2 px-3 py-2.5 text-left ${
+                      divisionId === d.id ? 'bg-primary/5' : 'hover:bg-surface-muted'
+                    }`}
+                  >
+                    <span>
+                      <span className="text-foreground block text-sm font-medium">{d.name}</span>
+                      <span className="text-foreground-muted block text-xs">
+                        {d.teamSize > 1 ? 'Doubles' : 'Singles'} · {d.format}
+                      </span>
                     </span>
-                  </span>
-                  <span className="text-foreground-muted shrink-0 text-xs font-semibold tabular-nums">
-                    {d.capacity > 0 ? `${d.registered}/${d.capacity}` : 'Open'}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                    <span className="text-foreground-muted shrink-0 text-xs font-semibold tabular-nums">
+                      {d.capacity > 0 ? `${d.registered}/${d.capacity}` : 'Open'}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-      {step === 'players' && division && (
-        <div className="space-y-3">
-          <PlayerPickField
-            label={isDoubles ? 'Player 1' : 'Player'}
-            tournamentId={tournamentId}
-            divisionId={division.id}
-            chosen={player1}
-            onChoose={setPlayer1}
-            onClear={() => setPlayer1(null)}
-            excludeId={player2?.id}
-          />
-          {isDoubles && (
+        {step === 'players' && division && (
+          <div className="space-y-3">
             <PlayerPickField
-              label="Player 2"
+              label={isDoubles ? 'Player 1' : 'Player'}
               tournamentId={tournamentId}
               divisionId={division.id}
-              chosen={player2}
-              onChoose={setPlayer2}
-              onClear={() => setPlayer2(null)}
-              excludeId={player1?.id}
+              chosen={player1}
+              onChoose={setPlayer1}
+              onClear={() => setPlayer1(null)}
+              excludeId={player2?.id}
             />
-          )}
-          <p className="text-foreground-muted text-xs">
-            Not on VouchPlay yet? Entering by email is coming with the next update.
-          </p>
-        </div>
-      )}
-
-      {step === 'payment' && (
-        <div className="space-y-4">
-          <Switch checked={markPaid} onCheckedChange={setMarkPaid} label="Mark as paid (cash)" />
-          <div className="space-y-1.5">
-            <label htmlFor="add-entry-reason" className="text-foreground block text-sm font-medium">
-              Reason<span className="text-danger ml-0.5">*</span>
-            </label>
-            <input
-              id="add-entry-reason"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. registered at the venue"
-              className="border-border bg-background min-h-11 w-full rounded-xl border px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
-            />
-          </div>
-        </div>
-      )}
-
-      {step === 'review' && division && player1 && (
-        <div className="space-y-3">
-          <div className="border-border space-y-2 rounded-xl border border-dashed p-3 text-sm">
-            <p>
-              <span className="text-foreground-muted">Division: </span>
-              <span className="text-foreground font-medium">{division.name}</span>
-            </p>
-            <p>
-              <span className="text-foreground-muted">Players: </span>
-              <span className="text-foreground font-medium">
-                {[player1, player2]
-                  .filter(Boolean)
-                  .map((p) => p?.name)
-                  .join(' & ')}
-              </span>
-            </p>
-            {[player1, player2]
-              .filter((p): p is OrganizerPlayerSearchResult => !!p?.warning)
-              .map((p) => (
-                <p key={p.id} className="text-warning text-xs">
-                  {p.name.split(/\s+/)[0]}: {p.warning}
-                </p>
-              ))}
-            <p>
-              <span className="text-foreground-muted">Paid: </span>
-              <span className="text-foreground font-medium">{markPaid ? 'Yes, cash' : 'No'}</span>
-            </p>
-            <p>
-              <span className="text-foreground-muted">Reason: </span>
-              <span className="text-foreground">{reason.trim()}</span>
+            {isDoubles && (
+              <PlayerPickField
+                label="Player 2"
+                tournamentId={tournamentId}
+                divisionId={division.id}
+                chosen={player2}
+                onChoose={setPlayer2}
+                onClear={() => setPlayer2(null)}
+                excludeId={player1?.id}
+              />
+            )}
+            <p className="text-foreground-muted text-xs">
+              Not on VouchPlay yet? Entering by email is coming with the next update.
             </p>
           </div>
-          {error && (
-            <p role="alert" className="bg-danger/10 text-danger rounded-lg px-3 py-2 text-sm">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="mt-5 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={step === 'division' ? onClose : back}
-          className="text-foreground-muted hover:text-foreground min-h-11 px-2 text-sm font-medium"
-        >
-          {step === 'division' ? 'Cancel' : 'Back'}
-        </button>
-        {step === 'review' ? (
-          <Button type="button" onClick={submit} disabled={pending}>
-            {pending ? 'Adding…' : 'Add entry'}
-          </Button>
-        ) : (
-          <Button type="button" onClick={next} disabled={!canAdvance()}>
-            Next
-          </Button>
         )}
-      </div>
-    </Modal>
+
+        {step === 'payment' && (
+          <div className="space-y-4">
+            <Switch checked={markPaid} onCheckedChange={setMarkPaid} label="Mark as paid (cash)" />
+            <div className="space-y-1.5">
+              <label
+                htmlFor="add-entry-reason"
+                className="text-foreground block text-sm font-medium"
+              >
+                Reason<span className="text-danger ml-0.5">*</span>
+              </label>
+              <input
+                id="add-entry-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. registered at the venue"
+                className="border-border bg-background min-h-11 w-full rounded-xl border px-3 text-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+              />
+            </div>
+          </div>
+        )}
+
+        {step === 'review' && division && player1 && (
+          <div className="space-y-3">
+            <div className="border-border space-y-2 rounded-xl border border-dashed p-3 text-sm">
+              <p>
+                <span className="text-foreground-muted">Division: </span>
+                <span className="text-foreground font-medium">{division.name}</span>
+              </p>
+              <p>
+                <span className="text-foreground-muted">Players: </span>
+                <span className="text-foreground font-medium">
+                  {[player1, player2]
+                    .filter(Boolean)
+                    .map((p) => p?.name)
+                    .join(' & ')}
+                </span>
+              </p>
+              {[player1, player2]
+                .filter((p): p is OrganizerPlayerSearchResult => !!p?.warning)
+                .map((p) => (
+                  <p key={p.id} className="text-warning text-xs">
+                    {p.name.split(/\s+/)[0]}: {p.warning}
+                  </p>
+                ))}
+              <p>
+                <span className="text-foreground-muted">Paid: </span>
+                <span className="text-foreground font-medium">{markPaid ? 'Yes, cash' : 'No'}</span>
+              </p>
+              <p>
+                <span className="text-foreground-muted">Reason: </span>
+                <span className="text-foreground">{reason.trim()}</span>
+              </p>
+            </div>
+            {error && (
+              <p role="alert" className="bg-danger/10 text-danger rounded-lg px-3 py-2 text-sm">
+                {error}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={step === 'division' ? onClose : back}
+            className="text-foreground-muted hover:text-foreground min-h-11 px-2 text-sm font-medium"
+          >
+            {step === 'division' ? 'Cancel' : 'Back'}
+          </button>
+          {step === 'review' ? (
+            <Button type="button" onClick={submit} disabled={pending}>
+              {pending ? 'Adding…' : 'Add entry'}
+            </Button>
+          ) : (
+            <Button type="button" onClick={next} disabled={!canAdvance()}>
+              Next
+            </Button>
+          )}
+        </div>
+      </Modal>
+    </>
   );
 }

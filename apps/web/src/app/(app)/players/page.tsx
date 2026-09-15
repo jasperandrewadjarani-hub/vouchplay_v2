@@ -164,7 +164,25 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   // visitors get the fixed compact preview (master_plan §2AH) - the view toggle is hidden for them,
   // so the skeleton and the cards stay compact even if `?view=detailed` is typed manually.
   const compact = authed ? one(sp.view) !== 'detailed' : true;
-  const [cityOptions, clubOptions, tournamentOptions] = await Promise.all([
+  // All nine reads below are independent of one another once `viewer`/`authed` are known - only
+  // their own internal logic (staff/authed gating) decides whether to do real work at all. They used
+  // to run as five separate sequential awaits (master_plan §2BH finding 8: "the Players page added
+  // several in §2BC"); one `Promise.all` runs every network round trip concurrently instead of back
+  // to back, which is most of the ~0.5s bottom-nav-to-Players delay. Each one already fails open
+  // (never rejects) on its own - see `getLeaderboardSettings`/`getMyProfile`/`getPartnerLookingStrip`/
+  // `getProfileVisibilityFlags`/`getPartnerSettings`/`loadSettingFlag` - so batching them here changes
+  // nothing about error handling, only when they run.
+  const [
+    cityOptions,
+    clubOptions,
+    tournamentOptions,
+    leaders,
+    myProfile,
+    profileVisibility,
+    partnerLooking,
+    partnerSettings,
+    staffLinks,
+  ] = await Promise.all([
     getDirectoryCityOptions(),
     getDirectoryClubOptions(),
     // The tournament filter (§2AG A4, D7) is offered only to staff or a tournament's own
@@ -178,34 +196,34 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
             rows.map((t) => ({ id: t.id, name: t.name })),
           )
         : Promise.resolve<TournamentOption[]>([]),
+    // The entry card names the current leader, so it needs the board it points at. Cached read; a
+    // failure here must never take down the directory, so it degrades to the invitation variant.
+    getLeaderboardSettings()
+      .then((settings) =>
+        settings.enabled ? getLeaderboard('community', 'global', null, 'all_time', 3) : null,
+      )
+      .catch(() => null),
+    // The viewer's own "looking for a partner" status, so the Players tab can offer a one-tap toggle
+    // right where people browse for partners (§2M). Signed-in only.
+    authed ? getMyProfile() : Promise.resolve(null),
+    // §2AO E: `profile_show_community_skill` (or staff) - computed once for the whole page and
+    // passed into every card, never decided in the component.
+    getProfileVisibilityFlags(),
+    // Where people are looking for a partner right now (master_plan §2AV directory strip). Bounded,
+    // cached and fail-open, so it can never take the directory down or slow it materially.
+    getPartnerLookingStrip(viewer.viewerId),
+    // §2BC: whether the "Find a partner" door exists at all (2-column row when off) - a separate
+    // read from the strip itself, since an empty strip and a disabled feature must not look the same.
+    getPartnerSettings(),
+    // §2BC-D: staff see the "See vouch activity" door only while Admin's switch is on; the
+    // /staff/players/[slug] page itself stays reachable by URL regardless (role + step-up gated).
+    // Non-staff never make this round trip at all (short-circuited here, same as before).
+    viewer.isStaff ? loadSettingFlag('staff_activity_links_enabled', true) : Promise.resolve(false),
   ]);
-  // The entry card names the current leader, so it needs the board it points at. Cached read; a
-  // failure here must never take down the directory, so it degrades to the invitation variant.
-  const leaders = await getLeaderboardSettings()
-    .then((settings) =>
-      settings.enabled ? getLeaderboard('community', 'global', null, 'all_time', 3) : null,
-    )
-    .catch(() => null);
-  // The viewer's own "looking for a partner" status, so the Players tab can offer a one-tap toggle
-  // right where people browse for partners (§2M). Signed-in only.
-  const myProfile = authed ? await getMyProfile() : null;
-  // §2AO E: `profile_show_community_skill` (or staff) - computed once for the whole page and passed
-  // into every card, never decided in the component.
-  const profileVisibility = await getProfileVisibilityFlags();
   const showCommunitySkill = profileVisibility.showCommunitySkill || viewer.isStaff;
-  // Where people are looking for a partner right now (master_plan §2AV directory strip). Bounded,
-  // cached and fail-open, so it can never take the directory down or slow it materially.
-  const partnerLooking = await getPartnerLookingStrip(viewer.viewerId);
-  // §2BC: whether the "Find a partner" door exists at all (2-column row when off) - a separate read
-  // from the strip itself, since an empty strip and a disabled feature must not look the same.
-  const partnerSettings = await getPartnerSettings();
   // §2BC decision A: which state the "Let people find you" / "Find a partner" doors react to - an
   // anonymous or not-yet-onboarded viewer has no profile to toggle, so they get routed elsewhere.
   const authDoorState = !authed ? 'anon' : myProfile?.onboarded_at ? 'onboarded' : 'not_onboarded';
-  // §2BC-D: staff see the "See vouch activity" door only while Admin's switch is on; the
-  // /staff/players/[slug] page itself stays reachable by URL regardless (role + step-up gated).
-  const staffLinks =
-    viewer.isStaff && (await loadSettingFlag('staff_activity_links_enabled', true));
 
   return (
     <div className="space-y-5">

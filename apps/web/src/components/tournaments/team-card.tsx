@@ -1,15 +1,18 @@
 'use client';
 
 /**
- * The team card (master_plan §2BG Decision E) - a roster with a next step. Replaces `RegRow` and its
- * satellite components in `organizer-registrations.tsx` (lane B deletes those; this is the only file
- * that renders them now). One question leads: what does the organizer need to decide? Everything else
- * - roster, eligibility, payment - is reference material underneath that one decision.
+ * The team card (master_plan §2BG Decision E, header rebuilt in §2BH Decision F) - a roster with a
+ * next step. Replaces `RegRow` and its satellite components in `organizer-registrations.tsx` (lane B
+ * deletes those; this is the only file that renders them now). One question leads: what does the
+ * organizer need to decide? Everything else - roster, eligibility, payment - is reference material
+ * underneath that one decision.
  *
- * Renders its own bottom sheet (mobile) / centered dialog (>= sm) - `Modal` (`components/ui/modal.tsx`)
- * always renders its own title row + close button, which collides with this card's custom header
- * (stacked avatars, verdict pill, a ⋯ button beside close), so the sheet mechanics (portal, Escape,
- * backdrop click, body-scroll lock) are re-implemented here rather than reused.
+ * The header is the TEAM (name + division + status) - no avatars, no member names; those live once,
+ * in the roster below (§2BH field test: the old avatar-stack header repeated the roster and truncated
+ * on a phone). Renders its own bottom sheet (mobile) / centered dialog (>= sm) - `Modal`
+ * (`components/ui/modal.tsx`) always renders its own title row + close button, which collides with
+ * this card's custom header, so the sheet mechanics (portal, Escape, backdrop click, body-scroll lock,
+ * and now Back-to-close via `useBackToClose`) are re-implemented here rather than reused.
  *
  * State is orchestrated here; presentational pieces (roster rows, payment rows, the More list/step
  * views, the award picker) live in `team-card-parts.tsx` - split out only because this file is long.
@@ -22,6 +25,7 @@ import {
   Banknote,
   Check,
   CheckCircle2,
+  Info,
   MoreHorizontal,
   Repeat,
   RotateCcw,
@@ -34,17 +38,17 @@ import type { EligibilityDivisionOption } from '@/lib/tournaments/organizer-type
 import {
   needsReasons,
   NEEDS_REASON_LABELS,
-  entryBucket,
+  statusView,
   entryVerdict,
   moneyRead,
-  memberDisplay,
   hasOpenSeat,
   isClosed,
   isFreeEntry,
-  teamLabel,
+  teamName,
   amountLabel,
   type NeedsReason,
 } from '@/lib/tournaments/entry-view';
+import { useBackToClose } from '@/lib/hooks/use-back-to-close';
 import {
   confirmRegistration,
   rejectRegistration,
@@ -66,7 +70,6 @@ import {
   markRefunded,
   getProofSignedUrl,
 } from '@/lib/actions/payment';
-import { PlayerAvatar } from '@/components/players/player-avatar';
 import {
   type ActionResult,
   type RunFn,
@@ -77,8 +80,6 @@ import {
   btn,
   VerdictPill,
   ToastLine,
-  OpenSeatAvatar,
-  NameWithNickname,
   InlineConfirm,
   InlineReasonPrompt,
   eligibilityReasonLines,
@@ -93,32 +94,18 @@ import {
   firstSubmittedReceipt,
 } from './team-card-parts';
 
-function initialsOf(name: string): string {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || '?'
-  );
-}
-
 // ---------------------------------------------------------------------------
-// Header (master_plan §2BG Decision E "Header")
+// Header (master_plan §2BH Decision F) - the TEAM, not the people: team name, division, status. No
+// avatars and no member names here - the roster below is where the people live, so nothing repeats.
 // ---------------------------------------------------------------------------
 
 function Header({
   reg,
-  openSeat,
   onClose,
   onOpenMore,
   showMoreButton,
 }: {
   reg: OrganizerRegistration;
-  openSeat: boolean;
   onClose: () => void;
   onOpenMore: () => void;
   showMoreButton: boolean;
@@ -126,43 +113,17 @@ function Header({
   const verdict = entryVerdict(reg);
   const money = moneyRead(reg);
   return (
-    <div className="flex items-start justify-between gap-2 px-4 pt-4 sm:px-5">
-      <div className="flex min-w-0 items-center gap-3">
-        <span className="isolate flex -space-x-3">
-          {reg.members.map((m) => (
-            <PlayerAvatar
-              key={m.id}
-              url={m.avatarUrl}
-              initials={initialsOf(m.name)}
-              name={m.name}
-              size="md"
-              className="ring-surface ring-2"
-            />
-          ))}
-          {openSeat && <OpenSeatAvatar size="md" />}
-        </span>
-        <span className="min-w-0">
-          <span className="text-foreground block text-base font-semibold">
-            {reg.members.map((m, i) => {
-              const display = memberDisplay(m);
-              return (
-                <span key={m.id}>
-                  {i > 0 && ' & '}
-                  <NameWithNickname name={display.name} nickname={display.nickname} />
-                </span>
-              );
-            })}
-            {openSeat && <span className="text-foreground-muted"> &amp; Open seat</span>}
-          </span>
-          <span className="text-foreground-muted block truncate text-xs">
-            {reg.divisionName} · {reg.teamSize > 1 ? 'Doubles' : 'Singles'}
-          </span>
-          <span className="mt-1.5 block">
-            <VerdictPill label={`${verdict.label} · ${money}`} tone={verdict.tone} />
-          </span>
-        </span>
+    <div className="relative px-4 pt-4 sm:px-5">
+      <div className="pr-24">
+        <h2 className="text-foreground line-clamp-2 text-lg font-bold">{teamName(reg)}</h2>
+        <p className="text-foreground-muted mt-0.5 text-sm">
+          {reg.divisionName} · {reg.teamSize > 1 ? 'Doubles' : 'Singles'}
+        </p>
+        <p className="mt-1.5">
+          <VerdictPill label={`${verdict.label} · ${money}`} tone={verdict.tone} />
+        </p>
       </div>
-      <span className="flex shrink-0 items-center gap-0.5">
+      <span className="absolute top-3 right-3 flex items-center gap-0.5 sm:right-4">
         {showMoreButton && (
           <button
             type="button"
@@ -443,40 +404,104 @@ function NextStepCard({
 }
 
 // ---------------------------------------------------------------------------
-// Eligibility line (master_plan §2BG Decision E "Eligibility") - only rendered when 'rule' is not a
-// pending Next Step reason; a problem always shows there instead.
+// Eligibility line (master_plan §2BH Decision C/F) - only rendered when 'rule' is not a pending Next
+// Step reason. Three states: clean eligible, an advisory "low evidence" note nobody needs to act on,
+// or a confirmed team whose eligibility carries a note the organizer already accepted (approve/undo,
+// never a to-do since confirming was the decision).
 // ---------------------------------------------------------------------------
 
 function EligibilityLine({
   reg,
   tournamentId,
+  nameById,
   pending,
   run,
 }: {
   reg: OrganizerRegistration;
   tournamentId: string;
+  nameById: Map<string, string>;
   pending: boolean;
   run: RunFn;
 }) {
+  const [showApprove, setShowApprove] = useState(false);
   const snap = (reg.eligibilitySnapshot ?? {}) as Snapshot;
-  return (
-    <section className="px-4 sm:px-5">
-      <div className="flex items-center justify-between gap-2">
+
+  if (reg.eligibilityStatus === 'eligible') {
+    return (
+      <section className="px-4 sm:px-5">
         <p className="text-success flex items-center gap-1.5 text-sm font-medium">
           <Check size={14} aria-hidden />
           Eligible for this division
         </p>
-        {snap.override && (
+      </section>
+    );
+  }
+
+  if (reg.eligibilityStatus === 'review') {
+    const lines = eligibilityReasonLines(snap, nameById);
+    return (
+      <section className="px-4 sm:px-5">
+        <p className="text-foreground-muted flex items-center gap-1.5 text-sm font-medium">
+          <Info size={14} aria-hidden />
+          Eligible · low evidence
+        </p>
+        {lines.length > 0 && (
+          <p className="text-foreground-muted mt-0.5 text-xs">
+            {lines.map((l) => l.text).join(' · ')}
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  // Confirmed with skill_mismatch/ineligible_hard_rule: `needsReasons` only counts 'rule' for
+  // unconfirmed entries (master_plan §2BH Decision C), so a confirmed team lands here instead - a
+  // note the organizer already accepted, not a to-do.
+  const isHardRule = reg.eligibilityStatus === 'ineligible_hard_rule';
+  const lines = eligibilityReasonLines(snap, nameById);
+  const firstReason = lines[0]?.text ?? eligibilityResultLabel(reg.eligibilityStatus, snap);
+  return (
+    <section className="px-4 sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+          Eligibility note: {firstReason}
+        </p>
+        {snap.override ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => run(() => undoEligibilityApproval(reg.id, tournamentId))}
-            className="text-foreground-muted hover:text-foreground text-xs font-semibold underline-offset-2 hover:underline"
+            className="text-foreground-muted hover:text-foreground shrink-0 text-xs font-semibold underline-offset-2 hover:underline"
           >
             Undo approval
           </button>
+        ) : (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setShowApprove((v) => !v)}
+            className="text-primary shrink-0 text-xs font-semibold underline-offset-2 hover:underline"
+          >
+            Approve
+          </button>
         )}
       </div>
+      {showApprove && (
+        <InlineReasonPrompt
+          placeholder={isHardRule ? 'Reason (required to override a rule)' : 'Reason (optional)'}
+          minLen={isHardRule ? 3 : 0}
+          pending={pending}
+          confirmLabel="Confirm approve"
+          onConfirm={(r) =>
+            run(async () => {
+              const res = await approveEligibility(reg.id, tournamentId, r);
+              if (res.ok) setShowApprove(false);
+              return res;
+            })
+          }
+          onCancel={() => setShowApprove(false)}
+        />
+      )}
     </section>
   );
 }
@@ -512,6 +537,14 @@ export function TeamCard({
   const [showAssignPartner, setShowAssignPartner] = useState(false);
 
   useEffect(() => setMounted(true), []);
+
+  // Back closes one sheet level at a time (master_plan §2BH Decision A): the card itself once
+  // mounted, then the More sheet, then whichever step view sits on top of it. Only one of
+  // panel.kind === 'more' / 'step' is ever true at a time, so at most one of the latter two tokens is
+  // live - each still gets its own call so hook order never depends on `panel`.
+  useBackToClose(mounted, onClose);
+  useBackToClose(panel.kind === 'more', () => setPanel({ kind: 'main' }));
+  useBackToClose(panel.kind === 'step', () => setPanel({ kind: 'more' }));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -660,7 +693,7 @@ export function TeamCard({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={teamLabel(reg)}
+        aria-label={teamName(reg)}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="border-border bg-surface flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border sm:max-h-[88dvh] sm:max-w-lg sm:rounded-2xl"
@@ -673,7 +706,6 @@ export function TeamCard({
         <div className="overflow-y-auto">
           <Header
             reg={reg}
-            openSeat={openSeat}
             onClose={onClose}
             onOpenMore={() => setPanel({ kind: 'more' })}
             showMoreButton={panel.kind === 'main' && moreItems.length > 0}
@@ -700,7 +732,7 @@ export function TeamCard({
                   setMsg={setMsg}
                   onOpenReclassify={() => setPanel({ kind: 'step', step: 'reclassify' })}
                 />
-              ) : entryBucket(reg) === 'confirmed' ? (
+              ) : !closed && statusView(reg) === 'confirmed' ? (
                 <div className="text-success mx-4 flex items-center gap-2 text-sm font-medium sm:mx-5">
                   <CheckCircle2 size={16} aria-hidden />
                   All set
@@ -728,6 +760,7 @@ export function TeamCard({
                 <EligibilityLine
                   reg={reg}
                   tournamentId={tournamentId}
+                  nameById={nameById}
                   pending={pending}
                   run={run}
                 />

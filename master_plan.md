@@ -6187,6 +6187,127 @@ no explainer sentences.
 Docs → three Sonnet lanes in parallel (model + tests · list shell · team card) → main-session review →
 gates → commit → push.
 
+## 2BH. Manage teams, field-test fixes: Back closes sheets, honest counts, no advisory noise in Needs me, a clean card header, fast loading, instant navigation (2026-09-15)
+
+Jasper tested §2BG live (screenshots): Back from a team card or the filters leaves the tournament
+instead of closing the sheet; the card header overlaps text and avatars and repeats every name; Overview
+says **56 confirmed teams** but the Confirmed tab says **28**; "what is Waiting?", "what makes Needs me?";
+"Check receipt · Unpaid" is misleading when a receipt was sent; "what is the clock icon?"; Manage often
+loads so long it needs a refresh; the selected tab is barely distinguishable; and a general ~0.5 s delay
+when tapping the bottom navigation.
+
+### Findings
+
+1. **Back.** Sheets are React state only; nothing touches browser history, so the phone's Back pops the
+   route. No `popstate` handling exists anywhere in the app.
+2. **56 vs 28 and "Needs me 123".** `needsReasons` treats ANY non-eligible status as *Rule check*, and
+   `entryBucket` puts needs ahead of confirmed. The eligibility engine returns `review` for advisory
+   evidence gaps (unrated, low confidence, few vouches, playing down one level) - Overview shows **112**
+   "Eligibility to review". So 28 already-confirmed teams were pulled out of Confirmed into Needs me, and
+   Needs me became a list of 123 mostly non-decisions.
+3. **Card header** puts a 2-avatar stack beside a two-line name; on a phone the second avatar covers the
+   start of the second line, and the roster below repeats the same avatars and names. The division line
+   truncates. `memberDisplay` only hides a nickname equal to the first/full name, so "MOH “MOH NASSER”
+   NASSER JAPALALI" repeats itself. The payment block lists "Open · Covered by team receipt · View" for an
+   open seat.
+4. **Money read** says "Unpaid" beside "Check receipt" because paid means verified - true, but a sent
+   receipt is not the same as no payment.
+5. **Flags** are icon-only (clock = partner not confirmed, person-x = unverified); tooltips do not exist on
+   phones.
+6. **Slow Manage.** `getOrganizerRegistrations` calls `auth.admin.getUserById` once per distinct team
+   member to attach emails (added in §2BE) - ~300 sequential-ish admin API round trips for 169 entries on
+   every load. There is no `loading.tsx` for the manage route, so a slow load looks frozen.
+7. **Tabs** scroll horizontally at 390 px (Needs me and All are clipped); the selected style is a slightly
+   darker surface.
+8. **Navigation delay** - to be measured in the nav component (prefetch, pending feedback) and the pages it
+   opens (sequential awaits; the Players page added several in §2BC).
+
+### Decisions
+
+**A. Back closes the top sheet.** New `lib/hooks/use-back-to-close.ts`: while a sheet is open it pushes one
+same-URL history entry (the router's own state preserved); Back pops it and closes that sheet; × / backdrop
+/ an action removes the entry again. Tokens make nested sheets close one at a time (the More sheet, then the
+team card). Applied to the team card, its More / step sheet, the Filter and Divisions sheets, and the Add
+entry wizard.
+
+**B. Tabs = a to-do list plus a status split, so numbers match Overview.**
+- **Needs you (n)** - a full-width amber button above the tabs (not a tab): a to-do list across any status.
+  Tapping it filters to those entries (reason chips appear); tapping again clears it.
+- **All · Not confirmed · Confirmed** - an equal-width 3-column segmented control (label over count, no
+  horizontal scroll). `Not confirmed` + `Confirmed` = `All`, and **Confirmed = every `status = confirmed`**
+  - the same number as Overview's "Confirmed teams". "Waiting" is renamed **Not confirmed**.
+- One short caption under the control states the selected view in plain words ("Registered, not yet
+  confirmed" / "Confirmed by you" / "Every active entry").
+- Selected segment: **solid fill** (primary background, contrasting text) in both themes; the Needs-you
+  button is solid amber while active.
+
+**C. What counts as "needs you".**
+- *Wants to cancel* (any status), *Check receipt* (a submitted receipt, any status), *Top-up due* (any
+  status).
+- *Rule check* only when eligibility is `skill_mismatch` or `ineligible_hard_rule` AND the entry is not
+  confirmed. `review` (advisory evidence gaps) is never a to-do - it shows as a quiet "Low evidence" note
+  in the card's eligibility line. Confirming a team is the organizer's eligibility decision.
+- Overview's "Eligibility to review" uses the same definition, and its "Fully paid teams" tile is checked
+  against the shared payment summary (it reads 0 while revenue is collected).
+
+**D. Money read shows a sent receipt.** "Paid" still means verified. A submitted, unverified receipt reads
+**"₱2,598 sent"** (or "Receipt sent" when the amount is unknown); seat-by-seat: "1 paid · 1 sent". The
+Payment filter becomes Not paid · Receipt sent · Partly paid · Paid.
+
+**E. Flags as words.** Row line 3 (only when needed) shows tiny muted labels: "Partner not confirmed" (clock),
+"Unverified account" (person-x), "Low evidence". No icon-only meaning.
+
+**F. The card header is the team, the roster is the people.** Header: a **team name** built from nicknames
+(first name when a player has none) - "Mk & Sweet/Maria", "Moh Nasser & Open seat" - then the full division
+on its own line, then the status line. No avatars in the header. Roster keeps avatar, full name, nickname,
+community skill. A nickname is hidden when the full name already contains it. Payment: when one team
+receipt covers every seat, the seat lines collapse into "Covers both seats" under the receipt (no per-seat
+"View"); a guest partner shows "Paraja Juhaili · to be invited" with **+ Add partner** still available.
+
+**G. Manage loads fast.** Emails are fetched only for unverified (guest) members - the only players an
+organizer looks up by email - bounded and parallel; verified players are searched by name and nickname.
+New `manage/loading.tsx` skeleton so the tap responds instantly. The page's reads stay in one
+`Promise.all`.
+
+**H. Navigation responds on tap.** Bottom-nav items show their active state the instant they are tapped
+(`useLinkStatus` pending state), their routes are prefetched, and pages behind the nav run independent
+reads in parallel (the Players page first). Measured before and after in the report.
+
+### Better suggestions folded in
+
+- To-do list separated from status (B): the numbers now reconcile with Overview by construction.
+- Advisory eligibility kept out of the to-do list (C): Needs you becomes short enough to finish.
+- One plain-language caption for the selected view (B) - answers "what is Waiting?" on screen, for everyone.
+
+### Loose ends resolved
+
+- Deep links and refresh: the pushed history entry has the same URL, so a refresh or a shared link is unaffected.
+- A sheet open while navigating away: the hook does not pop history when its entry is no longer current.
+- Remembered view: the stored value migrates (`needs` → Needs you on, `waiting` → Not confirmed).
+- Search still spans every view while typing.
+
+### Succeeding phases
+
+Unchanged: Phase B (migration 0051, after 2026-09-16) - replace / remove / merge players, non-user entries,
+bulk import, Admin → Guests; activity line on the card.
+
+**New, found while measuring H:** the middleware (`lib/supabase/middleware.ts`) calls `auth.getUser()` - a
+network round trip to Supabase Auth - on every request, RSC navigations and prefetches included. That is
+now the fixed floor under tab-to-tab latency. Options (after the Hermosa window, verified signed-in on a
+preview first because it touches session refresh for everyone): skip the refresh for prefetch requests, and
+verify the JWT locally (`getClaims` with project signing keys) instead of a network call. Deliberately not
+changed in this deploy.
+
+### Contracts
+
+**Hook:** `useBackToClose(open, onClose)`. **Model (`entry-view.ts`):** `EntryFilters` gains `needsOnly:
+boolean` and `status: 'all' | 'unconfirmed' | 'confirmed'` (replacing `bucket`); `countViews` → `{ needs,
+all, unconfirmed, confirmed, closed, reasons }`; `needsReasons` narrowed per C; `teamName(e)`; `memberDisplay`
+containment rule; `moneyRead` sent states; `PaymentState` + `'sent'`; `entryFlags` + `'low_evidence'`.
+**Server:** `registration-queries.ts` guest-only emails. **UI:** `organizer-registrations.tsx`,
+`manage-sheets.tsx`, `team-card.tsx` / `team-card-parts.tsx`, `add-entry-wizard.tsx`, manage `loading.tsx`,
+Overview tiles, bottom nav, Players page.
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

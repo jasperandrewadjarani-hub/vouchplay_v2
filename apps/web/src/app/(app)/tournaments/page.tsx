@@ -84,17 +84,21 @@ export default async function TournamentsPage({ searchParams }: { searchParams: 
   const hiddenStatuses = parseHiddenStatuses(sp);
   const managedParams = preservedManagedParams(hiddenStatuses);
   const user = await getOptionalUser();
-  const [managedTournaments, canCreate] = await Promise.all([
-    user ? listManagedTournaments(user.id, filters, hiddenStatuses) : Promise.resolve([]),
-    user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
-  ]);
-  const { tournaments: baseTournaments, total, page, pageCount } = await listTournaments(filters);
-  const tournaments = await withTournamentCardEngagement(baseTournaments, user?.id ?? null);
-
   // Arrived from a player's "Request to partner" (§2W): guide the viewer to pick an event and invite
   // that player during registration. Preserved across search so the banner survives filtering.
   const partnerSlug = one(sp.partner);
-  const partner = partnerSlug ? await getPlayerMetaBySlug(partnerSlug) : null;
+  // managedTournaments/canCreate, the public listTournaments read, and the partner lookup are all
+  // independent once `user` is known - previously three separate sequential awaits, now one batch
+  // (master_plan §2BH decision H). withTournamentCardEngagement still runs after, since it needs
+  // `baseTournaments` from listTournaments.
+  const [managedTournaments, canCreate, listResult, partner] = await Promise.all([
+    user ? listManagedTournaments(user.id, filters, hiddenStatuses) : Promise.resolve([]),
+    user ? viewerIsOrganizer(user.id) : Promise.resolve(false),
+    listTournaments(filters),
+    partnerSlug ? getPlayerMetaBySlug(partnerSlug) : Promise.resolve(null),
+  ]);
+  const { tournaments: baseTournaments, total, page, pageCount } = listResult;
+  const tournaments = await withTournamentCardEngagement(baseTournaments, user?.id ?? null);
   const preservedWithPartner = partnerSlug
     ? { ...managedParams, partner: partnerSlug }
     : managedParams;

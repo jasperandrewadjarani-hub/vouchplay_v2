@@ -35,6 +35,24 @@ const CANCELLATION_EVENT_TYPES = [
   'cancellation_declined',
 ];
 
+/** Runs `fn` over `items` with at most `limit` in flight at once - bounded concurrency without an
+ *  extra dependency. Used so an admin-API fan-out (§2BH Decision G: `auth.admin.getUserById` has no
+ *  bulk form) never turns into hundreds of near-simultaneous round trips on a large tournament. */
+async function mapWithConcurrency<T>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let index = 0;
+  async function worker() {
+    while (index < items.length) {
+      const i = index++;
+      await fn(items[i]!);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+}
+
 /**
  * Viewer-specific + organizer registration reads (handover §20–§23, §26.4). Not cached (per-viewer).
  * Uses the service client with explicit id filters after the caller is authenticated.
@@ -1110,19 +1128,21 @@ export async function getOrganizerRegistrations(
         : null,
     );
   }
-  // Emails from auth (profiles carry none). getUserById per distinct member, bounded per tournament -
-  // same approach `lib/exports/build.ts` uses for the export file.
+  // Emails from auth (profiles carry none) - master_plan §2BH Decision G: an organizer looks a player
+  // up by email only for a guest they cannot yet find by name/nickname (an onboarded player is
+  // searchable by name), so this fan-out is restricted to unverified guest members only - previously
+  // every distinct member on the tournament (§2BE A), which is what made a ~300-round-trip Manage load
+  // out of 169 entries. Bounded to 10 in flight at once; verified players simply keep `email: null`.
+  const unverifiedMemberIds = memberPlayerIds.filter((id) => profiles.get(id)?.unverified === true);
   const emailByPlayer = new Map<string, string | null>();
-  await Promise.all(
-    memberPlayerIds.map(async (id) => {
-      try {
-        const { data } = await svc.auth.admin.getUserById(id);
-        emailByPlayer.set(id, data?.user?.email ?? null);
-      } catch {
-        emailByPlayer.set(id, null);
-      }
-    }),
-  );
+  await mapWithConcurrency(unverifiedMemberIds, 10, async (id) => {
+    try {
+      const { data } = await svc.auth.admin.getUserById(id);
+      emailByPlayer.set(id, data?.user?.email ?? null);
+    } catch {
+      emailByPlayer.set(id, null);
+    }
+  });
 
   const payByReg = new Map<
     string,

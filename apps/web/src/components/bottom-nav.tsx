@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { PRIMARY_NAV, isActivePath } from './nav-items';
 import { PlayersNavLink } from './players/list-return';
+import { NavLinkIndicator } from './nav-link-indicator';
 
 /** Mobile bottom tab bar (handover §5.1). Hidden at desktop widths where the sidebar takes over. */
 export function BottomNav() {
@@ -18,17 +19,14 @@ export function BottomNav() {
         {PRIMARY_NAV.map((item) => {
           const active = isActivePath(pathname, item.href);
           const Icon = item.icon;
-          const className = `relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors ${
-            active ? 'text-primary' : 'text-foreground-muted hover:text-foreground'
-          }`;
+          // Layout only - no colour here. NavLinkIndicator (a child of the Link) owns every
+          // colour-dependent class so it can react to useLinkStatus' pending state the instant the
+          // tap registers, not just after usePathname updates post-commit (master_plan §2BH
+          // decision H). `group` lets it drive the hover colour too.
+          const className =
+            'group relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors';
           const content = (
-            <>
-              {active && (
-                <span className="vp-gradient absolute top-0 h-0.5 w-8 rounded-b" aria-hidden />
-              )}
-              <Icon size={22} aria-hidden strokeWidth={active ? 2.4 : 1.8} />
-              <span>{item.label}</span>
-            </>
+            <NavLinkIndicator active={active} label={item.label} Icon={Icon} variant="bottom" />
           );
           return (
             <li key={item.href} className="flex-1">

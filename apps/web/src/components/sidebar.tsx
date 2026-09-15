@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { PRIMARY_NAV, isActivePath } from './nav-items';
 import { PlayersNavLink } from './players/list-return';
+import { NavLinkIndicator } from './nav-link-indicator';
 
 /** Desktop/tablet left sidebar (handover §5.4). Same destinations as the mobile bottom nav. */
 export function Sidebar() {
@@ -16,22 +17,14 @@ export function Sidebar() {
           {PRIMARY_NAV.map((item) => {
             const active = isActivePath(pathname, item.href);
             const Icon = item.icon;
-            const className = `relative flex items-center gap-3 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
-              active
-                ? 'bg-primary/10 text-primary'
-                : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
-            }`;
+            // Layout only - no colour/background here. NavLinkIndicator (a child of the Link) owns
+            // every colour-dependent class (including the active pill background) so it can react to
+            // useLinkStatus' pending state instantly instead of waiting for usePathname to update
+            // post-commit (master_plan §2BH decision H). `group` drives the hover colour.
+            const className =
+              'group relative flex items-center gap-3 overflow-hidden rounded-xl px-3 py-2.5 text-sm font-semibold transition-all hover:bg-surface-muted';
             const content = (
-              <>
-                {active && (
-                  <span
-                    className="vp-gradient absolute top-1/2 left-0 h-6 w-1 -translate-y-1/2 rounded-r"
-                    aria-hidden
-                  />
-                )}
-                <Icon size={20} aria-hidden strokeWidth={active ? 2.4 : 1.8} />
-                <span>{item.label}</span>
-              </>
+              <NavLinkIndicator active={active} label={item.label} Icon={Icon} variant="sidebar" />
             );
             return (
               <li key={item.href}>

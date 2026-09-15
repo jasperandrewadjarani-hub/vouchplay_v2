@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.83 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.84 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,21 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.84 (2026-09-15)
+
+_Manage teams field-test fixes (master_plan §2BH). No migration._
+
+- **Back closes sheets** (`lib/hooks/use-back-to-close.ts`) - team card, its More/step sheet, Filter and
+  Divisions sheets, Add entry - instead of leaving the tournament.
+- **Counts reconcile:** "Needs you" is a to-do button above an All / Not confirmed / Confirmed control;
+  Confirmed = every confirmed team (matches Overview). Rule check is a to-do only for skill mismatch or a
+  hard rule on an unconfirmed entry; advisory eligibility shows as "Low evidence".
+- **Clarity:** sent receipts read "₱X sent"; flags are words; one caption explains the selected view;
+  solid selected state in both themes; card header = team name from nicknames + division (no repeated
+  avatars or overlap).
+- **Speed:** emails fetched only for unverified members (was one admin API call per member); manage
+  loading skeleton; bottom nav responds on tap.
+
 ## v1.83 (2026-09-15)
 
 _Hotfix (reclassify open-seat teams; nickname/email search) + Manage teams rebuilt around "what needs me?" (master_plan §2BG). No migration._

@@ -10,7 +10,15 @@ import {
   getOrganizerBareSlots,
   getClubOverrideParticipants,
 } from '@/lib/tournaments/registration-queries';
-import { isClosed, hasOpenSeat, hasUnconfirmedPartner } from '@/lib/tournaments/entry-view';
+import {
+  isClosed,
+  hasOpenSeat,
+  hasUnconfirmedPartner,
+  statusView,
+  needsReasons,
+  paymentState,
+  isFreeEntry,
+} from '@/lib/tournaments/entry-view';
 import { ClubOverrideControl } from '@/components/tournaments/club-override-control';
 import { updateTournament } from '@/lib/actions/tournament';
 import {
@@ -149,7 +157,7 @@ export default async function ManageTournamentPage({ params }: Params) {
     emailReady ? getConfirmationEmailBacklog(t.id).catch(() => 0) : Promise.resolve(0),
   ]);
   const unpaidCount = unpaidRecipients.length;
-  const overview = computeOverview(
+  const baseOverview = computeOverview(
     registrations.map((r) => ({
       divisionId: r.divisionId,
       status: r.status,
@@ -162,6 +170,31 @@ export default async function ManageTournamentPage({ params }: Params) {
     })),
     t.divisions.map((d) => ({ id: d.id, name: d.name, capacityTeams: d.capacityTeams })),
   );
+  // master_plan §2BH Decision G: "Confirmed teams", "Payments to review", "Eligibility to review" and
+  // "Fully paid teams" now derive from the SAME entry-view model the Registrations list uses (over the
+  // registrations this page already loaded - no extra query), so the tiles can never disagree with
+  // what the list itself shows. "Fully paid teams" reading 0 in production was `computeOverview`'s
+  // input never carrying a `fullyPaid` flag at all (this call site left it `undefined`) - it is
+  // computed here directly instead, from `paymentState`, and free entries are explicitly excluded so
+  // this tile means "collected money", not "nothing was owed". Waitlisted is unchanged.
+  let confirmedTeams = 0;
+  let paymentsToReview = 0;
+  let eligibilityReviewCount = 0;
+  let fullyPaidTeams = 0;
+  for (const r of registrations) {
+    if (statusView(r) === 'confirmed') confirmedTeams += 1;
+    const reasons = needsReasons(r);
+    if (reasons.includes('receipt')) paymentsToReview += 1;
+    if (reasons.includes('rule')) eligibilityReviewCount += 1;
+    if (!isClosed(r) && paymentState(r) === 'paid' && !isFreeEntry(r)) fullyPaidTeams += 1;
+  }
+  const overview = {
+    ...baseOverview,
+    confirmedTeams,
+    paymentsToReview,
+    eligibilityReviewCount,
+    fullyPaidTeams,
+  };
   const partnerLockLabel = t.partnerLockAt
     ? `${formatDateTime(t.partnerLockAt)}, PH time`
     : t.partnerLockEffectiveAt

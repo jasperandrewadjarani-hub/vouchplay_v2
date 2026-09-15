@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock,
+  Info,
   Search,
   SlidersHorizontal,
   UserPlus,
@@ -20,9 +22,10 @@ import { DivisionsSheet, FilterSheet } from './manage-sheets';
 import { TeamCard } from './team-card';
 import {
   activeRefineCount,
-  countBuckets,
+  countViews,
   DEFAULT_FILTERS,
   DEFAULT_SORT,
+  ENTRY_FLAG_LABELS,
   entryFlags,
   entryVerdict,
   filterEntries,
@@ -30,14 +33,18 @@ import {
   isClosed,
   memberDisplay,
   moneyRead,
+  NEEDS_CAPTION,
   NEEDS_REASON_SHORT,
   paymentState,
   sortEntries,
+  STATUS_VIEW_CAPTIONS,
+  STATUS_VIEW_LABELS,
   teamLabel,
-  type BucketFilter,
   type EntryFilters,
+  type EntryFlag,
   type EntrySort,
   type NeedsReason,
+  type StatusView,
 } from '@/lib/tournaments/entry-view';
 import type {
   DivisionCapacityRow,
@@ -46,12 +53,17 @@ import type {
 import { Button } from '@/components/ui/button';
 import { PlayerAvatar } from '@/components/players/player-avatar';
 
-const BUCKET_TABS: { value: BucketFilter; label: string }[] = [
-  { value: 'needs', label: 'Needs me' },
-  { value: 'waiting', label: 'Waiting' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'all', label: 'All' },
-];
+/** Left-to-right order of the status segmented control (master_plan §2BH Decision B). */
+const STATUS_ORDER: StatusView[] = ['all', 'unconfirmed', 'confirmed'];
+
+/** The icon each row-flag reads with on line 3 (master_plan §2BH Decision E: words, not icon-only
+ *  meaning - the icon is decoration, the label always carries the meaning). */
+const FLAG_ICON: Record<EntryFlag, typeof Clock> = {
+  partner_pending: Clock,
+  unverified: UserX,
+  low_evidence: Info,
+  eligibility_note: Info,
+};
 
 /** True when an entry has a receipt on file worth bulk-verifying - a submitted team payment or any
  *  submitted seat (master_plan §2AQ Decision E: bulk verify). Rows without one get no checkbox. */
@@ -150,10 +162,12 @@ function divisionsButtonLabel(divisions: DivisionCapacityRow[], selectedIds: str
 }
 
 /**
- * Organizer registrations (master_plan §2BG) - rebuilt around "what needs me?": a summary line,
- * search, bucket tabs that add up to the whole list, reason chips inside Needs me, and one action row
- * (Divisions / Filter / Add entry). The row itself carries one verdict and at most two icon flags; the
- * full picture - roster, next step, receipts, eligibility - lives in `TeamCard`'s own bottom sheet.
+ * Organizer registrations (master_plan §2BH, rebuilding §2BG's tabs): a summary line, search, a
+ * full-width "Needs you" to-do toggle, a 3-way status split whose counts always match Overview
+ * (Not confirmed + Confirmed = All, Confirmed = every `status = confirmed`), reason chips inside
+ * Needs you, and one action row (Divisions / Filter / Add entry). The row itself carries one verdict
+ * pill and up to two words-not-icons flags; the full picture - roster, next step, receipts,
+ * eligibility - lives in `TeamCard`'s own bottom sheet.
  */
 export function OrganizerRegistrations({
   tournamentId,
@@ -169,10 +183,10 @@ export function OrganizerRegistrations({
   divisions: DivisionCapacityRow[];
 }) {
   const router = useRouter();
-  const initialCounts = countBuckets(registrations, DEFAULT_FILTERS);
+  const initialCounts = countViews(registrations, DEFAULT_FILTERS);
   const [filters, setFilters] = useState<EntryFilters>(() => ({
     ...DEFAULT_FILTERS,
-    bucket: initialCounts.needs > 0 ? 'needs' : 'all',
+    needsOnly: initialCounts.needs > 0,
   }));
   const [sort, setSort] = useState<EntrySort>(DEFAULT_SORT);
   const [showDivisionsSheet, setShowDivisionsSheet] = useState<'pick' | 'capacity' | null>(null);
@@ -203,36 +217,61 @@ export function OrganizerRegistrations({
     };
   });
 
-  // §2BG Decision C: remember the selected bucket per tournament. The very first render already
-  // picks a deterministic default above (needs me when there is work, else all) so it renders the
-  // same on the server and the client; this effect only overrides it once `localStorage` is
-  // reachable, and never fires before that initial value has had a chance to be read back.
+  // master_plan §2BH "Remembered view": {needsOnly, status} per tournament. The very first render
+  // already picks a deterministic default above (needs-you on when there is work, status "all") so it
+  // renders the same on the server and the client; this effect only overrides it once `localStorage`
+  // is reachable, migrating the old single-bucket key exactly once.
   const hydratedRef = useRef(false);
-  const storageKey = `vp.manage.bucket.${tournamentId}`;
+  const storageKey = `vp.manage.view.${tournamentId}`;
+  const legacyKey = `vp.manage.bucket.${tournamentId}`;
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(storageKey);
-      if (
-        stored === 'needs' ||
-        stored === 'waiting' ||
-        stored === 'confirmed' ||
-        stored === 'all'
-      ) {
-        setFilters((f) => (f.bucket === stored ? f : { ...f, bucket: stored }));
+      if (stored) {
+        const parsed = JSON.parse(stored) as { needsOnly?: unknown; status?: unknown };
+        const status = parsed.status;
+        if (
+          typeof parsed.needsOnly === 'boolean' &&
+          (status === 'all' || status === 'unconfirmed' || status === 'confirmed')
+        ) {
+          setFilters((f) => ({ ...f, needsOnly: parsed.needsOnly as boolean, status }));
+        }
+      } else {
+        const legacy = window.localStorage.getItem(legacyKey);
+        if (legacy) {
+          const migrated: { needsOnly: boolean; status: StatusView } =
+            legacy === 'needs'
+              ? { needsOnly: true, status: 'all' }
+              : legacy === 'waiting'
+                ? { needsOnly: false, status: 'unconfirmed' }
+                : legacy === 'confirmed'
+                  ? { needsOnly: false, status: 'confirmed' }
+                  : { needsOnly: false, status: 'all' };
+          setFilters((f) => ({ ...f, ...migrated }));
+          try {
+            window.localStorage.setItem(storageKey, JSON.stringify(migrated));
+          } catch {
+            // ignore - see the fail-silent contract below.
+          }
+          window.localStorage.removeItem(legacyKey);
+        }
       }
     } catch {
       // localStorage unavailable (private mode, etc.) - fail silently, per master_plan §2BG C.
     }
     hydratedRef.current = true;
-  }, [storageKey]);
+  }, [storageKey, legacyKey]);
   useEffect(() => {
     if (!hydratedRef.current) return;
     try {
-      window.localStorage.setItem(storageKey, filters.bucket);
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({ needsOnly: filters.needsOnly, status: filters.status }),
+      );
     } catch {
       // ignore - same fail-silent contract as the read above.
     }
-  }, [storageKey, filters.bucket]);
+  }, [storageKey, filters.needsOnly, filters.status]);
 
   if (registrations.length === 0) {
     return (
@@ -257,7 +296,7 @@ export function OrganizerRegistrations({
     );
   }
 
-  const counts = countBuckets(registrations, filters);
+  const counts = countViews(registrations, filters);
   const visible = sortEntries(filterEntries(registrations, filters), sort);
   const selected = registrations.find((r) => r.id === openId) ?? null;
   const searching = filters.search.trim().length > 0;
@@ -305,14 +344,13 @@ export function OrganizerRegistrations({
     router.refresh();
   }
 
-  const canVerifySeveral =
-    filters.bucket === 'needs' && visible.some((r) => hasSubmittedReceipt(r));
+  const canVerifySeveral = filters.needsOnly && visible.some((r) => hasSubmittedReceipt(r));
 
   return (
     <div className="space-y-3">
-      {/* Sticky search + tabs (master_plan §2BG Decision C/G) - offset below the app's sticky header
-          the same way `sidebar.tsx`'s own sticky nav does (`top-16`, no `--app-header-h` token exists
-          in this codebase yet). */}
+      {/* Sticky search + Needs-you + status control (master_plan §2BH Decision B/G) - offset below the
+          app's sticky header the same way `sidebar.tsx`'s own sticky nav does (`top-16`, no
+          `--app-header-h` token exists in this codebase yet). */}
       <div className="bg-background sticky top-16 z-10 space-y-2.5 pt-1 pb-2">
         <SummaryLine
           divisions={divisions}
@@ -345,44 +383,85 @@ export function OrganizerRegistrations({
           )}
         </div>
 
+        {/* "Needs you" - a to-do list across any status, not a tab (master_plan §2BH Decision B). */}
+        {!searching &&
+          (counts.needs > 0 ? (
+            <button
+              type="button"
+              aria-pressed={filters.needsOnly}
+              onClick={() => setFilters((f) => ({ ...f, needsOnly: !f.needsOnly }))}
+              className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-left transition-colors ${
+                filters.needsOnly
+                  ? 'border-amber-500 bg-amber-500 text-amber-950'
+                  : 'border-amber-500/50 bg-amber-500/10 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <AlertTriangle size={18} aria-hidden />
+                <span className="flex flex-col">
+                  <span className="text-sm font-semibold">Needs you</span>
+                  {filters.needsOnly && (
+                    <span className="text-xs font-normal opacity-80">Showing decisions</span>
+                  )}
+                </span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span
+                  className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-bold tabular-nums ${
+                    filters.needsOnly ? 'bg-amber-950/15 text-amber-950' : 'bg-amber-500 text-white'
+                  }`}
+                >
+                  {counts.needs}
+                </span>
+                {filters.needsOnly && <X size={16} aria-hidden />}
+              </span>
+            </button>
+          ) : (
+            <p className="text-success flex items-center gap-1.5 px-1 text-sm">
+              <CheckCircle2 size={16} aria-hidden />
+              Nothing needs you
+            </p>
+          ))}
+
+        {/* All · Not confirmed · Confirmed - counts always match Overview (master_plan §2BH B). */}
         <div
           role="tablist"
-          aria-label="Entry bucket"
-          className={`flex items-center gap-1.5 overflow-x-auto transition-opacity ${searching ? 'opacity-50' : ''}`}
+          aria-label="Status"
+          className={`bg-surface-muted border-border grid grid-cols-3 gap-1 rounded-2xl border p-1 transition-opacity ${searching ? 'opacity-50' : ''}`}
         >
-          {BUCKET_TABS.map((tab) => {
-            const active = filters.bucket === tab.value;
-            const amber = active && tab.value === 'needs';
+          {STATUS_ORDER.map((key) => {
+            const active = filters.status === key;
             return (
               <button
-                key={tab.value}
+                key={key}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => setFilters((f) => ({ ...f, bucket: tab.value }))}
-                className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                  amber
-                    ? 'border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-300'
-                    : active
-                      ? 'border-primary bg-surface-muted text-foreground'
-                      : 'border-border text-foreground-muted hover:text-foreground'
+                onClick={() => setFilters((f) => ({ ...f, status: key }))}
+                className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-center transition-colors ${
+                  active
+                    ? 'vp-gradient text-white shadow-sm'
+                    : 'text-foreground-muted hover:text-foreground'
                 }`}
               >
-                {tab.label}
-                <span
-                  className={`inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold tabular-nums ${
-                    amber ? 'bg-amber-500 text-white' : 'bg-surface-muted text-foreground-muted'
-                  }`}
-                >
-                  {counts[tab.value]}
+                <span className="text-xs leading-tight font-semibold">
+                  {STATUS_VIEW_LABELS[key]}
                 </span>
+                <span className="text-base font-bold tabular-nums">{counts[key]}</span>
               </button>
             );
           })}
         </div>
-        {searching && <p className="text-foreground-muted px-1 text-xs">Searching all entries</p>}
 
-        {!searching && filters.bucket === 'needs' && counts.needs > 0 && (
+        <p className="text-foreground-muted px-1 text-xs">
+          {searching
+            ? 'Searching all entries'
+            : filters.needsOnly
+              ? NEEDS_CAPTION
+              : STATUS_VIEW_CAPTIONS[filters.status]}
+        </p>
+
+        {!searching && filters.needsOnly && counts.needs > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             {(Object.keys(NEEDS_REASON_SHORT) as NeedsReason[])
               .filter((reason) => counts.reasons[reason] > 0)
@@ -468,21 +547,21 @@ export function OrganizerRegistrations({
       )}
 
       {visible.length === 0 ? (
-        filters.bucket === 'needs' && !searching ? (
+        filters.needsOnly && !searching ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl px-4 py-10 text-center">
             <CheckCircle2 size={28} className="text-success" aria-hidden />
             <p className="text-foreground text-sm font-semibold">All caught up</p>
             <button
               type="button"
-              onClick={() => setFilters((f) => ({ ...f, bucket: 'all' }))}
+              onClick={() => setFilters((f) => ({ ...f, needsOnly: false }))}
               className="text-primary min-h-11 text-sm font-semibold"
             >
-              See all entries
+              Show all
             </button>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 rounded-2xl px-4 py-10 text-center">
-            <p className="text-foreground-muted text-sm">No entries match.</p>
+            <p className="text-foreground-muted text-sm">No entries match</p>
             <button
               type="button"
               onClick={() => setFilters(DEFAULT_FILTERS)}
@@ -579,10 +658,10 @@ export function OrganizerRegistrations({
 }
 
 /**
- * One entry, scannable in a glance (master_plan §2BG Decision B): stacked avatars, names with
- * nicknames, `Division · money read`, one verdict pill, up to two icon flags, chevron. The whole row
- * is the control; in select mode a row with a submitted receipt gets a checkbox and toggles selection
- * instead of opening `TeamCard`.
+ * One entry, scannable in a glance (master_plan §2BH Decision F/row spec): stacked avatars, names with
+ * nicknames, `Division · money read`, one verdict pill, and - only when needed - a third line of tiny
+ * muted flag labels (never icon-only). The whole row is the control; in select mode a row with a
+ * submitted receipt gets a checkbox and toggles selection instead of opening `TeamCard`.
  */
 function EntryRow({
   entry,
@@ -598,7 +677,7 @@ function EntryRow({
   onToggleSelect: () => void;
 }) {
   const verdict = entryVerdict(entry);
-  const flags = entryFlags(entry);
+  const flags = entryFlags(entry).slice(0, 2);
   const openSeat = hasOpenSeat(entry);
   const selectable = hasSubmittedReceipt(entry);
 
@@ -669,6 +748,20 @@ function EntryRow({
           <span className="text-foreground-muted mt-0.5 block truncate text-xs">
             {entry.divisionName} · {moneyRead(entry)}
           </span>
+          {flags.length > 0 && (
+            <span className="text-foreground-muted mt-0.5 flex items-center gap-1 overflow-hidden text-[11px] whitespace-nowrap">
+              {flags.map((flag, i) => {
+                const Icon = FLAG_ICON[flag];
+                return (
+                  <span key={flag} className="inline-flex shrink-0 items-center gap-1">
+                    {i > 0 && <span aria-hidden>·</span>}
+                    <Icon size={12} className="shrink-0" aria-hidden />
+                    <span className="truncate">{ENTRY_FLAG_LABELS[flag]}</span>
+                  </span>
+                );
+              })}
+            </span>
+          )}
         </span>
 
         {!selectMode && (
@@ -678,29 +771,6 @@ function EntryRow({
             >
               {verdict.label}
             </span>
-            {flags.length > 0 && (
-              <span className="flex items-center gap-1">
-                {flags
-                  .slice(0, 2)
-                  .map((flag) =>
-                    flag === 'unverified' ? (
-                      <UserX
-                        key={flag}
-                        size={20}
-                        className="text-warning"
-                        aria-label="Unverified account"
-                      />
-                    ) : (
-                      <Clock
-                        key={flag}
-                        size={20}
-                        className="text-foreground-muted"
-                        aria-label="Partner not confirmed"
-                      />
-                    ),
-                  )}
-              </span>
-            )}
           </span>
         )}
 

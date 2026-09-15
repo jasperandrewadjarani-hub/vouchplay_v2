@@ -12,8 +12,10 @@ import {
 import { SignupWall } from '@/components/ui/signup-wall';
 
 export default async function HomePage() {
-  const user = await getOptionalUser();
-  const settings = await getLeaderboardSettings();
+  // `getOptionalUser` and `getLeaderboardSettings` don't depend on each other (settings are global,
+  // not per-viewer) - running them together instead of back to back shaves one full round trip off
+  // every Home load (master_plan §2BH decision H). Both already fail open (never reject).
+  const [user, settings] = await Promise.all([getOptionalUser(), getLeaderboardSettings()]);
   const safeBoard = async (request: ReturnType<typeof getLeaderboard>) => {
     try {
       return { board: await request, error: false };

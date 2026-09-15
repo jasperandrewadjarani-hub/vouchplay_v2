@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { useBackToClose } from '@/lib/hooks/use-back-to-close';
 import type { DivisionCapacityRow } from '@/lib/tournaments/organizer-types';
 import {
   clearRefine,
@@ -36,6 +37,12 @@ export function BottomSheet({
   const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   useEffect(() => setMounted(true), []);
+
+  // master_plan §2BH Decision A: the phone's Back gesture closes this sheet instead of leaving the
+  // page. `BottomSheet` is only ever mounted while its owner's boolean state is true (the caller
+  // renders it as `{showX && <XSheet .../>}`), so `open` is always `true` for the sheet's lifetime -
+  // FilterSheet and DivisionsSheet inherit this for free by being built on top of BottomSheet.
+  useBackToClose(true, onClose);
 
   useEffect(() => {
     panelRef.current?.focus();
@@ -266,6 +273,7 @@ export function DivisionsSheet({
 
 const PAYMENT_OPTIONS: { value: PaymentState; label: string }[] = [
   { value: 'unpaid', label: 'Not paid' },
+  { value: 'sent', label: 'Receipt sent' },
   { value: 'partial', label: 'Partly paid' },
   { value: 'paid', label: 'Paid' },
 ];

@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useState, useTransition, type MouseEvent, type ReactNode } from 'react';
+import { NavLinkPendingOverride } from '@/components/nav-link-indicator';
 
 /**
  * Pagination-and-filters persistence across a vouch-and-return trip (master_plan §2AG A1): open a
@@ -83,6 +84,13 @@ export function PlayersNavLink({
   children: ReactNode;
 }) {
   const router = useRouter();
+  // When the click diverts to `router.push` below, `<Link>`'s own click handler never runs (it sees
+  // `defaultPrevented` and bows out), so its built-in `useLinkStatus` pending tracking never engages
+  // either. Wrapping the diverted push in our own transition and providing `isPending` through
+  // `NavLinkPendingOverride` gives the tapped tab the same instant feedback as every other nav Link
+  // (master_plan §2BH decision H) - this is the common case here, since a filtered/paged directory
+  // almost always has a stored URL that differs from the bare `/players` href.
+  const [isPending, startTransition] = useTransition();
 
   function onClick(e: MouseEvent<HTMLAnchorElement>) {
     if (e.defaultPrevented || e.button !== 0) return;
@@ -92,13 +100,17 @@ export function PlayersNavLink({
       e.preventDefault();
       // scroll:false (master_plan §2AN decision 1): this restores the viewer's own remembered list
       // position - jumping to the top would undo the "return to where you were" point of §2AG A1.
-      router.push(stored, { scroll: false });
+      startTransition(() => {
+        router.push(stored, { scroll: false });
+      });
     }
   }
 
   return (
     <Link href={href} className={className} aria-current={ariaCurrent} onClick={onClick}>
-      {children}
+      <NavLinkPendingOverride.Provider value={isPending}>
+        {children}
+      </NavLinkPendingOverride.Provider>
     </Link>
   );
 }

@@ -5,10 +5,9 @@ import {
   activeRefineCount,
   amountLabel,
   clearRefine,
-  countBuckets,
+  countViews,
   DEFAULT_FILTERS,
   DEFAULT_SORT,
-  entryBucket,
   entryFlags,
   entryVerdict,
   filterEntries,
@@ -16,13 +15,17 @@ import {
   hasUnconfirmedPartner,
   isClosed,
   isFreeEntry,
+  isNeeds,
   memberDisplay,
   moneyRead,
   needsReasons,
+  paymentState,
   queuesFor,
   SORT_OPTIONS,
   sortEntries,
+  statusView,
   teamLabel,
+  teamName,
   type EntryFilters,
 } from './entry-view';
 
@@ -201,12 +204,12 @@ describe('scanning', () => {
   });
 });
 
-describe('needsReasons - priority order (master_plan §2BG Decision A)', () => {
+describe('needsReasons - a to-do list independent of status (master_plan §2BH Decision C)', () => {
   it('lists every active reason, in priority order: cancel, receipt, topup, rule', () => {
     const e = entry({
       paymentStatus: 'submitted',
       cancellationRequest: { reason: 'injured', requestedAt: '2026-09-09T00:00:00Z' },
-      eligibilityStatus: 'review',
+      eligibilityStatus: 'skill_mismatch',
       paymentSummary: {
         state: 'partial',
         fullyPaid: false,
@@ -256,63 +259,60 @@ describe('needsReasons - priority order (master_plan §2BG Decision A)', () => {
   it('is empty for an ordinary open, unpaid, eligible entry', () => {
     expect(needsReasons(entry())).toEqual([]);
   });
-});
 
-describe('entryBucket - bucket exclusivity, closed > needs > confirmed > waiting', () => {
-  it('every open entry sits in exactly one bucket, and the counts add up', () => {
-    const rows = [
-      entry({ id: 'a', paymentStatus: 'submitted' }), // needs (receipt)
-      entry({ id: 'b', amountDue: 500 }), // waiting (unpaid, not free)
-      entry({ id: 'c', status: 'confirmed' }), // confirmed
-      entry({ id: 'd', status: 'withdrawn' }), // closed
-    ];
-    expect(entryBucket(rows[0]!)).toBe('needs');
-    expect(entryBucket(rows[1]!)).toBe('waiting');
-    expect(entryBucket(rows[2]!)).toBe('confirmed');
-    expect(entryBucket(rows[3]!)).toBe('closed');
-
-    const counts = countBuckets(rows, DEFAULT_FILTERS);
-    expect(counts.needs + counts.waiting + counts.confirmed).toBe(counts.all);
-    expect(counts.all).toBe(3);
-    expect(counts.closed).toBe(1);
+  it('"review" (advisory evidence gaps) is NEVER a to-do reason', () => {
+    expect(needsReasons(entry({ eligibilityStatus: 'review' }))).toEqual([]);
+    expect(needsReasons(entry({ eligibilityStatus: 'review', status: 'confirmed' }))).toEqual([]);
   });
 
-  it('closed always wins, even over an open cancellation request or a bad receipt', () => {
-    expect(
-      entryBucket(
-        entry({
-          status: 'withdrawn',
-          paymentStatus: 'submitted',
-          cancellationRequest: { reason: 'x', requestedAt: '2026-09-09T00:00:00Z' },
-        }),
-      ),
-    ).toBe('closed');
+  it('"rule" fires only for a hard eligibility problem on an entry not yet confirmed', () => {
+    expect(needsReasons(entry({ eligibilityStatus: 'skill_mismatch' }))).toEqual(['rule']);
+    expect(needsReasons(entry({ eligibilityStatus: 'ineligible_hard_rule' }))).toEqual(['rule']);
   });
 
-  it('a confirmed entry with an outstanding reason is "needs", not "confirmed" (§2AP C4)', () => {
+  it('"rule" never fires once the organizer has confirmed the entry, even with a hard-rule flag', () => {
     expect(
-      entryBucket(
-        entry({
-          status: 'confirmed',
-          paymentSummary: {
-            state: 'partial',
-            fullyPaid: false,
-            anyReceipt: true,
-            paidSeats: 1,
-            submittedSeats: 0,
-            totalSeats: 2,
-            seats: [],
-            teamReceipt: 'none',
-            topupDue: 500,
-          },
-        }),
-      ),
-    ).toBe('needs');
+      needsReasons(entry({ eligibilityStatus: 'skill_mismatch', status: 'confirmed' })),
+    ).toEqual([]);
+    expect(
+      needsReasons(entry({ eligibilityStatus: 'ineligible_hard_rule', status: 'confirmed' })),
+    ).toEqual([]);
+  });
+
+  it('a receipt/cancel/topup reason still fires on a CONFIRMED entry - needs is independent of status', () => {
+    expect(needsReasons(entry({ status: 'confirmed', paymentStatus: 'submitted' }))).toEqual([
+      'receipt',
+    ]);
   });
 });
 
-describe('entryVerdict - the one pill a row shows (master_plan §2BG Decision B)', () => {
-  it('needs: leads with the first reason, amber "action"', () => {
+describe('isNeeds', () => {
+  it('is true exactly when needsReasons is non-empty', () => {
+    expect(isNeeds(entry({ paymentStatus: 'submitted' }))).toBe(true);
+    expect(isNeeds(entry())).toBe(false);
+  });
+});
+
+describe('statusView - exclusive, unlike needsReasons (master_plan §2BH Decision B)', () => {
+  it('closed beats everything', () => {
+    expect(statusView(entry({ status: 'withdrawn' }))).toBe('closed');
+  });
+
+  it('confirmed is exactly status === confirmed, regardless of needs', () => {
+    expect(statusView(entry({ status: 'confirmed' }))).toBe('confirmed');
+    expect(statusView(entry({ status: 'confirmed', paymentStatus: 'submitted' }))).toBe(
+      'confirmed',
+    );
+  });
+
+  it('everything else open is unconfirmed', () => {
+    expect(statusView(entry({ status: 'payment_pending' }))).toBe('unconfirmed');
+    expect(statusView(entry({ status: 'waitlisted' }))).toBe('unconfirmed');
+  });
+});
+
+describe('entryVerdict - the one pill a row shows (master_plan §2BH)', () => {
+  it('needs: leads with the first reason, amber "action" - even on a confirmed entry', () => {
     expect(entryVerdict(entry({ paymentStatus: 'submitted' }))).toEqual({
       label: 'Check receipt',
       tone: 'action',
@@ -322,10 +322,21 @@ describe('entryVerdict - the one pill a row shows (master_plan §2BG Decision B)
         entry({ cancellationRequest: { reason: 'x', requestedAt: '2026-09-09T00:00:00Z' } }),
       ),
     ).toEqual({ label: 'Wants to cancel', tone: 'action' });
+    expect(entryVerdict(entry({ status: 'confirmed', paymentStatus: 'submitted' }))).toEqual({
+      label: 'Check receipt',
+      tone: 'action',
+    });
   });
 
-  it('confirmed: green "done"', () => {
+  it('confirmed with no outstanding reason: green "done"', () => {
     expect(entryVerdict(entry({ status: 'confirmed' }))).toEqual({
+      label: 'Confirmed',
+      tone: 'done',
+    });
+  });
+
+  it('confirmed with an advisory "review" eligibility still reads Confirmed - review is never a need', () => {
+    expect(entryVerdict(entry({ status: 'confirmed', eligibilityStatus: 'review' }))).toEqual({
       label: 'Confirmed',
       tone: 'done',
     });
@@ -433,7 +444,7 @@ describe('isFreeEntry', () => {
   });
 });
 
-describe('moneyRead - "paid" always means verified (master_plan §2BG Decision B)', () => {
+describe('moneyRead - "paid" always means verified (master_plan §2BH Decision D)', () => {
   it('reads "Free" for a free entry', () => {
     expect(moneyRead(entry())).toBe('Free');
   });
@@ -498,16 +509,120 @@ describe('moneyRead - "paid" always means verified (master_plan §2BG Decision B
     expect(moneyRead(e)).toBe('1 of 2 paid');
   });
 
-  it('a SUBMITTED (not yet verified) receipt still reads "Unpaid" - submitted is never "paid"', () => {
+  it('reads "N paid · M sent" when some seats paid and others merely submitted', () => {
+    const e = entry({
+      amountDue: 500,
+      paymentSummary: {
+        state: 'partial',
+        fullyPaid: false,
+        anyReceipt: true,
+        paidSeats: 1,
+        submittedSeats: 1,
+        totalSeats: 2,
+        seats: [],
+        teamReceipt: 'none',
+        topupDue: 0,
+      },
+    });
+    expect(moneyRead(e)).toBe('1 paid · 1 sent');
+  });
+
+  it('a SUBMITTED team receipt reads "{amount} sent", or "Receipt sent" when the amount is unknown', () => {
     expect(
       moneyRead(
-        entry({ amountDue: 500, paymentSummary: summaryFromPaymentStatus('submitted', 2) }),
+        entry({
+          amountDue: 2598,
+          currency: 'PHP',
+          paymentSummary: summaryFromPaymentStatus('submitted', 2),
+        }),
       ),
-    ).toBe('Unpaid');
+    ).toBe('PHP 2,598 sent');
+    expect(
+      moneyRead(
+        entry({ divisionFee: 2000, paymentSummary: summaryFromPaymentStatus('submitted', 2) }),
+      ),
+    ).toBe('Receipt sent');
+  });
+
+  it('reads "N of M sent" when only seats (no team receipt) are submitted', () => {
+    const e = entry({
+      amountDue: 500,
+      paymentSummary: {
+        state: 'submitted',
+        fullyPaid: false,
+        anyReceipt: true,
+        paidSeats: 0,
+        submittedSeats: 1,
+        totalSeats: 2,
+        seats: [],
+        teamReceipt: 'none',
+        topupDue: 0,
+      },
+    });
+    expect(moneyRead(e)).toBe('1 of 2 sent');
   });
 
   it('reads "Unpaid" for a plain unpaid entry', () => {
     expect(moneyRead(entry({ amountDue: 500 }))).toBe('Unpaid');
+  });
+});
+
+describe('paymentState - the filter enum, now with "sent" (master_plan §2BH Decision D)', () => {
+  it('free is paid', () => {
+    expect(paymentState(entry())).toBe('paid');
+  });
+
+  it('a verified team receipt or fully-paid seats is paid', () => {
+    expect(
+      paymentState(
+        entry({ amountDue: 500, paymentSummary: summaryFromPaymentStatus('verified', 2) }),
+      ),
+    ).toBe('paid');
+  });
+
+  it('any paid seat short of full is partial', () => {
+    const e = entry({
+      amountDue: 500,
+      paymentSummary: {
+        state: 'partial',
+        fullyPaid: false,
+        anyReceipt: true,
+        paidSeats: 1,
+        submittedSeats: 0,
+        totalSeats: 2,
+        seats: [],
+        teamReceipt: 'none',
+        topupDue: 0,
+      },
+    });
+    expect(paymentState(e)).toBe('partial');
+  });
+
+  it('a submitted, unverified receipt (team or any seat) with nothing verified is "sent"', () => {
+    expect(
+      paymentState(
+        entry({ amountDue: 500, paymentSummary: summaryFromPaymentStatus('submitted', 2) }),
+      ),
+    ).toBe('sent');
+    const seatSubmitted = entry({
+      amountDue: 500,
+      paymentSummary: {
+        state: 'submitted',
+        fullyPaid: false,
+        anyReceipt: true,
+        paidSeats: 0,
+        submittedSeats: 1,
+        totalSeats: 2,
+        seats: [],
+        teamReceipt: 'none',
+        topupDue: 0,
+      },
+    });
+    expect(paymentState(seatSubmitted)).toBe('sent');
+  });
+
+  it('otherwise unpaid', () => {
+    expect(paymentState(entry({ amountDue: 500 }))).toBe('unpaid');
   });
 });
 
@@ -537,6 +652,15 @@ describe('memberDisplay - nickname suppression', () => {
     });
   });
 
+  it('suppresses a nickname already CONTAINED in the full name, however punctuated (master_plan §2BH Finding 3)', () => {
+    expect(
+      memberDisplay({ name: 'MOH "MOH NASSER" NASSER JAPALALI', nickname: 'MOH NASSER' }),
+    ).toEqual({ name: 'MOH "MOH NASSER" NASSER JAPALALI', nickname: null });
+    expect(memberDisplay({ name: 'Rene, Villanueva Jr.', nickname: 'rene villanueva jr' })).toEqual(
+      { name: 'Rene, Villanueva Jr.', nickname: null },
+    );
+  });
+
   it('suppresses an empty, whitespace, or missing nickname', () => {
     expect(memberDisplay({ name: 'Ana Reyes', nickname: '' })).toEqual({
       name: 'Ana Reyes',
@@ -550,70 +674,160 @@ describe('memberDisplay - nickname suppression', () => {
   });
 });
 
-describe('entryFlags', () => {
-  it('flags an unverified member', () => {
+describe('teamName - the card header name (master_plan §2BH Decision F)', () => {
+  it("uses each member's nickname when it says something new", () => {
+    expect(
+      teamName(
+        entry({
+          members: [
+            { id: 'p1', name: 'Mark Santos', slug: 'mk', avatarUrl: null, nickname: 'Mk' },
+            { id: 'p2', name: 'Maria Cruz', slug: 'cruz', avatarUrl: null, nickname: 'Sweet' },
+          ],
+        }),
+      ),
+    ).toBe('Mk & Sweet');
+  });
+
+  it('falls back to the first name when a member has no usable nickname', () => {
+    expect(
+      teamName(
+        entry({
+          members: [
+            { id: 'p1', name: 'Moh Nasser', slug: 'moh', avatarUrl: null },
+            { id: 'p2', name: 'Juhaili Paraja', slug: 'juhaili', avatarUrl: null },
+          ],
+        }),
+      ),
+    ).toBe('Moh & Juhaili');
+  });
+
+  it('adds "Open seat" when the team is short a player', () => {
+    expect(
+      teamName(
+        entry({
+          members: [{ id: 'p1', name: 'Moh Nasser', slug: 'moh', avatarUrl: null }],
+        }),
+      ),
+    ).toBe('Moh & Open seat');
+  });
+
+  it('reads "Unnamed team" with no members', () => {
+    expect(teamName(entry({ members: [] }))).toBe('Unnamed team');
+  });
+});
+
+describe('entryFlags - words, not icons (master_plan §2BH Decision E)', () => {
+  it('flags an unverified member first', () => {
     const e = entry({
       members: [
         { id: 'p1', name: 'Guest One', slug: null, avatarUrl: null, unverified: true },
         { id: 'p2', name: 'Ana Reyes', slug: 'ana', avatarUrl: null },
       ],
     });
-    expect(entryFlags(e)).toContain('unverified');
+    expect(entryFlags(e)).toEqual(['unverified']);
   });
 
   it('flags a pending partner', () => {
-    expect(entryFlags(entry({ unconfirmedMemberIds: ['p2'] }))).toContain('partner_pending');
+    expect(entryFlags(entry({ unconfirmedMemberIds: ['p2'] }))).toEqual(['partner_pending']);
+  });
+
+  it('flags advisory "review" eligibility as a quiet low-evidence note', () => {
+    expect(entryFlags(entry({ eligibilityStatus: 'review' }))).toEqual(['low_evidence']);
+  });
+
+  it('flags a hard-rule/mismatch eligibility as an eligibility note ONLY once confirmed', () => {
+    expect(entryFlags(entry({ eligibilityStatus: 'skill_mismatch', status: 'confirmed' }))).toEqual(
+      ['eligibility_note'],
+    );
+    // Not yet confirmed - this is a to-do (needsReasons), not a quiet flag.
+    expect(entryFlags(entry({ eligibilityStatus: 'skill_mismatch' }))).toEqual([]);
+  });
+
+  it('orders unverified, then partner pending, then the eligibility note', () => {
+    const e = entry({
+      status: 'confirmed',
+      eligibilityStatus: 'skill_mismatch',
+      unconfirmedMemberIds: ['p2'],
+      members: [
+        { id: 'p1', name: 'Guest One', slug: null, avatarUrl: null, unverified: true },
+        { id: 'p2', name: 'Ana Reyes', slug: 'ana', avatarUrl: null },
+      ],
+    });
+    expect(entryFlags(e)).toEqual(['unverified', 'partner_pending', 'eligibility_note']);
   });
 
   it('is empty for an ordinary entry', () => {
     expect(entryFlags(entry())).toEqual([]);
   });
+
+  it('is empty for a closed entry, whatever else is true', () => {
+    expect(
+      entryFlags(
+        entry({
+          status: 'withdrawn',
+          eligibilityStatus: 'review',
+          unconfirmedMemberIds: ['p2'],
+        }),
+      ),
+    ).toEqual([]);
+  });
 });
 
-describe('filterEntries - bucket tabs (master_plan §2BG Decision A/C)', () => {
+describe('filterEntries - status view + needsOnly (master_plan §2BH Decision B)', () => {
   const rows = [
-    entry({ id: 'a', paymentStatus: 'submitted' }), // needs
-    entry({ id: 'b', amountDue: 500 }), // waiting
-    entry({ id: 'c', status: 'confirmed' }), // confirmed
+    entry({ id: 'a', paymentStatus: 'submitted' }), // unconfirmed, needs (receipt)
+    entry({ id: 'b', amountDue: 500 }), // unconfirmed, routine
+    entry({ id: 'c', status: 'confirmed' }), // confirmed, routine
     entry({ id: 'd', status: 'withdrawn' }), // closed
   ];
 
-  it('DEFAULT_FILTERS opens on the needs bucket', () => {
-    expect(DEFAULT_FILTERS.bucket).toBe('needs');
-    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a']);
+  it('DEFAULT_FILTERS opens on "all", showing every open entry', () => {
+    expect(DEFAULT_FILTERS.status).toBe('all');
+    expect(DEFAULT_FILTERS.needsOnly).toBe(false);
+    expect(filterEntries(rows, DEFAULT_FILTERS).map((r) => r.id)).toEqual(['a', 'b', 'c']);
   });
 
-  it('each bucket shows exactly its own entries', () => {
-    expect(filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'waiting' }).map((r) => r.id)).toEqual(
-      ['b'],
-    );
+  it('status narrows to exactly its own statusView', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'confirmed' }).map((r) => r.id),
+      filterEntries(rows, { ...DEFAULT_FILTERS, status: 'unconfirmed' }).map((r) => r.id),
+    ).toEqual(['a', 'b']);
+    expect(
+      filterEntries(rows, { ...DEFAULT_FILTERS, status: 'confirmed' }).map((r) => r.id),
     ).toEqual(['c']);
   });
 
   it('"all" shows every open entry, closed only when includeClosed', () => {
-    expect(filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'all' }).map((r) => r.id)).toEqual([
-      'a',
-      'b',
-      'c',
-    ]);
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'all', includeClosed: true }).map(
-        (r) => r.id,
-      ),
+      filterEntries(rows, { ...DEFAULT_FILTERS, includeClosed: true }).map((r) => r.id),
     ).toEqual(['a', 'b', 'c', 'd']);
   });
 
-  it('a specific bucket NEVER shows a closed entry, even with includeClosed on', () => {
+  it('needsOnly ANDs with whatever status is selected - it is not a tab of its own', () => {
+    expect(filterEntries(rows, { ...DEFAULT_FILTERS, needsOnly: true }).map((r) => r.id)).toEqual([
+      'a',
+    ]);
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'needs', includeClosed: true }).map(
+      filterEntries(rows, { ...DEFAULT_FILTERS, status: 'confirmed', needsOnly: true }).map(
         (r) => r.id,
       ),
-    ).toEqual(['a']);
+    ).toEqual([]);
   });
 
-  it('reasons narrow the needs bucket only, and OR within the group', () => {
+  it('a confirmed entry that still needs a receipt checked shows under BOTH confirmed and needsOnly', () => {
+    const confirmedNeeds = entry({ id: 'e', status: 'confirmed', paymentStatus: 'submitted' });
+    expect(
+      filterEntries([confirmedNeeds], { ...DEFAULT_FILTERS, status: 'confirmed' }).map((r) => r.id),
+    ).toEqual(['e']);
+    expect(
+      filterEntries([confirmedNeeds], {
+        ...DEFAULT_FILTERS,
+        status: 'confirmed',
+        needsOnly: true,
+      }).map((r) => r.id),
+    ).toEqual(['e']);
+  });
+
+  it('reasons narrow needsOnly, OR within the group', () => {
     const topup = entry({
       id: 'e',
       paymentSummary: {
@@ -631,29 +845,29 @@ describe('filterEntries - bucket tabs (master_plan §2BG Decision A/C)', () => {
     expect(
       filterEntries([...rows, topup], {
         ...DEFAULT_FILTERS,
-        bucket: 'needs',
+        needsOnly: true,
         reasons: ['topup'],
       }).map((r) => r.id),
     ).toEqual(['e']);
     expect(
       filterEntries([...rows, topup], {
         ...DEFAULT_FILTERS,
-        bucket: 'needs',
+        needsOnly: true,
         reasons: ['receipt', 'topup'],
       }).map((r) => r.id),
     ).toEqual(['a', 'e']);
   });
 
-  it('reasons are ignored outside the needs bucket', () => {
+  it('reasons are ignored when needsOnly is off', () => {
     expect(
-      filterEntries(rows, { ...DEFAULT_FILTERS, bucket: 'waiting', reasons: ['topup'] }).map(
+      filterEntries(rows, { ...DEFAULT_FILTERS, status: 'unconfirmed', reasons: ['topup'] }).map(
         (r) => r.id,
       ),
-    ).toEqual(['b']);
+    ).toEqual(['a', 'b']);
   });
 });
 
-describe('filterEntries - search ignores bucket and reasons, matches nickname + email (§2BG)', () => {
+describe('filterEntries - search ignores the selected view, matches nickname + email (§2BG/§2BH)', () => {
   const nickRows = [
     entry({
       id: 'n1',
@@ -677,10 +891,11 @@ describe('filterEntries - search ignores bucket and reasons, matches nickname + 
     }),
   ];
 
-  it('matches a nickname even when the selected bucket would otherwise exclude it', () => {
-    // bucket is 'needs' (default), which would normally exclude n1 (confirmed) - search overrides.
+  it('matches a nickname even when the selected status/needsOnly would otherwise exclude it', () => {
+    // status defaults to 'all' with needsOnly true, which would normally exclude n1 (confirmed,
+    // no needs) - search overrides both.
     expect(
-      filterEntries(nickRows, { ...DEFAULT_FILTERS, bucket: 'needs', search: 'bogart' }).map(
+      filterEntries(nickRows, { ...DEFAULT_FILTERS, needsOnly: true, search: 'bogart' }).map(
         (r) => r.id,
       ),
     ).toEqual(['n1']);
@@ -688,7 +903,7 @@ describe('filterEntries - search ignores bucket and reasons, matches nickname + 
 
   it('matches an email, case-insensitively', () => {
     expect(
-      filterEntries(nickRows, { ...DEFAULT_FILTERS, bucket: 'confirmed', search: 'TEEJ@EX' }).map(
+      filterEntries(nickRows, { ...DEFAULT_FILTERS, status: 'confirmed', search: 'TEEJ@EX' }).map(
         (r) => r.id,
       ),
     ).toEqual(['n2']);
@@ -700,7 +915,6 @@ describe('filterEntries - search ignores bucket and reasons, matches nickname + 
     expect(
       filterEntries([a, b], {
         ...DEFAULT_FILTERS,
-        bucket: 'all',
         divisions: ['d2'],
         search: 'maria',
       }).map((r) => r.id),
@@ -751,14 +965,11 @@ describe('filterEntries - refine filters AND across groups, OR within a group', 
     // 'unverified-member', 'open-seat' and 'pending-partner' never override paymentSummary, so they
     // are 'unpaid' too - this checks the payment filter itself, not those other entries' identities.
     expect(
-      filterEntries(refineRows, { ...DEFAULT_FILTERS, bucket: 'all', payment: ['unpaid'] }).map(
-        (r) => r.id,
-      ),
+      filterEntries(refineRows, { ...DEFAULT_FILTERS, payment: ['unpaid'] }).map((r) => r.id),
     ).toEqual(['unpaid', 'unverified-member', 'open-seat', 'pending-partner']);
     expect(
       filterEntries(refineRows, {
         ...DEFAULT_FILTERS,
-        bucket: 'all',
         payment: ['partial', 'paid'],
       }).map((r) => r.id),
     ).toEqual(['partial', 'paid']);
@@ -766,27 +977,20 @@ describe('filterEntries - refine filters AND across groups, OR within a group', 
 
   it('account: unverified matches an entry with any unverified member', () => {
     expect(
-      filterEntries(refineRows, { ...DEFAULT_FILTERS, bucket: 'all', account: ['unverified'] }).map(
-        (r) => r.id,
-      ),
+      filterEntries(refineRows, { ...DEFAULT_FILTERS, account: ['unverified'] }).map((r) => r.id),
     ).toEqual(['unverified-member']);
   });
 
   it('partner: OR within the group', () => {
     expect(
-      filterEntries(refineRows, { ...DEFAULT_FILTERS, bucket: 'all', partner: ['open_seat'] }).map(
-        (r) => r.id,
-      ),
+      filterEntries(refineRows, { ...DEFAULT_FILTERS, partner: ['open_seat'] }).map((r) => r.id),
     ).toEqual(['open-seat']);
     expect(
-      filterEntries(refineRows, { ...DEFAULT_FILTERS, bucket: 'all', partner: ['pending'] }).map(
-        (r) => r.id,
-      ),
+      filterEntries(refineRows, { ...DEFAULT_FILTERS, partner: ['pending'] }).map((r) => r.id),
     ).toEqual(['pending-partner']);
     expect(
       filterEntries(refineRows, {
         ...DEFAULT_FILTERS,
-        bucket: 'all',
         partner: ['open_seat', 'pending'],
       }).map((r) => r.id),
     ).toEqual(['open-seat', 'pending-partner']);
@@ -798,7 +1002,6 @@ describe('filterEntries - refine filters AND across groups, OR within a group', 
     expect(
       filterEntries([a, b], {
         ...DEFAULT_FILTERS,
-        bucket: 'all',
         divisions: ['d1'],
         payment: ['unpaid'],
       }).map((r) => r.id),
@@ -806,10 +1009,9 @@ describe('filterEntries - refine filters AND across groups, OR within a group', 
   });
 
   it('every empty refine group applies no constraint', () => {
-    expect(filterEntries(refineRows, { ...DEFAULT_FILTERS, bucket: 'all' })).toEqual(
+    expect(filterEntries(refineRows, DEFAULT_FILTERS)).toEqual(
       filterEntries(refineRows, {
         ...DEFAULT_FILTERS,
-        bucket: 'all',
         payment: [],
         account: [],
         partner: [],
@@ -818,34 +1020,68 @@ describe('filterEntries - refine filters AND across groups, OR within a group', 
   });
 });
 
-describe('countBuckets - ignores bucket/reasons/search/includeClosed, honours refine filters', () => {
+describe('countViews - reconciles with Overview by construction (master_plan §2BH Decision B)', () => {
   const rows = [
-    entry({ id: 'a', paymentStatus: 'submitted' }), // needs (receipt)
-    entry({ id: 'b', amountDue: 500 }), // waiting
-    entry({ id: 'c', status: 'confirmed' }), // confirmed
+    entry({ id: 'a', paymentStatus: 'submitted' }), // unconfirmed, needs (receipt)
+    entry({ id: 'b', amountDue: 500 }), // unconfirmed, routine
+    entry({ id: 'c', status: 'confirmed' }), // confirmed, routine
     entry({ id: 'd', status: 'withdrawn' }), // closed
   ];
 
-  it('counts every open bucket plus closed, regardless of the current bucket/search/includeClosed', () => {
-    const counts = countBuckets(rows, {
+  it('all === unconfirmed + confirmed, ignoring the currently selected status/needsOnly/search', () => {
+    const counts = countViews(rows, { ...DEFAULT_FILTERS, status: 'confirmed', search: 'nomatch' });
+    expect(counts.all).toBe(counts.unconfirmed + counts.confirmed);
+    expect(counts).toMatchObject({ all: 3, unconfirmed: 2, confirmed: 1, closed: 1 });
+  });
+
+  it('Overview reconciliation: a confirmed entry with a review or skill_mismatch eligibility still counts in confirmed', () => {
+    const confirmedReview = entry({ id: 'x', status: 'confirmed', eligibilityStatus: 'review' });
+    const confirmedMismatch = entry({
+      id: 'y',
+      status: 'confirmed',
+      eligibilityStatus: 'skill_mismatch',
+    });
+    const counts = countViews([confirmedReview, confirmedMismatch], DEFAULT_FILTERS);
+    expect(counts.confirmed).toBe(2);
+    expect(counts.all).toBe(2);
+  });
+
+  it('needs and reasons are counted WITHIN the currently selected status view', () => {
+    const confirmedNeeds = entry({ id: 'e', status: 'confirmed', paymentStatus: 'submitted' });
+    const withConfirmedNeeds = [...rows, confirmedNeeds];
+
+    const allView = countViews(withConfirmedNeeds, { ...DEFAULT_FILTERS, status: 'all' });
+    expect(allView.needs).toBe(2); // 'a' and the new confirmed-with-receipt entry
+    expect(allView.reasons.receipt).toBe(2);
+
+    const confirmedView = countViews(withConfirmedNeeds, {
       ...DEFAULT_FILTERS,
-      bucket: 'confirmed',
-      search: 'nomatch',
-      includeClosed: false,
+      status: 'confirmed',
     });
-    expect(counts).toEqual({
-      needs: 1,
-      waiting: 1,
-      confirmed: 1,
-      all: 3,
-      closed: 1,
-      reasons: { cancel: 0, receipt: 1, topup: 0, rule: 0 },
+    expect(confirmedView.needs).toBe(1); // only the confirmed one
+    expect(confirmedView.reasons.receipt).toBe(1);
+
+    const unconfirmedView = countViews(withConfirmedNeeds, {
+      ...DEFAULT_FILTERS,
+      status: 'unconfirmed',
     });
+    expect(unconfirmedView.needs).toBe(1); // only 'a'
+  });
+
+  it('a receipt need on a confirmed entry still counts toward the confirmed tally', () => {
+    const confirmedNeeds = entry({ id: 'e', status: 'confirmed', paymentStatus: 'submitted' });
+    const counts = countViews([confirmedNeeds], DEFAULT_FILTERS);
+    expect(counts.confirmed).toBe(1);
+    expect(counts.needs).toBe(1);
   });
 
   it('an entry with two needs reasons counts in both reason buckets', () => {
-    const both = entry({ id: 'e', paymentStatus: 'submitted', eligibilityStatus: 'review' });
-    const counts = countBuckets([both], DEFAULT_FILTERS);
+    const both = entry({
+      id: 'e',
+      paymentStatus: 'submitted',
+      eligibilityStatus: 'skill_mismatch',
+    });
+    const counts = countViews([both], DEFAULT_FILTERS);
     expect(counts.reasons.receipt).toBe(1);
     expect(counts.reasons.rule).toBe(1);
     expect(counts.needs).toBe(1);
@@ -856,9 +1092,9 @@ describe('countBuckets - ignores bucket/reasons/search/includeClosed, honours re
       entry({ id: 'x', divisionId: 'd1', amountDue: 500 }),
       entry({ id: 'y', divisionId: 'd2', amountDue: 500 }),
     ];
-    const counts = countBuckets(withDivision, { ...DEFAULT_FILTERS, divisions: ['d1'] });
+    const counts = countViews(withDivision, { ...DEFAULT_FILTERS, divisions: ['d1'] });
     expect(counts.all).toBe(1);
-    expect(counts.waiting).toBe(1);
+    expect(counts.unconfirmed).toBe(1);
   });
 });
 
@@ -879,7 +1115,8 @@ describe('activeRefineCount + clearRefine', () => {
 
   it('clearRefine resets only payment, account, partner and includeClosed', () => {
     const f: EntryFilters = {
-      bucket: 'needs',
+      needsOnly: true,
+      status: 'unconfirmed',
       reasons: ['topup'],
       divisions: ['d1'],
       payment: ['unpaid'],
@@ -889,7 +1126,8 @@ describe('activeRefineCount + clearRefine', () => {
       search: 'maria',
     };
     expect(clearRefine(f)).toEqual({
-      bucket: 'needs',
+      needsOnly: true,
+      status: 'unconfirmed',
       reasons: ['topup'],
       divisions: ['d1'],
       payment: [],
@@ -925,24 +1163,28 @@ describe('sorting - default unchanged, every column key deterministic', () => {
     ).toEqual(['routine', 'work']);
   });
 
-  it('needs_first orders needs, then waiting, then confirmed, then closed', () => {
+  it('needs_first orders needs, then unconfirmed, then confirmed, then closed (master_plan §2BH)', () => {
     const rows = [
       entry({ id: 'confirmed', status: 'confirmed' }),
       entry({ id: 'closed', status: 'withdrawn' }),
       entry({ id: 'needs', paymentStatus: 'submitted' }),
-      entry({ id: 'waiting', amountDue: 500 }),
+      entry({ id: 'unconfirmed', amountDue: 500 }),
+      // A confirmed entry that STILL needs something outranks routine confirmed/unconfirmed rows.
+      entry({ id: 'confirmed-needs', status: 'confirmed', paymentStatus: 'submitted' }),
     ];
     expect(sortEntries(rows, { key: 'needs_first', dir: 'asc' }).map((r) => r.id)).toEqual([
       'needs',
-      'waiting',
+      'confirmed-needs',
+      'unconfirmed',
       'confirmed',
       'closed',
     ]);
     expect(sortEntries(rows, { key: 'needs_first', dir: 'desc' }).map((r) => r.id)).toEqual([
       'closed',
       'confirmed',
-      'waiting',
+      'unconfirmed',
       'needs',
+      'confirmed-needs',
     ]);
   });
 

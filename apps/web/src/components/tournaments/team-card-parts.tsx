@@ -460,12 +460,7 @@ export function RosterSection({
         ))}
         {openSeat && (
           <li className="py-2">
-            {partnerNote ? (
-              <p className="text-foreground-muted flex items-center gap-2.5 text-xs">
-                <OpenSeatAvatar size="md" />
-                Partner: {partnerNote} (to be invited)
-              </p>
-            ) : showAssignPartner ? (
+            {showAssignPartner ? (
               <AssignPartnerForm
                 teamId={reg.teamId}
                 tournamentId={tournamentId}
@@ -474,25 +469,27 @@ export function RosterSection({
               />
             ) : (
               <div className="flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2.5">
+                <span className="flex min-w-0 items-center gap-2.5">
                   <OpenSeatAvatar size="md" />
-                  <span className="text-foreground-muted text-sm">Open seat</span>
+                  {partnerNote ? (
+                    <span className="min-w-0">
+                      <span className="text-foreground-muted block text-sm">{partnerNote}</span>
+                      <span className="text-foreground-muted block text-xs">to be invited</span>
+                    </span>
+                  ) : (
+                    <span className="text-foreground-muted text-sm">Open seat</span>
+                  )}
                 </span>
                 <button
                   type="button"
                   onClick={() => onToggleAssignPartner(true)}
-                  className={`${btnSmall} border`}
+                  className={`${btnSmall} shrink-0 border`}
                   style={{ borderColor: 'var(--accent-lime)', color: 'var(--accent-lime)' }}
                 >
                   + Add partner
                 </button>
               </div>
             )}
-          </li>
-        )}
-        {partnerNote && !openSeat && (
-          <li className="text-foreground-muted py-2 text-xs">
-            Partner: {partnerNote} (to be invited)
           </li>
         )}
       </ul>
@@ -864,9 +861,14 @@ export function PaymentSection({
   const slotByPlayer = new Map((reg.slots ?? []).map((s) => [s.playerId, s]));
   const teamReceiptCoversAll =
     summary && (summary.teamReceipt === 'verified' || summary.teamReceipt === 'submitted');
-  // Overpayment (master_plan §2AP C6, kept in §2BG): the team receipt already covers every seat but a
+  const hasSeatSlots = (reg.slots ?? []).length > 0;
+  // master_plan §2BH Decision F: a team receipt that covers every seat, with no seat ever carrying its
+  // own receipt, collapses to ONE row - no "MOH · Covered by team receipt" / "Open · Covered by team
+  // receipt" noise underneath it. Mixed payment (some seats paid individually) still lists seats.
+  const collapseToTeamOnly = !!reg.paymentId && !!teamReceiptCoversAll && !hasSeatSlots;
+  // Overpayment (master_plan §2AP C6, kept in §2BH): the team receipt already covers every seat but a
   // seat also carries its own receipt - a likely duplicate payment. One quiet line, never absorbed.
-  const hasOverpayment = !!teamReceiptCoversAll && (reg.slots ?? []).length > 0;
+  const hasOverpayment = !!teamReceiptCoversAll && hasSeatSlots;
 
   return (
     <section className="px-4 sm:px-5">
@@ -883,40 +885,52 @@ export function PaymentSection({
             </p>
           )}
           {reg.paymentId && (
-            <TeamReceiptLine
-              reg={reg}
-              tournamentId={tournamentId}
-              pending={pending}
-              start={start}
-              run={run}
-              setMsg={setMsg}
-            />
+            <>
+              <TeamReceiptLine
+                reg={reg}
+                tournamentId={tournamentId}
+                pending={pending}
+                start={start}
+                run={run}
+                setMsg={setMsg}
+              />
+              {collapseToTeamOnly && (
+                <p className="text-foreground-muted px-0.5 text-xs">
+                  {reg.teamSize > 1 ? 'Covers both seats' : 'Covers the entry'}
+                </p>
+              )}
+            </>
           )}
-          {summary && (
+          {!collapseToTeamOnly && summary && (
             <ul className="divide-border divide-y">
-              {summary.seats.map((seat, i) => {
-                const slot = seat.playerId ? slotByPlayer.get(seat.playerId) : undefined;
-                const isFirst =
-                  firstReceipt?.kind === 'slot' && !!slot && firstReceipt.id === slot.id;
-                return (
-                  <SeatLine
-                    key={seat.playerId ?? `open-seat-${i}`}
-                    seat={seat}
-                    slot={slot}
-                    nameById={nameById}
-                    currency={reg.currency}
-                    coveredByTeamReceipt={!!teamReceiptCoversAll && !slot}
-                    teamPaymentId={reg.paymentId}
-                    isFirstReceipt={isFirst}
-                    registrationId={reg.id}
-                    tournamentId={tournamentId}
-                    pending={pending}
-                    start={start}
-                    run={run}
-                    setMsg={setMsg}
-                  />
-                );
-              })}
+              {summary.seats
+                // Never a seat line for an open seat with no slot (master_plan §2BH Decision F) - a
+                // seat only ever has a slot when it has a playerId, so this is exactly "skip empty
+                // seats".
+                .filter((seat) => seat.playerId != null)
+                .map((seat) => {
+                  const slot = slotByPlayer.get(seat.playerId as string);
+                  const isFirst =
+                    firstReceipt?.kind === 'slot' && !!slot && firstReceipt.id === slot.id;
+                  return (
+                    <SeatLine
+                      key={seat.playerId}
+                      seat={seat}
+                      slot={slot}
+                      nameById={nameById}
+                      currency={reg.currency}
+                      coveredByTeamReceipt={!!teamReceiptCoversAll && !slot}
+                      teamPaymentId={reg.paymentId}
+                      isFirstReceipt={isFirst}
+                      registrationId={reg.id}
+                      tournamentId={tournamentId}
+                      pending={pending}
+                      start={start}
+                      run={run}
+                      setMsg={setMsg}
+                    />
+                  );
+                })}
             </ul>
           )}
         </div>
