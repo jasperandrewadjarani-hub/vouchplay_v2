@@ -14,7 +14,16 @@ const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: true },
   // Server Actions handle file uploads (avatars 2MB, club logos 2MB, tournament covers 4MB, payment
   // proofs 5MB). Next's default action body limit is 1MB, which errored those uploads - raise it.
-  experimental: { serverActions: { bodySizeLimit: '8mb' } },
+  experimental: {
+    serverActions: { bodySizeLimit: '8mb' },
+    // Client router cache for dynamic pages (master_plan §2BO, cost diagnosis fix #5). Re-visiting a page
+    // within 30 s (tab back and forth, Back to the list, toggling a filter off and on) reuses the render
+    // the phone already has instead of a new server render + function invocation. Freshness after a
+    // change is kept: server actions that call revalidatePath/revalidateTag and `router.refresh()` clear
+    // this cache, and a page left open refreshes on resume (resume-refresh, §2AE). 30 s is the safe
+    // ceiling for data other people change (counts, online, notifications).
+    staleTimes: { dynamic: 30 },
+  },
   // Domain logic lives in workspace packages; transpile them for the app.
   transpilePackages: [
     '@vouchplay/core',

@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.89 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.90 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,17 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.90 (2026-09-15)
+
+_Vercel cost fixes #2 and #5 (master_plan §2BO)._
+
+- **Docs-only pushes no longer build:** `vercel.json` `ignoreCommand` runs `scripts/vercel-ignore-build.sh`, which
+  skips only when everything since the last successful deployment is docs / working material; any app change or
+  any doubt builds.
+- **30 s client router cache** (`staleTimes.dynamic = 30`): revisiting a page within 30 s reuses the phone's copy
+  instead of a new server render; data-changing actions still refresh it.
+- **Baseline to beat:** ~$1.80/day ongoing Vercel burn (see `working/P_006b_Vercel_Supabase_Cost_Diagnosis_(2026-09).md`).
+
 ## v1.89 (2026-09-15)
 
 _Incident fix: signed-in Players tab crash (master_plan §2BN)._

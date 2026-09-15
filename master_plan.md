@@ -6662,6 +6662,32 @@ side. Verified: typecheck, lint, 1,028 tests, clean production build, and a loca
    non-directory test account plus a Playwright smoke test that loads `/players`, `/tournaments`, `/me`,
    `/admin/badges` signed in on a Vercel Preview before promoting to production.
 
+## 2BO. Cost fixes #2 and #5: skip docs-only builds, 30 s client router cache (2026-09-15)
+
+From the cost diagnosis (`working/P_006b_Vercel_Supabase_Cost_Diagnosis_(2026-09).md`); Jasper approved #2 and #5.
+
+**#2 - Ignored Build Step.** `vercel.json` `"ignoreCommand": "bash scripts/vercel-ignore-build.sh"`. The script
+skips a deployment only when every file changed since the **last successful deployment**
+(`VERCEL_GIT_PREVIOUS_SHA`) is documentation / working material (`*.md`, `docs/`, `working/`,
+`scripts/apply-NNNN.sql`). It deliberately does NOT compare against `HEAD^`: a push of "code commit + docs commit"
+would otherwise skip and never deploy the code. Fail-safe - no previous SHA, SHA not fetchable, or a git error →
+build. Verified on real ranges: docs-only → skip; code → build; code + docs in one push → build; incident fix with
+CLAUDE.md + code → build; no / unknown previous SHA → build; no changes → skip. The app reads no Markdown at build
+or runtime, and the build is `next build` only.
+
+**Deploy discipline (restated):** batch approved work into one push; docs-only pushes now cost nothing.
+
+**#5 - Client router cache.** `experimental.staleTimes.dynamic = 30` in `apps/web/next.config.ts`: re-visiting a
+page within 30 s (tab back and forth, back to a list, toggling a filter off and on) reuses the render already on the
+phone instead of a new server render. Freshness after changes: every server-action module that writes data calls
+`revalidatePath` / `revalidateTag` / `redirect` (which clear the client cache) except `report.ts` and
+`skill-review.ts` (no on-screen state) and `guest-registration.ts`, whose wizard calls `router.refresh()` after each
+step. Data other people change (counts, online, notifications) can be up to 30 s old on a revisit; resume-refresh
+still refreshes a page left open.
+
+**Measure:** Build CPU Minutes should stop growing on docs pushes; Function Invocations and Fluid Active CPU per day
+should fall. Compare the Usage page 48 h after deploy against the diagnosis baseline (~$1.80/day ongoing).
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

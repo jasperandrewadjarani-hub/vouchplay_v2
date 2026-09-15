@@ -3470,3 +3470,12 @@ signed out. Fix: pass `pageHrefs: string[]` built on the server. Prevention: `sc
 in `npm run lint` (fails on the crashing code, passes on the fix, no false positives); CLAUDE.md rule on
 serializable Server→Client props; signed-in smoke test required for signed-in render paths (Playwright + a
 permanent test account proposed, pending Jasper's OK).
+
+## 2026-09-15 - Cost fixes #2 (skip docs-only builds) and #5 (30 s router cache) (§2BO, handover v1.90)
+
+Cost diagnosis baseline: ~$1.80/day ongoing Vercel burn; 134 commits reached main in 7 days, 18+ docs-only yet built.
+#2: `vercel.json` ignoreCommand → `scripts/vercel-ignore-build.sh`, comparing against the last successful deployment
+(`VERCEL_GIT_PREVIOUS_SHA`, not HEAD^, so code + docs in one push still builds); fail-safe builds on any doubt; 7 real
+commit-range cases verified. #5: `experimental.staleTimes.dynamic = 30` - revisits within 30 s reuse the phone's
+render; writes still clear it (revalidatePath/Tag, redirect, router.refresh - audited per action module). Measure the
+Usage page after 48 h.
