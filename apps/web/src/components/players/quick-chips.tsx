@@ -1,16 +1,21 @@
-import Link from 'next/link';
-import { Check } from 'lucide-react';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Check, Loader2 } from 'lucide-react';
 import { playerFiltersToQuery, type PlayerFilters } from '@/lib/players/filters';
 import type { BadgeFilterOption } from '@/lib/badges/queries';
 import { BadgeHoldersChip } from './badge-filter-sheet';
+import { NavAnchor, usePlayersNav } from './players-nav';
 
 /**
  * Quick filter chips (master_plan §2BK F, neon selected state per §2BL D), sitting under
  * search/filters for a signed-in viewer: one tap toggles of the same URL filters `SearchFilters`
  * already understands - never a parallel state, so a chip and the full filter sheet can never
- * disagree about what is applied. Server component: plain links with the next URL already computed,
- * no client state needed for a toggle. The one exception is the gold "Badge holders" chip, which
- * opens a bottom sheet and so needs its own small client island (`BadgeHoldersChip`).
+ * disagree about what is applied. Client component (master_plan §2BM B): a tap flips the chip's
+ * on/off state optimistically and routes through `PlayersNavProvider` so the list reacts instantly
+ * instead of freezing until the server re-renders. The one other exception is the gold "Badge
+ * holders" chip, which opens a bottom sheet and so needs its own client island (`BadgeHoldersChip`).
  */
 
 /** Selected = solid neon cyan fill with dark text, a check mark and a soft glow ring (§2BL D) - must
@@ -19,6 +24,12 @@ import { BadgeHoldersChip } from './badge-filter-sheet';
 const NEON_SELECTED =
   'border-cyan-200 bg-gradient-to-br from-cyan-300 to-cyan-400 text-cyan-950 shadow-[0_0_0_3px_rgba(34,211,238,0.22),0_6px_18px_-6px_rgba(34,211,238,0.7)]';
 const UNSELECTED = 'border-border bg-surface text-foreground-muted hover:text-foreground';
+
+/** Instant-feeling tap (master_plan §2BM B): a small press-in plus no 300ms mobile tap delay.
+ *  `transition-duration` is already zeroed by the global `prefers-reduced-motion` rule in
+ *  globals.css; `motion-reduce:transition-none` here just documents that at the point of use. */
+const TAP =
+  'active:scale-[0.97] transition-transform motion-reduce:transition-none touch-manipulation';
 
 export function QuickChips({
   current,
@@ -42,6 +53,10 @@ export function QuickChips({
    *  chip entirely (signed-out viewers never receive this prop from the page in the first place). */
   badgeOptions: BadgeFilterOption[];
 }) {
+  const router = useRouter();
+  const nav = usePlayersNav();
+  const navigate = nav?.navigate ?? ((href: string) => router.push(href, { scroll: false }));
+
   const hrefFor = (patch: Partial<PlayerFilters>) =>
     `/players${playerFiltersToQuery({ ...current, ...patch, page: 1 }, { compact, page: 1 })}`;
 
@@ -81,6 +96,19 @@ export function QuickChips({
     href: hrefFor({ coach: coachOn ? undefined : true }),
   });
 
+  // Optimistic tap (master_plan §2BM B): the tapped chip flips its on/off state immediately rather
+  // than waiting on the server round trip. Cleared as soon as real filters arrive from the server -
+  // never guessed away by a timer, so it can never show a stale state if the navigation is slow.
+  const [optimistic, setOptimistic] = useState<{ key: string; on: boolean } | null>(null);
+  useEffect(() => {
+    setOptimistic(null);
+  }, [current]);
+
+  function tap(chip: { key: string; on: boolean; href: string }) {
+    setOptimistic({ key: chip.key, on: !chip.on });
+    navigate(chip.href);
+  }
+
   return (
     <div
       className="flex [scrollbar-width:none] items-center gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
@@ -93,19 +121,28 @@ export function QuickChips({
       {badgeOptions.length > 0 && (
         <BadgeHoldersChip current={current} compact={compact} options={badgeOptions} />
       )}
-      {chips.map((c) => (
-        <Link
-          key={c.key}
-          href={c.href}
-          aria-pressed={c.on}
-          className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
-            c.on ? NEON_SELECTED : UNSELECTED
-          }`}
-        >
-          {c.on && <Check size={13} strokeWidth={3} aria-hidden />}
-          {c.label}
-        </Link>
-      ))}
+      {chips.map((c) => {
+        const on = optimistic?.key === c.key ? optimistic.on : c.on;
+        const isPending = Boolean(nav?.pending && nav.pendingHref === c.href);
+        return (
+          <NavAnchor
+            key={c.key}
+            href={c.href}
+            onNavigate={() => tap(c)}
+            aria-pressed={on}
+            className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${TAP} ${
+              on ? NEON_SELECTED : UNSELECTED
+            }`}
+          >
+            {isPending ? (
+              <Loader2 size={12} className="animate-spin" aria-hidden />
+            ) : (
+              on && <Check size={13} strokeWidth={3} aria-hidden />
+            )}
+            {c.label}
+          </NavAnchor>
+        );
+      })}
     </div>
   );
 }

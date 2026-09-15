@@ -3,7 +3,7 @@ Total output lines: 6749
 
 # VouchPlay Master Product & Code Execution Handover v1.81
 
-_(File retains its `…v1.1.md` name; content is v1.87 - see Changelog.)_
+_(File retains its `…v1.1.md` name; content is v1.88 - see Changelog.)_
 
 **Status:** LOCKED FOR EXECUTION - Phases 0–13 built; Pilot Prep in progress (see §0Z)
 **Owner:** JT Consulting & Analytics Inc.  
@@ -6494,6 +6494,20 @@ Maintain a changelog at the bottom.
 ---
 
 # Changelog
+## v1.88 (2026-09-15)
+
+_Snappiness fixes (master_plan §2BM). No migration._
+
+- **Badge filter "Show players" works**: the sheet's history clean-up no longer cancels the navigation
+  (`whenSheetsSettled()` in `lib/hooks/use-back-to-close.ts` - close, wait, then navigate).
+- **Players tab filters react instantly**: tapped chip flips on with a spinner, the list becomes skeleton
+  rows the same frame, then the new list fades in (`components/players/players-nav.tsx`).
+- **Admin → Badges → Tag no longer freezes the app**: search/filters use a cancelable GET endpoint
+  (`/api/admin/badges/players`, admin + MFA) instead of router re-renders + serial server actions; the
+  query fetches only the visible page; no full refresh after tagging.
+- **Rule for future sheets**: never navigate or refresh in the same tick you close a sheet - await
+  `whenSheetsSettled()` first.
+
 ## v1.87 (2026-09-15)
 
 _Badges round 2 (master_plan §2BL). No migration. 0051 applied and verified 2026-09-15._

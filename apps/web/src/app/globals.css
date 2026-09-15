@@ -187,6 +187,21 @@ body {
   animation: vp-fade-up 0.4s ease both;
 }
 
+/* Players directory list settling back in after a filter-tap transition (master_plan §2BM B) -
+ * subtle only, never a delay on the skeleton itself (that swap stays instant). Already stilled by
+ * the global prefers-reduced-motion rule above (animation-duration: 0.01ms). */
+@keyframes vp-players-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.vp-players-fade-in {
+  animation: vp-players-fade-in 120ms ease-out both;
+}
+
 /*
  * Vouch micro-reward (master_plan §2BK F): a "+1" that floats up and fades from a card's Vouch
  * button once a vouch it started is confirmed (see `VouchButton`'s sessionStorage handoff - the

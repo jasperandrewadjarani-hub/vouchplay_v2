@@ -21,6 +21,15 @@ type State =
   | { status: 'ready'; player: PlayerHeader; badges: AdminPlayerBadge[] }
   | { status: 'error'; error: string };
 
+/** A badge row counts as "live" the same way `listPlayersForBadgeTagging` does: not revoked, and not
+ *  expired. Used to report the Tag screen's own `badgeKeys` shape back up after a change here. */
+function liveBadgeKeys(badges: AdminPlayerBadge[]): string[] {
+  const now = Date.now();
+  return badges
+    .filter((b) => !b.revokedAt && (!b.expiresAt || new Date(b.expiresAt).getTime() > now))
+    .map((b) => b.key);
+}
+
 /**
  * The chevron button on each Tag-screen row opens this (master_plan §2BL E): that one player's full
  * badge detail - live badges with Untag, and the removed list with Allow automatic again - reusing
@@ -34,8 +43,9 @@ export function PlayerBadgesSheet({
 }: {
   playerId: string;
   onClose: () => void;
-  /** Bubbles up to the Tag screen so the underlying row's badge chips/pill can refresh too. */
-  onChanged?: () => void;
+  /** Bubbles the player's fresh live badge keys up to the Tag screen (master_plan §2BM Decision C) so
+   *  it can patch just that row's chips/pill in place - no requery, no `router.refresh()`. */
+  onChanged?: (playerId: string, badgeKeys: string[]) => void;
 }) {
   const [state, setState] = useState<State>({ status: 'loading' });
 
@@ -45,6 +55,7 @@ export function PlayerBadgesSheet({
       if (!alive()) return;
       if (res.ok) setState({ status: 'ready', player: res.player, badges: res.badges });
       else setState({ status: 'error', error: res.error });
+      return res;
     },
     [playerId],
   );
@@ -58,9 +69,9 @@ export function PlayerBadgesSheet({
     };
   }, [load]);
 
-  function handleChanged() {
-    onChanged?.();
-    void load(() => true);
+  async function handleChanged() {
+    const res = await load(() => true);
+    if (res?.ok) onChanged?.(playerId, liveBadgeKeys(res.badges));
   }
 
   return (

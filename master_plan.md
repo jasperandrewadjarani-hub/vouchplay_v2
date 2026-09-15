@@ -6582,6 +6582,43 @@ badge filter is on; holder counts cached. A 100 × 3 batch ≈ 300 small inserts
 notifications (badge notifications are never email, so the Gmail cap is untouched). Batch cap + deferred pushes
 keep the request well inside the function time limit.
 
+## 2BM. Snappiness: badge filter did nothing, laggy filters with no loading cue, admin tag screen froze navigation (2026-09-15)
+
+Jasper: tapping **Show players** in the badge filter does nothing; filter taps feel laggy with no loading
+cue; after multi-tagging and searching on Admin → Badges the app lags and the bottom navigation stops
+responding.
+
+### Diagnosis
+
+1. **Badge filter**: `apply()` called `router.push()` then closed the sheet at once. Closing a sheet pops its
+   Back-to-close history entry (`history.go(-1)`), which landed on top of the still-pending navigation and
+   undid it. Only this sheet navigates-then-closes.
+2. **Laggy filters**: quick chips are links to the same route with new search params. Next keeps the old UI
+   frozen until the whole page re-renders on the server; the route-level `loading.tsx` never shows for a
+   search-param change, so nothing reacts to the tap for ~1 s.
+3. **Admin freeze**: every debounced search fired BOTH a `router.replace` (full server re-render of the admin
+   page) AND a server action that loaded up to 2,000 profiles plus their skill and badge rows to show 30.
+   Server actions run one at a time and navigation waits behind them, so the bottom nav appeared dead;
+   `router.refresh()` after a batch stacked another full render; stale responses could overwrite newer ones.
+
+### Decisions
+
+- **A. `whenSheetsSettled()`** in `lib/hooks/use-back-to-close.ts`: resolves after a closing sheet's history pop
+  lands (bounded 400 ms). Rule: close → await settled → navigate/refresh. Tested (close-then-navigate keeps the
+  new entry).
+- **B. Instant filter feedback on the Players tab**: one client `PlayersNavProvider` runs every filter change
+  (quick chips, badge filter apply/clear, sort, view toggle, pagination, search filters) inside
+  `useTransition`. The tapped chip flips on immediately (optimistic), the list area swaps to skeleton rows the
+  same frame (`PlayerListSkeleton`), and the new list replaces it when the server answers. No full-page
+  spinner; the header, chips and search stay interactive. Stale taps: the latest navigation wins.
+- **C. Admin tag screen**: search and filters no longer touch the router - the URL is mirrored with
+  `window.history.replaceState` (no server render). Player lists load from a GET route handler
+  (`/api/admin/badges/players`, same admin + MFA guard) with `AbortController`, so requests are cancelable, run
+  in parallel and never block navigation; the latest request wins. The query pages in the database (range +
+  exact count) and reads skill / badge rows only for the page's ids; tier and "no badges" filters resolve ids
+  first instead of loading 2,000 profiles. Skeleton rows while loading. After a batch: close the review sheet →
+  await settled → update affected rows locally (no `router.refresh()`).
+
 ## 2. System Architecture and Component Specs
 
 ### Eligibility flow

@@ -33,7 +33,11 @@ import { getBadgeFilterOptions, getViewerGame, type BadgeFilterOption } from '@/
 import { PlayerViewToggle } from '@/components/players/player-view-toggle';
 import { SortSelect } from '@/components/players/sort-select';
 import { RememberListUrl } from '@/components/players/list-return';
-import { Pagination } from '@/components/ui/pagination';
+import {
+  PlayersNavProvider,
+  PlayersListFrame,
+  PlayersPagination,
+} from '@/components/players/players-nav';
 import { SignupWall } from '@/components/ui/signup-wall';
 import {
   getLeaderboardSettings,
@@ -143,7 +147,7 @@ async function PlayersResults({
       )}
 
       {authed ? (
-        <Pagination
+        <PlayersPagination
           page={page}
           pageCount={pageCount}
           hrefFor={(n) => `/players${playerFiltersToQuery(filters, { page: n, compact })}`}
@@ -300,48 +304,57 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
           null-check on its result. */}
       {authed && onboarded && viewerGame && <YourGameCard game={viewerGame} />}
 
-      {/* Search, filters, sort and the quick chips are signed-in features (master_plan §2AH): a guest
-          sees the header, the quick bar and a fixed 10-player preview, nothing to tune. */}
-      {authed && (
-        <>
-          <SearchFilters
-            current={filters}
-            cityOptions={cityOptions}
-            clubOptions={clubOptions}
-            tournamentOptions={tournamentOptions}
-            compact={compact}
-          />
-          <QuickChips
-            current={filters}
-            compact={compact}
-            myLevelOrdinal={myLevelOrdinal}
-            myLevelLabel={myLevelLabel}
-            myCity={myCityKey}
-            myCityLabel={myCityLabel}
-            badgeOptions={badgeOptions}
-          />
-        </>
-      )}
+      {/* One shared client transition runs every filter change below - quick chips, badge filter,
+          sort, view toggle, pagination and search filters all navigate through it instead of
+          freezing the page until the server re-renders (master_plan §2BM B). */}
+      <PlayersNavProvider>
+        {/* Search, filters, sort and the quick chips are signed-in features (master_plan §2AH): a
+            guest sees the header, the quick bar and a fixed 10-player preview, nothing to tune. */}
+        {authed && (
+          <>
+            <SearchFilters
+              current={filters}
+              cityOptions={cityOptions}
+              clubOptions={clubOptions}
+              tournamentOptions={tournamentOptions}
+              compact={compact}
+            />
+            <QuickChips
+              current={filters}
+              compact={compact}
+              myLevelOrdinal={myLevelOrdinal}
+              myLevelLabel={myLevelLabel}
+              myCity={myCityKey}
+              myCityLabel={myCityLabel}
+              badgeOptions={badgeOptions}
+            />
+          </>
+        )}
 
-      {/* Keyed on the filters + view so any search/filter/sort/page/view change remounts the
-          boundary and shows the skeleton while the new query resolves (§2Z, §2AG A1 - `sort` is a
-          field on `filters`, so it is already covered by this same JSON key). The shell above stays
-          put. */}
-      <Suspense
-        key={`${JSON.stringify(filters)}|${compact ? 'c' : 'd'}`}
-        fallback={<PlayerListSkeleton compact={compact} />}
-      >
-        <PlayersResults
-          filters={filters}
-          viewer={viewer}
-          compact={compact}
-          authed={authed}
-          staffLinks={staffLinks}
-          showCommunitySkill={showCommunitySkill}
-          ownSlug={myProfile?.slug ?? null}
-          badgeOptions={badgeOptions}
-        />
-      </Suspense>
+        {/* Shows the shared skeleton INSTANTLY while a filter navigation is pending (§2BM B), before
+            handing back to the boundary below once the transition resolves. Keyed on the filters +
+            view so any search/filter/sort/page/view change remounts the boundary and shows Suspense's
+            own fallback for a genuinely slow first paint or direct navigation (§2Z, §2AG A1 - `sort`
+            is a field on `filters`, so it is already covered by this same JSON key). The shell above
+            stays put either way. */}
+        <PlayersListFrame compact={compact}>
+          <Suspense
+            key={`${JSON.stringify(filters)}|${compact ? 'c' : 'd'}`}
+            fallback={<PlayerListSkeleton compact={compact} />}
+          >
+            <PlayersResults
+              filters={filters}
+              viewer={viewer}
+              compact={compact}
+              authed={authed}
+              staffLinks={staffLinks}
+              showCommunitySkill={showCommunitySkill}
+              ownSlug={myProfile?.slug ?? null}
+              badgeOptions={badgeOptions}
+            />
+          </Suspense>
+        </PlayersListFrame>
+      </PlayersNavProvider>
     </div>
   );
 }

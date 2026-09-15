@@ -11,8 +11,7 @@ import { getBadgeSettings, type BadgeSettings } from '@/lib/settings';
 import { PLAYERS_LIST_TAG, playerTag } from '@/lib/players/queries';
 import { computeAutoBadges } from '@/lib/badges/compute';
 import { getPlayerBadgesForAdmin } from '@/lib/badges/queries';
-import { getUserAdminDetail, listPlayersForBadgeTagging } from '@/lib/admin/user-queries';
-import type { AdminBadgeTagPlayer } from '@/lib/admin/user-queries';
+import { getUserAdminDetail } from '@/lib/admin/user-queries';
 import type { AdminPlayerBadge, BadgeActionResult } from '@/lib/badges/types';
 
 /**
@@ -375,31 +374,6 @@ export async function adminTagBadgesBatch(
   } catch {
     return { ok: false, error: 'That action is temporarily unavailable.' };
   }
-}
-
-export type AdminListPlayersResult =
-  { ok: true; players: AdminBadgeTagPlayer[]; total: number } | { ok: false; error: string };
-
-/**
- * Client-callable bridge to `listPlayersForBadgeTagging` (master_plan §2BL E): the Tag screen is a
- * client component (selection has to persist across search/filter/page changes, which only works as
- * client state), and `lib/admin/user-queries.ts` is `server-only`, so this thin admin-guarded action
- * is what the client actually calls to fetch/refresh pages.
- */
-export async function adminListPlayersForBadgeTagging(opts: {
-  q?: string;
-  tier?: number;
-  city?: string;
-  noBadges?: boolean;
-  ids?: string[];
-  page?: number;
-  pageSize?: number;
-}): Promise<AdminListPlayersResult> {
-  const actor = await assertAdminActor();
-  if (!actor)
-    return { ok: false, error: 'Admin access with a stepped-up (two-factor) session is required.' };
-  const result = await listPlayersForBadgeTagging(opts);
-  return { ok: true, ...result };
 }
 
 export type AdminPlayerBadgeDetailResult =

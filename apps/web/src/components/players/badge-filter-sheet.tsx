@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Medal, X } from 'lucide-react';
+import { Check, Loader2, Medal, X } from 'lucide-react';
 import { BADGE_FAMILIES, type BadgeFamily } from '@vouchplay/config';
 import {
   clearFilter,
@@ -14,6 +13,8 @@ import {
 import type { BadgeFilterOption } from '@/lib/badges/queries';
 import { BadgeSymbol } from '@/components/badges/badge-symbol';
 import { BottomSheet } from '@/components/tournaments/manage-sheets';
+import { whenSheetsSettled } from '@/lib/hooks/use-back-to-close';
+import { NavAnchor, usePlayersNav } from './players-nav';
 
 /**
  * Badge holders filter (master_plan §2BL C): the gold "Badge holders" quick chip plus the bottom
@@ -32,6 +33,12 @@ const NEON_SEGMENT =
 
 const FAMILY_ORDER: readonly BadgeFamily[] = ['glory', 'community', 'growth', 'roles', 'special'];
 
+/** Instant-feeling tap (master_plan §2BM B): a small press-in plus no 300ms mobile tap delay.
+ *  `transition-duration` is already zeroed by the global `prefers-reduced-motion` rule in
+ *  globals.css; `motion-reduce:transition-none` here just documents that at the point of use. */
+const TAP =
+  'active:scale-[0.97] transition-transform motion-reduce:transition-none touch-manipulation';
+
 export function BadgeHoldersChip({
   current,
   compact,
@@ -43,7 +50,19 @@ export function BadgeHoldersChip({
    *  filtered to what a viewer may pick from; the caller only renders this chip when non-empty. */
   options: BadgeFilterOption[];
 }) {
+  const router = useRouter();
+  const nav = usePlayersNav();
+  const navigate = nav?.navigate ?? ((href: string) => router.push(href, { scroll: false }));
   const [open, setOpen] = useState(false);
+  // The href the sheet just applied, so this chip (which lives OUTSIDE the sheet and stays mounted
+  // after it closes) can show its own spinner while that specific navigation is in flight - reset the
+  // moment fresh filters arrive from the server, i.e. exactly when the navigation resolves.
+  const [applyingHref, setApplyingHref] = useState<string | null>(null);
+  useEffect(() => {
+    setApplyingHref(null);
+  }, [current]);
+  const pendingApply = Boolean(nav?.pending && applyingHref && nav.pendingHref === applyingHref);
+
   const badges = current.badges ?? [];
   const applied = badges.length > 0;
   const clearHref = `/players${playerFiltersToQuery(
@@ -61,16 +80,18 @@ export function BadgeHoldersChip({
           applied ? '' : 'vp-badge-chip-sheen'
         }`}
       >
-        {/* Tapping the chip BODY opens/reopens the sheet; the ✕ (applied state only) clears via a
-            plain link so it works without a client round trip through the sheet at all. */}
+        {/* Tapping the chip BODY opens/reopens the sheet; the ✕ (applied state only) clears via its
+            own nav-aware link so it works without opening the sheet at all. */}
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={open}
-          className="relative z-[1] inline-flex items-center gap-1.5"
+          className={`relative z-[1] inline-flex items-center gap-1.5 ${TAP}`}
         >
-          {applied ? (
+          {pendingApply ? (
+            <Loader2 size={14} className="animate-spin" aria-hidden />
+          ) : applied ? (
             <>
               <span className="inline-flex items-center" aria-hidden>
                 {badges.slice(0, 3).map((key, i) => (
@@ -88,14 +109,15 @@ export function BadgeHoldersChip({
             </>
           )}
         </button>
-        {applied && (
-          <Link
+        {applied && !pendingApply && (
+          <NavAnchor
             href={clearHref}
+            onNavigate={() => navigate(clearHref)}
             aria-label="Clear badge filter"
-            className="relative z-[1] inline-flex h-5 w-5 items-center justify-center rounded-full opacity-70 hover:opacity-100"
+            className={`relative z-[1] inline-flex h-5 w-5 items-center justify-center rounded-full opacity-70 hover:opacity-100 ${TAP}`}
           >
             <X size={12} strokeWidth={3} aria-hidden />
-          </Link>
+          </NavAnchor>
         )}
       </span>
       {open && (
@@ -104,6 +126,7 @@ export function BadgeHoldersChip({
           compact={compact}
           options={options}
           onClose={() => setOpen(false)}
+          onApply={setApplyingHref}
         />
       )}
     </>
@@ -126,7 +149,7 @@ function BadgeTile({
       onClick={onToggle}
       disabled={empty}
       aria-pressed={selected}
-      className={`relative flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 text-center transition-colors disabled:cursor-not-allowed ${
+      className={`relative flex min-h-24 flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 text-center transition-colors disabled:cursor-not-allowed ${TAP} ${
         empty
           ? 'border-border bg-surface text-foreground-muted opacity-40'
           : selected
@@ -156,13 +179,19 @@ export function BadgeFilterSheet({
   compact,
   options,
   onClose,
+  onApply,
 }: {
   current: PlayerFilters;
   compact: boolean;
   options: BadgeFilterOption[];
   onClose: () => void;
+  /** Told the href right before it's pushed, so the (already-closed) chip above can show its own
+   *  spinner for exactly this navigation (master_plan §2BM B). */
+  onApply: (href: string) => void;
 }) {
   const router = useRouter();
+  const nav = usePlayersNav();
+  const navigate = nav?.navigate ?? ((href: string) => router.push(href, { scroll: false }));
   const [selected, setSelected] = useState<string[]>(current.badges ?? []);
   const [matchAll, setMatchAll] = useState<boolean>(current.badgeMatch === 'all');
 
@@ -180,15 +209,23 @@ export function BadgeFilterSheet({
     setMatchAll(false);
   }
 
-  function apply() {
+  // Root cause (master_plan §2BM Diagnosis 1): this sheet used to `router.push()` then `onClose()`.
+  // Closing pops the sheet's Back-to-close history entry via `history.go(-1)` (see
+  // `use-back-to-close.ts`), and that pop landed a moment later - on top of the still-pending push -
+  // and silently undid it, which is why "Show players" appeared to do nothing. Close FIRST, wait for
+  // that pop to actually land (`whenSheetsSettled`), THEN navigate.
+  async function apply() {
     const next: PlayerFilters = {
       ...current,
       badges: selected.length > 0 ? selected : undefined,
       badgeMatch: matchAll && selected.length > 0 ? 'all' : undefined,
       page: 1,
     };
-    router.push(`/players${playerFiltersToQuery(next, { compact, page: 1 })}`, { scroll: false });
+    const href = `/players${playerFiltersToQuery(next, { compact, page: 1 })}`;
     onClose();
+    await whenSheetsSettled();
+    onApply(href);
+    navigate(href);
   }
 
   // Honest count (lane brief): exact only for a single selection (n = that badge's own holder
@@ -215,7 +252,7 @@ export function BadgeFilterSheet({
             type="button"
             onClick={clearAll}
             disabled={selected.length === 0}
-            className="text-foreground-muted hover:text-foreground min-h-11 px-2 text-sm font-medium disabled:opacity-40"
+            className={`text-foreground-muted hover:text-foreground min-h-11 px-2 text-sm font-medium disabled:opacity-40 ${TAP}`}
           >
             Clear{selected.length > 0 ? ` (${selected.length})` : ''}
           </button>
@@ -223,7 +260,7 @@ export function BadgeFilterSheet({
             type="button"
             onClick={apply}
             disabled={selected.length === 0}
-            className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-amber-200 to-amber-500 px-4 text-sm font-bold text-amber-950 shadow-[0_6px_20px_-8px_rgba(245,158,11,0.8)] disabled:opacity-50"
+            className={`inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-amber-200 to-amber-500 px-4 text-sm font-bold text-amber-950 shadow-[0_6px_20px_-8px_rgba(245,158,11,0.8)] disabled:opacity-50 ${TAP}`}
           >
             {showLabel}
           </button>
@@ -237,7 +274,7 @@ export function BadgeFilterSheet({
               type="button"
               onClick={() => setMatchAll(false)}
               aria-pressed={!matchAll}
-              className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${TAP} ${
                 !matchAll ? NEON_SEGMENT : 'text-foreground-muted'
               }`}
             >
@@ -247,7 +284,7 @@ export function BadgeFilterSheet({
               type="button"
               onClick={() => setMatchAll(true)}
               aria-pressed={matchAll}
-              className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${TAP} ${
                 matchAll ? NEON_SEGMENT : 'text-foreground-muted'
               }`}
             >

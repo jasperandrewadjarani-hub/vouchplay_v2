@@ -209,8 +209,12 @@ function BadgeGrid({
       }
       setResult(res.message ?? `Tagged ${def.name}.`);
       setSelectedKey(null);
-      router.refresh();
-      onChanged?.();
+      // master_plan §2BM Decision C: when a client-fetched host (the §2BL chevron sheet) supplied
+      // `onChanged`, trust it to refresh its own data - an extra `router.refresh()` here would be a
+      // second full server render stacked on top of the same freeze the Tag screen's search had.
+      // The Holders tab (no `onChanged`) still needs it: its list is server-rendered.
+      if (onChanged) onChanged();
+      else router.refresh();
     });
   }
 

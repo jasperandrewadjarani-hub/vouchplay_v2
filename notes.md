@@ -3445,3 +3445,17 @@ All and live count, URL `badges=` + `badgeMatch=`, filter via `restrictIds`; hol
 chips become solid neon cyan with a check and glow. Admin → Badges → Tag: badges tray + player list with
 multi-select on one screen, review sheet, `adminTagBadgesBatch` (≤100 players, ≤10 badges, audited per player,
 notifications after the writes). No migration; Supabase/Vercel impact small (see §2BL).
+
+## 2026-09-15 - Snappiness fixes: badge filter apply, instant filter feedback, admin tag screen (§2BM, handover v1.88)
+
+Causes: (1) badge sheet `apply()` pushed then closed - the sheet's Back-to-close `history.go(-1)` landed on the
+pending navigation and undid it; (2) quick chips were same-route links, so Next froze the old UI until the full
+server render finished and no loading state showed; (3) admin search fired `router.replace` (full admin page
+render) plus a server action loading up to 2,000 profiles per keystroke - server actions run serially and
+navigation waits behind them, freezing the bottom nav; `router.refresh()` after batches added more. Fixes:
+`whenSheetsSettled()` in the Back hook (close → await → navigate; tested); `PlayersNavProvider` routes every
+Players-tab filter change through `useTransition` with optimistic chips, per-chip spinners and an instant
+skeleton list (`PlayersListFrame`), tap delay removed; admin tag screen mirrors the URL with
+`history.replaceState`, loads players from `GET /api/admin/badges/players` (admin + MFA guard, no-store,
+AbortController, latest request wins), the query pages in the database and reads skill/badge rows only for the
+30 on screen, skeleton rows while loading, local row updates after a batch instead of `router.refresh()`.

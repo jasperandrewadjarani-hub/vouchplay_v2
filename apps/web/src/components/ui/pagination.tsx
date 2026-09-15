@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Loader2 } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { LinkSpinner } from './link-spinner';
 import { PageLinkLabel } from './page-link-label';
 
@@ -19,6 +20,14 @@ import { PageLinkLabel } from './page-link-label';
  *  - Every page link carries `scroll={false}` (master_plan §2AN decision 1): pagination changes the
  *    list IN PLACE, so the App Router default of scrolling to the top on navigation would jump the
  *    viewer away from the row of numbers they just tapped.
+ *
+ * `navigate`/`pendingHref` (master_plan §2BM B) are an OPT-IN pair: pass both to route page taps
+ * through a shared transition (the players list wires them to `PlayersNavProvider`) instead of a
+ * plain `<Link>` navigation - a real `<a href>` intercepts a plain left click only, so modifier/
+ * middle-click and right-click "open in new tab" still work natively. Omit both (as `clubs/page.tsx`
+ * does) and this renders exactly as before, `LinkSpinner`/`PageLinkLabel` included - those two read
+ * Next's `useLinkStatus`, which only works nested inside a real `<Link>`, so the nav-aware branch
+ * below never renders them and tracks its own pending state from `pendingHref` instead.
  */
 
 const GAP = 'gap' as const;
@@ -39,22 +48,48 @@ function slotsFor(page: number, pageCount: number): Slot[] {
   return slots;
 }
 
-const BOX =
-  'inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-sm font-semibold';
+/** Instant-feeling tap (master_plan §2BM B): a small press-in plus no 300ms mobile tap delay, on
+ *  both the plain-Link and nav-aware variants alike. `transition-duration` is already zeroed by the
+ *  global `prefers-reduced-motion` rule in globals.css; `motion-reduce:transition-none` here just
+ *  documents that at the point of use. */
+const TAP =
+  'active:scale-[0.97] transition-transform motion-reduce:transition-none touch-manipulation';
+
+const BOX = `inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-sm font-semibold ${TAP}`;
 const STEP = `${BOX} border-border bg-surface text-foreground hover:bg-surface-muted gap-1.5 border px-3`;
+const NUM = `${BOX} border-border bg-surface text-foreground hover:bg-surface-muted border px-3`;
+
+/** Intercepts a plain left click (no modifiers) to route through the shared transition; everything
+ *  else (middle-click, cmd/ctrl/shift/alt-click, an already-handled event) falls through to the
+ *  browser's normal anchor behavior. */
+function navClick(navigate: (href: string) => void, href: string) {
+  return (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.defaultPrevented || e.button !== 0) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    navigate(href);
+  };
+}
+
+type NavProps = {
+  navigate?: (href: string) => void;
+  pendingHref?: string | null;
+};
 
 export function Pagination({
   page,
   pageCount,
   hrefFor,
   label = 'Pagination',
+  navigate,
+  pendingHref,
 }: {
   page: number;
   pageCount: number;
   /** Builds the URL for a page, so each list keeps its own filters in the query string. */
   hrefFor: (page: number) => string;
   label?: string;
-}) {
+} & NavProps) {
   if (pageCount <= 1) return null;
   const slots = slotsFor(page, pageCount);
   // On a phone, keep a window of at least THREE numbers around the current page (clamped to the
@@ -76,6 +111,18 @@ export function Pagination({
               <ChevronsLeft size={16} aria-hidden />
               <span className="sr-only">First page</span>
             </span>
+          ) : navigate ? (
+            <a
+              href={hrefFor(1)}
+              onClick={navClick(navigate, hrefFor(1))}
+              className={STEP}
+              aria-label="First page"
+            >
+              <ChevronsLeft size={16} aria-hidden />
+              {pendingHref === hrefFor(1) && (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              )}
+            </a>
           ) : (
             <Link href={hrefFor(1)} className={STEP} aria-label="First page" scroll={false}>
               <ChevronsLeft size={16} aria-hidden />
@@ -85,12 +132,28 @@ export function Pagination({
         </li>
         <li>
           {page > 1 ? (
-            <Link href={hrefFor(page - 1)} className={STEP} rel="prev" scroll={false}>
-              <ChevronLeft size={16} aria-hidden />
-              <span className="hidden sm:inline">Previous</span>
-              <span className="sr-only sm:hidden">Previous page</span>
-              <LinkSpinner />
-            </Link>
+            navigate ? (
+              <a
+                href={hrefFor(page - 1)}
+                onClick={navClick(navigate, hrefFor(page - 1))}
+                className={STEP}
+                rel="prev"
+              >
+                <ChevronLeft size={16} aria-hidden />
+                <span className="hidden sm:inline">Previous</span>
+                <span className="sr-only sm:hidden">Previous page</span>
+                {pendingHref === hrefFor(page - 1) && (
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                )}
+              </a>
+            ) : (
+              <Link href={hrefFor(page - 1)} className={STEP} rel="prev" scroll={false}>
+                <ChevronLeft size={16} aria-hidden />
+                <span className="hidden sm:inline">Previous</span>
+                <span className="sr-only sm:hidden">Previous page</span>
+                <LinkSpinner />
+              </Link>
+            )
           ) : (
             <span className={`${STEP} opacity-40`} aria-disabled="true">
               <ChevronLeft size={16} aria-hidden />
@@ -115,11 +178,24 @@ export function Pagination({
                 <span className={`${BOX} vp-gradient px-3 text-white`} aria-current="page">
                   {slot}
                 </span>
+              ) : navigate ? (
+                <a
+                  href={hrefFor(slot)}
+                  onClick={navClick(navigate, hrefFor(slot))}
+                  aria-label={`Page ${slot}`}
+                  className={NUM}
+                >
+                  {pendingHref === hrefFor(slot) ? (
+                    <Loader2 size={14} className="animate-spin" aria-hidden />
+                  ) : (
+                    slot
+                  )}
+                </a>
               ) : (
                 <Link
                   href={hrefFor(slot)}
                   aria-label={`Page ${slot}`}
-                  className={`${BOX} border-border bg-surface text-foreground hover:bg-surface-muted border px-3`}
+                  className={NUM}
                   scroll={false}
                 >
                   <PageLinkLabel page={slot} />
@@ -131,12 +207,28 @@ export function Pagination({
 
         <li>
           {page < pageCount ? (
-            <Link href={hrefFor(page + 1)} className={STEP} rel="next" scroll={false}>
-              <span className="hidden sm:inline">Next</span>
-              <span className="sr-only sm:hidden">Next page</span>
-              <ChevronRight size={16} aria-hidden />
-              <LinkSpinner />
-            </Link>
+            navigate ? (
+              <a
+                href={hrefFor(page + 1)}
+                onClick={navClick(navigate, hrefFor(page + 1))}
+                className={STEP}
+                rel="next"
+              >
+                <span className="hidden sm:inline">Next</span>
+                <span className="sr-only sm:hidden">Next page</span>
+                <ChevronRight size={16} aria-hidden />
+                {pendingHref === hrefFor(page + 1) && (
+                  <Loader2 size={14} className="animate-spin" aria-hidden />
+                )}
+              </a>
+            ) : (
+              <Link href={hrefFor(page + 1)} className={STEP} rel="next" scroll={false}>
+                <span className="hidden sm:inline">Next</span>
+                <span className="sr-only sm:hidden">Next page</span>
+                <ChevronRight size={16} aria-hidden />
+                <LinkSpinner />
+              </Link>
+            )
           ) : (
             <span className={`${STEP} opacity-40`} aria-disabled="true">
               <span className="hidden sm:inline">Next</span>
@@ -153,6 +245,18 @@ export function Pagination({
               <ChevronsRight size={16} aria-hidden />
               <span className="sr-only">Last page</span>
             </span>
+          ) : navigate ? (
+            <a
+              href={hrefFor(pageCount)}
+              onClick={navClick(navigate, hrefFor(pageCount))}
+              className={STEP}
+              aria-label="Last page"
+            >
+              <ChevronsRight size={16} aria-hidden />
+              {pendingHref === hrefFor(pageCount) && (
+                <Loader2 size={14} className="animate-spin" aria-hidden />
+              )}
+            </a>
           ) : (
             <Link href={hrefFor(pageCount)} className={STEP} aria-label="Last page" scroll={false}>
               <ChevronsRight size={16} aria-hidden />

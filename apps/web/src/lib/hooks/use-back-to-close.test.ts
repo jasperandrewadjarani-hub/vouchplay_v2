@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { __resetBackStackForTests, armSheet } from './use-back-to-close';
+import { __resetBackStackForTests, armSheet, whenSheetsSettled } from './use-back-to-close';
 
 /**
  * A minimal browser-history simulator: pushState truncates forward entries, go() moves the cursor and
@@ -169,6 +169,28 @@ describe('Back closes the top sheet (useBackToClose core)', () => {
     await flush();
     expect(calls).toEqual(['step', 'card']);
     expect(h.index).toBe(0);
+  });
+
+  it('close-then-navigate: waiting for the sheet to settle keeps the new navigation (§2BM)', async () => {
+    // The "Show players does nothing" bug: close the sheet, then navigate. Without waiting, the sheet's
+    // history pop lands on top of the new entry and undoes it.
+    const release = armSheet(
+      () => {},
+      () => false,
+    );
+    expect(h.index).toBe(1);
+    release(); // sheet closes (unmount cleanup)
+    await whenSheetsSettled();
+    h.navigate('https://app.test/players?badges=legend'); // router.push after settling
+    await flush();
+    expect(h.index).toBe(1); // base + the filtered page; nothing popped it
+  });
+
+  it('whenSheetsSettled resolves immediately when no sheet is closing', async () => {
+    let resolved = false;
+    void whenSheetsSettled().then(() => (resolved = true));
+    await flush();
+    expect(resolved).toBe(true);
   });
 
   it('never pops history after the page navigated away from inside the sheet', async () => {

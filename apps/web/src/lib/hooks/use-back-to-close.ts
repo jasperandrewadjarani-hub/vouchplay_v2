@@ -24,10 +24,19 @@ let skipPops = 0;
 let listening = false;
 let pendingRemoval: Entry[] = [];
 let flushQueued = false;
+/** Callers waiting for our own history clean-up to finish (see `whenSheetsSettled`). */
+let settleWaiters: (() => void)[] = [];
+
+function releaseWaiters() {
+  const waiters = settleWaiters;
+  settleWaiters = [];
+  for (const w of waiters) w();
+}
 
 function handlePop() {
   if (skipPops > 0) {
     skipPops -= 1;
+    if (skipPops === 0 && !flushQueued) releaseWaiters();
     return;
   }
   const top = stack.pop();
@@ -51,11 +60,50 @@ function scheduleRemoval(entry: Entry) {
     flushQueued = false;
     const removed = pendingRemoval;
     pendingRemoval = [];
-    if (removed.length === 0) return;
+    if (removed.length === 0) {
+      if (skipPops === 0) releaseWaiters();
+      return;
+    }
     // Navigated away while the sheet was open: its entries now sit behind the new page. Leave them.
-    if (removed.some((e) => e.href !== window.location.href)) return;
+    if (removed.some((e) => e.href !== window.location.href)) {
+      if (skipPops === 0) releaseWaiters();
+      return;
+    }
     skipPops += 1; // history.go fires a single popstate however many steps it moves
     window.history.go(-removed.length);
+  });
+}
+
+/**
+ * Resolves once any sheet that is closing has finished removing its history entry (master_plan §2BM).
+ *
+ * Closing a sheet pops its entry with `history.go(-1)`, which lands a moment later. Anything that
+ * navigates or refreshes right after closing a sheet (apply a filter, refresh after an action) must wait
+ * for that pop - otherwise the pop lands on top of the new navigation and silently undoes it (the
+ * "tap Show players and nothing happens" bug). Call it AFTER `onClose()`:
+ *
+ *   onClose(); await whenSheetsSettled(); router.push(href);
+ *
+ * It first yields one task so React can commit the unmount that schedules the pop, then waits for the pop
+ * (bounded by a safety timeout so a caller is never stuck).
+ */
+export function whenSheetsSettled(timeoutMs = 400): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    setTimeout(() => {
+      if (!flushQueued && skipPops === 0 && pendingRemoval.length === 0) {
+        finish();
+        return;
+      }
+      settleWaiters.push(finish);
+      setTimeout(finish, timeoutMs);
+    }, 0);
   });
 }
 
@@ -101,6 +149,7 @@ export function __resetBackStackForTests(): void {
   pendingRemoval = [];
   flushQueued = false;
   listening = false;
+  settleWaiters = [];
 }
 
 export function useBackToClose(open: boolean, onClose: () => void): void {

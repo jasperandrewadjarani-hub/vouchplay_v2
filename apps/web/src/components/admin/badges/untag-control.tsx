@@ -18,8 +18,10 @@ export function UntagControl({
 }: {
   playerBadgeId: string;
   badgeName: string;
-  /** Called in addition to `router.refresh()` - lets a client-fetched host (the §2BL chevron sheet)
-   *  refetch its own data too. */
+  /** When given (the §2BL chevron sheet), this refetches the sheet's own data and is trusted instead
+   *  of `router.refresh()` (master_plan §2BM Decision C - avoids stacking a full server render on top
+   *  of a client-fetched refresh). The server-rendered Holders tab passes nothing and keeps the
+   *  `router.refresh()` it has always needed. */
   onSuccess?: () => void;
 }) {
   const router = useRouter();
@@ -43,8 +45,8 @@ export function UntagControl({
       }
       setConfirming(false);
       setReason('');
-      router.refresh();
-      onSuccess?.();
+      if (onSuccess) onSuccess();
+      else router.refresh();
     });
   }
 

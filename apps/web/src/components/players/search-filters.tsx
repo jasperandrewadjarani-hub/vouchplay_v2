@@ -22,6 +22,7 @@ import {
 import type { ClubOption } from '@/lib/players/queries';
 import type { TournamentOption } from '@/lib/tournaments/queries';
 import { DualRange } from '@/components/ui/dual-range';
+import { usePlayersNav } from './players-nav';
 
 const formatSts = (v: number) => v.toFixed(1);
 const formatVouches = (v: number) => (v >= VOUCHES_MAX ? `${VOUCHES_MAX}+` : String(v));
@@ -55,6 +56,12 @@ const compactControlClass =
 
 const sectionLabel = 'text-foreground block text-sm font-semibold';
 
+/** Instant-feeling tap (master_plan §2BM B): a small press-in plus no 300ms mobile tap delay.
+ *  `transition-duration` is already zeroed by the global `prefers-reduced-motion` rule in
+ *  globals.css; `motion-reduce:transition-none` here just documents that at the point of use. */
+const TAP =
+  'active:scale-[0.97] transition-transform motion-reduce:transition-none touch-manipulation';
+
 /** A tappable pill used for skill bands, the sex segments and the boolean toggles. `compact` is the
  *  smaller skill-chip size, so the seven bands fit tighter without a wall of full-height buttons. */
 function TogglePill({
@@ -76,7 +83,7 @@ function TogglePill({
       onClick={onClick}
       aria-pressed={selected}
       aria-label={label}
-      className={`inline-flex items-center gap-1 rounded-lg border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${
+      className={`inline-flex items-center gap-1 rounded-lg border font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${TAP} ${
         compact ? 'min-h-[34px] px-2.5 py-1 text-xs' : 'min-h-[44px] gap-1.5 px-3 py-2 text-sm'
       } ${
         selected
@@ -106,7 +113,8 @@ export function SearchFilters({
   compact: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const nav = usePlayersNav();
+  const [localPending, startTransition] = useTransition();
 
   const serialize = (f: PlayerFilters) =>
     playerFiltersToQuery({ ...f, page: 1 }, { compact, page: 1 });
@@ -144,9 +152,19 @@ export function SearchFilters({
     lastPushed.current = qs;
     // scroll:false (master_plan §2AN decision 1): this changes the list IN PLACE - the Filters
     // control sits at the top of the page, so the App Router default (scroll to top on push) reads
-    // as an unwanted jump back to the same spot the viewer just tapped from.
-    startTransition(() => router.push(`/players${qs}`, { scroll: false }));
+    // as an unwanted jump back to the same spot the viewer just tapped from. Routed through
+    // PlayersNavProvider (master_plan §2BM B) when present, so the list swaps to the shared skeleton
+    // instantly instead of freezing; falls back to a local transition when rendered outside it (so
+    // this component keeps working unchanged on any other page).
+    if (nav) nav.navigate(`/players${qs}`);
+    else startTransition(() => router.push(`/players${qs}`, { scroll: false }));
   }
+
+  const pending = nav
+    ? nav.pending &&
+      lastPushed.current !== null &&
+      nav.pendingHref === `/players${lastPushed.current}`
+    : localPending;
 
   /** Discrete controls apply on the tap: there is nothing to finish typing. */
   function apply(patch: Partial<PlayerFilters>) {
@@ -234,7 +252,7 @@ export function SearchFilters({
           type="button"
           onClick={() => setShowFilters((v) => !v)}
           aria-expanded={showFilters}
-          className="border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium"
+          className={`border-border bg-surface text-foreground hover:bg-surface-muted inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium ${TAP}`}
         >
           <SlidersHorizontal size={16} aria-hidden />
           {/* Closed-by-default sheet still needs to say what's applied (master_plan §2AN decision 2):
@@ -255,7 +273,7 @@ export function SearchFilters({
         <button
           type="submit"
           disabled={pending}
-          className="bg-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-70"
+          className={`bg-primary inline-flex min-h-10 items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-70 ${TAP}`}
         >
           {pending && <Loader2 size={14} className="animate-spin" aria-hidden />}
           Search
@@ -271,7 +289,7 @@ export function SearchFilters({
               key={chip.key}
               type="button"
               onClick={() => removeChip(chip.key)}
-              className="border-primary/40 bg-primary/10 text-foreground hover:border-primary inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium"
+              className={`border-primary/40 bg-primary/10 text-foreground hover:border-primary inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium ${TAP}`}
             >
               {chip.label}
               <X size={12} aria-hidden />
@@ -281,7 +299,7 @@ export function SearchFilters({
           <button
             type="button"
             onClick={clearAll}
-            className="text-foreground-muted hover:text-foreground px-1.5 py-1 text-xs font-medium underline underline-offset-2"
+            className={`text-foreground-muted hover:text-foreground px-1.5 py-1 text-xs font-medium underline underline-offset-2 ${TAP}`}
           >
             Clear all
           </button>
@@ -484,14 +502,14 @@ export function SearchFilters({
             <button
               type="button"
               onClick={clearAll}
-              className="text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium"
+              className={`text-foreground-muted hover:text-foreground min-h-[44px] text-sm font-medium ${TAP}`}
             >
               Clear all filters
             </button>
             <button
               type="button"
               onClick={() => setShowFilters(false)}
-              className="border-border text-foreground hover:bg-surface-muted min-h-[44px] rounded-xl border px-4 text-sm font-semibold"
+              className={`border-border text-foreground hover:bg-surface-muted min-h-[44px] rounded-xl border px-4 text-sm font-semibold ${TAP}`}
             >
               Done
             </button>

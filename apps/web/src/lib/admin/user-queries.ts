@@ -98,22 +98,144 @@ export interface AdminBadgeTagPlayer {
   badgeKeys: string[];
 }
 
-/**
- * Bounded above which the admin badge-tagging list is fetched, filtered (tier / "no badges yet") and
- * paginated in memory rather than in SQL. Community tier lives in `player_skill_profiles` and "no
- * badges" needs an anti-join against `player_badges` - PostgREST cannot express either against the
- * `profiles` query below in one round trip, and the same trade-off is already accepted elsewhere in
- * this codebase for admin-scale lists (see `idsMatchingIndexFilters` in `lib/players/filters.ts`).
- * VouchPlay's whole player base is currently in the hundreds, far under this cap.
- */
-const BADGE_TAG_CANDIDATE_CAP = 2000;
+const TAG_PROFILE_COLUMNS = 'id, first_name, last_name, nickname, slug, city, avatar_path';
+type ProfileRow = Record<string, unknown>;
 
 /**
- * Players for Admin → Badges' single-screen Tag flow (master_plan §2BL E). Unlike `searchUsers` /
- * the public directory, this deliberately includes players hidden from the directory (admins tag
- * everyone, not just who a visitor can see) and never applies `account_status`/visibility filters.
- * `ids` (used for the "Selected (n)" quick filter and the review sheet) returns exactly those players,
- * unpaginated, ignoring every other filter.
+ * Bounds past which a tier/"no badges yet" id restriction is applied server-side via a single
+ * `.in()`/`.not(...,'in',...)` round trip (master_plan §2BM Decision C); at or beyond it, the
+ * restriction is paged in memory instead over a lightweight `id, first_name` read, so neither query
+ * string grows unbounded. VouchPlay's whole player base is currently in the hundreds, far under
+ * either bound.
+ */
+const TIER_INLINE_ID_CAP = 500;
+const NO_BADGES_INLINE_ID_CAP = 800;
+
+/**
+ * Tier-matching player ids. Filtered on the V1 `community_skill_level` column - this list has only
+ * ever read that column for tier (never the STS_V2 columns added by `player_skill_profiles`), and
+ * routing it through the `skill_algorithm_active_version` switch (`lib/vouches/active-skill.ts`)
+ * would need `selectSkillProfiles`'s single column-list retry to also swap an `.eq()` filter column,
+ * which its fail-open-to-V1 retry contract does not support. Deviation noted rather than force-fit -
+ * see master_plan §2BM.
+ */
+async function tierPlayerIds(
+  svc: ReturnType<typeof createServiceClient>,
+  tier: number,
+): Promise<string[]> {
+  const { data, error } = await svc
+    .from('player_skill_profiles')
+    .select('player_id')
+    .eq('community_skill_level', tier);
+  if (error) throw error;
+  return ((data ?? []) as { player_id: string }[]).map((r) => r.player_id);
+}
+
+/** Distinct ids currently holding any live (not revoked, not expired) badge - the "no badges yet"
+ *  exclusion set (master_plan §2BM Decision C). */
+async function liveBadgeHolderIds(svc: ReturnType<typeof createServiceClient>): Promise<string[]> {
+  const { data, error } = await svc
+    .from('player_badges')
+    .select('player_id')
+    .is('revoked_at', null)
+    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+  if (error) throw error;
+  return Array.from(new Set(((data ?? []) as { player_id: string }[]).map((r) => r.player_id)));
+}
+
+type IdRestrict = { kind: 'in' | 'notIn'; ids: string[] };
+
+function likeOrFilter(q: string): string {
+  const like = `%${q}%`;
+  return `first_name.ilike.${like},last_name.ilike.${like},nickname.ilike.${like},slug.ilike.${like}`;
+}
+
+/**
+ * Pages `profiles` for the Tag screen, applying `q`/`city` plus an optional id restriction, in the
+ * cheapest way that stays correct (master_plan §2BM Decision C):
+ * - No restriction, or one within its inline cap: one SQL round trip with `.range()` +
+ *   `{ count: 'exact' }` - only the requested page is ever fetched.
+ * - A restriction past its inline cap (tier matches > 500, or "no badges" holders >= 800): a
+ *   lightweight `id, first_name` read is paginated in memory instead, and only the page's own ids are
+ *   read back in full - still far cheaper than the old "load up to 2000 full profiles" path.
+ */
+async function pageProfilesForTagging(
+  svc: ReturnType<typeof createServiceClient>,
+  opts: { q?: string; city?: string; restrict: IdRestrict | null },
+  page: number,
+  pageSize: number,
+): Promise<{ rows: ProfileRow[]; total: number }> {
+  const { restrict } = opts;
+  if (restrict?.kind === 'in' && restrict.ids.length === 0) return { rows: [], total: 0 };
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const q = opts.q?.trim();
+  const city = opts.city?.trim();
+
+  const inline =
+    !restrict ||
+    (restrict.kind === 'in' && restrict.ids.length <= TIER_INLINE_ID_CAP) ||
+    (restrict.kind === 'notIn' && restrict.ids.length < NO_BADGES_INLINE_ID_CAP);
+
+  if (inline) {
+    // `sel` is deliberately untyped past this point: reassigning through this many chained
+    // supabase-js filter calls (not/or/ilike/in/order/range) makes TS try to instantiate a
+    // conditional type so deep it hits "TS2589 excessively deep" - the same tradeoff supabase-js
+    // users hit on any sufficiently long conditional filter chain. `data`/`count` are cast back to
+    // known shapes below, so this stays contained to the query-building steps.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let sel: any = svc
+      .from('profiles')
+      .select(TAG_PROFILE_COLUMNS, { count: 'exact' })
+      .not('onboarded_at', 'is', null);
+    if (q) sel = sel.or(likeOrFilter(q));
+    if (city) sel = sel.ilike('city', `%${city}%`);
+    if (restrict?.kind === 'in') sel = sel.in('id', restrict.ids);
+    if (restrict?.kind === 'notIn') sel = sel.not('id', 'in', `(${restrict.ids.join(',')})`);
+    const { data, error, count } = await sel
+      .order('first_name', { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    return { rows: (data ?? []) as ProfileRow[], total: count ?? 0 };
+  }
+
+  // Fallback: lightweight in-memory pagination (only reached well past the inline caps above).
+  let lightSel = svc.from('profiles').select('id, first_name').not('onboarded_at', 'is', null);
+  if (q) lightSel = lightSel.or(likeOrFilter(q));
+  if (city) lightSel = lightSel.ilike('city', `%${city}%`);
+  if (restrict?.kind === 'in') lightSel = lightSel.in('id', restrict.ids);
+  const { data: lightData, error: lightErr } = await lightSel;
+  if (lightErr) throw lightErr;
+  let lightRows = (lightData ?? []) as { id: string; first_name: string | null }[];
+  if (restrict?.kind === 'notIn') {
+    const excl = new Set(restrict.ids);
+    lightRows = lightRows.filter((r) => !excl.has(r.id));
+  }
+  lightRows.sort((a, b) => (a.first_name ?? '').localeCompare(b.first_name ?? ''));
+  const total = lightRows.length;
+  const pageIds = lightRows.slice(from, to + 1).map((r) => r.id);
+  if (pageIds.length === 0) return { rows: [], total };
+  const { data: fullData, error: fullErr } = await svc
+    .from('profiles')
+    .select(TAG_PROFILE_COLUMNS)
+    .in('id', pageIds);
+  if (fullErr) throw fullErr;
+  const byId = new Map(((fullData ?? []) as ProfileRow[]).map((r) => [r.id as string, r]));
+  const rows = pageIds.map((id) => byId.get(id)).filter((r): r is ProfileRow => !!r);
+  return { rows, total };
+}
+
+/**
+ * Players for Admin → Badges' single-screen Tag flow (master_plan §2BL E, cheapened in §2BM Decision
+ * C). Unlike `searchUsers` / the public directory, this deliberately includes players hidden from the
+ * directory (admins tag everyone, not just who a visitor can see) and never applies
+ * `account_status`/visibility filters. `ids` returns exactly those players, unpaginated, ignoring
+ * every other filter (kept for interface compatibility; no current caller passes it).
+ *
+ * Only the requested page's worth of profiles is ever fetched from `profiles`, and skill/badge rows
+ * are read only for that page's ids - never the whole player base (the previous implementation loaded
+ * up to 2000 profiles plus their skill and badge rows on every keystroke).
  */
 export async function listPlayersForBadgeTagging(opts: {
   q?: string;
@@ -132,30 +254,44 @@ export async function listPlayersForBadgeTagging(opts: {
     const page = Math.max(opts.page ?? 1, 1);
     const byIds = !!opts.ids && opts.ids.length > 0;
 
-    let sel = svc
-      .from('profiles')
-      .select('id, first_name, last_name, nickname, slug, city, avatar_path')
-      .not('onboarded_at', 'is', null)
-      .order('created_at', { ascending: false });
+    let rows: ProfileRow[];
+    let total: number;
 
     if (byIds) {
-      sel = sel.in('id', opts.ids as string[]);
+      const { data, error } = await svc
+        .from('profiles')
+        .select(TAG_PROFILE_COLUMNS)
+        .not('onboarded_at', 'is', null)
+        .order('created_at', { ascending: false })
+        .in('id', opts.ids as string[]);
+      if (error) throw error;
+      rows = (data ?? []) as ProfileRow[];
+      total = rows.length;
     } else {
-      const q = opts.q?.trim();
-      if (q) {
-        const like = `%${q}%`;
-        sel = sel.or(
-          `first_name.ilike.${like},last_name.ilike.${like},nickname.ilike.${like},slug.ilike.${like}`,
-        );
+      let restrict: IdRestrict | null = null;
+      if (opts.tier != null) {
+        restrict = { kind: 'in', ids: await tierPlayerIds(svc, opts.tier) };
       }
-      if (opts.city?.trim()) sel = sel.ilike('city', `%${opts.city.trim()}%`);
-      sel = sel.limit(BADGE_TAG_CANDIDATE_CAP);
+      if (opts.noBadges) {
+        const holderIds = await liveBadgeHolderIds(svc);
+        if (restrict) {
+          const holderSet = new Set(holderIds);
+          restrict = { kind: 'in', ids: restrict.ids.filter((id) => !holderSet.has(id)) };
+        } else {
+          restrict = { kind: 'notIn', ids: holderIds };
+        }
+      }
+      const paged = await pageProfilesForTagging(
+        svc,
+        { q: opts.q, city: opts.city, restrict },
+        page,
+        pageSize,
+      );
+      rows = paged.rows;
+      total = paged.total;
     }
 
-    const { data, error } = await sel;
-    if (error) throw error;
-    const rows = (data ?? []) as Record<string, unknown>[];
-    if (rows.length === 0) return empty;
+    if (rows.length === 0) return { players: [], total };
     const ids = rows.map((r) => r.id as string);
 
     const [{ data: skillRows }, { data: badgeRows }] = await Promise.all([
@@ -185,7 +321,7 @@ export async function listPlayersForBadgeTagging(opts: {
       badgesByPlayer.set(r.player_id, arr);
     }
 
-    let all: AdminBadgeTagPlayer[] = rows.map((r) => {
+    const players: AdminBadgeTagPlayer[] = rows.map((r) => {
       const ordinal = tierByPlayer.get(r.id as string);
       const band = ordinal != null ? SKILL_BANDS.find((b) => b.ordinal === ordinal) : undefined;
       return {
@@ -202,13 +338,7 @@ export async function listPlayersForBadgeTagging(opts: {
       };
     });
 
-    if (opts.tier != null) all = all.filter((p) => tierByPlayer.get(p.id) === opts.tier);
-    if (opts.noBadges) all = all.filter((p) => p.badgeKeys.length === 0);
-
-    const total = all.length;
-    if (byIds) return { players: all, total };
-    const from = (page - 1) * pageSize;
-    return { players: all.slice(from, from + pageSize), total };
+    return { players, total };
   } catch {
     return empty;
   }

@@ -1,25 +1,27 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { Check, Loader2, Plus, Search, X } from 'lucide-react';
 import { badgeDef, SKILL_BANDS } from '@vouchplay/config';
 import { BadgeSymbol } from '@/components/badges/badge-symbol';
 import type { CityOption } from '@/lib/players/filters';
-import { adminListPlayersForBadgeTagging } from '@/lib/actions/badges';
+import { whenSheetsSettled } from '@/lib/hooks/use-back-to-close';
 import type { AdminBadgeTagPlayer } from '@/lib/admin/user-queries';
 import { PlayerRow } from './player-row';
+import { PlayerRowSkeleton } from './player-row-skeleton';
 import { BadgeGridSheet } from './badge-grid-sheet';
 import { ReviewSheet } from './review-sheet';
 import { PlayerBadgesSheet } from './player-badges-sheet';
 
 const PAGE_SIZE = 30;
+const SKELETON_ROWS = 6;
 
 /** master_plan §2BL Decision D: the neon-cyan selected style, unmistakable in both themes. */
 const NEON_SELECTED =
   'border-cyan-200 bg-gradient-to-br from-cyan-300 to-cyan-400 text-cyan-950 shadow-[0_0_0_3px_rgba(34,211,238,0.22),0_6px_18px_-6px_rgba(34,211,238,0.7)]';
 const CHIP_BASE =
-  'inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition-colors';
+  'inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-semibold whitespace-nowrap transition-colors [touch-action:manipulation] active:scale-[0.97]';
 const CHIP_UNSELECTED = 'border-border bg-surface text-foreground-muted hover:text-foreground';
 
 interface Filters {
@@ -30,12 +32,23 @@ interface Filters {
   selectedOnly: boolean;
 }
 
+interface PlayersResponse {
+  players: AdminBadgeTagPlayer[];
+  total: number;
+}
+
 /**
  * Admin → Badges "Tag" tab (master_plan §2BL E): one screen replacing the old search-first flow. A
  * sticky "Badges to tag" tray above a searchable/filterable player list with multi-select checkboxes,
  * and a sticky bottom action bar leading to the review sheet. Selection lives in client state keyed
  * by player id (with just enough player info for the review sheet's own list and "has X" notes) so it
  * survives every search/filter/page change - the server round trip only ever replaces `players`.
+ *
+ * master_plan §2BM Decision C: search/filter changes never touch the Next router (no
+ * `router.replace`/`router.refresh`, which used to queue behind server actions and freeze the bottom
+ * nav) - the URL is mirrored with `window.history.replaceState` and player pages are fetched from a
+ * GET route handler with an `AbortController`, so requests are cancelable, run outside Next's
+ * navigation/action queues, and the latest one always wins.
  */
 export function TagScreen({
   initialPlayers,
@@ -48,7 +61,6 @@ export function TagScreen({
   cityOptions: CityOption[];
   initialQ: string;
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [q, setQ] = useState(initialQ);
@@ -77,41 +89,88 @@ export function TagScreen({
   const [openPlayerId, setOpenPlayerId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
+  // The in-flight fetch, so a newer search/filter/page can cancel a stale one instead of racing it,
+  // and a monotonic id so a response that lands after an even newer request started is ignored even
+  // if it isn't the one that got aborted (master_plan §2BM Decision C).
+  const abortRef = useRef<AbortController | null>(null);
+  const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      if (qTimer.current) clearTimeout(qTimer.current);
+    };
+  }, []);
+
+  // Mirrors the given filters into the URL via native history (not `router.replace`) so a search or
+  // filter tap never waits behind - or gets undone by - a Next navigation (master_plan §2BM Decisions
+  // A and C). Next 15 keeps `useSearchParams` in sync with native history calls.
+  function syncUrl(next: Pick<Filters, 'q' | 'tier' | 'city' | 'noBadges'>) {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', 'tag');
+    if (next.q) params.set('q', next.q);
+    else params.delete('q');
+    if (next.tier != null) params.set('tier', String(next.tier));
+    else params.delete('tier');
+    if (next.city) params.set('city', next.city);
+    else params.delete('city');
+    if (next.noBadges) params.set('noBadges', '1');
+    else params.delete('noBadges');
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState(window.history.state, '', newUrl);
+  }
+
   // Debounce the search box into `filters.q`, and mirror it in the URL for shareability
   // (master_plan §2BL E: "search input (debounced → URL q)").
   function onQChange(next: string) {
     setQ(next);
     if (qTimer.current) clearTimeout(qTimer.current);
     qTimer.current = setTimeout(() => {
-      setFilters((f) => ({ ...f, q: next.trim() }));
-      const params = new URLSearchParams(searchParams.toString());
-      params.set('tab', 'tag');
-      if (next.trim()) params.set('q', next.trim());
-      else params.delete('q');
-      router.replace(`/admin/badges?${params.toString()}`, { scroll: false });
+      setFilters((f) => {
+        const nextFilters = { ...f, q: next.trim() };
+        syncUrl(nextFilters);
+        return nextFilters;
+      });
     }, 300);
   }
 
-  // "Selected (n)" is a pure client-side view over `selectedPlayers` - no round trip, always in sync
-  // with the tray, and never at risk of a stale server snapshot of a selection that lives here anyway.
   const runQuery = useCallback(async (targetPage: number, f: Filters) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = ++requestIdRef.current;
+
     if (targetPage === 1) setLoading(true);
     else setLoadingMore(true);
-    const res = await adminListPlayersForBadgeTagging({
-      q: f.q || undefined,
-      tier: f.tier ?? undefined,
-      city: f.city ?? undefined,
-      noBadges: f.noBadges || undefined,
-      page: targetPage,
-      pageSize: PAGE_SIZE,
-    });
-    if (res.ok) {
-      setPlayers((prev) => (targetPage === 1 ? res.players : [...prev, ...res.players]));
-      setTotal(res.total);
+
+    const params = new URLSearchParams();
+    if (f.q) params.set('q', f.q);
+    if (f.tier != null) params.set('tier', String(f.tier));
+    if (f.city) params.set('city', f.city);
+    if (f.noBadges) params.set('noBadges', '1');
+    params.set('page', String(targetPage));
+    params.set('pageSize', String(PAGE_SIZE));
+
+    try {
+      const res = await fetch(`/api/admin/badges/players?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (requestId !== requestIdRef.current) return; // superseded by a newer request
+      if (!res.ok) return;
+      const data = (await res.json()) as PlayersResponse;
+      if (requestId !== requestIdRef.current) return;
+      setPlayers((prev) => (targetPage === 1 ? data.players : [...prev, ...data.players]));
+      setTotal(data.total);
       setPage(targetPage);
+    } catch (err) {
+      if ((err as { name?: string })?.name === 'AbortError') return; // expected: superseded/unmounted
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-    setLoading(false);
-    setLoadingMore(false);
   }, []);
 
   // Refetch page 1 whenever a server-side filter changes. `selectedOnly` is excluded - it only
@@ -128,13 +187,25 @@ export function TagScreen({
   }, [filters.q, filters.tier, filters.city, filters.noBadges]);
 
   function toggleTier(ordinal: number) {
-    setFilters((f) => ({ ...f, tier: f.tier === ordinal ? null : ordinal }));
+    setFilters((f) => {
+      const next = { ...f, tier: f.tier === ordinal ? null : ordinal };
+      syncUrl(next);
+      return next;
+    });
   }
   function toggleCity(key: string) {
-    setFilters((f) => ({ ...f, city: f.city === key ? null : key }));
+    setFilters((f) => {
+      const next = { ...f, city: f.city === key ? null : key };
+      syncUrl(next);
+      return next;
+    });
   }
   function toggleNoBadges() {
-    setFilters((f) => ({ ...f, noBadges: !f.noBadges }));
+    setFilters((f) => {
+      const next = { ...f, noBadges: !f.noBadges };
+      syncUrl(next);
+      return next;
+    });
   }
   function toggleSelectedOnly() {
     setFilters((f) => ({ ...f, selectedOnly: !f.selectedOnly }));
@@ -160,11 +231,17 @@ export function TagScreen({
     setSelectedPlayers(new Map());
   }
 
-  function handleRowChanged() {
-    // A tag/untag from the chevron sheet can change a row's badges/pill; the simplest correct
-    // refresh is to re-run the current query at page 1 (Load more state resets, same as a filter
-    // change would).
-    void runQuery(1, filters);
+  // The chevron sheet reports its own live badge keys back (it already re-fetched its own detail) -
+  // patch just that row in place, no requery (master_plan §2BM Decision C).
+  function handleRowChanged(playerId: string, badgeKeys: string[]) {
+    setPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, badgeKeys } : p)));
+    setSelectedPlayers((prev) => {
+      const existing = prev.get(playerId);
+      if (!existing) return prev;
+      const next = new Map(prev);
+      next.set(playerId, { ...existing, badgeKeys });
+      return next;
+    });
   }
 
   const selectedList = Array.from(selectedPlayers.values());
@@ -281,11 +358,9 @@ export function TagScreen({
 
       {/* Player list */}
       <div className="space-y-2">
-        {loading && displayedPlayers.length === 0 && (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="text-foreground-muted size-5 animate-spin" aria-hidden />
-          </div>
-        )}
+        {loading &&
+          displayedPlayers.length === 0 &&
+          Array.from({ length: SKELETON_ROWS }).map((_, i) => <PlayerRowSkeleton key={i} />)}
         {!loading && displayedPlayers.length === 0 && (
           <p className="text-foreground-muted border-border bg-surface rounded-2xl border p-6 text-center text-sm">
             {filters.selectedOnly ? 'No players selected yet.' : 'No players match these filters.'}
@@ -306,8 +381,9 @@ export function TagScreen({
             type="button"
             onClick={() => void runQuery(page + 1, filters)}
             disabled={loadingMore}
-            className="border-border text-foreground hover:border-primary min-h-[44px] w-full rounded-xl border text-sm font-semibold transition-colors disabled:opacity-60"
+            className="border-border text-foreground hover:border-primary flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition-colors disabled:opacity-60"
           >
+            {loadingMore && <Loader2 className="size-4 animate-spin" aria-hidden />}
             {loadingMore ? 'Loading…' : 'Load more'}
           </button>
         )}
@@ -356,12 +432,25 @@ export function TagScreen({
           onRemovePlayer={removePlayer}
           onClose={() => setReviewOpen(false)}
           onSubmitted={(message) => {
+            // master_plan §2BM Decision C: close -> await the sheet's history pop -> patch the
+            // affected rows' badgeKeys locally. No `router.refresh()` - that was a second full
+            // server render stacked right after the batch write, on top of the search freeze.
+            const taggedPlayerIds = selectedList.map((p) => p.id);
+            const taggedBadgeKeys = selectedBadgeKeys;
             setReviewOpen(false);
-            clearAll();
-            setToast(message);
-            setTimeout(() => setToast(null), 5000);
-            router.refresh();
-            void runQuery(1, filters);
+            void (async () => {
+              await whenSheetsSettled();
+              setPlayers((prev) =>
+                prev.map((p) =>
+                  taggedPlayerIds.includes(p.id)
+                    ? { ...p, badgeKeys: Array.from(new Set([...p.badgeKeys, ...taggedBadgeKeys])) }
+                    : p,
+                ),
+              );
+              clearAll();
+              setToast(message);
+              setTimeout(() => setToast(null), 5000);
+            })();
           }}
         />
       )}

@@ -100,10 +100,12 @@ export default async function AdminBadgesPage({ searchParams }: Props) {
 }
 
 /**
- * Admin → Badges "Tag" tab (master_plan §2BL E): the one-screen batch tagging flow. The server only
- * renders the first page (filter-less, or matching a shared `?q=`) - every subsequent search/filter/
- * page/selection change happens client-side in `TagScreen` via the `adminListPlayersForBadgeTagging`
- * action, since selection has to persist across all of those and that only works as client state.
+ * Admin → Badges "Tag" tab (master_plan §2BL E, cheapened in §2BM Decision C): the one-screen batch
+ * tagging flow. The server only renders the first page (filter-less, or matching a shared `?q=`) -
+ * every subsequent search/filter/page/selection change happens client-side in `TagScreen`, fetched
+ * from `/api/admin/badges/players` (a GET route handler, not a server action) with an
+ * `AbortController`, since selection has to persist across all of those and that only works as client
+ * state.
  */
 async function TagSection({ q }: { q?: string }) {
   const [{ players, total }, cityOptions] = await Promise.all([

@@ -1,9 +1,10 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import { useTransition } from 'react';
+import { useRef, useTransition } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { PlayerSort } from '@/lib/players/filters';
+import { usePlayersNav } from './players-nav';
 
 /**
  * The directory "Sort by" control (master_plan §2AG A1, D6). Lives OUTSIDE the collapsible filter
@@ -30,7 +31,9 @@ export function SortSelect({ sort, staff }: { sort: PlayerSort; staff: boolean }
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [pending, startTransition] = useTransition();
+  const nav = usePlayersNav();
+  const [localPending, startTransition] = useTransition();
+  const lastHrefRef = useRef<string | null>(null);
 
   function onChange(next: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -40,11 +43,17 @@ export function SortSelect({ sort, staff }: { sort: PlayerSort; staff: boolean }
     // viewer was looking at (the same rule `clearFilter` applies to every other filter change).
     params.delete('page');
     const qs = params.toString();
+    const href = qs ? `${pathname}?${qs}` : pathname;
+    lastHrefRef.current = href;
     // scroll:false (master_plan §2AN decision 1): re-sorting swaps the list in place, right below
     // this control - scrolling to the top would jump the viewer away from where they just clicked.
-    startTransition(() => router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false }));
+    // Routed through PlayersNavProvider (master_plan §2BM B) when present, so the list swaps to the
+    // shared skeleton instantly instead of freezing; falls back to a local transition otherwise.
+    if (nav) nav.navigate(href);
+    else startTransition(() => router.push(href, { scroll: false }));
   }
 
+  const pending = nav ? nav.pending && nav.pendingHref === lastHrefRef.current : localPending;
   const options = staff ? [...PUBLIC_OPTIONS, STAFF_OPTION] : PUBLIC_OPTIONS;
 
   return (
